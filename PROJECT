@@ -1,0 +1,9 @@
+domain: sigs.k8s.io
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: oot-operator
+repo: github.com/qbarrand/oot-operator
+version: "3"
