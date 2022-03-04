@@ -1,0 +1,26 @@
+---
+apiVersion: ooto.sigs.k8s.io/v1beta1
+kind: Module
+metadata:
+  name: ooto-ci
+spec:
+#  devicePlugin: {}
+  driverContainer:
+    name: overwritten-anyway
+    command: [sleep, infinity]
+    imagePullPolicy: Never
+    lifecycle:
+      postStart:
+        exec:
+          command: [modprobe, -v, ooto_ci]
+      preStop:
+        exec:
+          command: [modprobe, -rv, ooto_ci]
+    securityContext:
+      capabilities:
+        add: [SYS_MODULE]
+  kernelMappings:
+    - literal: KVER_CHANGEME
+      containerImage: ooto-kmod:local
+  selector:
+    kubernetes.io/hostname: minikube
