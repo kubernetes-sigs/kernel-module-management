@@ -1,0 +1,51 @@
+name: Test and build
+
+on: [pull_request]
+
+jobs:
+  build:
+    name: Lint, test and build the code
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: actions/setup-go@v2
+      with:
+        go-version: 1.17
+
+    - name: Generate code
+      run: make generate
+
+    - name: Check if generating code changed files
+      run: |
+        if ! git diff --exit-code; then
+          echo "Changes detected; diff:"
+          git diff
+        fi
+
+    - name: Lint the code
+      run: make lint
+
+    - name: Run tests
+      run: make test
+
+    - name: Build
+      run: make
+
+  container-image:
+    name: Build a container image
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      # docker-build depends on the test target, which requires Go
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+
+      - name: Build the Docker image
+        run: make docker-build
