@@ -1,0 +1,47 @@
+@startyaml
+
+title ""Module"" API
+
+apiVersion: ooto.sigs.k8s.io/v1beta1
+kind: Module
+metadata:
+  name: module-sample
+spec:
+  build:
+    # Reference instructions to build the module
+    git:
+      repository: https://github.com/vendor/driver
+      ref: some-tag
+    buildArgs:
+      PARAM1: value1
+      PARAM2: value2
+    containerFile: Dockerfile (or something else)
+    contextDir: some/path/in/the/sources
+    to:
+      imageName: image-registry.openshift-image-registry.svc:5000/driver:${KERNEL_VERSION}
+      pushSecret:
+        name: push-secret-name
+        namespace: push-secret-namespace
+  devicePlugin:
+    TODO: TODO
+  kernelMappings:
+    - literal: 5.16.11-200.fc35.x86_64
+      containerImage: quay.io/vendor/module-sample:fedora-5.16.11-200.fc35.x86_64
+    - literal: 5.4.0-1054-gke
+      containerImage: quay.io/vendor/module-sample:ubuntu-5.4.0-1054-gke
+    - regexp: '^.*\-gke$'
+      build:
+        git:
+          ref: gke
+  selector:  # top-level selector
+    feature.node.kubernetes.io/cpu-cpuid.VMX: true
+status:
+  conditions:
+    - lastTransitionTime: "2022-03-07T14:01:00Z"
+      status: False
+      type: Progressing
+    - lastTransitionTime: "2022-03-07T14:01:01Z"
+      status: True
+      type: Ready
+
+@endyaml

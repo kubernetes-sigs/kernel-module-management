@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Design notes - Out-Of-Tree operator</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.5.0/styles/github.min.css">
+
+        <script src="../js/jquery-1.10.2.min.js" defer></script>
+        <script src="../js/bootstrap.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.5.0/highlight.min.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">Out-Of-Tree operator</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="navitem">
+                                <a href=".." class="nav-link">Home</a>
+                            </li>
+                            <li class="dropdown active">
+                                <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">Developer <b class="caret"></b></a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="./" class="dropdown-item active">Design notes</a>
+</li>
+                                    
+<li>
+    <a href="reconciliation_loops/" class="dropdown-item">Reconciliation loops</a>
+</li>
+                                    
+<li>
+    <a href="use_cases/" class="dropdown-item">Use cases</a>
+</li>
+                                </ul>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href=".." class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="reconciliation_loops/" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#design-notes" class="nav-link">Design notes</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#module-crd" class="nav-link">Module CRD</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#in-cluster-builds" class="nav-link">In-cluster builds</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#unloading-modules" class="nav-link">Unloading modules</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#security" class="nav-link">Security</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="design-notes">Design notes</h1>
+<p>The OOT Operator brings a new <code>Module</code> CRD.
+<code>Module</code> represents an out-of-tree kernel module that must be inserted into the cluster nodes’ kernel through a
+DriverContainer scheduled by a <code>DaemonSet</code>.</p>
+<p>The OOTO optionally builds and runs DriverContainers on the cluster.
+It picks the right DriverContainer image by leveraging kernel mappings in the <code>Module</code> CRD that describe which image
+should be used for which kernel.</p>
+<p>A kernel mapping maps either a literal kernel name or a regex with a kernel’s node.
+This allows for more flexibility when targeting a set of kernels (e.g. “for Ubuntu nodes, build from that repository”).
+Variables available at build time still reflect the actual kernel version.</p>
+<h2 id="module-crd"><code>Module</code> CRD</h2>
+<pre><code class="language-yaml">apiVersion: ooto.sigs.k8s.io/v1beta1
+kind: Module
+metadata:
+  name: module-sample
+spec:
+  build:
+    # Reference instructions to build the module
+    git:
+      repository: https://github.com/vendor/driver
+      ref: some-tag
+    buildArgs:
+      PARAM1: value1
+      PARAM2: value2
+    containerFile: Dockerfile (or something else)
+    contextDir: some/path/in/the/sources
+    to:
+      imageName: image-registry.openshift-image-registry.svc:5000/driver:${KERNEL_VERSION}
+      pushSecret:
+        name: push-secret-name
+        namespace: push-secret-namespace
+  devicePlugin: # is a Container spec
+  driverContainer: # is a Container spec
+  kernelMappings:
+    - literal: 5.16.11-200.fc35.x86_64
+      containerImage: quay.io/vendor/module-sample:fedora-5.16.11-200.fc35.x86_64
+    - literal: 5.4.0-1054-gke
+      containerImage: quay.io/vendor/module-sample:ubuntu-5.4.0-1054-gke
+    - regexp: '^.*\-gke$'
+      build:
+        git:
+          ref: gke
+  selector:  # top-level selector
+    feature.node.kubernetes.io/cpu-cpuid.VMX: true
+status:
+  conditions:
+    - lastTransitionTime: &quot;2022-03-07T14:01:00Z&quot;
+      status: False
+      type: Progressing
+    - lastTransitionTime: &quot;2022-03-07T14:01:01Z&quot;
+      status: True
+      type: Ready
+</code></pre>
+<h2 id="in-cluster-builds">In-cluster builds</h2>
+<p>Virtually any Kubernetes distribution ships with its own kernel.
+It is thus challenging for a kernel module vendor to make DriverContainer images available for all kernels available
+in all Kubernetes distributions out there (or even for a subset of them).</p>
+<p>The OOTO supports in-cluster builds of DriverContainer images when those are not made available by the vendor.
+The in-cluster build system is able to build an image from any Git repository that contains a <code>Dockerfile</code>.
+It can then push said image to a user-provided repository, optionally using authentication provided in a Kubernetes secret.</p>
+<p><strong>Optional:</strong> on upstream Kubernetes, we may want to deploy an in-cluster registry to host in-cluster built images.<br />
+<strong>On OCP</strong>, the build mechanism would be BuildConfig (maybe Shipwright in the future) and we can leverage the
+integrated in-cluster registry.</p>
+<h2 id="unloading-modules">Unloading modules</h2>
+<p>Users must provide a <a href="https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/">preStop lifecycle hook</a>
+to their DriverContainer pod template to make sure that their module is unloaded when the DriverContainer pod exits.</p>
+<h2 id="security">Security</h2>
+<h3 id="drivercontainer-privileges">DriverContainer privileges</h3>
+<p>By default, the OOTO would only grant the <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code>CAP_SYS_MODULE</code></a>
+capability to DriverContainer <code>DaemonSets</code>.</p>
+<h3 id="kubernetes-api-privileges">Kubernetes API privileges</h3>
+<p>The OOTO would only be granted a limited set of Kubernetes API privileges:
+- Read and watch <code>Nodes</code>;
+- Read and watch <code>Modules</code>, update their status;
+- Read, create, modify and watch <code>DaemonSets</code>;
+- Read, create, modify and watch <code>Build</code> objects (from whatever system we agree on);
+- Read <code>Secrets</code>.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js" defer></script>
+        <script src="../search/main.js" defer></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

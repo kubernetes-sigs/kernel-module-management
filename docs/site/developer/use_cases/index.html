@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../img/favicon.ico">
+        <title>Use cases - Out-Of-Tree operator</title>
+        <link href="../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.5.0/styles/github.min.css">
+
+        <script src="../../js/jquery-1.10.2.min.js" defer></script>
+        <script src="../../js/bootstrap.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.5.0/highlight.min.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../..">Out-Of-Tree operator</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="navitem">
+                                <a href="../.." class="nav-link">Home</a>
+                            </li>
+                            <li class="dropdown active">
+                                <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">Developer <b class="caret"></b></a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../" class="dropdown-item">Design notes</a>
+</li>
+                                    
+<li>
+    <a href="../reconciliation_loops/" class="dropdown-item">Reconciliation loops</a>
+</li>
+                                    
+<li>
+    <a href="./" class="dropdown-item active">Use cases</a>
+</li>
+                                </ul>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="../reconciliation_loops/" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" class="nav-link disabled">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#use-cases" class="nav-link">Use cases</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#a-new-module-is-added-to-the-cluster" class="nav-link">A new module is added to the cluster</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#module-update-kernel-kernel-should-run-a-new-drivercontainer-image" class="nav-link">Module update: kernel $kernel should run a new DriverContainer image</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#a-new-node-joins-the-cluster-or-is-modified" class="nav-link">A new node joins the cluster (or is modified)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#a-node-leaves-the-cluster" class="nav-link">A node leaves the cluster</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#a-nodes-kernel-is-updated" class="nav-link">A node’s kernel is updated</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#a-node-matches-a-modules-specselector-but-not-any-of-its-kernel-mappings" class="nav-link">A node matches a Module’s .spec.selector, but not any of its kernel mappings</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="use-cases">Use cases</h1>
+<h2 id="a-new-module-is-added-to-the-cluster">A new module is added to the cluster</h2>
+<p>The operator lists all nodes required to build the module and looks at their kernels.
+It uses the <code>Module</code>’s <code>.spec.kernelMappings</code> to create <code>DaemonSets</code> for each of those kernels.</p>
+<p>If an image for one of these <code>DaemonSets</code> requires an in-cluster build, it creates the build object (build system TBD).
+The <code>DaemonSet</code> owns the build object, so that it is deleted when the <code>DaemonSet</code> is deleted.</p>
+<p><strong>Optional:</strong> we could watch the build object to rollout restart the <code>DaemonSet</code> as soon as the build is over and the
+image can be pulled.</p>
+<h2 id="module-update-kernel-kernel-should-run-a-new-drivercontainer-image">Module update: kernel <code>$kernel</code> should run a new DriverContainer image</h2>
+<p>The OOTO would be triggered by an update to any <code>Module</code> instance.
+That reconciliation generates a list of <code>DaemonSets</code> that need to be reconciled.</p>
+<p>For each <code>DaemonSet</code> belonging to <code>Module</code>, we set the following labels:</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ooto.sigs.k8s.io/module-name</code></td>
+<td><code>$moduleName</code></td>
+</tr>
+<tr>
+<td><code>ooto.sigs.k8s.io/kernel-target</code></td>
+<td><code>$kernel</code></td>
+</tr>
+</tbody>
+</table>
+<p>We either create those <code>DaemonSets</code> (if they do not already exist) or update them (if a <code>DaemonSet</code> already exists with 
+the same labels).
+If a <code>DaemonSet</code> already exists for <code>$moduleName</code> and <code>$kernel</code>, it is updated with the new DriverContainer image.
+If that image requires a build, we create the build object and wait for its completion before we modify the <code>DaemonSet</code>.</p>
+<h2 id="a-new-node-joins-the-cluster-or-is-modified">A new node joins the cluster (or is modified)</h2>
+<p>The OOTO lists all <code>Modules</code> and checks which ones should run on the node.<br />
+For each <code>Module</code> that should run on the node (determined by the <code>.spec.selector</code> field), the operator tries to find
+a suitable DriverContainer image for the node’s kernel.<br />
+It creates a <code>DaemonSet</code> that runs that DriverContainer on all nodes running that kernel.</p>
+<h2 id="a-node-leaves-the-cluster">A node leaves the cluster</h2>
+<p>If that node was targeted by one of the <code>DaemonSets</code>, said <code>DaemonSet</code>’s <code>.status.desiredNumberScheduled</code> is
+decremented.<br />
+The operator watches changes to those objects; if that field reaches 0, the <code>DaemonSet</code> is deleted.</p>
+<h2 id="a-nodes-kernel-is-updated">A node’s kernel is updated</h2>
+<p>Depending on the Kubernetes distribution used, this is functionally equivalent to either:</p>
+<ul>
+<li>Deleting the node and creating a new one, or;</li>
+<li>Modifying an existing node.</li>
+</ul>
+<p>That use case is thus covered above.</p>
+<h2 id="a-node-matches-a-modules-specselector-but-not-any-of-its-kernel-mappings">A node matches a Module’s .spec.selector, but not any of its kernel mappings</h2>
+<p>No DaemonSet is scheduled for this module and this kernel. The OOT kernel module will not be deployed on that node.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script>
+            var base_url = "../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../js/base.js" defer></script>
+        <script src="../../search/main.js" defer></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

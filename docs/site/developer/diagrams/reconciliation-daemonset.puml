@@ -1,0 +1,25 @@
+@startuml
+'https://plantuml.com/activity-diagram-beta
+
+title ""DaemonSet"" reconciliation
+
+start
+
+:Reconcile() called for DaemonSet;
+
+if (Is the ""DaemonSet"" owned by a ""Module""?) then (yes)
+  if (Is "".status.desiredNumberScheduled"" == 0?) then (yes)
+      :Delete the DaemonSet;
+      note
+          No node is matching that
+          DaemonSet's selector anymore.
+          No point in keeping it.
+      end note
+  else (no)
+  endif
+else (no)
+endif
+
+stop
+
+@enduml
