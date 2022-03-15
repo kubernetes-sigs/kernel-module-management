@@ -1,0 +1,37 @@
+name: Docs
+
+on: [pull_request]
+
+jobs:
+  build-compare:
+    name: Build and compare docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v2
+        with:
+          cache: pip
+
+      - name: Install mkdocs
+        run: pip install -r docs/requirements.txt
+
+      - name: Install plantuml
+        run: |
+          sudo apt update
+          sudo apt install -y plantuml
+
+      - name: Build the docs site
+        run: make
+        working-directory: docs
+
+      - name: Check if the output directory changed
+        run: |
+          git add -N docs/site
+
+          if ! git diff --quiet docs/site/ ':!docs/site/index.html' ':!docs/site/sitemap.xml*'; then
+            echo 'Changes detected; please run make -C docs.'
+            git diff docs/site ':!docs/site/index.html' ':!docs/site/sitemap.xml*'
+            exit 1
+          fi
