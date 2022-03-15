@@ -1,2 +1,12 @@
 site_name: Out-Of-Tree operator
+repo_url: https://github.com/qbarrand/oot-operator
+edit_uri: edit/main/docs/
+
 docs_dir: mkdocs
+strict: true
+
+plugins:
+  - exclude:
+      glob:
+        - developer/diagrams/*.puml
+        - developer/Makefile
