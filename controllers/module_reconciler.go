@@ -32,8 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const KernelLabel = "feature.node.kubernetes.io/kernel-version.full"
-
 // ModuleReconciler reconciles a Module object
 type ModuleReconciler struct {
 	client.Client

@@ -12,8 +12,10 @@ import (
 )
 
 var _ = Describe("daemonSetGenerator", func() {
+	const kernelLabel = "kernel-label"
+
 	Describe("SetAsDesired", func() {
-		dg := controllers.NewDaemonSetCreator(scheme)
+		dg := controllers.NewDaemonSetCreator(kernelLabel, scheme)
 
 		It("should return an error if the DaemonSet is nil", func() {
 			Expect(
@@ -110,7 +112,7 @@ var _ = Describe("daemonSetGenerator", func() {
 							},
 							NodeSelector: map[string]string{
 								"has-feature-x": "true",
-								"feature.node.kubernetes.io/kernel-version.full": kernelVersion,
+								kernelLabel:     kernelVersion,
 							},
 						},
 					},
