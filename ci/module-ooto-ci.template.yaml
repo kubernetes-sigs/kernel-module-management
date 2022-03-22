@@ -4,7 +4,6 @@ kind: Module
 metadata:
   name: ooto-ci
 spec:
-#  devicePlugin: {}
   driverContainer:
     name: overwritten-anyway
     command: [sleep, infinity]
