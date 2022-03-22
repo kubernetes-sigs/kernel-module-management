@@ -17,14 +17,13 @@ jobs:
       - name: Install mkdocs
         run: pip install -r docs/requirements.txt
 
-      - name: Install plantuml
+      - name: Install Java for PlantUML
         run: |
           sudo apt update
-          sudo apt install -y plantuml
+          sudo apt install -y default-jre
 
       - name: Build the docs site
-        run: make
-        working-directory: docs
+        run: make docs
 
       - name: Check if the output directory changed
         run: |
