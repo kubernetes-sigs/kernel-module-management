@@ -21,33 +21,43 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// KernelMapping pairs kernel versions with a DriverContainer image.
+// Kernel versions can be matched literally or using a regular expression.
 type KernelMapping struct {
+	// ContainerImage is the name of the DriverContainer image that should be used to deploy the module.
 	ContainerImage string `json:"containerImage"`
 
 	// +optional
+
+	// Literal defines a literal target kernel version to be matched exactly against node kernels.
 	Literal string `json:"literal"`
 
 	// +optional
+
+	// Regexp is a regular expression to be match against node kernels.
 	Regexp string `json:"regexp"`
 }
 
-// ModuleSpec defines the desired state of Module
+// ModuleSpec describes how the OOT operator should deploy a Module on those nodes that need it.
 type ModuleSpec struct {
 	// +optional
-	DevicePlugin v1.Container `json:"devicePlugin"`
 
-	// +optional
+	// DriverContainer allows overriding some properties of the container that deploys the driver on the node.
+	// Name and image are ignored and are set automatically by the OOT Operator.
 	DriverContainer v1.Container `json:"driverContainer"`
 
+	// KernelMappings is a list of kernel mappings.
+	// When a node's labels match Selector, then the OOT Operator will look for the first mapping that matches its
+	// kernel version, and use the corresponding container image to run the DriverContainer.
 	KernelMappings []KernelMapping `json:"kernelMappings"`
 
-	// Selector is a first-level filter to check if the module applies to a specific node.
-	// In the case of a hardware accelerator, Selector could contain a PCI device label set by Node Feature Discovery.
+	// Selector describes on which nodes the Module should be loaded.
 	Selector map[string]string `json:"selector"`
 }
 
-// ModuleStatus defines the observed state of Module
+// ModuleStatus defines the observed state of Module.
 type ModuleStatus struct {
+	// Conditions is a list of conditions representing the Module's current state.
 	Conditions []metav1.Condition `json:"conditions"`
 
 	// +optional

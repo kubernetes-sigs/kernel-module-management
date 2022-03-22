@@ -2423,12 +2423,21 @@ spec:
                 type: object
               kernelMappings:
                 items:
+                  description: KernelMapping pairs kernel versions with a DriverContainer
+                    image. Kernel versions can be matched literally or using a regular
+                    expression.
                   properties:
                     containerImage:
+                      description: ContainerImage is the name of the DriverContainer
+                        image that should be used to deploy the module.
                       type: string
                     literal:
+                      description: Literal defines a literal target kernel version
+                        to be matched exactly against node kernels.
                       type: string
                     regexp:
+                      description: Regexp is a regular expression to be match against
+                        node kernels.
                       type: string
                   required:
                   - containerImage
