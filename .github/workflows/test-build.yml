@@ -25,9 +25,6 @@ jobs:
           git diff
         fi
 
-    - name: Lint the code
-      run: make lint
-
     - name: Run tests
       run: make test
 
