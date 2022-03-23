@@ -17,6 +17,7 @@ COPY controllers controllers
 
 # Copy Makefile
 COPY Makefile Makefile
+COPY docs.mk docs.mk
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make manager
