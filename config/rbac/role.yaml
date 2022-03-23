@@ -21,7 +21,9 @@ rules:
   resources:
   - nodes
   verbs:
+  - get
   - list
+  - patch
   - watch
 - apiGroups:
   - ooto.sigs.k8s.io

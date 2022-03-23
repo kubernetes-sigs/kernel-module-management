@@ -19,14 +19,18 @@ type DaemonSetCreator interface {
 }
 
 type daemonSetGenerator struct {
-	scheme *runtime.Scheme
+	kernelLabel string
+	scheme      *runtime.Scheme
 }
 
-func NewDaemonSetCreator(scheme *runtime.Scheme) *daemonSetGenerator {
-	return &daemonSetGenerator{scheme: scheme}
+func NewDaemonSetCreator(kernelLabel string, scheme *runtime.Scheme) *daemonSetGenerator {
+	return &daemonSetGenerator{
+		kernelLabel: kernelLabel,
+		scheme:      scheme,
+	}
 }
 
-func (dc daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, mod *ootov1beta1.Module, kernelVersion string) error {
+func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, mod *ootov1beta1.Module, kernelVersion string) error {
 	if ds == nil {
 		return errors.New("ds cannot be nil")
 	}
@@ -61,7 +65,7 @@ func (dc daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, mo
 	ds.SetLabels(labels)
 
 	nodeSelector := CopyMapStringString(mod.Spec.Selector)
-	nodeSelector[KernelLabel] = kernelVersion
+	nodeSelector[dc.kernelLabel] = kernelVersion
 
 	driverContainer := mod.Spec.DriverContainer
 	driverContainer.Name = "driver-container"

@@ -18,9 +18,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/qbarrand/oot-operator/controllers/module"
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -37,9 +40,17 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
+const (
+	NFDKernelLabelingMethod  = "nfd"
+	OOTOKernelLabelingMethod = "ooto"
+
+	KernelLabelingMethodEnvVar = "KERNEL_LABELING_METHOD"
+)
+
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme               = runtime.NewScheme()
+	setupLog             = ctrl.Log.WithName("setup")
+	validLabelingMethods = sets.NewString(OOTOKernelLabelingMethod, NFDKernelLabelingMethod)
 )
 
 func init() {
@@ -51,6 +62,7 @@ func init() {
 
 func main() {
 	var (
+		configFile           string
 		metricsAddr          string
 		enableLeaderElection bool
 		probeAddr            string
@@ -62,6 +74,8 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
+	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
+
 	opts := zap.Options{
 		//Development: true,
 	}
@@ -71,10 +85,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	namespace, ok := os.LookupEnv("OPERATOR_NAMESPACE")
-	if !ok {
-		namespace = "default"
-	}
+	namespace := GetEnvWithDefault("OPERATOR_NAMESPACE", "default")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -92,7 +103,37 @@ func main() {
 
 	client := mgr.GetClient()
 
-	dc := controllers.NewDaemonSetCreator(scheme)
+	var (
+		kernelLabel          string
+		kernelLabelingMethod = GetEnvWithDefault(KernelLabelingMethodEnvVar, OOTOKernelLabelingMethod)
+	)
+
+	setupLog.V(1).Info("Determining kernel labeling method", KernelLabelingMethodEnvVar, kernelLabelingMethod)
+
+	switch kernelLabelingMethod {
+	case OOTOKernelLabelingMethod:
+		kernelLabel = "oot.node.kubernetes.io/kernel-version.full"
+
+		nkr := controllers.NewNodeKernelReconciler(client, kernelLabel)
+
+		if err = nkr.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "NodeKernel")
+			os.Exit(1)
+		}
+	case NFDKernelLabelingMethod:
+		kernelLabel = "feature.node.kubernetes.io/kernel-version.full"
+	default:
+		setupLog.Error(
+			fmt.Errorf("%q is not in %v", kernelLabelingMethod, validLabelingMethods.List()),
+			"Invalid kernel labeling method",
+		)
+
+		os.Exit(1)
+	}
+
+	setupLog.V(1).Info("Using kernel label", "label", kernelLabel)
+
+	dc := controllers.NewDaemonSetCreator(kernelLabel, scheme)
 	su := module.NewConditionsUpdater(client.Status())
 
 	mc := controllers.NewModuleReconciler(
@@ -122,4 +163,13 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func GetEnvWithDefault(key, def string) string {
+	v, ok := os.LookupEnv(key)
+	if !ok {
+		v = def
+	}
+
+	return v
 }
