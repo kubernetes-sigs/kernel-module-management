@@ -5,6 +5,7 @@
 package controllers
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -35,8 +36,23 @@ func (m *MockDaemonSetCreator) EXPECT() *MockDaemonSetCreatorMockRecorder {
 	return m.recorder
 }
 
+// ModuleDaemonSetsByKernelVersion mocks base method.
+func (m *MockDaemonSetCreator) ModuleDaemonSetsByKernelVersion(ctx context.Context, mod v1beta1.Module) (map[string]*v1.DaemonSet, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ModuleDaemonSetsByKernelVersion", ctx, mod)
+	ret0, _ := ret[0].(map[string]*v1.DaemonSet)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ModuleDaemonSetsByKernelVersion indicates an expected call of ModuleDaemonSetsByKernelVersion.
+func (mr *MockDaemonSetCreatorMockRecorder) ModuleDaemonSetsByKernelVersion(ctx, mod interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModuleDaemonSetsByKernelVersion", reflect.TypeOf((*MockDaemonSetCreator)(nil).ModuleDaemonSetsByKernelVersion), ctx, mod)
+}
+
 // SetAsDesired mocks base method.
-func (m *MockDaemonSetCreator) SetAsDesired(ds *v1.DaemonSet, image string, mod *v1beta1.Module, kernelVersion string) error {
+func (m *MockDaemonSetCreator) SetAsDesired(ds *v1.DaemonSet, image string, mod v1beta1.Module, kernelVersion string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetAsDesired", ds, image, mod, kernelVersion)
 	ret0, _ := ret[0].(error)

@@ -11,10 +11,9 @@ rules:
   - daemonsets
   verbs:
   - create
-  - delete
   - get
   - list
-  - update
+  - patch
   - watch
 - apiGroups:
   - ""

@@ -133,21 +133,24 @@ func main() {
 
 	setupLog.V(1).Info("Using kernel label", "label", kernelLabel)
 
-	dc := controllers.NewDaemonSetCreator(kernelLabel, scheme)
+	dc := controllers.NewDaemonSetCreator(client, kernelLabel, namespace, scheme)
+	km := module.NewKernelMapper()
 	su := module.NewConditionsUpdater(client.Status())
 
-	mc := controllers.NewModuleReconciler(
-		client,
-		namespace,
-		dc,
-		module.NewKernelMapper(),
-		su)
+	mc := controllers.NewModuleReconciler(client, namespace, dc, km, su)
 
 	if err = mc.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Module")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
+
+	nr := controllers.NewNodeReconciler(client, namespace, dc, km)
+
+	if err = nr.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Node")
+		os.Exit(1)
+	}
 
 	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")

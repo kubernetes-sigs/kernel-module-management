@@ -24,7 +24,6 @@ import (
 	"github.com/qbarrand/oot-operator/controllers/module"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,31 +60,20 @@ func NewModuleReconciler(
 //+kubebuilder:rbac:groups=ooto.sigs.k8s.io,resources=modules,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=ooto.sigs.k8s.io,resources=modules/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=ooto.sigs.k8s.io,resources=modules/finalizers,verbs=update
-//+kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=create;delete;get;list;update;watch
+//+kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=create;get;list;patch;watch
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=list;watch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Module object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.0/pkg/reconcile
+// Reconcile lists all nodes and looks for kernels that match its mappings.
+// For each mapping that matches at least one node in the cluster, it creates a DaemonSet running the container image
+// on the nodes with a compatible kernel.
 func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	mod := ootov1beta1.Module{}
 
 	if err := r.Client.Get(ctx, req.NamespacedName, &mod); err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Resource not found, module was deleted")
-			return ctrl.Result{}, nil
-		}
-
-		logger.Error(err, "Could not get resource; retrying")
-		return ctrl.Result{Requeue: true}, err
+		logger.Error(err, "Could not get module")
+		return ctrl.Result{}, err
 	}
 
 	logger.V(1).Info("Listing nodes", "selector", mod.Spec.Selector)
@@ -96,7 +84,12 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if err := r.Client.List(ctx, &nodes, opt); err != nil {
 		logger.Error(err, "Could not list nodes; retrying")
-		return ctrl.Result{Requeue: true}, err
+		return ctrl.Result{}, fmt.Errorf("could not list nodes: %v", err)
+	}
+
+	if len(nodes.Items) == 0 {
+		logger.Info("No nodes matching the selector; skipping module")
+		return ctrl.Result{}, nil
 	}
 
 	mappings := make(map[string]string)
@@ -116,7 +109,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		containerImage, err := r.km.FindImageForKernel(mod.Spec.KernelMappings, kernelVersion)
 		if err != nil {
-			nodeLogger.Error(err, "no suitable container image found; skipping node")
+			nodeLogger.Info("no suitable container image found; skipping node")
 			continue
 		}
 
@@ -124,56 +117,44 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		mappings[kernelVersion] = containerImage
 	}
 
-	// TODO qbarrand: find a better place for this
-	if err := r.su.SetAsReady(ctx, &mod, "TODO", "TODO"); err != nil {
-		return ctrl.Result{Requeue: true}, fmt.Errorf("could not set the initial conditions: %v", err)
+	dsByKernelVersion, err := r.dc.ModuleDaemonSetsByKernelVersion(ctx, mod)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("could get DaemonSets for module %s: %v", mod.Name, err)
 	}
+
+	//// TODO qbarrand: find a better place for this
+	//if err := r.su.SetAsReady(ctx, &mod, "TODO", "TODO"); err != nil {
+	//	return ctrl.Result{}, fmt.Errorf("could not set the initial conditions: %v", err)
+	//}
 
 	for kernelVersion, containerImage := range mappings {
 		logger.WithValues("kernel version", kernelVersion, "image", containerImage)
-
-		isCreation := false
 
 		ds := &appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{Namespace: r.namespace},
 		}
 
-		name, ok := mod.Status.KernelDaemonSetsMap[kernelVersion]
-		if !ok {
-			isCreation = true
-			ds.GenerateName = mod.Name + "-"
+		if existingDS := dsByKernelVersion[kernelVersion]; existingDS != nil {
+			ds = existingDS
 		} else {
-			ds.Name = name
+			ds.GenerateName = mod.Name + "-"
 		}
 
-		res, err := controllerutil.CreateOrUpdate(ctx, r.Client, ds, func() error {
-			return r.dc.SetAsDesired(ds, containerImage, &mod, kernelVersion)
+		var res controllerutil.OperationResult
+
+		res, err = controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
+			return r.dc.SetAsDesired(ds, containerImage, mod, kernelVersion)
 		})
 
 		if err != nil {
-			return ctrl.Result{Requeue: true}, fmt.Errorf("could not reconcile DaemonSet for kernel %s: %v", kernelVersion, err)
-		}
-
-		if isCreation {
-			if mod.Status.KernelDaemonSetsMap == nil {
-				mod.Status.KernelDaemonSetsMap = make(map[string]string)
-			}
-
-			mod.Status.KernelDaemonSetsMap[kernelVersion] = ds.Name
-
-			if err = r.Client.Status().Update(ctx, &mod); err != nil {
-				logger.Error(err, "Module status update failed; deleting DaemonSet")
-
-				if err := r.Client.Delete(ctx, ds); err != nil {
-					logger.Error(err, "Failed to delete the DeamonSet; state might be inconsistent")
-				}
-
-				return ctrl.Result{}, fmt.Errorf("could not update the module's status: %v", err)
-			}
+			return ctrl.Result{}, fmt.Errorf("could not create or patch DaemonSet: %v", err)
 		}
 
 		logger.Info("Reconciled DaemonSet", "name", ds.Name, "result", res)
 	}
+
+	// TODO we need to garbage collect DaemonSets here.
+	// If we removed a kernel mapping from the Module, the corresponding DaemonSet is currently not deleted.
 
 	return ctrl.Result{}, nil
 }
@@ -183,5 +164,6 @@ func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ootov1beta1.Module{}).
 		Owns(&appsv1.DaemonSet{}).
+		WithEventFilter(SkipDeletions()).
 		Complete(r)
 }

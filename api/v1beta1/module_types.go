@@ -59,9 +59,6 @@ type ModuleSpec struct {
 type ModuleStatus struct {
 	// Conditions is a list of conditions representing the Module's current state.
 	Conditions []metav1.Condition `json:"conditions"`
-
-	// +optional
-	KernelDaemonSetsMap map[string]string `json:"kernelDaemonSetsMap"`
 }
 
 //+kubebuilder:object:root=true

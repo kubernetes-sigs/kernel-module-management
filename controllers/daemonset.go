@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -9,28 +10,65 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+const labelModuleName = "oot.node.kubernetes.io/module.name"
 
 //go:generate mockgen -source=daemonset.go -package=controllers -destination=mock_daemonset.go
 
 type DaemonSetCreator interface {
-	SetAsDesired(ds *appsv1.DaemonSet, image string, mod *ootov1beta1.Module, kernelVersion string) error
+	ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1beta1.Module) (map[string]*appsv1.DaemonSet, error)
+	SetAsDesired(ds *appsv1.DaemonSet, image string, mod ootov1beta1.Module, kernelVersion string) error
 }
 
 type daemonSetGenerator struct {
+	client      client.Client
 	kernelLabel string
+	namespace   string
 	scheme      *runtime.Scheme
 }
 
-func NewDaemonSetCreator(kernelLabel string, scheme *runtime.Scheme) *daemonSetGenerator {
+func NewDaemonSetCreator(client client.Client, kernelLabel, namespace string, scheme *runtime.Scheme) *daemonSetGenerator {
 	return &daemonSetGenerator{
+		client:      client,
 		kernelLabel: kernelLabel,
+		namespace:   namespace,
 		scheme:      scheme,
 	}
 }
 
-func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, mod *ootov1beta1.Module, kernelVersion string) error {
+func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1beta1.Module) (map[string]*appsv1.DaemonSet, error) {
+	dsList := appsv1.DaemonSetList{}
+
+	opts := []client.ListOption{
+		client.MatchingLabels(map[string]string{labelModuleName: mod.Name}),
+		client.InNamespace(dc.namespace),
+	}
+
+	if err := dc.client.List(ctx, &dsList, opts...); err != nil {
+		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
+	}
+
+	dsByKernelVersion := make(map[string]*appsv1.DaemonSet, len(dsList.Items))
+
+	for i := 0; i < len(dsList.Items); i++ {
+		ds := dsList.Items[i]
+
+		kernelVersion := ds.Labels[dc.kernelLabel]
+
+		if dsByKernelVersion[kernelVersion] != nil {
+			return nil, fmt.Errorf("multiple DaemonSets found for kernel %q", kernelVersion)
+		}
+
+		dsByKernelVersion[kernelVersion] = &ds
+	}
+
+	return dsByKernelVersion, nil
+}
+
+func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, mod ootov1beta1.Module, kernelVersion string) error {
 	if ds == nil {
 		return errors.New("ds cannot be nil")
 	}
@@ -39,17 +77,13 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 		return errors.New("image cannot be empty")
 	}
 
-	if mod == nil {
-		return errors.New("mod cannot be nil")
-	}
-
 	if kernelVersion == "" {
 		return errors.New("kernelVersion cannot be empty")
 	}
 
 	standardLabels := map[string]string{
-		"oot.node.kubernetes.io/module.name":         mod.Name,
-		"oot.node.kubernetes.io/kernel-version.full": kernelVersion,
+		labelModuleName: mod.Name,
+		dc.kernelLabel:  kernelVersion,
 	}
 
 	labels := ds.GetLabels()
@@ -82,7 +116,7 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 		},
 	}
 
-	if err := controllerutil.SetOwnerReference(mod, ds, dc.scheme); err != nil {
+	if err := controllerutil.SetOwnerReference(&mod, ds, dc.scheme); err != nil {
 		return fmt.Errorf("could not set the owner reference: %v", err)
 	}
 

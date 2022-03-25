@@ -1339,10 +1339,6 @@ spec:
                   - type
                   type: object
                 type: array
-              kernelDaemonSetsMap:
-                additionalProperties:
-                  type: string
-                type: object
             required:
             - conditions
             type: object

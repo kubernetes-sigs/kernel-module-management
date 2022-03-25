@@ -33,19 +33,6 @@ var _ = Describe("ModuleReconciler", func() {
 			mockKM = module.NewMockKernelMapper(ctrl)
 		})
 
-		It("should do nothing when the resource was deleted", func() {
-			client := fake.NewClientBuilder().WithScheme(scheme).Build()
-
-			mr := controllers.ModuleReconciler{Client: client}
-			req := reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: "some-name"},
-			}
-
-			res, err := mr.Reconcile(context.TODO(), req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(reconcile.Result{}))
-		})
-
 		It("should do nothing when no nodes match the selector", func() {
 			const moduleName = "test-module"
 
@@ -76,10 +63,6 @@ var _ = Describe("ModuleReconciler", func() {
 			req := reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: moduleName},
 			}
-
-			ctx := context.TODO()
-
-			mockCU.EXPECT().SetAsReady(ctx, gomock.AssignableToTypeOf(&mod), "TODO", "TODO")
 
 			res, err := mr.Reconcile(context.TODO(), req)
 			Expect(err).NotTo(HaveOccurred())
@@ -148,8 +131,8 @@ var _ = Describe("ModuleReconciler", func() {
 
 			gomock.InOrder(
 				mockKM.EXPECT().FindImageForKernel(mappings, kernelVersion).Return(imageName, nil),
-				mockCU.EXPECT().SetAsReady(ctx, gomock.AssignableToTypeOf(&mod), "TODO", "TODO"),
-				mockDC.EXPECT().SetAsDesired(&ds, imageName, gomock.AssignableToTypeOf(&mod), kernelVersion),
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)),
+				mockDC.EXPECT().SetAsDesired(&ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
 			)
 
 			res, err := mr.Reconcile(context.TODO(), req)
@@ -161,14 +144,95 @@ var _ = Describe("ModuleReconciler", func() {
 			err = c.List(ctx, &dsList)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(dsList.Items).To(HaveLen(1))
+		})
 
-			updatedMod := ootov1beta1.Module{}
+		It("should path the DaemonSet when it already exists", func() {
+			const (
+				imageName     = "test-image"
+				kernelVersion = "1.2.3"
+				moduleName    = "test-module"
+			)
 
-			err = c.Get(ctx, types.NamespacedName{Name: moduleName}, &updatedMod)
+			mappings := []ootov1beta1.KernelMapping{
+				{
+					ContainerImage: imageName,
+					Literal:        kernelVersion,
+				},
+			}
+
+			nodeLabels := map[string]string{"key": "value"}
+
+			mod := ootov1beta1.Module{
+				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				Spec: ootov1beta1.ModuleSpec{
+					KernelMappings: mappings,
+					Selector:       nodeLabels,
+				},
+			}
+
+			nodeList := v1.NodeList{
+				Items: []v1.Node{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:   "node1",
+							Labels: nodeLabels,
+						},
+						Status: v1.NodeStatus{
+							NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
+						},
+					},
+				},
+			}
+
+			const (
+				dsName    = "some-daemonset"
+				namespace = "test-namespace"
+			)
+
+			ds := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      dsName,
+					Namespace: namespace,
+				},
+			}
+
+			c := fake.
+				NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(&mod, &ds).
+				WithLists(&nodeList).
+				Build()
+
+			mr := controllers.NewModuleReconciler(c, namespace, mockDC, mockKM, mockCU)
+
+			req := reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: moduleName},
+			}
+
+			ctx := context.TODO()
+
+			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
+
+			gomock.InOrder(
+				mockKM.EXPECT().FindImageForKernel(mappings, kernelVersion).Return(imageName, nil),
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
+				mockDC.EXPECT().SetAsDesired(&ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
+					func(d *appsv1.DaemonSet, _ string, _ ootov1beta1.Module, _ string) {
+						d.SetLabels(map[string]string{"test": "test"})
+					}),
+			)
+
+			res, err := mr.Reconcile(context.TODO(), req)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(reconcile.Result{}))
 
-			Expect(updatedMod.Status.KernelDaemonSetsMap).
-				To(HaveKeyWithValue(kernelVersion, dsList.Items[0].Name))
+			dsList := appsv1.DaemonSetList{}
+
+			err = c.List(ctx, &dsList)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dsList.Items).To(HaveLen(1))
+			Expect(dsList.Items[0].Name).To(Equal(dsName))
+			Expect(dsList.Items[0].Labels).To(HaveKeyWithValue("test", "test"))
 		})
 	})
 })

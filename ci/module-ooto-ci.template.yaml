@@ -2,7 +2,7 @@
 apiVersion: ooto.sigs.k8s.io/v1beta1
 kind: Module
 metadata:
-  name: ooto-ci
+  name: NAME_CHANGEME
 spec:
   driverContainer:
     name: overwritten-anyway
@@ -11,10 +11,10 @@ spec:
     lifecycle:
       postStart:
         exec:
-          command: [modprobe, -v, ooto_ci]
+          command: [modprobe, -v, KMOD_CHANGEME]
       preStop:
         exec:
-          command: [modprobe, -rv, ooto_ci]
+          command: [modprobe, -rv, KMOD_CHANGEME]
     securityContext:
       capabilities:
         add: [SYS_MODULE]
@@ -22,4 +22,4 @@ spec:
     - literal: KVER_CHANGEME
       containerImage: ooto-kmod:local
   selector:
-    kubernetes.io/hostname: minikube
+    wants-oot-module: KMOD_CHANGEME
