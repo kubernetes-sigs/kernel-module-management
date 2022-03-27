@@ -3,6 +3,59 @@ name: e2e
 on: [pull_request]
 
 jobs:
+  build-operator-image:
+    runs-on: ubuntu-latest
+
+    name: Build the OOTO container image
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Build the image
+        run: docker build -t ooto:local .
+
+      - name: Export the image
+        run: docker save -o ooto_local.tar ooto:local
+
+      - name: Upload the image
+        uses: actions/upload-artifact@v3
+        with:
+          name: ci-images
+          if-no-files-found: error
+          path: ooto_local.tar
+          retention-days: 1
+
+  build-drivercontainer-image:
+    runs-on: ubuntu-latest
+
+    name: Build the DriverContainer image
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Save the kernel version
+        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
+
+      - name: Build the kernel module
+        run: make KERNEL_SRC_DIR="/usr/src/linux-headers-${KERNEL_VERSION}"
+        working-directory: ci/ooto-kmod
+
+      - name: Build the image
+        run: docker build -t ooto-kmod:local --build-arg=KERNEL_VERSION=${KERNEL_VERSION} ci/ooto-kmod
+
+      - name: Export the image
+        run: docker save -o ooto-kmod_local.tar ooto-kmod:local
+
+      - name: Upload the image
+        uses: actions/upload-artifact@v3
+        with:
+          name: ci-images
+          path: ooto-kmod_local.tar
+          if-no-files-found: error
+          retention-days: 1
+
   e2e:
     runs-on: ubuntu-latest
 
@@ -16,16 +69,11 @@ jobs:
 
     name: "Prebuilt kernel module (NFD: ${{ matrix.install-nfd }})"
 
+    needs: [build-operator-image, build-drivercontainer-image]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-
-      - name: Save the kernel version
-        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
-
-      - name: Build the kernel module
-        run: make KERNEL_SRC_DIR="/usr/src/linux-headers-${KERNEL_VERSION}"
-        working-directory: ci/ooto-kmod
 
       - name: Download and install minikube
         run: |
@@ -35,15 +83,6 @@ jobs:
         run: |
           minikube start --driver=docker
           kubectl wait --for=condition=available deployment coredns -n kube-system
-      - name: Build ooto-kmod
-        run: minikube image build -t ooto-kmod:local --build-opt build-arg=KERNEL_VERSION=${KERNEL_VERSION} ci/ooto-kmod
-
-      - name: Build OOTO
-        run: minikube image build -t ooto:local .
-
-      - uses: actions/setup-go@v2
-        with:
-          go-version: 1.17.6
 
       - name: Install NFD
         run: kubectl apply -k https://github.com/kubernetes-sigs/node-feature-discovery/deployment/overlays/default?ref=v0.10.1
@@ -51,6 +90,22 @@ jobs:
 
       - name: Label the node so that it gets the module
         run: kubectl label node minikube wants-oot-module=ooto_ci_a
+
+      - name: Download container images
+        uses: actions/download-artifact@v3
+        with:
+          name: ci-images
+
+      - name: Import images into minikube
+        run: |
+          minikube image load ooto_local.tar
+          minikube image load ooto-kmod_local.tar
+
+      - run: minikube image ls
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.17.6
 
       - name: Deploy OOTO
         run: make deploy
@@ -73,9 +128,9 @@ jobs:
             echo "Unexpected lsmod output - the module should not be loaded"
             exit 1
           fi
-      - name: Add an ooto-ci Module that contains a mapping for $KERNEL_VERSION
+      - name: Add an ooto-ci Module that contains a valid mapping
         run: |
-          sed -e "s/KVER_CHANGEME/${KERNEL_VERSION}/g" \
+          sed -e "s/KVER_CHANGEME/$(uname -r)/g" \
             -e s/NAME_CHANGEME/ooto-ci/ \
             -e s/KMOD_CHANGEME/ooto_ci_a/ \
             ci/module-ooto-ci.template.yaml | tee module-ooto-ci.yaml
@@ -128,17 +183,14 @@ jobs:
 
   e2e-two-nodes:
     name: Prebuilt kernel module - two nodes
+
     runs-on: ubuntu-latest
+
+    needs: [build-operator-image, build-drivercontainer-image]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-
-      - name: Save the kernel version
-        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
-
-      - name: Build both kernel modules
-        run: make KERNEL_SRC_DIR="/usr/src/linux-headers-${KERNEL_VERSION}"
-        working-directory: ci/ooto-kmod
 
       - name: Download and install minikube
         run: |
@@ -149,11 +201,15 @@ jobs:
           minikube start --driver=docker -n 2
           kubectl wait --for=condition=available deployment coredns -n kube-system
 
-      - name: Build the DriverContainer image on all nodes
-        run: minikube image build --all -t ooto-kmod:local --build-opt build-arg=KERNEL_VERSION=${KERNEL_VERSION} ci/ooto-kmod
+      - name: Download container images
+        uses: actions/download-artifact@v3
+        with:
+          name: ci-images
 
-      - name: Build OOTO
-        run: minikube image build -t ooto:local .
+      - name: Import images into minikube
+        run: |
+          minikube image load ooto_local.tar
+          minikube image load ooto-kmod_local.tar
 
       - uses: actions/setup-go@v2
         with:
@@ -179,6 +235,8 @@ jobs:
 
       - name: Create one Module for each node
         run: |
+          KERNEL_VERSION="$(uname -r)"
+
           # Node minikube gets module a
           sed -e s/NAME_CHANGEME/ooto-ci-a/g \
             -e s/KMOD_CHANGEME/ooto_ci_a/g \
