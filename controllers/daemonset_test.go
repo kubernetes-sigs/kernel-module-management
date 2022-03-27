@@ -79,8 +79,8 @@ var _ = Describe("daemonSetGenerator", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			podLabels := map[string]string{
-				"oot.node.kubernetes.io/module.name": moduleName,
-				kernelLabel:                          kernelVersion,
+				controllers.ModuleNameLabel: moduleName,
+				kernelLabel:                 kernelVersion,
 			}
 
 			expected := appsv1.DaemonSet{

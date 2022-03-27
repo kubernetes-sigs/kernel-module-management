@@ -14,9 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const labelModuleName = "oot.node.kubernetes.io/module.name"
-
 //go:generate mockgen -source=daemonset.go -package=controllers -destination=mock_daemonset.go
+
+const ModuleNameLabel = "oot.node.kubernetes.io/module.name"
 
 type DaemonSetCreator interface {
 	ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1beta1.Module) (map[string]*appsv1.DaemonSet, error)
@@ -43,7 +43,7 @@ func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Contex
 	dsList := appsv1.DaemonSetList{}
 
 	opts := []client.ListOption{
-		client.MatchingLabels(map[string]string{labelModuleName: mod.Name}),
+		client.MatchingLabels(map[string]string{ModuleNameLabel: mod.Name}),
 		client.InNamespace(dc.namespace),
 	}
 
@@ -82,7 +82,7 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 	}
 
 	standardLabels := map[string]string{
-		labelModuleName: mod.Name,
+		ModuleNameLabel: mod.Name,
 		dc.kernelLabel:  kernelVersion,
 	}
 

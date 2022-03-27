@@ -143,7 +143,6 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Module")
 		os.Exit(1)
 	}
-	//+kubebuilder:scaffold:builder
 
 	nr := controllers.NewNodeReconciler(client, namespace, dc, km)
 
@@ -151,6 +150,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Node")
 		os.Exit(1)
 	}
+
+	dsr := controllers.NewDaemonSetReconciler(client)
+
+	if err = dsr.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DaemonSet")
+		os.Exit(1)
+	}
+
+	//+kubebuilder:scaffold:builder
 
 	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")

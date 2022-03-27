@@ -31,12 +31,10 @@ jobs:
         run: |
           wget https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
           sudo dpkg -i ./minikube_latest_amd64.deb
-
       - name: Start minikube and wait until CoreDNS is available
         run: |
           minikube start --driver=docker
           kubectl wait --for=condition=available deployment coredns -n kube-system
-
       - name: Build ooto-kmod
         run: minikube image build -t ooto-kmod:local --build-opt build-arg=KERNEL_VERSION=${KERNEL_VERSION} ci/ooto-kmod
 
@@ -75,7 +73,6 @@ jobs:
             echo "Unexpected lsmod output - the module should not be loaded"
             exit 1
           fi
-
       - name: Add an ooto-ci Module that contains a mapping for $KERNEL_VERSION
         run: |
           sed -e "s/KVER_CHANGEME/${KERNEL_VERSION}/g" \
@@ -84,7 +81,6 @@ jobs:
             ci/module-ooto-ci.template.yaml | tee module-ooto-ci.yaml
 
           kubectl apply -f module-ooto-ci.yaml
-
       - name: Check that the module gets loaded on the node
         run: |
           until minikube ssh -- lsmod | grep ooto_ci_a; do
@@ -102,8 +98,12 @@ jobs:
           done
         timeout-minutes: 1
 
-      - name: Get all resources in the namespace
+      - name: Get all resources in the oot-operator-system namespace
         run: kubectl get all -n oot-operator-system
+        if: ${{ always() }}
+
+      - name: Get all resources in the default namespace
+        run: kubectl get all
         if: ${{ always() }}
 
       - name: Describe nodes
@@ -144,7 +144,6 @@ jobs:
         run: |
           wget https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
           sudo dpkg -i ./minikube_latest_amd64.deb
-
       - name: Start minikube and wait until CoreDNS is available
         run: |
           minikube start --driver=docker -n 2
@@ -224,8 +223,33 @@ jobs:
           done
         timeout-minutes: 1
 
-      - name: Get all resources in the namespace
+      - name: Verify that the DaemonSet controller works
+        run: |
+          set -eux
+
+          # Get the DaemonSet's name, as we cannot patch by label
+          DS_NAME=$(kubectl get daemonsets.apps -l oot.node.kubernetes.io/module.name=ooto-ci-b --template='{{ (index .items 0).metadata.name }}')
+
+          # Verify that we got the name
+          test -n "${DS_NAME}"
+
+          # Wait one minute for the DaemonSet to be considered old and deletable
+          sleep 60
+
+          # Patch the DaemonSet to trigger a reconciliation
+          kubectl patch daemonset.apps "${DS_NAME}" --patch '{"metadata":{"labels": {"trigger-reconcile":""}}}'
+
+          until ! kubectl get daemonsets.apps "${DS_NAME}"; do
+            sleep 3
+          done
+        timeout-minutes: 2
+
+      - name: Get all resources in the oot-operator-system namespace
         run: kubectl get all -n oot-operator-system
+        if: ${{ always() }}
+
+      - name: Get all resources in the default namespace
+        run: kubectl get all
         if: ${{ always() }}
 
       - name: Describe nodes
