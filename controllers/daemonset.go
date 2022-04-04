@@ -102,16 +102,17 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 	nodeSelector[dc.kernelLabel] = kernelVersion
 
 	const (
-		nodeLibModulesPath          = "/lib/modules"
-		nodeLibModulesVolumeName    = "node-lib-modules"
-		nodeUsrLibModulesPath       = "/usr/lib/modules"
-		nodeUsrLibModulesVolumeName = "node-usr-lib-modules"
+		kubeletDevicePluginsVolumeName = "kubelet-device-plugins"
+		kubeletDevicePluginsPath       = "/var/lib/kubelet/device-plugins"
+		nodeLibModulesPath             = "/lib/modules"
+		nodeLibModulesVolumeName       = "node-lib-modules"
+		nodeUsrLibModulesPath          = "/usr/lib/modules"
+		nodeUsrLibModulesVolumeName    = "node-usr-lib-modules"
 	)
 
-	driverContainer := mod.Spec.DriverContainer
-	driverContainer.Name = "driver-container"
-	driverContainer.Image = image
-	driverContainer.VolumeMounts = []v1.VolumeMount{
+	containers := make([]v1.Container, 0, 2)
+
+	driverContainerVolumeMounts := []v1.VolumeMount{
 		{
 			Name:      nodeLibModulesVolumeName,
 			ReadOnly:  true,
@@ -124,7 +125,70 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 		},
 	}
 
+	driverContainer := mod.Spec.DriverContainer
+	driverContainer.Name = "driver-container"
+	driverContainer.Image = image
+	driverContainer.VolumeMounts = append(driverContainer.VolumeMounts, driverContainerVolumeMounts...)
+
+	containers = append(containers, driverContainer)
+
 	hostPathDirectory := v1.HostPathDirectory
+	varTrue := true
+
+	volumes := []v1.Volume{
+		{
+			Name: nodeLibModulesVolumeName,
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: nodeLibModulesPath,
+					Type: &hostPathDirectory,
+				},
+			},
+		},
+		{
+			Name: nodeUsrLibModulesVolumeName,
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: nodeUsrLibModulesPath,
+					Type: &hostPathDirectory,
+				},
+			},
+		},
+	}
+
+	if mod.Spec.DevicePlugin != nil {
+		devicePlugin := *mod.Spec.DevicePlugin
+		devicePlugin.Name = "device-plugin"
+
+		if devicePlugin.SecurityContext == nil {
+			devicePlugin.SecurityContext = &v1.SecurityContext{}
+		}
+
+		devicePlugin.SecurityContext.Privileged = &varTrue
+
+		devicePluginsVolumeMount := v1.VolumeMount{
+			Name:      kubeletDevicePluginsVolumeName,
+			MountPath: kubeletDevicePluginsPath,
+		}
+
+		devicePlugin.VolumeMounts = append(devicePlugin.VolumeMounts, devicePluginsVolumeMount)
+
+		containers = append(containers, devicePlugin)
+
+		devicePluginsVolume := v1.Volume{
+			Name: kubeletDevicePluginsVolumeName,
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: kubeletDevicePluginsPath,
+					Type: &hostPathDirectory,
+				},
+			},
+		}
+
+		volumes = append(volumes, devicePluginsVolume)
+	}
+
+	volumes = append(volumes, mod.Spec.AdditionalVolumes...)
 
 	ds.Spec = appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{MatchLabels: standardLabels},
@@ -132,27 +196,8 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 			ObjectMeta: metav1.ObjectMeta{Labels: standardLabels},
 			Spec: v1.PodSpec{
 				NodeSelector: nodeSelector,
-				Containers:   []v1.Container{driverContainer},
-				Volumes: []v1.Volume{
-					{
-						Name: nodeLibModulesVolumeName,
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{
-								Path: nodeLibModulesPath,
-								Type: &hostPathDirectory,
-							},
-						},
-					},
-					{
-						Name: nodeUsrLibModulesVolumeName,
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{
-								Path: nodeUsrLibModulesPath,
-								Type: &hostPathDirectory,
-							},
-						},
-					},
-				},
+				Containers:   containers,
+				Volumes:      volumes,
 			},
 		},
 	}

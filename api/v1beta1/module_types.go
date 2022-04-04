@@ -42,6 +42,16 @@ type KernelMapping struct {
 type ModuleSpec struct {
 	// +optional
 
+	// AdditionalVolumes is a list of volumes that will be attached to the DriverContainer / DevicePlugin pod,
+	// in addition to the default ones.
+	AdditionalVolumes []v1.Volume `json:"additionalVolumes"`
+
+	// +optional
+
+	// DevicePlugin allows overriding some properties of the container that deploys the device plugin on the node.
+	// Name is ignored and is set automatically by the OOT Operator.
+	DevicePlugin *v1.Container `json:"devicePlugin"`
+
 	// DriverContainer allows overriding some properties of the container that deploys the driver on the node.
 	// Name and image are ignored and are set automatically by the OOT Operator.
 	DriverContainer v1.Container `json:"driverContainer"`

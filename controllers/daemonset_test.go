@@ -50,11 +50,55 @@ var _ = Describe("daemonSetGenerator", func() {
 			)
 		})
 
+		It("should not add a device-plugin container if it is not set in the spec", func() {
+			mod := ootov1beta1.Module{
+				Spec: ootov1beta1.ModuleSpec{
+					Selector: map[string]string{"has-feature-x": "true"},
+				},
+			}
+
+			ds := appsv1.DaemonSet{}
+
+			err := dg.SetAsDesired(&ds, "test-image", mod, kernelVersion)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		})
+
+		It("should add additional volumes if there are any", func() {
+			vol := v1.Volume{Name: "test-volume"}
+
+			mod := ootov1beta1.Module{
+				Spec: ootov1beta1.ModuleSpec{
+					AdditionalVolumes: []v1.Volume{vol},
+				},
+			}
+
+			ds := appsv1.DaemonSet{}
+
+			err := dg.SetAsDesired(&ds, "test-image", mod, kernelVersion)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+			Expect(ds.Spec.Template.Spec.Volumes[2]).To(Equal(vol))
+		})
+
 		It("should work as expected", func() {
 			const (
-				dsName = "ds-name"
-				image  = "test-image"
+				devicePluginImage    = "device-plugin-image"
+				driverContainerImage = "driver-image"
+				dsName               = "ds-name"
 			)
+
+			dcVolMount := v1.VolumeMount{
+				Name:      "some-dc-volume-mount",
+				ReadOnly:  true,
+				MountPath: "/some/path",
+			}
+
+			dpVolMount := v1.VolumeMount{
+				Name:      "some-dp-volume-mount",
+				MountPath: "/some/path",
+			}
 
 			mod := ootov1beta1.Module{
 				TypeMeta: metav1.TypeMeta{
@@ -63,9 +107,15 @@ var _ = Describe("daemonSetGenerator", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 				Spec: ootov1beta1.ModuleSpec{
+					DriverContainer: v1.Container{
+						VolumeMounts: []v1.VolumeMount{dcVolMount},
+					},
+					DevicePlugin: &v1.Container{
+						Image:        devicePluginImage,
+						VolumeMounts: []v1.VolumeMount{dpVolMount},
+					},
 					Selector: map[string]string{"has-feature-x": "true"},
 				},
-				Status: ootov1beta1.ModuleStatus{},
 			}
 
 			ds := appsv1.DaemonSet{
@@ -75,7 +125,7 @@ var _ = Describe("daemonSetGenerator", func() {
 				},
 			}
 
-			err := dg.SetAsDesired(&ds, image, mod, kernelVersion)
+			err := dg.SetAsDesired(&ds, driverContainerImage, mod, kernelVersion)
 			Expect(err).NotTo(HaveOccurred())
 
 			podLabels := map[string]string{
@@ -84,6 +134,7 @@ var _ = Describe("daemonSetGenerator", func() {
 			}
 
 			directory := v1.HostPathDirectory
+			varTrue := true
 
 			expected := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -107,8 +158,9 @@ var _ = Describe("daemonSetGenerator", func() {
 							Containers: []v1.Container{
 								{
 									Name:  "driver-container",
-									Image: image,
+									Image: driverContainerImage,
 									VolumeMounts: []v1.VolumeMount{
+										dcVolMount,
 										{
 											Name:      "node-lib-modules",
 											ReadOnly:  true,
@@ -118,6 +170,18 @@ var _ = Describe("daemonSetGenerator", func() {
 											Name:      "node-usr-lib-modules",
 											ReadOnly:  true,
 											MountPath: "/usr/lib/modules",
+										},
+									},
+								},
+								{
+									Name:            "device-plugin",
+									Image:           devicePluginImage,
+									SecurityContext: &v1.SecurityContext{Privileged: &varTrue},
+									VolumeMounts: []v1.VolumeMount{
+										dpVolMount,
+										{
+											Name:      "kubelet-device-plugins",
+											MountPath: "/var/lib/kubelet/device-plugins",
 										},
 									},
 								},
@@ -141,6 +205,15 @@ var _ = Describe("daemonSetGenerator", func() {
 									VolumeSource: v1.VolumeSource{
 										HostPath: &v1.HostPathVolumeSource{
 											Path: "/usr/lib/modules",
+											Type: &directory,
+										},
+									},
+								},
+								{
+									Name: "kubelet-device-plugins",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{
+											Path: "/var/lib/kubelet/device-plugins",
 											Type: &directory,
 										},
 									},
