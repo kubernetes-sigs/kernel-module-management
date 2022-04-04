@@ -35,6 +35,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: 'DEBUG: List all kernel modules'
+        run: find /lib/modules/$(uname -r) -type f -name '*.ko*'
+
       - name: Save the kernel version
         run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
 

@@ -83,6 +83,8 @@ var _ = Describe("daemonSetGenerator", func() {
 				kernelLabel:                 kernelVersion,
 			}
 
+			directory := v1.HostPathDirectory
+
 			expected := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      dsName,
@@ -106,11 +108,43 @@ var _ = Describe("daemonSetGenerator", func() {
 								{
 									Name:  "driver-container",
 									Image: image,
+									VolumeMounts: []v1.VolumeMount{
+										{
+											Name:      "node-lib-modules",
+											ReadOnly:  true,
+											MountPath: "/lib/modules",
+										},
+										{
+											Name:      "node-usr-lib-modules",
+											ReadOnly:  true,
+											MountPath: "/usr/lib/modules",
+										},
+									},
 								},
 							},
 							NodeSelector: map[string]string{
 								"has-feature-x": "true",
 								kernelLabel:     kernelVersion,
+							},
+							Volumes: []v1.Volume{
+								{
+									Name: "node-lib-modules",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{
+											Path: "/lib/modules",
+											Type: &directory,
+										},
+									},
+								},
+								{
+									Name: "node-usr-lib-modules",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{
+											Path: "/usr/lib/modules",
+											Type: &directory,
+										},
+									},
+								},
 							},
 						},
 					},

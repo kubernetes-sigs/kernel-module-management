@@ -101,9 +101,30 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 	nodeSelector := CopyMapStringString(mod.Spec.Selector)
 	nodeSelector[dc.kernelLabel] = kernelVersion
 
+	const (
+		nodeLibModulesPath          = "/lib/modules"
+		nodeLibModulesVolumeName    = "node-lib-modules"
+		nodeUsrLibModulesPath       = "/usr/lib/modules"
+		nodeUsrLibModulesVolumeName = "node-usr-lib-modules"
+	)
+
 	driverContainer := mod.Spec.DriverContainer
 	driverContainer.Name = "driver-container"
 	driverContainer.Image = image
+	driverContainer.VolumeMounts = []v1.VolumeMount{
+		{
+			Name:      nodeLibModulesVolumeName,
+			ReadOnly:  true,
+			MountPath: nodeLibModulesPath,
+		},
+		{
+			Name:      nodeUsrLibModulesVolumeName,
+			ReadOnly:  true,
+			MountPath: nodeUsrLibModulesPath,
+		},
+	}
+
+	hostPathDirectory := v1.HostPathDirectory
 
 	ds.Spec = appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{MatchLabels: standardLabels},
@@ -112,6 +133,26 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 			Spec: v1.PodSpec{
 				NodeSelector: nodeSelector,
 				Containers:   []v1.Container{driverContainer},
+				Volumes: []v1.Volume{
+					{
+						Name: nodeLibModulesVolumeName,
+						VolumeSource: v1.VolumeSource{
+							HostPath: &v1.HostPathVolumeSource{
+								Path: nodeLibModulesPath,
+								Type: &hostPathDirectory,
+							},
+						},
+					},
+					{
+						Name: nodeUsrLibModulesVolumeName,
+						VolumeSource: v1.VolumeSource{
+							HostPath: &v1.HostPathVolumeSource{
+								Path: nodeUsrLibModulesPath,
+								Type: &hostPathDirectory,
+							},
+						},
+					},
+				},
 			},
 		},
 	}
