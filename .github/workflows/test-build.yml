@@ -35,5 +35,10 @@ jobs:
     - name: Build
       run: make
 
+    - name: Generate a coverage file without mocks
+      run: |
+        mv cover.out cover-with-mocks.out
+        grep -Ev '^.+/mock_.+\.go:.+$' cover-with-mocks.out > cover.out
+
     - name: Upload the coverage to Codecov
       uses: codecov/codecov-action@v3
