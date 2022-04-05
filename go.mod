@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/golang/mock v1.6.0
-	github.com/google/go-cmp v0.5.5
+	github.com/google/go-cmp v0.5.7
 	github.com/onsi/ginkgo/v2 v2.1.3
 	github.com/onsi/gomega v1.17.0
 	k8s.io/api v0.23.4
