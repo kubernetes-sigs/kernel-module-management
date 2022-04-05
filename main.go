@@ -17,9 +17,11 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/qbarrand/oot-operator/controllers/module"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -84,6 +86,14 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	commit, err := gitCommit()
+	if err != nil {
+		setupLog.Error(err, "Could not get the git commit; using <undefined>")
+		commit = "<undefined>"
+	}
+
+	setupLog.Info("Creating manager", "git commit", commit)
 
 	namespace := GetEnvWithDefault("OPERATOR_NAMESPACE", "default")
 
@@ -183,4 +193,21 @@ func GetEnvWithDefault(key, def string) string {
 	}
 
 	return v
+}
+
+func gitCommit() (string, error) {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "", errors.New("build info is not available")
+	}
+
+	const vcsRevisionKey = "vcs.revision"
+
+	for _, s := range bi.Settings {
+		if s.Key == vcsRevisionKey {
+			return s.Value, nil
+		}
+	}
+
+	return "", fmt.Errorf("%s not found in build info settings", vcsRevisionKey)
 }

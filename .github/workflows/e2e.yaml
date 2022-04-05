@@ -108,7 +108,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.17.6
+          go-version: 1.18
 
       - name: Deploy OOTO
         run: make deploy
@@ -216,7 +216,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.17.6
+          go-version: 1.18
 
       - name: Deploy OOTO
         run: make deploy

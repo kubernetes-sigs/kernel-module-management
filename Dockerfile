@@ -1,7 +1,11 @@
 # Build the manager binary
-FROM golang:1.17 as builder
+FROM golang:1.18 as builder
 
 WORKDIR /workspace
+
+# Copy the .git directory which is needed to store the build info
+COPY .git .git
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum

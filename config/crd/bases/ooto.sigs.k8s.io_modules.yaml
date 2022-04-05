@@ -1513,9 +1513,9 @@ spec:
                   type: object
                 type: array
               devicePlugin:
-                description: DriverContainer allows overriding some properties of
-                  the container that deploys the device plugin on the node. Name is
-                  ignored and is set automatically by the OOT Operator.
+                description: DevicePlugin allows overriding some properties of the
+                  container that deploys the device plugin on the node. Name is ignored
+                  and is set automatically by the OOT Operator.
                 properties:
                   args:
                     description: 'Arguments to the entrypoint. The docker image''s
