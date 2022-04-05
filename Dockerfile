@@ -3,9 +3,6 @@ FROM golang:1.18 as builder
 
 WORKDIR /workspace
 
-# Copy the .git directory which is needed to store the build info
-COPY .git .git
-
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
@@ -22,6 +19,9 @@ COPY controllers controllers
 # Copy Makefile
 COPY Makefile Makefile
 COPY docs.mk docs.mk
+
+# Copy the .git directory which is needed to store the build info
+COPY .git .git
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make manager
