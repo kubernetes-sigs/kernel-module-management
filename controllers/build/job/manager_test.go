@@ -8,7 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/build/job"
 	"github.com/qbarrand/oot-operator/controllers/constants"
@@ -25,7 +25,7 @@ var _ = Describe("Labels", func() {
 			targetKernel = "1.2.3"
 		)
 
-		mod := ootov1beta1.Module{
+		mod := ootov1alpha1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 		}
 
@@ -54,10 +54,10 @@ var _ = Describe("JobManager", func() {
 			namespace = "some-namespace"
 		)
 
-		po := ootov1beta1.PullOptions{}
+		po := ootov1alpha1.PullOptions{}
 
-		km := ootov1beta1.KernelMapping{
-			Build:          &ootov1beta1.Build{Pull: po},
+		km := ootov1alpha1.KernelMapping{
+			Build:          &ootov1alpha1.Build{Pull: po},
 			ContainerImage: imageName,
 		}
 
@@ -68,7 +68,7 @@ var _ = Describe("JobManager", func() {
 
 			mgr := job.NewBuildManager(nil, getter, maker, namespace)
 
-			_, err := mgr.Sync(ctx, ootov1beta1.Module{}, km, "")
+			_, err := mgr.Sync(ctx, ootov1alpha1.Module{}, km, "")
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -80,7 +80,7 @@ var _ = Describe("JobManager", func() {
 			mgr := job.NewBuildManager(nil, getter, maker, namespace)
 
 			Expect(
-				mgr.Sync(ctx, ootov1beta1.Module{}, km, ""),
+				mgr.Sync(ctx, ootov1alpha1.Module{}, km, ""),
 			).To(
 				Equal(build.Result{Status: build.StatusCompleted}),
 			)
@@ -91,7 +91,7 @@ var _ = Describe("JobManager", func() {
 			kernelVersion = "1.2.3"
 		)
 
-		mod := ootov1beta1.Module{
+		mod := ootov1alpha1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 		}
 

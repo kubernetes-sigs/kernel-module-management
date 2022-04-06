@@ -4,7 +4,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,8 +28,8 @@ var _ = Describe("FindModulesForNode", func() {
 	})
 
 	It("should return nothing if the node labels match no module", func() {
-		mod := ootov1beta1.Module{
-			Spec: ootov1beta1.ModuleSpec{
+		mod := ootov1alpha1.Module{
+			Spec: ootov1alpha1.ModuleSpec{
 				Selector: map[string]string{"key": "value"},
 			},
 		}
@@ -55,14 +55,14 @@ var _ = Describe("FindModulesForNode", func() {
 
 		const mod1Name = "mod1"
 
-		mod1 := ootov1beta1.Module{
+		mod1 := ootov1alpha1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: mod1Name},
-			Spec:       ootov1beta1.ModuleSpec{Selector: nodeLabels},
+			Spec:       ootov1alpha1.ModuleSpec{Selector: nodeLabels},
 		}
 
-		mod2 := ootov1beta1.Module{
+		mod2 := ootov1alpha1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "mod2"},
-			Spec: ootov1beta1.ModuleSpec{
+			Spec: ootov1alpha1.ModuleSpec{
 				Selector: map[string]string{"other-key": "other-value"},
 			},
 		}

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,7 +31,7 @@ func (nmm *NodeModuleMapper) FindModulesForNode(node client.Object) []reconcile.
 
 	logger.Info("Listing all modules")
 
-	mods := ootov1beta1.ModuleList{}
+	mods := ootov1alpha1.ModuleList{}
 
 	if err := nmm.client.List(context.Background(), &mods); err != nil {
 		nmm.logger.Error(err, "could not list modules")

@@ -5,7 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers/module"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,11 +20,11 @@ var _ = Describe("SetAs{Ready,Progressing,Errored}", func() {
 
 	var (
 		c   ctrlclient.StatusWriter
-		mod *ootov1beta1.Module
+		mod *ootov1alpha1.Module
 	)
 
 	BeforeEach(func() {
-		mod = &ootov1beta1.Module{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+		mod = &ootov1alpha1.Module{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 
 		c = fake.
 			NewClientBuilder().

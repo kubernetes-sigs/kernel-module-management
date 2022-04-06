@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	v1 "k8s.io/api/apps/v1"
 )
 
@@ -37,7 +37,7 @@ func (m *MockDaemonSetCreator) EXPECT() *MockDaemonSetCreatorMockRecorder {
 }
 
 // ModuleDaemonSetsByKernelVersion mocks base method.
-func (m *MockDaemonSetCreator) ModuleDaemonSetsByKernelVersion(ctx context.Context, mod v1beta1.Module) (map[string]*v1.DaemonSet, error) {
+func (m *MockDaemonSetCreator) ModuleDaemonSetsByKernelVersion(ctx context.Context, mod v1alpha1.Module) (map[string]*v1.DaemonSet, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ModuleDaemonSetsByKernelVersion", ctx, mod)
 	ret0, _ := ret[0].(map[string]*v1.DaemonSet)
@@ -52,7 +52,7 @@ func (mr *MockDaemonSetCreatorMockRecorder) ModuleDaemonSetsByKernelVersion(ctx,
 }
 
 // SetAsDesired mocks base method.
-func (m *MockDaemonSetCreator) SetAsDesired(ds *v1.DaemonSet, image string, mod v1beta1.Module, kernelVersion string) error {
+func (m *MockDaemonSetCreator) SetAsDesired(ds *v1.DaemonSet, image string, mod v1alpha1.Module, kernelVersion string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetAsDesired", ds, image, mod, kernelVersion)
 	ret0, _ := ret[0].(error)

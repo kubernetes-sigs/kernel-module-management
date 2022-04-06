@@ -1,5 +1,5 @@
 ---
-apiVersion: ooto.sigs.k8s.io/v1beta1
+apiVersion: ooto.sigs.k8s.io/v1alpha1
 kind: Module
 metadata:
   name: ooto-ci-build

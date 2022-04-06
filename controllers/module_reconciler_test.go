@@ -6,7 +6,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers"
 	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/module"
@@ -40,9 +40,9 @@ var _ = Describe("ModuleReconciler", func() {
 		It("should do nothing when no nodes match the selector", func() {
 			const moduleName = "test-module"
 
-			mod := ootov1beta1.Module{
+			mod := ootov1alpha1.Module{
 				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
-				Spec: ootov1beta1.ModuleSpec{
+				Spec: ootov1alpha1.ModuleSpec{
 					Selector: map[string]string{"key": "value"},
 				},
 			}
@@ -80,16 +80,16 @@ var _ = Describe("ModuleReconciler", func() {
 				moduleName    = "test-module"
 			)
 
-			mappings := []ootov1beta1.KernelMapping{
+			mappings := []ootov1alpha1.KernelMapping{
 				{
 					ContainerImage: imageName,
 					Literal:        kernelVersion,
 				},
 			}
 
-			mod := ootov1beta1.Module{
+			mod := ootov1alpha1.Module{
 				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
-				Spec: ootov1beta1.ModuleSpec{
+				Spec: ootov1alpha1.ModuleSpec{
 					KernelMappings: mappings,
 					Selector:       map[string]string{"key": "value"},
 				},
@@ -157,7 +157,7 @@ var _ = Describe("ModuleReconciler", func() {
 				moduleName    = "test-module"
 			)
 
-			mappings := []ootov1beta1.KernelMapping{
+			mappings := []ootov1alpha1.KernelMapping{
 				{
 					ContainerImage: imageName,
 					Literal:        kernelVersion,
@@ -166,9 +166,9 @@ var _ = Describe("ModuleReconciler", func() {
 
 			nodeLabels := map[string]string{"key": "value"}
 
-			mod := ootov1beta1.Module{
+			mod := ootov1alpha1.Module{
 				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
-				Spec: ootov1beta1.ModuleSpec{
+				Spec: ootov1alpha1.ModuleSpec{
 					KernelMappings: mappings,
 					Selector:       nodeLabels,
 				},
@@ -221,7 +221,7 @@ var _ = Describe("ModuleReconciler", func() {
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().SetAsDesired(&ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
-					func(d *appsv1.DaemonSet, _ string, _ ootov1beta1.Module, _ string) {
+					func(d *appsv1.DaemonSet, _ string, _ ootov1alpha1.Module, _ string) {
 						d.SetLabels(map[string]string{"test": "test"})
 					}),
 			)

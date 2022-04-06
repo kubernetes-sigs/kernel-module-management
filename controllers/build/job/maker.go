@@ -3,7 +3,7 @@ package job
 import (
 	"fmt"
 
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +14,7 @@ import (
 //go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
 
 type Maker interface {
-	MakeJob(mod ootov1beta1.Module, m ootov1beta1.KernelMapping, targetKernel string) (*batchv1.Job, error)
+	MakeJob(mod ootov1alpha1.Module, m ootov1alpha1.KernelMapping, targetKernel string) (*batchv1.Job, error)
 }
 
 type maker struct {
@@ -29,7 +29,7 @@ func NewMaker(namespace string, scheme *runtime.Scheme) Maker {
 	}
 }
 
-func (m *maker) MakeJob(mod ootov1beta1.Module, km ootov1beta1.KernelMapping, targetKernel string) (*batchv1.Job, error) {
+func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, targetKernel string) (*batchv1.Job, error) {
 	args := []string{
 		"--destination", km.ContainerImage,
 		"--build-arg", "KERNEL_VERSION=" + targetKernel,

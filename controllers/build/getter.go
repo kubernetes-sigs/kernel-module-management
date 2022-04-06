@@ -9,13 +9,13 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 )
 
 //go:generate mockgen -source=getter.go -package=build -destination=mock_getter.go
 
 type Getter interface {
-	ImageExists(ctx context.Context, containerImage string, po ootov1beta1.PullOptions) (bool, error)
+	ImageExists(ctx context.Context, containerImage string, po ootov1alpha1.PullOptions) (bool, error)
 }
 
 type getter struct{}
@@ -24,7 +24,7 @@ func NewGetter() Getter {
 	return &getter{}
 }
 
-func (getter) ImageExists(ctx context.Context, containerImage string, po ootov1beta1.PullOptions) (bool, error) {
+func (getter) ImageExists(ctx context.Context, containerImage string, po ootov1alpha1.PullOptions) (bool, error) {
 	opts := make([]name.Option, 0)
 
 	if po.Insecure {

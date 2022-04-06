@@ -4,7 +4,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers/build/job"
 	"github.com/qbarrand/oot-operator/controllers/constants"
 	batchv1 "k8s.io/api/batch/v1"
@@ -22,12 +22,12 @@ var _ = Describe("Maker", func() {
 			namespace      = "some-namespace"
 		)
 
-		mod := ootov1beta1.Module{
+		mod := ootov1alpha1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 		}
 
-		km := ootov1beta1.KernelMapping{
-			Build:          &ootov1beta1.Build{Dockerfile: dockerfile},
+		km := ootov1alpha1.KernelMapping{
+			Build:          &ootov1alpha1.Build{Dockerfile: dockerfile},
 			ContainerImage: containerImage,
 		}
 
@@ -49,7 +49,7 @@ var _ = Describe("Maker", func() {
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
-							APIVersion:         "ooto.sigs.k8s.io/v1beta1",
+							APIVersion:         "ooto.sigs.k8s.io/v1alpha1",
 							Kind:               "Module",
 							Name:               moduleName,
 							Controller:         &trueVar,

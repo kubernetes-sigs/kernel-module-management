@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 )
 
 // MockGetter is a mock of Getter interface.
@@ -36,7 +36,7 @@ func (m *MockGetter) EXPECT() *MockGetterMockRecorder {
 }
 
 // ImageExists mocks base method.
-func (m *MockGetter) ImageExists(ctx context.Context, containerImage string, po v1beta1.PullOptions) (bool, error) {
+func (m *MockGetter) ImageExists(ctx context.Context, containerImage string, po v1alpha1.PullOptions) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ImageExists", ctx, containerImage, po)
 	ret0, _ := ret[0].(bool)

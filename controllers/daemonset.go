@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -18,8 +18,8 @@ import (
 //go:generate mockgen -source=daemonset.go -package=controllers -destination=mock_daemonset.go
 
 type DaemonSetCreator interface {
-	ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1beta1.Module) (map[string]*appsv1.DaemonSet, error)
-	SetAsDesired(ds *appsv1.DaemonSet, image string, mod ootov1beta1.Module, kernelVersion string) error
+	ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1alpha1.Module) (map[string]*appsv1.DaemonSet, error)
+	SetAsDesired(ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error
 }
 
 type daemonSetGenerator struct {
@@ -38,7 +38,7 @@ func NewDaemonSetCreator(client client.Client, kernelLabel, namespace string, sc
 	}
 }
 
-func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1beta1.Module) (map[string]*appsv1.DaemonSet, error) {
+func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1alpha1.Module) (map[string]*appsv1.DaemonSet, error) {
 	dsList := appsv1.DaemonSetList{}
 
 	opts := []client.ListOption{
@@ -67,7 +67,7 @@ func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Contex
 	return dsByKernelVersion, nil
 }
 
-func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, mod ootov1beta1.Module, kernelVersion string) error {
+func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error {
 	if ds == nil {
 		return errors.New("ds cannot be nil")
 	}

@@ -1,4 +1,4 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
-- ooto_v1beta1_module.yaml
+- ooto_v1alpha1_module.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

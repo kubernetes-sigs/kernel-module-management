@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/constants"
 	batchv1 "k8s.io/api/batch/v1"
@@ -31,14 +31,14 @@ func NewBuildManager(client client.Client, getter build.Getter, maker Maker, nam
 	}
 }
 
-func Labels(mod ootov1beta1.Module, targetKernel string) map[string]string {
+func Labels(mod ootov1alpha1.Module, targetKernel string) map[string]string {
 	return map[string]string{
 		constants.ModuleNameLabel:    mod.Name,
 		constants.TargetKernelTarget: targetKernel,
 	}
 }
 
-func (jbm *jobManager) getJob(ctx context.Context, mod ootov1beta1.Module, targetKernel string) (*batchv1.Job, error) {
+func (jbm *jobManager) getJob(ctx context.Context, mod ootov1alpha1.Module, targetKernel string) (*batchv1.Job, error) {
 	jobList := batchv1.JobList{}
 
 	opts := []client.ListOption{
@@ -59,7 +59,7 @@ func (jbm *jobManager) getJob(ctx context.Context, mod ootov1beta1.Module, targe
 	return &jobList.Items[0], nil
 }
 
-func (jbm *jobManager) Sync(ctx context.Context, mod ootov1beta1.Module, m ootov1beta1.KernelMapping, targetKernel string) (build.Result, error) {
+func (jbm *jobManager) Sync(ctx context.Context, mod ootov1alpha1.Module, m ootov1alpha1.KernelMapping, targetKernel string) (build.Result, error) {
 	logger := log.FromContext(ctx)
 
 	imageAvailable, err := jbm.getter.ImageExists(ctx, m.ContainerImage, m.Build.Pull)

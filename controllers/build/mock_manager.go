@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 )
 
 // MockManager is a mock of Manager interface.
@@ -36,7 +36,7 @@ func (m *MockManager) EXPECT() *MockManagerMockRecorder {
 }
 
 // Sync mocks base method.
-func (m_2 *MockManager) Sync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping, targetKernel string) (Result, error) {
+func (m_2 *MockManager) Sync(ctx context.Context, mod v1alpha1.Module, m v1alpha1.KernelMapping, targetKernel string) (Result, error) {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "Sync", ctx, mod, m, targetKernel)
 	ret0, _ := ret[0].(Result)

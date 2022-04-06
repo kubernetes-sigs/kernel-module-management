@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 )
 
 // MockKernelMapper is a mock of KernelMapper interface.
@@ -35,10 +35,10 @@ func (m *MockKernelMapper) EXPECT() *MockKernelMapperMockRecorder {
 }
 
 // FindMappingForKernel mocks base method.
-func (m *MockKernelMapper) FindMappingForKernel(mappings []v1beta1.KernelMapping, kernelVersion string) (*v1beta1.KernelMapping, error) {
+func (m *MockKernelMapper) FindMappingForKernel(mappings []v1alpha1.KernelMapping, kernelVersion string) (*v1alpha1.KernelMapping, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindMappingForKernel", mappings, kernelVersion)
-	ret0, _ := ret[0].(*v1beta1.KernelMapping)
+	ret0, _ := ret[0].(*v1alpha1.KernelMapping)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

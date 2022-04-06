@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 )
 
 // MockConditionsUpdater is a mock of ConditionsUpdater interface.
@@ -36,7 +36,7 @@ func (m *MockConditionsUpdater) EXPECT() *MockConditionsUpdaterMockRecorder {
 }
 
 // SetAsErrored mocks base method.
-func (m *MockConditionsUpdater) SetAsErrored(ctx context.Context, mod *v1beta1.Module, reason, message string) error {
+func (m *MockConditionsUpdater) SetAsErrored(ctx context.Context, mod *v1alpha1.Module, reason, message string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetAsErrored", ctx, mod, reason, message)
 	ret0, _ := ret[0].(error)
@@ -50,7 +50,7 @@ func (mr *MockConditionsUpdaterMockRecorder) SetAsErrored(ctx, mod, reason, mess
 }
 
 // SetAsProgressing mocks base method.
-func (m *MockConditionsUpdater) SetAsProgressing(ctx context.Context, mod *v1beta1.Module, reason, message string) error {
+func (m *MockConditionsUpdater) SetAsProgressing(ctx context.Context, mod *v1alpha1.Module, reason, message string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetAsProgressing", ctx, mod, reason, message)
 	ret0, _ := ret[0].(error)
@@ -64,7 +64,7 @@ func (mr *MockConditionsUpdaterMockRecorder) SetAsProgressing(ctx, mod, reason, 
 }
 
 // SetAsReady mocks base method.
-func (m *MockConditionsUpdater) SetAsReady(ctx context.Context, mod *v1beta1.Module, reason, message string) error {
+func (m *MockConditionsUpdater) SetAsReady(ctx context.Context, mod *v1alpha1.Module, reason, message string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetAsReady", ctx, mod, reason, message)
 	ret0, _ := ret[0].(error)

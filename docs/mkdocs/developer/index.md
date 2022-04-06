@@ -14,28 +14,20 @@ Variables available at build time still reflect the actual kernel version.
 
 ## `Module` CRD
 ```yaml
-apiVersion: ooto.sigs.k8s.io/v1beta1
+apiVersion: ooto.sigs.k8s.io/v1alpha1
 kind: Module
 metadata:
   name: module-sample
 spec:
-  build:
-    # Reference instructions to build the module
-    git:
-      repository: https://github.com/vendor/driver
-      ref: some-tag
-    buildArgs:
-      PARAM1: value1
-      PARAM2: value2
-    containerFile: Dockerfile (or something else)
-    contextDir: some/path/in/the/sources
-    to:
-      imageName: image-registry.openshift-image-registry.svc:5000/driver:${KERNEL_VERSION}
-      pushSecret:
-        name: push-secret-name
-        namespace: push-secret-namespace
   devicePlugin: # is a Container spec
+    name: overwritten-anyway
+    image: some-image
   driverContainer: # is a Container spec
+    name: overwritten-anyway
+    image: overwritten-anyway
+    securityContext:
+      capabilities:
+        add: [SYS_MODULE] # this is enough in most cases
   kernelMappings:
     - literal: 5.16.11-200.fc35.x86_64
       containerImage: quay.io/vendor/module-sample:fedora-5.16.11-200.fc35.x86_64
@@ -43,8 +35,14 @@ spec:
       containerImage: quay.io/vendor/module-sample:ubuntu-5.4.0-1054-gke
     - regexp: '^.*\-gke$'
       build:
-        git:
-          ref: gke
+        pull:
+          insecure: false
+        push:
+          insecure: false
+        dockerfile: |
+          FROM some-image
+          RUN some-command
+      containerImage: quay.io/vendor/module-sample:gke
   selector:  # top-level selector
     feature.node.kubernetes.io/cpu-cpuid.VMX: true
 status:

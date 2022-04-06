@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/module"
 	"github.com/qbarrand/oot-operator/controllers/predicates"
@@ -82,7 +82,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	logger := log.FromContext(ctx)
 
-	mod := ootov1beta1.Module{}
+	mod := ootov1alpha1.Module{}
 
 	if err := r.Client.Get(ctx, req.NamespacedName, &mod); err != nil {
 		logger.Error(err, "Could not get module")
@@ -105,7 +105,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, nil
 	}
 
-	mappings := make(map[string]*ootov1beta1.KernelMapping)
+	mappings := make(map[string]*ootov1alpha1.KernelMapping)
 
 	for _, node := range nodes.Items {
 		kernelVersion := node.Status.NodeInfo.KernelVersion
@@ -199,7 +199,7 @@ func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&ootov1beta1.Module{}).
+		For(&ootov1alpha1.Module{}).
 		Owns(&appsv1.DaemonSet{}).
 		Owns(&batchv1.Job{}).
 		Watches(

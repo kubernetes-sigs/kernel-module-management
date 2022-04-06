@@ -6,7 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers"
 	"github.com/qbarrand/oot-operator/controllers/constants"
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,7 +29,7 @@ var _ = Describe("daemonSetGenerator", func() {
 
 		It("should return an error if the DaemonSet is nil", func() {
 			Expect(
-				dg.SetAsDesired(nil, "", ootov1beta1.Module{}, ""),
+				dg.SetAsDesired(nil, "", ootov1alpha1.Module{}, ""),
 			).To(
 				HaveOccurred(),
 			)
@@ -37,7 +37,7 @@ var _ = Describe("daemonSetGenerator", func() {
 
 		It("should return an error if the image is empty", func() {
 			Expect(
-				dg.SetAsDesired(&appsv1.DaemonSet{}, "", ootov1beta1.Module{}, ""),
+				dg.SetAsDesired(&appsv1.DaemonSet{}, "", ootov1alpha1.Module{}, ""),
 			).To(
 				HaveOccurred(),
 			)
@@ -45,15 +45,15 @@ var _ = Describe("daemonSetGenerator", func() {
 
 		It("should return an error if the kernel version is empty", func() {
 			Expect(
-				dg.SetAsDesired(&appsv1.DaemonSet{}, "", ootov1beta1.Module{}, ""),
+				dg.SetAsDesired(&appsv1.DaemonSet{}, "", ootov1alpha1.Module{}, ""),
 			).To(
 				HaveOccurred(),
 			)
 		})
 
 		It("should not add a device-plugin container if it is not set in the spec", func() {
-			mod := ootov1beta1.Module{
-				Spec: ootov1beta1.ModuleSpec{
+			mod := ootov1alpha1.Module{
+				Spec: ootov1alpha1.ModuleSpec{
 					Selector: map[string]string{"has-feature-x": "true"},
 				},
 			}
@@ -69,8 +69,8 @@ var _ = Describe("daemonSetGenerator", func() {
 		It("should add additional volumes if there are any", func() {
 			vol := v1.Volume{Name: "test-volume"}
 
-			mod := ootov1beta1.Module{
-				Spec: ootov1beta1.ModuleSpec{
+			mod := ootov1alpha1.Module{
+				Spec: ootov1alpha1.ModuleSpec{
 					AdditionalVolumes: []v1.Volume{vol},
 				},
 			}
@@ -101,13 +101,13 @@ var _ = Describe("daemonSetGenerator", func() {
 				MountPath: "/some/path",
 			}
 
-			mod := ootov1beta1.Module{
+			mod := ootov1alpha1.Module{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: ootov1beta1.GroupVersion.String(),
+					APIVersion: ootov1alpha1.GroupVersion.String(),
 					Kind:       "Module",
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
-				Spec: ootov1beta1.ModuleSpec{
+				Spec: ootov1alpha1.ModuleSpec{
 					DriverContainer: v1.Container{
 						VolumeMounts: []v1.VolumeMount{dcVolMount},
 					},
@@ -243,7 +243,7 @@ var _ = Describe("daemonSetGenerator", func() {
 				dsNamespace,
 				scheme)
 
-			mod := ootov1beta1.Module{
+			mod := ootov1alpha1.Module{
 				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 			}
 
@@ -280,7 +280,7 @@ var _ = Describe("daemonSetGenerator", func() {
 				dsNamespace,
 				scheme)
 
-			mod := ootov1beta1.Module{
+			mod := ootov1alpha1.Module{
 				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 			}
 
@@ -319,7 +319,7 @@ var _ = Describe("daemonSetGenerator", func() {
 				dsNamespace,
 				scheme)
 
-			mod := ootov1beta1.Module{
+			mod := ootov1alpha1.Module{
 				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 			}
 
