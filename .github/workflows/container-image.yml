@@ -78,7 +78,7 @@ jobs:
         run: |
           mkdir -p ${HOME}/.local/bin
           curl -Lo ${HOME}/.local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v1.18.1/operator-sdk_linux_amd64
-          chmod +x {HOME}/.local/bin/operator-sdk
+          chmod +x ${HOME}/.local/bin/operator-sdk
           echo "${HOME}/.local/bin" >> $GITHUB_PATH
 
       - name: Generate the bundle content
