@@ -21,9 +21,42 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type PullOptions struct {
+	// +optional
+
+	// When Insecure is true, images can be pulled from an insecure (plain HTTP) registry.
+	Insecure bool `json:"insecure"`
+}
+
+type PushOptions struct {
+	// +optional
+
+	// When Insecure is true, built images can be pushed to an insecure (plain HTTP) registry.
+	Insecure bool `json:"insecure"`
+}
+
+type Build struct {
+	Dockerfile string `json:"dockerfile"`
+
+	// +optional
+
+	// Pull contains settings determining how to check if the DriverContainer image already exists.
+	Pull PullOptions `json:"pull"`
+
+	// +optional
+
+	// Push contains settings determining how to push a built DriverContainer image.
+	Push PushOptions `json:"push"`
+}
+
 // KernelMapping pairs kernel versions with a DriverContainer image.
 // Kernel versions can be matched literally or using a regular expression.
 type KernelMapping struct {
+	// +optional
+
+	// Build enables in-cluster builds for this mapping and allows overriding the Module's build settings.
+	Build *Build `json:"build"`
+
 	// ContainerImage is the name of the DriverContainer image that should be used to deploy the module.
 	ContainerImage string `json:"containerImage"`
 
@@ -40,6 +73,9 @@ type KernelMapping struct {
 
 // ModuleSpec describes how the OOT operator should deploy a Module on those nodes that need it.
 type ModuleSpec struct {
+	// +optional
+	Build Build `json:"build"`
+
 	// +optional
 
 	// AdditionalVolumes is a list of volumes that will be attached to the DriverContainer / DevicePlugin pod,

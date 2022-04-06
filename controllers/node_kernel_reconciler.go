@@ -4,15 +4,16 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/qbarrand/oot-operator/controllers/predicates"
 	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-//+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;patch;watch
+//+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;patch;list;watch
 
 type NodeKernelReconciler struct {
 	client    client.Client
@@ -32,31 +33,26 @@ func (r *NodeKernelReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	logger := log.FromContext(ctx)
 
 	if err := r.client.Get(ctx, types.NamespacedName{Name: req.Name}, &node); err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Node not found; probably deleted")
-			return ctrl.Result{}, nil
-		}
-
-		return ctrl.Result{Requeue: true}, fmt.Errorf("could not get node: %v", err)
+		return ctrl.Result{}, fmt.Errorf("could not get node: %v", err)
 	}
 
-	labelValue := node.Labels[r.labelName]
 	kernelVersion := node.Status.NodeInfo.KernelVersion
 
-	if labelValue != kernelVersion {
-		logger.Info("Patching node label", "old kernel", labelValue, "new kernel", kernelVersion)
+	logger.Info(
+		"Patching node label",
+		"old kernel", node.Labels[r.labelName],
+		"new kernel", kernelVersion)
 
-		p := client.MergeFrom(node.DeepCopy())
+	p := client.MergeFrom(node.DeepCopy())
 
-		if node.Labels == nil {
-			node.Labels = make(map[string]string)
-		}
+	if node.Labels == nil {
+		node.Labels = make(map[string]string)
+	}
 
-		node.Labels[r.labelName] = node.Status.NodeInfo.KernelVersion
+	node.Labels[r.labelName] = kernelVersion
 
-		if err := r.client.Patch(ctx, &node, p); err != nil {
-			return ctrl.Result{Requeue: true}, fmt.Errorf("could not patch the node: %v", err)
-		}
+	if err := r.client.Patch(ctx, &node, p); err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not patch the node: %v", err)
 	}
 
 	return ctrl.Result{}, nil
@@ -64,5 +60,20 @@ func (r *NodeKernelReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NodeKernelReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).For(&v1.Node{}).Complete(r)
+	return ctrl.
+		NewControllerManagedBy(mgr).
+		Named("NodeKernelReconciler").
+		For(&v1.Node{}).
+		WithEventFilter(
+			NodeKernelReconcilerPredicate(r.labelName),
+		).
+		Complete(r)
+}
+
+func NodeKernelReconcilerPredicate(labelName string) predicate.Predicate {
+	labelMismatch := predicate.NewPredicateFuncs(func(o client.Object) bool {
+		return o.GetLabels()[labelName] != o.(*v1.Node).Status.NodeInfo.KernelVersion
+	})
+
+	return predicate.And(predicates.SkipDeletions, labelMismatch)
 }

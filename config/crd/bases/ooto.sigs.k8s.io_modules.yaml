@@ -1512,6 +1512,31 @@ spec:
                   - name
                   type: object
                 type: array
+              build:
+                properties:
+                  dockerfile:
+                    type: string
+                  pull:
+                    description: Pull contains settings determining how to check if
+                      the DriverContainer image already exists.
+                    properties:
+                      insecure:
+                        description: When Insecure is true, images can be pulled from
+                          an insecure (plain HTTP) registry.
+                        type: boolean
+                    type: object
+                  push:
+                    description: Push contains settings determining how to push a
+                      built DriverContainer image.
+                    properties:
+                      insecure:
+                        description: When Insecure is true, built images can be pushed
+                          to an insecure (plain HTTP) registry.
+                        type: boolean
+                    type: object
+                required:
+                - dockerfile
+                type: object
               devicePlugin:
                 description: DevicePlugin allows overriding some properties of the
                   container that deploys the device plugin on the node. Name is ignored
@@ -3910,6 +3935,33 @@ spec:
                     image. Kernel versions can be matched literally or using a regular
                     expression.
                   properties:
+                    build:
+                      description: Build enables in-cluster builds for this mapping
+                        and allows overriding the Module's build settings.
+                      properties:
+                        dockerfile:
+                          type: string
+                        pull:
+                          description: Pull contains settings determining how to check
+                            if the DriverContainer image already exists.
+                          properties:
+                            insecure:
+                              description: When Insecure is true, images can be pulled
+                                from an insecure (plain HTTP) registry.
+                              type: boolean
+                          type: object
+                        push:
+                          description: Push contains settings determining how to push
+                            a built DriverContainer image.
+                          properties:
+                            insecure:
+                              description: When Insecure is true, built images can
+                                be pushed to an insecure (plain HTTP) registry.
+                              type: boolean
+                          type: object
+                      required:
+                      - dockerfile
+                      type: object
                     containerImage:
                       description: ContainerImage is the name of the DriverContainer
                         image that should be used to deploy the module.

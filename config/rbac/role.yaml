@@ -17,6 +17,14 @@ rules:
   - patch
   - watch
 - apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - list
+  - watch
+- apiGroups:
   - ""
   resources:
   - nodes

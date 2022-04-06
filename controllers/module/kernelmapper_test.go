@@ -9,47 +9,41 @@ import (
 var _ = Describe("KernelMapper", func() {
 	km := NewKernelMapper()
 
-	Describe("FindImageForKernel", func() {
+	Describe("FindMappingForKernel", func() {
 		const (
 			kernelVersion = "1.2.3"
 			selectedImage = "image1"
 		)
 
 		It("should work with one literal mapping", func() {
-			mappings := []ootov1beta1.KernelMapping{
-				{
-					ContainerImage: selectedImage,
-					Literal:        "1.2.3",
-				},
+			mapping := ootov1beta1.KernelMapping{
+				ContainerImage: selectedImage,
+				Literal:        "1.2.3",
 			}
 
-			m, err := km.FindImageForKernel(mappings, kernelVersion)
+			m, err := km.FindMappingForKernel([]ootov1beta1.KernelMapping{mapping}, kernelVersion)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(m).To(Equal(selectedImage))
+			Expect(m).To(Equal(&mapping))
 		})
 
 		It("should work with one regexp mapping", func() {
-			mappings := []ootov1beta1.KernelMapping{
-				{
-					ContainerImage: selectedImage,
-					Regexp:         `1\..*`,
-				},
+			mapping := ootov1beta1.KernelMapping{
+				ContainerImage: selectedImage,
+				Regexp:         `1\..*`,
 			}
 
-			m, err := km.FindImageForKernel(mappings, kernelVersion)
+			m, err := km.FindMappingForKernel([]ootov1beta1.KernelMapping{mapping}, kernelVersion)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(m).To(Equal(selectedImage))
+			Expect(m).To(Equal(&mapping))
 		})
 
 		It("should return an error if a regex is invalid", func() {
-			mappings := []ootov1beta1.KernelMapping{
-				{
-					ContainerImage: selectedImage,
-					Regexp:         "invalid)",
-				},
+			mapping := ootov1beta1.KernelMapping{
+				ContainerImage: selectedImage,
+				Regexp:         "invalid)",
 			}
 
-			_, err := km.FindImageForKernel(mappings, kernelVersion)
+			_, err := km.FindMappingForKernel([]ootov1beta1.KernelMapping{mapping}, kernelVersion)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -65,7 +59,7 @@ var _ = Describe("KernelMapper", func() {
 				},
 			}
 
-			_, err := km.FindImageForKernel(mappings, kernelVersion)
+			_, err := km.FindMappingForKernel(mappings, kernelVersion)
 			Expect(err).To(MatchError("no suitable mapping found"))
 		})
 	})

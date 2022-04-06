@@ -8,12 +8,14 @@ import (
 	. "github.com/onsi/gomega"
 	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	"github.com/qbarrand/oot-operator/controllers"
+	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/module"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -21,6 +23,7 @@ var _ = Describe("ModuleReconciler", func() {
 	Describe("Reconcile", func() {
 		var (
 			ctrl   *gomock.Controller
+			mockBM *build.MockManager
 			mockCU *module.MockConditionsUpdater
 			mockDC *controllers.MockDaemonSetCreator
 			mockKM *module.MockKernelMapper
@@ -28,6 +31,7 @@ var _ = Describe("ModuleReconciler", func() {
 
 		BeforeEach(func() {
 			ctrl = gomock.NewController(GinkgoT())
+			mockBM = build.NewMockManager(ctrl)
 			mockCU = module.NewMockConditionsUpdater(ctrl)
 			mockDC = controllers.NewMockDaemonSetCreator(ctrl)
 			mockKM = module.NewMockKernelMapper(ctrl)
@@ -58,7 +62,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(client, "", nil, nil, mockCU)
+			mr := controllers.NewModuleReconciler(client, "", mockBM, mockDC, mockKM, mockCU)
 
 			req := reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: moduleName},
@@ -114,7 +118,7 @@ var _ = Describe("ModuleReconciler", func() {
 
 			const namespace = "test-namespace"
 
-			mr := controllers.NewModuleReconciler(c, namespace, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(c, namespace, mockBM, mockDC, mockKM, mockCU)
 
 			req := reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: moduleName},
@@ -130,7 +134,7 @@ var _ = Describe("ModuleReconciler", func() {
 			}
 
 			gomock.InOrder(
-				mockKM.EXPECT().FindImageForKernel(mappings, kernelVersion).Return(imageName, nil),
+				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)),
 				mockDC.EXPECT().SetAsDesired(&ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
 			)
@@ -203,7 +207,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(c, namespace, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(c, namespace, mockBM, mockDC, mockKM, mockCU)
 
 			req := reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: moduleName},
@@ -214,7 +218,7 @@ var _ = Describe("ModuleReconciler", func() {
 			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
 			gomock.InOrder(
-				mockKM.EXPECT().FindImageForKernel(mappings, kernelVersion).Return(imageName, nil),
+				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().SetAsDesired(&ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
 					func(d *appsv1.DaemonSet, _ string, _ ootov1beta1.Module, _ string) {
@@ -234,5 +238,81 @@ var _ = Describe("ModuleReconciler", func() {
 			Expect(dsList.Items[0].Name).To(Equal(dsName))
 			Expect(dsList.Items[0].Labels).To(HaveKeyWithValue("test", "test"))
 		})
+	})
+})
+
+var _ = Describe("ModuleReconcilerNodePredicate", func() {
+	const kernelLabel = "kernel-label"
+
+	p := controllers.ModuleReconcilerNodePredicate(kernelLabel)
+
+	It("should return true for creations", func() {
+		ev := event.CreateEvent{
+			Object: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{kernelLabel: "1.2.3"},
+				},
+			},
+		}
+
+		Expect(
+			p.Create(ev),
+		).To(
+			BeTrue(),
+		)
+	})
+
+	It("should return true for label updates", func() {
+		ev := event.UpdateEvent{
+			ObjectOld: &v1.Node{},
+			ObjectNew: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{kernelLabel: "1.2.3"},
+				},
+			},
+		}
+
+		Expect(
+			p.Update(ev),
+		).To(
+			BeTrue(),
+		)
+	})
+
+	It("should return false for label updates without the expected label", func() {
+		ev := event.UpdateEvent{
+			ObjectOld: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"a": "b"},
+				},
+			},
+			ObjectNew: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"c": "d"},
+				},
+			},
+		}
+
+		Expect(
+			p.Update(ev),
+		).To(
+			BeFalse(),
+		)
+	})
+
+	It("should return false for deletions", func() {
+		ev := event.DeleteEvent{
+			Object: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{kernelLabel: "1.2.3"},
+				},
+			},
+		}
+
+		Expect(
+			p.Delete(ev),
+		).To(
+			BeFalse(),
+		)
 	})
 })

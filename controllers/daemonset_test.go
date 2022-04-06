@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	"github.com/qbarrand/oot-operator/controllers"
+	"github.com/qbarrand/oot-operator/controllers/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -129,12 +130,12 @@ var _ = Describe("daemonSetGenerator", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			podLabels := map[string]string{
-				controllers.ModuleNameLabel: moduleName,
-				kernelLabel:                 kernelVersion,
+				constants.ModuleNameLabel: moduleName,
+				kernelLabel:               kernelVersion,
 			}
 
 			directory := v1.HostPathDirectory
-			varTrue := true
+			trueVar := true
 
 			expected := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -143,10 +144,12 @@ var _ = Describe("daemonSetGenerator", func() {
 					Labels:    podLabels,
 					OwnerReferences: []metav1.OwnerReference{
 						{
-							APIVersion: mod.APIVersion,
-							Kind:       mod.Kind,
-							Name:       moduleName,
-							UID:        mod.UID,
+							APIVersion:         mod.APIVersion,
+							BlockOwnerDeletion: &trueVar,
+							Controller:         &trueVar,
+							Kind:               mod.Kind,
+							Name:               moduleName,
+							UID:                mod.UID,
 						},
 					},
 				},
@@ -176,7 +179,7 @@ var _ = Describe("daemonSetGenerator", func() {
 								{
 									Name:            "device-plugin",
 									Image:           devicePluginImage,
-									SecurityContext: &v1.SecurityContext{Privileged: &varTrue},
+									SecurityContext: &v1.SecurityContext{Privileged: &trueVar},
 									VolumeMounts: []v1.VolumeMount{
 										dpVolMount,
 										{

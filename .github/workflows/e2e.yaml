@@ -82,6 +82,7 @@ jobs:
         run: |
           wget https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
           sudo dpkg -i ./minikube_latest_amd64.deb
+
       - name: Start minikube and wait until CoreDNS is available
         run: |
           minikube start --driver=docker
@@ -131,6 +132,7 @@ jobs:
             echo "Unexpected lsmod output - the module should not be loaded"
             exit 1
           fi
+
       - name: Add an ooto-ci Module that contains a valid mapping
         run: |
           sed -e "s/KVER_CHANGEME/$(uname -r)/g" \
@@ -139,6 +141,7 @@ jobs:
             ci/module-ooto-ci.template.yaml | tee module-ooto-ci.yaml
 
           kubectl apply -f module-ooto-ci.yaml
+
       - name: Check that the module gets loaded on the node
         run: |
           until minikube ssh -- lsmod | grep ooto_ci_a; do
@@ -199,6 +202,7 @@ jobs:
         run: |
           wget https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
           sudo dpkg -i ./minikube_latest_amd64.deb
+
       - name: Start minikube and wait until CoreDNS is available
         run: |
           minikube start --driver=docker -n 2
@@ -315,6 +319,141 @@ jobs:
 
       - name: Describe nodes
         run: kubectl describe node
+        if: ${{ always() }}
+
+      - name: Describe DaemonSets
+        run: kubectl describe daemonset -l oot.node.kubernetes.io/module.name
+        if: ${{ always() }}
+
+      - name: Describe Pods
+        run: kubectl describe pod -l oot.node.kubernetes.io/module.name
+        if: ${{ always() }}
+
+      - name: Collect dmesg
+        run: sudo dmesg
+        if: ${{ always() }}
+
+      - name: Get all operator logs
+        run: kubectl logs deployment.apps/oot-operator-controller-manager -n oot-operator-system
+        if: ${{ always() }}
+
+  in-cluster-build:
+    runs-on: ubuntu-latest
+
+    name: In-cluster build
+
+    needs: [build-operator-image, build-drivercontainer-image]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Download and install minikube
+        run: |
+          wget https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
+          sudo dpkg -i ./minikube_latest_amd64.deb
+
+      - name: Start minikube and wait until CoreDNS is available
+        run: |
+          minikube start --driver=docker --addons registry,registry-aliases
+          kubectl wait --for=condition=available deployment coredns -n kube-system
+
+          kubectl apply -f ci/registry-nodeport.yaml
+
+      - name: Install skopeo
+        run: |
+          sudo apt -y update
+          sudo apt -y install skopeo
+
+      - name: Download container images
+        uses: actions/download-artifact@v3
+        with:
+          name: ci-images
+
+      - name: Import DriverContainer base into the internal-registry
+        run: |
+          MINIKUBE_REGISTRY_EXT="$(minikube service registry-nodeport -n kube-system --format '{{.IP}}:{{.Port}}' --url)"
+          skopeo copy --dest-tls-verify=false docker-archive:ooto-kmod_local.tar docker://${MINIKUBE_REGISTRY_EXT}/ooto-base:local
+
+      - name: Import the OOTO image into minikube
+        run: minikube image load ooto_local.tar
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.17.6
+
+      - name: Deploy OOTO
+        run: make deploy
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
+
+      - name: Wait until the OOTO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+        timeout-minutes: 1
+
+      - name: Describe the Deployment / pods and get their YAML if that failed
+        run: |
+          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+
+          kubectl describe pod -n oot-operator-system
+          kubectl get -o yaml pod -n oot-operator-system
+        if: ${{ failure() }}
+
+      - name: Add an ooto-ci Module that contains a valid mapping
+        run: |
+          sed -e "s/KVER_CHANGEME/$(uname -r)/g" ci/module-ooto-ci-build.template.yaml | tee module-ooto-ci.yaml
+
+          kubectl apply -f module-ooto-ci.yaml
+
+      - name: Wait for the job to be created
+        run: |
+          until kubectl get job -l oot.node.kubernetes.io/module.name | grep ooto; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Wait for Job completion
+        run: kubectl wait --for condition=complete job -l oot.node.kubernetes.io/module.name --timeout=-1s
+        timeout-minutes: 2
+
+      - name: Collect job logs
+        run: |
+          JOB_NAME=$(kubectl get jobs.batch -l oot.node.kubernetes.io/module.name --template='{{ (index .items 0).metadata.name }}')
+          kubectl logs jobs.batch/${JOB_NAME}
+        if: ${{ always() }}
+
+      - name: Check that the module gets loaded on the node
+        run: |
+          until minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Remove the Module
+        run: kubectl delete -f module-ooto-ci.yaml
+
+      - name: Check that the module gets unloaded from the node
+        run: |
+          until ! minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Get all resources in the oot-operator-system namespace
+        run: kubectl get all -n oot-operator-system
+        if: ${{ always() }}
+
+      - name: Get all resources in the default namespace
+        run: kubectl get all
+        if: ${{ always() }}
+
+      - name: Describe nodes
+        run: kubectl describe node
+        if: ${{ always() }}
+
+      - name: Describe Jobs
+        run: kubectl describe job
         if: ${{ always() }}
 
       - name: Describe DaemonSets

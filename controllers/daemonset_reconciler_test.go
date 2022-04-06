@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -70,31 +69,4 @@ var _ = Describe("DaemonSetReconciler", func() {
 			Entry("Old DS, 0 desired", metav1.NewTime(metav1.Now().Add(-1*time.Hour)), int32(0), 0),
 		)
 	})
-})
-
-var _ = Describe("ModuleLabelNotEmptyFilter", func() {
-	dsWithEmptyLabel := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{controllers.ModuleNameLabel: ""},
-		},
-	}
-
-	dsWithLabel := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{controllers.ModuleNameLabel: "some-module"},
-		},
-	}
-
-	DescribeTable("Should return the expected value",
-		func(obj client.Object, expected bool) {
-			Expect(
-				controllers.ModuleLabelNotEmptyFilter(obj),
-			).To(
-				Equal(expected),
-			)
-		},
-		Entry("label not set", &appsv1.DaemonSet{}, false),
-		Entry("label set to empty value", dsWithEmptyLabel, false),
-		Entry("label set to a concrete value", dsWithLabel, true),
-	)
 })

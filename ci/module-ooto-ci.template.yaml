@@ -11,10 +11,10 @@ spec:
     lifecycle:
       postStart:
         exec:
-          command: [modprobe, -d, /opt, -v, KMOD_CHANGEME]
+          command: [modprobe, -vd, /opt, KMOD_CHANGEME]
       preStop:
         exec:
-          command: [modprobe, -d, /opt, -rv, KMOD_CHANGEME]
+          command: [modprobe, -rvd, /opt, KMOD_CHANGEME]
     securityContext:
       capabilities:
         add: [SYS_MODULE]

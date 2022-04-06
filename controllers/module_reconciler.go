@@ -21,14 +21,21 @@ import (
 	"fmt"
 
 	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/module"
+	"github.com/qbarrand/oot-operator/controllers/predicates"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // ModuleReconciler reconciles a Module object
@@ -36,6 +43,7 @@ type ModuleReconciler struct {
 	client.Client
 
 	namespace string
+	bm        build.Manager
 	dc        DaemonSetCreator
 	km        module.KernelMapper
 	su        module.ConditionsUpdater
@@ -44,12 +52,14 @@ type ModuleReconciler struct {
 func NewModuleReconciler(
 	client client.Client,
 	namespace string,
+	bm build.Manager,
 	dg DaemonSetCreator,
 	km module.KernelMapper,
 	su module.ConditionsUpdater,
 ) *ModuleReconciler {
 	return &ModuleReconciler{
 		Client:    client,
+		bm:        bm,
 		dc:        dg,
 		km:        km,
 		namespace: namespace,
@@ -61,19 +71,22 @@ func NewModuleReconciler(
 //+kubebuilder:rbac:groups=ooto.sigs.k8s.io,resources=modules/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=ooto.sigs.k8s.io,resources=modules/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=create;get;list;patch;watch
-//+kubebuilder:rbac:groups="core",resources=nodes,verbs=list;watch
+//+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
+//+kubebuilder:rbac:groups="batch",resources=jobs,verbs=create;list;watch
 
 // Reconcile lists all nodes and looks for kernels that match its mappings.
 // For each mapping that matches at least one node in the cluster, it creates a DaemonSet running the container image
 // on the nodes with a compatible kernel.
 func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	res := ctrl.Result{}
+
 	logger := log.FromContext(ctx)
 
 	mod := ootov1beta1.Module{}
 
 	if err := r.Client.Get(ctx, req.NamespacedName, &mod); err != nil {
 		logger.Error(err, "Could not get module")
-		return ctrl.Result{}, err
+		return res, err
 	}
 
 	logger.V(1).Info("Listing nodes", "selector", mod.Spec.Selector)
@@ -84,15 +97,15 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if err := r.Client.List(ctx, &nodes, opt); err != nil {
 		logger.Error(err, "Could not list nodes; retrying")
-		return ctrl.Result{}, fmt.Errorf("could not list nodes: %v", err)
+		return res, fmt.Errorf("could not list nodes: %v", err)
 	}
 
 	if len(nodes.Items) == 0 {
 		logger.Info("No nodes matching the selector; skipping module")
-		return ctrl.Result{}, nil
+		return res, nil
 	}
 
-	mappings := make(map[string]string)
+	mappings := make(map[string]*ootov1beta1.KernelMapping)
 
 	for _, node := range nodes.Items {
 		kernelVersion := node.Status.NodeInfo.KernelVersion
@@ -107,28 +120,47 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			continue
 		}
 
-		containerImage, err := r.km.FindImageForKernel(mod.Spec.KernelMappings, kernelVersion)
+		m, err := r.km.FindMappingForKernel(mod.Spec.KernelMappings, kernelVersion)
 		if err != nil {
 			nodeLogger.Info("no suitable container image found; skipping node")
 			continue
 		}
 
-		nodeLogger.V(1).Info("Found a valid mapping", "image", containerImage)
-		mappings[kernelVersion] = containerImage
+		nodeLogger.V(1).Info("Found a valid mapping",
+			"image", m.ContainerImage,
+			"build", m.Build != nil,
+		)
+
+		mappings[kernelVersion] = m
 	}
 
 	dsByKernelVersion, err := r.dc.ModuleDaemonSetsByKernelVersion(ctx, mod)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("could get DaemonSets for module %s: %v", mod.Name, err)
+		return res, fmt.Errorf("could get DaemonSets for module %s: %v", mod.Name, err)
 	}
 
 	//// TODO qbarrand: find a better place for this
 	//if err := r.su.SetAsReady(ctx, &mod, "TODO", "TODO"); err != nil {
-	//	return ctrl.Result{}, fmt.Errorf("could not set the initial conditions: %v", err)
+	//	return res, fmt.Errorf("could not set the initial conditions: %v", err)
 	//}
 
-	for kernelVersion, containerImage := range mappings {
-		logger.WithValues("kernel version", kernelVersion, "image", containerImage)
+	for kernelVersion, m := range mappings {
+		logger.WithValues("kernel version", kernelVersion, "image", m)
+
+		if m.Build != nil {
+			buildCtx := log.IntoContext(ctx, logger)
+
+			buildRes, err := r.bm.Sync(buildCtx, mod, *m, kernelVersion)
+			if err != nil {
+				return res, fmt.Errorf("could not synchronize the build: %v", err)
+			}
+
+			if buildRes.Requeue {
+				logger.Info("Build requires a requeue; skipping this mapping for now", "status", buildRes.Status)
+				res.Requeue = true
+				continue
+			}
+		}
 
 		ds := &appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{Namespace: r.namespace},
@@ -140,30 +172,50 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			ds.GenerateName = mod.Name + "-"
 		}
 
-		var res controllerutil.OperationResult
+		var opRes controllerutil.OperationResult
 
-		res, err = controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-			return r.dc.SetAsDesired(ds, containerImage, mod, kernelVersion)
+		opRes, err = controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
+			return r.dc.SetAsDesired(ds, m.ContainerImage, mod, kernelVersion)
 		})
 
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("could not create or patch DaemonSet: %v", err)
+			return res, fmt.Errorf("could not create or patch DaemonSet: %v", err)
 		}
 
-		logger.Info("Reconciled DaemonSet", "name", ds.Name, "result", res)
+		logger.Info("Reconciled DaemonSet", "name", ds.Name, "result", opRes)
 	}
 
 	// TODO we need to garbage collect DaemonSets here.
 	// If we removed a kernel mapping from the Module, the corresponding DaemonSet is currently not deleted.
 
-	return ctrl.Result{}, nil
+	return res, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string) error {
+	nmm := NewNodeModuleMapper(
+		r.Client,
+		mgr.GetLogger().WithName("NodeModuleMapper"),
+	)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ootov1beta1.Module{}).
 		Owns(&appsv1.DaemonSet{}).
-		WithEventFilter(SkipDeletions()).
+		Owns(&batchv1.Job{}).
+		Watches(
+			&source.Kind{Type: &v1.Node{}},
+			handler.EnqueueRequestsFromMapFunc(nmm.FindModulesForNode),
+			builder.WithPredicates(
+				ModuleReconcilerNodePredicate(kernelLabel),
+			),
+		).
 		Complete(r)
+}
+
+func ModuleReconcilerNodePredicate(kernelLabel string) predicate.Predicate {
+	return predicate.And(
+		predicates.SkipDeletions,
+		predicates.HasLabel(kernelLabel),
+		predicate.LabelChangedPredicate{},
+	)
 }

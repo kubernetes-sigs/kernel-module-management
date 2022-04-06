@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	ootov1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	"github.com/qbarrand/oot-operator/controllers/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,8 +16,6 @@ import (
 )
 
 //go:generate mockgen -source=daemonset.go -package=controllers -destination=mock_daemonset.go
-
-const ModuleNameLabel = "oot.node.kubernetes.io/module.name"
 
 type DaemonSetCreator interface {
 	ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1beta1.Module) (map[string]*appsv1.DaemonSet, error)
@@ -43,7 +42,7 @@ func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Contex
 	dsList := appsv1.DaemonSetList{}
 
 	opts := []client.ListOption{
-		client.MatchingLabels(map[string]string{ModuleNameLabel: mod.Name}),
+		client.MatchingLabels(map[string]string{constants.ModuleNameLabel: mod.Name}),
 		client.InNamespace(dc.namespace),
 	}
 
@@ -82,8 +81,8 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 	}
 
 	standardLabels := map[string]string{
-		ModuleNameLabel: mod.Name,
-		dc.kernelLabel:  kernelVersion,
+		constants.ModuleNameLabel: mod.Name,
+		dc.kernelLabel:            kernelVersion,
 	}
 
 	labels := ds.GetLabels()
@@ -202,7 +201,7 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 		},
 	}
 
-	if err := controllerutil.SetOwnerReference(&mod, ds, dc.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(&mod, ds, dc.scheme); err != nil {
 		return fmt.Errorf("could not set the owner reference: %v", err)
 	}
 
