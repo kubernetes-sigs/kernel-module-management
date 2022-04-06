@@ -99,5 +99,5 @@ jobs:
       - name: Build and push catalog
         run: make catalog-build && make catalog-push
         env:
-          BUNDLE_IMG: ghcr.io/qbarrand/oot-operator-bundle@${{ steps.build-push-operator-bundle.outputs.digest }}
+          BUNDLE_IMG: ghcr.io/qbarrand/oot-operator-bundle@${{ steps.build-push-bundle.outputs.digest }}
           VERSION: ${{ github.ref_name }}
