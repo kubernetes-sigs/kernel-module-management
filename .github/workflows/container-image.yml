@@ -14,11 +14,35 @@ jobs:
       packages: write
 
     steps:
-      - name: Generate image metadata
-        id: meta
+      - name: Generate image metadata for operator
+        id: meta-operator
         uses: docker/metadata-action@v3
         with:
           images: ghcr.io/qbarrand/oot-operator
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Generate image metadata for bundle
+        id: meta-bundle
+        uses: docker/metadata-action@v3
+        with:
+          images: ghcr.io/qbarrand/oot-operator-bundle
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Generate image metadata for catalog
+        id: meta-catalog
+        uses: docker/metadata-action@v3
+        with:
+          images: ghcr.io/qbarrand/oot-operator-catalog
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -36,10 +60,44 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v3
 
-      - name: Build and push
+      - name: Build and push operator
+        id: build-push-operator
         uses: docker/build-push-action@v2
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-operator.outputs.tags }}
+          labels: ${{ steps.meta-operator.outputs.labels }}
+
+      - name: Setup Go 1.17
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.17'
+
+      - name: Install the Operator SDK CLI
+        run: |
+          mkdir -p ${HOME}/.local/bin
+          curl -Lo ${HOME}/.local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v1.18.1/operator-sdk_linux_amd64
+          chmod +x {HOME}/.local/bin/operator-sdk
+          echo "${HOME}/.local/bin" >> $GITHUB_PATH
+
+      - name: Generate the bundle content
+        run: make bundle
+        env:
+          IMG: ghcr.io/qbarrand/oot-operator@${{ steps.build-push-operator.outputs.digest }}
+
+      - name: Build and push bundle
+        id: build-push-bundle
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: bundle.Dockerfile
+          push: true
+          tags: ${{ steps.meta-bundle.outputs.tags }}
+          labels: ${{ steps.meta-bundle.outputs.labels }}
+
+      - name: Build and push catalog
+        run: make catalog-build && make catalog-push
+        env:
+          BUNDLE_IMG: ghcr.io/qbarrand/oot-operator-bundle@${{ steps.build-push-operator-bundle.outputs.digest }}
+          VERSION: ${{ github.ref_name }}
