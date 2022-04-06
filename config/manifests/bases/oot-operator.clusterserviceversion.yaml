@@ -1,0 +1,52 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: oot-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: Module is the Schema for the modules API
+      displayName: Module
+      kind: Module
+      name: modules.ooto.sigs.k8s.io
+      version: v1alpha1
+  description: Kubernetes operator managing out of tree kernel modules
+  displayName: OOT Operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - oot
+  - out-of-tree
+  - kernel
+  - module
+  - modules
+  links:
+  - name: OOT Operator
+    url: https://github.com/qbarrand/oot-operator
+  maintainers:
+  - email: quba@redhat.com
+    name: Quentin Barrand
+  maturity: alpha
+  provider:
+    name: Community
+    url: https://github.com/qbarrand/oot-operator
+  version: 0.0.0
