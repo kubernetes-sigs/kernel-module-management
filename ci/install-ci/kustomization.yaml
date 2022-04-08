@@ -5,7 +5,7 @@ resources:
   - ../../config/default
 
 images:
-  - name: controller
+  - name: ghcr.io/qbarrand/oot-operator
     newName: ooto
     newTag: local
 
