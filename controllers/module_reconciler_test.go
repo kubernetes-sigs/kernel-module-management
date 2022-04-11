@@ -14,6 +14,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -37,9 +38,13 @@ var _ = Describe("ModuleReconciler", func() {
 			mockKM = module.NewMockKernelMapper(ctrl)
 		})
 
-		It("should do nothing when no nodes match the selector", func() {
-			const moduleName = "test-module"
+		const moduleName = "test-module"
 
+		req := reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: moduleName},
+		}
+
+		It("should do nothing when no nodes match the selector", func() {
 			mod := ootov1alpha1.Module{
 				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 				Spec: ootov1alpha1.ModuleSpec{
@@ -64,9 +69,53 @@ var _ = Describe("ModuleReconciler", func() {
 
 			mr := controllers.NewModuleReconciler(client, "", mockBM, mockDC, mockKM, mockCU)
 
-			req := reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: moduleName},
+			ctx := context.TODO()
+
+			dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
+
+			gomock.InOrder(
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
+				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+			)
+
+			res, err := mr.Reconcile(context.TODO(), req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(reconcile.Result{}))
+		})
+
+		It("should remove obsolete DaemonSets when no nodes match the selector", func() {
+			const kernelVersion = "1.2.3"
+
+			mod := ootov1alpha1.Module{
+				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				Spec: ootov1alpha1.ModuleSpec{
+					Selector: map[string]string{"key": "value"},
+				},
 			}
+
+			ds := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-daemonset",
+					Namespace: dsNamespace,
+				},
+			}
+
+			c := fake.
+				NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(&mod, &ds).
+				Build()
+
+			mr := controllers.NewModuleReconciler(c, dsNamespace, mockBM, mockDC, mockKM, mockCU)
+
+			ctx := context.TODO()
+
+			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
+
+			gomock.InOrder(
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
+				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+			)
 
 			res, err := mr.Reconcile(context.TODO(), req)
 			Expect(err).NotTo(HaveOccurred())
@@ -77,7 +126,6 @@ var _ = Describe("ModuleReconciler", func() {
 			const (
 				imageName     = "test-image"
 				kernelVersion = "1.2.3"
-				moduleName    = "test-module"
 			)
 
 			mappings := []ootov1alpha1.KernelMapping{
@@ -120,10 +168,6 @@ var _ = Describe("ModuleReconciler", func() {
 
 			mr := controllers.NewModuleReconciler(c, namespace, mockBM, mockDC, mockKM, mockCU)
 
-			req := reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: moduleName},
-			}
-
 			ctx := context.TODO()
 
 			ds := appsv1.DaemonSet{
@@ -137,6 +181,7 @@ var _ = Describe("ModuleReconciler", func() {
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)),
 				mockDC.EXPECT().SetAsDesired(&ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
+				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString(kernelVersion)),
 			)
 
 			res, err := mr.Reconcile(context.TODO(), req)
@@ -150,11 +195,10 @@ var _ = Describe("ModuleReconciler", func() {
 			Expect(dsList.Items).To(HaveLen(1))
 		})
 
-		It("should path the DaemonSet when it already exists", func() {
+		It("should patch the DaemonSet when it already exists", func() {
 			const (
 				imageName     = "test-image"
 				kernelVersion = "1.2.3"
-				moduleName    = "test-module"
 			)
 
 			mappings := []ootov1alpha1.KernelMapping{
@@ -209,10 +253,6 @@ var _ = Describe("ModuleReconciler", func() {
 
 			mr := controllers.NewModuleReconciler(c, namespace, mockBM, mockDC, mockKM, mockCU)
 
-			req := reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: moduleName},
-			}
-
 			ctx := context.TODO()
 
 			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
@@ -224,6 +264,7 @@ var _ = Describe("ModuleReconciler", func() {
 					func(d *appsv1.DaemonSet, _ string, _ ootov1alpha1.Module, _ string) {
 						d.SetLabels(map[string]string{"test": "test"})
 					}),
+				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
 			)
 
 			res, err := mr.Reconcile(context.TODO(), req)

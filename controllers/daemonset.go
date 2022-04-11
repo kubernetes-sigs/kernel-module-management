@@ -11,6 +11,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -18,6 +19,7 @@ import (
 //go:generate mockgen -source=daemonset.go -package=controllers -destination=mock_daemonset.go
 
 type DaemonSetCreator interface {
+	GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.String) ([]string, error)
 	ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1alpha1.Module) (map[string]*appsv1.DaemonSet, error)
 	SetAsDesired(ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error
 }
@@ -36,6 +38,22 @@ func NewDaemonSetCreator(client client.Client, kernelLabel, namespace string, sc
 		namespace:   namespace,
 		scheme:      scheme,
 	}
+}
+
+func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.String) ([]string, error) {
+	deleted := make([]string, 0)
+
+	for kernelVersion, ds := range existingDS {
+		if !validKernels.Has(kernelVersion) {
+			if err := dc.client.Delete(ctx, ds); err != nil {
+				return nil, fmt.Errorf("could not delete DaemonSet %s: %v", ds.Name, err)
+			}
+
+			deleted = append(deleted, ds.Name)
+		}
+	}
+
+	return deleted, nil
 }
 
 func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1alpha1.Module) (map[string]*appsv1.DaemonSet, error) {

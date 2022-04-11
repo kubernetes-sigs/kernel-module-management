@@ -288,26 +288,13 @@ jobs:
           done
         timeout-minutes: 1
 
-      - name: Verify that the DaemonSet controller works
+      - name: Verify that the DaemonSet gets garbage collected
         run: |
-          set -eux
-
-          # Get the DaemonSet's name, as we cannot patch by label
-          DS_NAME=$(kubectl get daemonsets.apps -l oot.node.kubernetes.io/module.name=ooto-ci-b --template='{{ (index .items 0).metadata.name }}')
-
-          # Verify that we got the name
-          test -n "${DS_NAME}"
-
-          # Wait one minute for the DaemonSet to be considered old and deletable
-          sleep 60
-
-          # Patch the DaemonSet to trigger a reconciliation
-          kubectl patch daemonset.apps "${DS_NAME}" --patch '{"metadata":{"labels": {"trigger-reconcile":""}}}'
-
-          until ! kubectl get daemonsets.apps "${DS_NAME}"; do
+          # Cannot use kubectl wait because it will fail if there is no initial match
+          until [ $(kubectl get daemonsets.apps -l oot.node.kubernetes.io/module.name=ooto-ci-b -o go-template='{{ len .items }}') -eq 0 ]; do
             sleep 3
           done
-        timeout-minutes: 2
+        timeout-minutes: 1
 
       - name: Get all resources in the oot-operator-system namespace
         run: kubectl get all -n oot-operator-system

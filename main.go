@@ -157,13 +157,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	dsr := controllers.NewDaemonSetReconciler(client)
-
-	if err = dsr.SetupWithManager(mgr, namespace); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "DaemonSet")
-		os.Exit(1)
-	}
-
 	//+kubebuilder:scaffold:builder
 
 	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -232,6 +233,68 @@ var _ = Describe("daemonSetGenerator", func() {
 			).To(
 				BeTrue(), cmp.Diff(expected, ds),
 			)
+		})
+	})
+
+	Describe("GarbageCollect", func() {
+		It("should only delete one of the two DaemonSets if only one is not used", func() {
+			const (
+				legitKernelVersion    = "legit-kernel-version"
+				legitName             = "legit"
+				notLegitKernelVersion = "not-legit-kernel-version"
+				notLegitName          = "not-legit"
+			)
+
+			dsLegit := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: legitName, Namespace: dsNamespace},
+			}
+
+			dsNotLegit := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: dsNamespace},
+			}
+
+			client := fake.NewClientBuilder().WithObjects(&dsLegit, &dsNotLegit).Build()
+
+			dc := controllers.NewDaemonSetCreator(client, "", dsNamespace, scheme)
+
+			existingDS := map[string]*appsv1.DaemonSet{
+				legitKernelVersion:    &dsLegit,
+				notLegitKernelVersion: &dsNotLegit,
+			}
+
+			validKernels := sets.NewString(legitKernelVersion)
+
+			Expect(
+				dc.GarbageCollect(context.TODO(), existingDS, validKernels),
+			).To(
+				Equal([]string{notLegitName}),
+			)
+
+			afterDeleteDaemonSetList := appsv1.DaemonSetList{}
+
+			Expect(
+				client.List(context.TODO(), &afterDeleteDaemonSetList),
+			).To(
+				Succeed(),
+			)
+
+			Expect(afterDeleteDaemonSetList.Items).To(HaveLen(1))
+			Expect(afterDeleteDaemonSetList.Items[0].Name).To(Equal(legitName))
+		})
+
+		It("should return an error if a deletion failed", func() {
+			dc := controllers.NewDaemonSetCreator(
+				fake.NewClientBuilder().Build(),
+				"",
+				dsNamespace,
+				scheme)
+
+			existingDS := map[string]*appsv1.DaemonSet{
+				"some-kernel-version": {},
+			}
+
+			_, err := dc.GarbageCollect(context.TODO(), existingDS, sets.NewString())
+			Expect(err).To(HaveOccurred())
 		})
 	})
 

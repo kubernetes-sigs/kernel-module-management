@@ -11,6 +11,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	v1 "k8s.io/api/apps/v1"
+	sets "k8s.io/apimachinery/pkg/util/sets"
 )
 
 // MockDaemonSetCreator is a mock of DaemonSetCreator interface.
@@ -34,6 +35,21 @@ func NewMockDaemonSetCreator(ctrl *gomock.Controller) *MockDaemonSetCreator {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockDaemonSetCreator) EXPECT() *MockDaemonSetCreatorMockRecorder {
 	return m.recorder
+}
+
+// GarbageCollect mocks base method.
+func (m *MockDaemonSetCreator) GarbageCollect(ctx context.Context, existingDS map[string]*v1.DaemonSet, validKernels sets.String) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GarbageCollect", ctx, existingDS, validKernels)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GarbageCollect indicates an expected call of GarbageCollect.
+func (mr *MockDaemonSetCreatorMockRecorder) GarbageCollect(ctx, existingDS, validKernels interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockDaemonSetCreator)(nil).GarbageCollect), ctx, existingDS, validKernels)
 }
 
 // ModuleDaemonSetsByKernelVersion mocks base method.
