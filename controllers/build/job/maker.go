@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	"github.com/qbarrand/oot-operator/controllers/build"
+	"golang.org/x/exp/slices"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,21 +20,29 @@ type Maker interface {
 }
 
 type maker struct {
+	mh        build.ModuleHelper
 	namespace string
 	scheme    *runtime.Scheme
 }
 
-func NewMaker(namespace string, scheme *runtime.Scheme) Maker {
+func NewMaker(mh build.ModuleHelper, namespace string, scheme *runtime.Scheme) Maker {
 	return &maker{
+		mh:        mh,
 		namespace: namespace,
 		scheme:    scheme,
 	}
 }
 
 func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, targetKernel string) (*batchv1.Job, error) {
-	args := []string{
-		"--destination", km.ContainerImage,
-		"--build-arg", "KERNEL_VERSION=" + targetKernel,
+	args := []string{"--destination", km.ContainerImage}
+
+	buildArgs := m.mh.ApplyBuildArgOverrides(
+		slices.Clone(km.Build.BuildArgs),
+		ootov1alpha1.BuildArg{Name: "KERNEL_VERSION", Value: targetKernel},
+	)
+
+	for _, ba := range buildArgs {
+		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", ba.Name, ba.Value))
 	}
 
 	if km.Build.Pull.Insecure {

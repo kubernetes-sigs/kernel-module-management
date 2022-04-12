@@ -21,6 +21,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// BuildArg represents a build argument used when building a container image.
+type BuildArg struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 type PullOptions struct {
 	// +optional
 
@@ -36,6 +42,11 @@ type PushOptions struct {
 }
 
 type Build struct {
+	// +optional
+
+	// BuildArgs is an array of build variables that are provided to the image building backend.
+	BuildArgs []BuildArg `json:"buildArgs"`
+
 	Dockerfile string `json:"dockerfile"`
 
 	// +optional

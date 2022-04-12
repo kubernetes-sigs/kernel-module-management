@@ -145,7 +145,7 @@ func main() {
 
 	setupLog.V(1).Info("Using kernel label", "label", kernelLabel)
 
-	bm := job.NewBuildManager(client, build.NewGetter(), job.NewMaker(namespace, scheme), namespace)
+	bm := job.NewBuildManager(client, build.NewGetter(), job.NewMaker(build.NewModuleHelper(), namespace, scheme), namespace)
 	dc := controllers.NewDaemonSetCreator(client, kernelLabel, namespace, scheme)
 	km := module.NewKernelMapper()
 	su := module.NewConditionsUpdater(client.Status())

@@ -1514,6 +1514,22 @@ spec:
                 type: array
               build:
                 properties:
+                  buildArgs:
+                    description: BuildArgs is an array of build variables that are
+                      provided to the image building backend.
+                    items:
+                      description: BuildArg represents a build argument used when
+                        building a container image.
+                      properties:
+                        name:
+                          type: string
+                        value:
+                          type: string
+                      required:
+                      - name
+                      - value
+                      type: object
+                    type: array
                   dockerfile:
                     type: string
                   pull:
@@ -3939,6 +3955,22 @@ spec:
                       description: Build enables in-cluster builds for this mapping
                         and allows overriding the Module's build settings.
                       properties:
+                        buildArgs:
+                          description: BuildArgs is an array of build variables that
+                            are provided to the image building backend.
+                          items:
+                            description: BuildArg represents a build argument used
+                              when building a container image.
+                            properties:
+                              name:
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
                         dockerfile:
                           type: string
                         pull:

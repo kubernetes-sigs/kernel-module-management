@@ -1,12 +1,15 @@
 package job_test
 
 import (
+	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/build/job"
 	"github.com/qbarrand/oot-operator/controllers/constants"
+	"golang.org/x/exp/slices"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,16 +25,32 @@ var _ = Describe("Maker", func() {
 			namespace      = "some-namespace"
 		)
 
+		var (
+			m  job.Maker
+			mh *build.MockModuleHelper
+		)
+
 		mod := ootov1alpha1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 		}
 
+		buildArgs := []ootov1alpha1.BuildArg{
+			{Name: "name1", Value: "value1"},
+		}
+
 		km := ootov1alpha1.KernelMapping{
-			Build:          &ootov1alpha1.Build{Dockerfile: dockerfile},
+			Build: &ootov1alpha1.Build{
+				BuildArgs:  buildArgs,
+				Dockerfile: dockerfile,
+			},
 			ContainerImage: containerImage,
 		}
 
-		m := job.NewMaker(namespace, scheme)
+		BeforeEach(func() {
+			ctrl := gomock.NewController(GinkgoT())
+			mh = build.NewMockModuleHelper(ctrl)
+			m = job.NewMaker(mh, namespace, scheme)
+		})
 
 		It("should set fields correctly", func() {
 			var (
@@ -68,6 +87,7 @@ var _ = Describe("Maker", func() {
 								{
 									Args: []string{
 										"--destination", containerImage,
+										"--build-arg", "name1=value1",
 										"--build-arg", "KERNEL_VERSION=" + kernelVersion,
 									},
 									Name:  "kaniko",
@@ -103,6 +123,13 @@ var _ = Describe("Maker", func() {
 					},
 				},
 			}
+
+			override := ootov1alpha1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
+
+			mh.
+				EXPECT().
+				ApplyBuildArgOverrides(buildArgs, override).
+				Return(append(slices.Clone(buildArgs), override))
 
 			actual, err := m.MakeJob(mod, km, kernelVersion)
 			Expect(err).NotTo(HaveOccurred())
