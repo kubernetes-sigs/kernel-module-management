@@ -45,7 +45,7 @@
 </li>
                                     
 <li>
-    <a href="reconciliation_loops/" class="dropdown-item">Reconciliation loops</a>
+    <a href="reconciliation_loops/" class="dropdown-item">Reconciliation loop</a>
 </li>
                                     
 <li>
@@ -128,10 +128,21 @@ kind: Module
 metadata:
   name: module-sample
 spec:
+  additionalVolumes:
+    # All volumes here are available into the DriverContainer / DevicePlugin pod.
+    # Users should mount those by adding corresponding volumeMounts under .spec.devicePlugin
+    # and .spec.driverContainer.
+    - name: some-volume
+      configMap:
+        name: some-configmap
   devicePlugin: # is a Container spec
+    # This container will be privileged and will mount
+    # /var/lib/kubelet/device-plugins automatically.
     name: overwritten-anyway
     image: some-image
   driverContainer: # is a Container spec
+    # This container will not be privileged by default.
+    # It will mount /lib/modules and /usr/lib/modules automatically.
     name: overwritten-anyway
     image: overwritten-anyway
     securityContext:
@@ -144,6 +155,9 @@ spec:
       containerImage: quay.io/vendor/module-sample:ubuntu-5.4.0-1054-gke
     - regexp: '^.*\-gke$'
       build:
+        buildArgs:
+          - name: SOME_KEY
+            value: SOME_VALUE
         pull:
           insecure: false
         push:
@@ -181,12 +195,14 @@ to their DriverContainer pod template to make sure that their module is unloaded
 <p>By default, the OOTO would only grant the <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code>CAP_SYS_MODULE</code></a>
 capability to DriverContainer <code>DaemonSets</code>.</p>
 <h3 id="kubernetes-api-privileges">Kubernetes API privileges</h3>
-<p>The OOTO would only be granted a limited set of Kubernetes API privileges:
-- Read and watch <code>Nodes</code>;
-- Read and watch <code>Modules</code>, update their status;
-- Read, create, modify and watch <code>DaemonSets</code>;
-- Read, create, modify and watch <code>Build</code> objects (from whatever system we agree on);
-- Read <code>Secrets</code>.</p></div>
+<p>The OOTO would only be granted a limited set of Kubernetes API privileges:</p>
+<ul>
+<li>Read, modify (for kernel version labeling) and watch <code>Nodes</code>;</li>
+<li>Read and watch <code>Modules</code>, update their status;</li>
+<li>Read, create, modify and watch <code>DaemonSets</code>;</li>
+<li>Read, create, modify and watch <code>Build</code> objects (from whatever system we agree on);</li>
+<li>Read <code>Secrets</code> for pull and build secrets.</li>
+</ul></div>
             </div>
         </div>
 

@@ -45,7 +45,7 @@
 </li>
                                     
 <li>
-    <a href="../reconciliation_loops/" class="dropdown-item">Reconciliation loops</a>
+    <a href="../reconciliation_loops/" class="dropdown-item">Reconciliation loop</a>
 </li>
                                     
 <li>
@@ -125,9 +125,7 @@
 <p>The operator lists all nodes required to build the module and looks at their kernels.
 It uses the <code>Module</code>’s <code>.spec.kernelMappings</code> to create <code>DaemonSets</code> for each of those kernels.</p>
 <p>If an image for one of these <code>DaemonSets</code> requires an in-cluster build, it creates the build object (build system TBD).
-The <code>DaemonSet</code> owns the build object, so that it is deleted when the <code>DaemonSet</code> is deleted.</p>
-<p><strong>Optional:</strong> we could watch the build object to rollout restart the <code>DaemonSet</code> as soon as the build is over and the
-image can be pulled.</p>
+The <code>Module</code> owns the build object, so that it is deleted when the <code>Module</code> is deleted.</p>
 <h2 id="module-update-kernel-kernel-should-run-a-new-drivercontainer-image">Module update: kernel <code>$kernel</code> should run a new DriverContainer image</h2>
 <p>The OOTO would be triggered by an update to any <code>Module</code> instance.
 That reconciliation generates a list of <code>DaemonSets</code> that need to be reconciled.</p>
@@ -145,7 +143,7 @@ That reconciliation generates a list of <code>DaemonSets</code> that need to be 
 <td><code>$moduleName</code></td>
 </tr>
 <tr>
-<td><code>ooto.sigs.k8s.io/kernel-target</code></td>
+<td><code>oot.node.kubernetes.io/kernel-version.full</code></td>
 <td><code>$kernel</code></td>
 </tr>
 </tbody>

@@ -19,10 +19,21 @@ kind: Module
 metadata:
   name: module-sample
 spec:
+  additionalVolumes:
+    # All volumes here are available into the DriverContainer / DevicePlugin pod.
+    # Users should mount those by adding corresponding volumeMounts under .spec.devicePlugin
+    # and .spec.driverContainer.
+    - name: some-volume
+      configMap:
+        name: some-configmap
   devicePlugin: # is a Container spec
+    # This container will be privileged and will mount
+    # /var/lib/kubelet/device-plugins automatically.
     name: overwritten-anyway
     image: some-image
   driverContainer: # is a Container spec
+    # This container will not be privileged by default.
+    # It will mount /lib/modules and /usr/lib/modules automatically.
     name: overwritten-anyway
     image: overwritten-anyway
     securityContext:
@@ -35,6 +46,9 @@ spec:
       containerImage: quay.io/vendor/module-sample:ubuntu-5.4.0-1054-gke
     - regexp: '^.*\-gke$'
       build:
+        buildArgs:
+          - name: SOME_KEY
+            value: SOME_VALUE
         pull:
           insecure: false
         push:
@@ -80,8 +94,9 @@ capability to DriverContainer `DaemonSets`.
 
 ### Kubernetes API privileges
 The OOTO would only be granted a limited set of Kubernetes API privileges:
-- Read and watch `Nodes`;
+
+- Read, modify (for kernel version labeling) and watch `Nodes`;
 - Read and watch `Modules`, update their status;
 - Read, create, modify and watch `DaemonSets`;
 - Read, create, modify and watch `Build` objects (from whatever system we agree on);
-- Read `Secrets`.
+- Read `Secrets` for pull and build secrets.

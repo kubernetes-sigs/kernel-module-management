@@ -1,4 +1,4 @@
-all: diagrams/reconciliation-daemonset.png diagrams/reconciliation-module.png diagrams/reconciliation-node.png
+all: diagrams/reconciliation-module.png
 
 diagrams/%.png: diagrams/%.puml
 	java -jar ../../../bin/plantuml.jar -nometadata -p < $< > $@

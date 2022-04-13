@@ -8,7 +8,7 @@
         
         
         <link rel="shortcut icon" href="../../img/favicon.ico">
-        <title>Reconciliation loops - Out-Of-Tree operator</title>
+        <title>Reconciliation loop - Out-Of-Tree operator</title>
         <link href="../../css/bootstrap.min.css" rel="stylesheet">
         <link href="../../css/font-awesome.min.css" rel="stylesheet">
         <link href="../../css/base.css" rel="stylesheet">
@@ -45,7 +45,7 @@
 </li>
                                     
 <li>
-    <a href="./" class="dropdown-item active">Reconciliation loops</a>
+    <a href="./" class="dropdown-item active">Reconciliation loop</a>
 </li>
                                     
 <li>
@@ -87,17 +87,9 @@
     <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
         <ul class="nav flex-column">
             
-            <li class="nav-item" data-level="1"><a href="#reconciliation-loops" class="nav-link">Reconciliation loops</a>
+            <li class="nav-item" data-level="1"><a href="#reconciliation-loop" class="nav-link">Reconciliation loop</a>
               <ul class="nav flex-column">
             <li class="nav-item" data-level="2"><a href="#modules" class="nav-link">Modules</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-            <li class="nav-item" data-level="2"><a href="#nodes" class="nav-link">Nodes</a>
-              <ul class="nav flex-column">
-              </ul>
-            </li>
-            <li class="nav-item" data-level="2"><a href="#daemonsets" class="nav-link">DaemonSets</a>
               <ul class="nav flex-column">
               </ul>
             </li>
@@ -108,7 +100,7 @@
 </div></div>
                     <div class="col-md-9" role="main">
 
-<h1 id="reconciliation-loops">Reconciliation loops</h1>
+<h1 id="reconciliation-loop">Reconciliation loop</h1>
 <h2 id="modules">Modules</h2>
 <p>Each time a new <code>Module</code> is created, we need to find to which nodes it applies.<br />
 A first filtering is performed using the <code>.spec.selector</code> field, then we go through the module’s kernel mappings to
@@ -116,28 +108,13 @@ find a container image that matches the node’s kernel.
 We end up with a certain number of (kernel, image) pairs; for each of these pairs, there should be a <code>DaemonSet</code>.<br />
 We first look for a <code>DaemonSet</code> that would already be targeting the same kernel and DriverContainer image (that data is
 stored in the <code>DaemonSet</code>’s labels).
-If there is already such a <code>DaemonSet</code>, we update it, if needed.<br />
+If there is already such a <code>DaemonSet</code>, we patch it, if needed.<br />
 If there is not already a matching <code>DaemonSet</code>, we create it and set the <code>Module</code> as owner.</p>
 <p>When a <code>Module</code> is deleted, we have nothing to do: because we set it as owner of all <code>DaemonSets</code>, Kubernetes garbage
 collection will take care of deleting them.</p>
-<p><img alt="Modules reconciliation" src="../diagrams/reconciliation-module.png" /></p>
-<h2 id="nodes">Nodes</h2>
-<p>Each time a <code>Node</code> is created or updated, we must verify which <code>Modules</code> apply to it.
-The reconciliation process is similar to that of <code>Module</code>, except it is made in reverse.<br />
-We first list all <code>Modules</code> and check which ones apply to the Node using each <code>Module</code>’s <code>.spec.selector</code> field.
-We then iterate over the filtered <code>Modules</code>.<br />
-For each <code>Module</code>, we try to find a suitable DriverContainer image by finding a kernelMapping that applies to the <code>Node</code>.
-We select the first occurrence and store this in a list of (kernel, DriverContainer image) pairs.<br />
-After we have looped over all modules that apply to the <code>Node</code>, we reconcile <code>DaemonSets</code> corresponding to these
-(kernel, DriverContainer image) pairs like we did for <code>Modules</code>.</p>
-<p><img alt="Node reconciliation" src="../diagrams/reconciliation-node.png" /></p>
-<h2 id="daemonsets">DaemonSets</h2>
-<p><code>Module</code> and <code>Node</code> reconciliation loops create and update <code>DaemonSets</code>, but they never actively destroy them.<br />
-A <code>DaemonSet</code> should be deleted when it runs a DriverContainer image for a kernel that no <code>Node</code> runs anymore.<br />
-Because we use the <code>DaemonSet</code>’s <code>nodeSelector</code> to target precise kernels, we can determine when a <code>DaemonSet</code> is
-outdated and does not target any <code>Node</code> in the cluster: that is when its desired replicas is set by Kubernetes to 0.<br />
-We can thus watch all <code>DaemonSets</code> managed by the operator, and delete those that are not targeting any node.</p>
-<p><img alt="DaemonSet reconciliation" src="../diagrams/reconciliation-daemonset.png" /></p></div>
+<p>We watch <code>Module</code>, owned <code>DaemonSet</code> and build objects as well as nodes to make sure that we are not missing any change
+in the cluster.</p>
+<p><img alt="Modules reconciliation" src="../diagrams/reconciliation-module.png" /></p></div>
             </div>
         </div>
 

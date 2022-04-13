@@ -5,10 +5,7 @@ The operator lists all nodes required to build the module and looks at their ker
 It uses the `Module`’s `.spec.kernelMappings` to create `DaemonSets` for each of those kernels.
 
 If an image for one of these `DaemonSets` requires an in-cluster build, it creates the build object (build system TBD).
-The `DaemonSet` owns the build object, so that it is deleted when the `DaemonSet` is deleted.
-
-**Optional:** we could watch the build object to rollout restart the `DaemonSet` as soon as the build is over and the
-image can be pulled.
+The `Module` owns the build object, so that it is deleted when the `Module` is deleted.
 
 ## Module update: kernel `$kernel` should run a new DriverContainer image
 The OOTO would be triggered by an update to any `Module` instance.
@@ -16,10 +13,10 @@ That reconciliation generates a list of `DaemonSets` that need to be reconciled.
 
 For each `DaemonSet` belonging to `Module`, we set the following labels:
 
-| key                              | value         |
-|----------------------------------|---------------|
-| `ooto.sigs.k8s.io/module-name`   | `$moduleName` |
-| `ooto.sigs.k8s.io/kernel-target` | `$kernel`     |
+| key                                          | value         |
+|----------------------------------------------|---------------|
+| `ooto.sigs.k8s.io/module-name`               | `$moduleName` |
+| `oot.node.kubernetes.io/kernel-version.full` | `$kernel`     |
 
 We either create those `DaemonSets` (if they do not already exist) or update them (if a `DaemonSet` already exists with 
 the same labels).
