@@ -6,7 +6,11 @@ metadata:
 spec:
   driverContainer:
     name: overwritten-anyway
-    command: [sleep, infinity]
+    command:
+      - sh
+      - -c
+      # Wrap inside echo to disable stdout buffering
+      - 'echo "Hello World! secret: $(cat /ci-build-secret)" && sleep infinity'
     lifecycle:
       postStart:
         exec:
@@ -25,6 +29,10 @@ spec:
           insecure: true
         push:
           insecure: true
-        dockerfile: FROM registry.minikube/ooto-base:local
+        secrets:
+          - name: build-secret
+        dockerfile: |
+          FROM registry.minikube/ooto-base:local
+          RUN cat /run/secrets/build-secret/ci-build-secret > /ci-build-secret
   selector:
     kubernetes.io/hostname: minikube

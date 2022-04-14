@@ -1550,6 +1550,19 @@ spec:
                           to an insecure (plain HTTP) registry.
                         type: boolean
                     type: object
+                  secrets:
+                    description: Secrets is an optional list of secrets to be made
+                      available to the build system.
+                    items:
+                      description: LocalObjectReference contains enough information
+                        to let you locate the referenced object inside the same namespace.
+                      properties:
+                        name:
+                          description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            TODO: Add other useful fields. apiVersion, kind, uid?'
+                          type: string
+                      type: object
+                    type: array
                 required:
                 - dockerfile
                 type: object
@@ -3991,6 +4004,21 @@ spec:
                                 be pushed to an insecure (plain HTTP) registry.
                               type: boolean
                           type: object
+                        secrets:
+                          description: Secrets is an optional list of secrets to be
+                            made available to the build system.
+                          items:
+                            description: LocalObjectReference contains enough information
+                              to let you locate the referenced object inside the same
+                              namespace.
+                            properties:
+                              name:
+                                description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  TODO: Add other useful fields. apiVersion, kind,
+                                  uid?'
+                                type: string
+                            type: object
+                          type: array
                       required:
                       - dockerfile
                       type: object

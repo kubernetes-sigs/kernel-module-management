@@ -387,6 +387,9 @@ jobs:
           kubectl get -o yaml pod -n oot-operator-system
         if: ${{ failure() }}
 
+      - name: Create a build secret
+        run: kubectl create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
+
       - name: Add an ooto-ci Module that contains a valid mapping
         run: |
           sed -e "s/KVER_CHANGEME/$(uname -r)/g" ci/module-ooto-ci-build.template.yaml | tee module-ooto-ci.yaml
@@ -413,6 +416,13 @@ jobs:
       - name: Check that the module gets loaded on the node
         run: |
           until minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Check that the DriverContainer prints the secret's value to the standard output
+        run: |
+          until kubectl logs -l oot.node.kubernetes.io/module.name | grep super-secret-value; do
             sleep 3
           done
         timeout-minutes: 1

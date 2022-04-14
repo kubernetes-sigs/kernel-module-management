@@ -55,6 +55,28 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, 
 
 	var one int32 = 1
 
+	const dockerfileVolumeName = "dockerfile"
+
+	dockerFileVolume := v1.Volume{
+		Name: dockerfileVolumeName,
+		VolumeSource: v1.VolumeSource{
+			DownwardAPI: &v1.DownwardAPIVolumeSource{
+				Items: []v1.DownwardAPIVolumeFile{
+					{
+						Path:     "Dockerfile",
+						FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.annotations['Dockerfile']"},
+					},
+				},
+			},
+		},
+	}
+
+	dockerFileVolumeMount := v1.VolumeMount{
+		Name:      dockerfileVolumeName,
+		ReadOnly:  true,
+		MountPath: "/workspace",
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mod.Name + "-build-",
@@ -70,34 +92,14 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, 
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
-							Args:  args,
-							Name:  "kaniko",
-							Image: "gcr.io/kaniko-project/executor:latest",
-							VolumeMounts: []v1.VolumeMount{
-								{
-									Name:      "dockerfile",
-									ReadOnly:  true,
-									MountPath: "/workspace",
-								},
-							},
+							Args:         args,
+							Name:         "kaniko",
+							Image:        "gcr.io/kaniko-project/executor:latest",
+							VolumeMounts: append([]v1.VolumeMount{dockerFileVolumeMount}, MakeSecretVolumeMounts(km.Build.Secrets)...),
 						},
 					},
 					RestartPolicy: v1.RestartPolicyOnFailure,
-					Volumes: []v1.Volume{
-						{
-							Name: "dockerfile",
-							VolumeSource: v1.VolumeSource{
-								DownwardAPI: &v1.DownwardAPIVolumeSource{
-									Items: []v1.DownwardAPIVolumeFile{
-										{
-											Path:     "Dockerfile",
-											FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.annotations['Dockerfile']"},
-										},
-									},
-								},
-							},
-						},
-					},
+					Volumes:       append([]v1.Volume{dockerFileVolume}, MakeSecretVolumes(km.Build.Secrets)...),
 				},
 			},
 		},
@@ -108,4 +110,41 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, 
 	}
 
 	return job, nil
+}
+
+func MakeSecretVolumes(secretRefs []v1.LocalObjectReference) []v1.Volume {
+	volumes := make([]v1.Volume, 0, len(secretRefs))
+
+	for _, secretRef := range secretRefs {
+		vol := v1.Volume{
+			Name: volumeNameFromSecretRef(secretRef),
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{SecretName: secretRef.Name},
+			},
+		}
+
+		volumes = append(volumes, vol)
+	}
+
+	return volumes
+}
+
+func MakeSecretVolumeMounts(secretRefs []v1.LocalObjectReference) []v1.VolumeMount {
+	secretVolumeMounts := make([]v1.VolumeMount, 0, len(secretRefs))
+
+	for _, secretRef := range secretRefs {
+		volMount := v1.VolumeMount{
+			Name:      volumeNameFromSecretRef(secretRef),
+			ReadOnly:  true,
+			MountPath: "/run/secrets/" + secretRef.Name,
+		}
+
+		secretVolumeMounts = append(secretVolumeMounts, volMount)
+	}
+
+	return secretVolumeMounts
+}
+
+func volumeNameFromSecretRef(ref v1.LocalObjectReference) string {
+	return "secret-" + ref.Name
 }

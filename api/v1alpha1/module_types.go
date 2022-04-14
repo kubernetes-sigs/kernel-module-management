@@ -58,6 +58,10 @@ type Build struct {
 
 	// Push contains settings determining how to push a built DriverContainer image.
 	Push PushOptions `json:"push"`
+
+	// Secrets is an optional list of secrets to be made available to the build system.
+	// +optional
+	Secrets []v1.LocalObjectReference `json:"secrets"`
 }
 
 // KernelMapping pairs kernel versions with a DriverContainer image.

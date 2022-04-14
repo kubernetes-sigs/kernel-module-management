@@ -42,6 +42,9 @@ var _ = Describe("Maker", func() {
 			Build: &ootov1alpha1.Build{
 				BuildArgs:  buildArgs,
 				Dockerfile: dockerfile,
+				Secrets: []v1.LocalObjectReference{
+					{Name: "s1"},
+				},
 			},
 			ContainerImage: containerImage,
 		}
@@ -98,6 +101,11 @@ var _ = Describe("Maker", func() {
 											ReadOnly:  true,
 											MountPath: "/workspace",
 										},
+										{
+											Name:      "secret-s1",
+											ReadOnly:  true,
+											MountPath: "/run/secrets/s1",
+										},
 									},
 								},
 							},
@@ -116,6 +124,12 @@ var _ = Describe("Maker", func() {
 												},
 											},
 										},
+									},
+								},
+								{
+									Name: "secret-s1",
+									VolumeSource: v1.VolumeSource{
+										Secret: &v1.SecretVolumeSource{SecretName: "s1"},
 									},
 								},
 							},
@@ -138,6 +152,76 @@ var _ = Describe("Maker", func() {
 				cmp.Diff(expected, actual),
 			).To(
 				BeEmpty(),
+			)
+		})
+	})
+
+	Describe("MakeSecretVolumes", func() {
+		It("should return an empty list if there are no secrets", func() {
+			Expect(
+				job.MakeSecretVolumes(nil),
+			).To(
+				BeEmpty(),
+			)
+		})
+
+		It("should two volumes for two secrets", func() {
+			secretRefs := []v1.LocalObjectReference{
+				{Name: "s1"},
+				{Name: "s2"},
+			}
+
+			Expect(
+				job.MakeSecretVolumes(secretRefs),
+			).To(
+				Equal([]v1.Volume{
+					{
+						Name: "secret-s1",
+						VolumeSource: v1.VolumeSource{
+							Secret: &v1.SecretVolumeSource{SecretName: "s1"},
+						},
+					},
+					{
+						Name: "secret-s2",
+						VolumeSource: v1.VolumeSource{
+							Secret: &v1.SecretVolumeSource{SecretName: "s2"},
+						},
+					},
+				}),
+			)
+		})
+	})
+
+	Describe("MakeSecretVolumeMounts", func() {
+		It("should return an empty list if there are no secrets", func() {
+			Expect(
+				job.MakeSecretVolumeMounts(nil),
+			).To(
+				BeEmpty(),
+			)
+		})
+
+		It("should two volumes for two secrets", func() {
+			secretRefs := []v1.LocalObjectReference{
+				{Name: "s1"},
+				{Name: "s2"},
+			}
+
+			Expect(
+				job.MakeSecretVolumeMounts(secretRefs),
+			).To(
+				Equal([]v1.VolumeMount{
+					{
+						Name:      "secret-s1",
+						ReadOnly:  true,
+						MountPath: "/run/secrets/s1",
+					},
+					{
+						Name:      "secret-s2",
+						ReadOnly:  true,
+						MountPath: "/run/secrets/s2",
+					},
+				}),
 			)
 		})
 	})
