@@ -34,7 +34,7 @@ func (nmm *NodeModuleMapper) FindModulesForNode(node client.Object) []reconcile.
 	mods := ootov1alpha1.ModuleList{}
 
 	if err := nmm.client.List(context.Background(), &mods); err != nil {
-		nmm.logger.Error(err, "could not list modules")
+		logger.Error(err, "could not list modules")
 		return reqs
 	}
 
