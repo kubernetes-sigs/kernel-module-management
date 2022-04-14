@@ -17,16 +17,16 @@ import (
 )
 
 const (
-	dsNamespace   = "ds-namespace"
 	kernelVersion = "1.2.3"
 	moduleName    = "module-name"
+	namespace     = "namespace"
 )
 
 var _ = Describe("daemonSetGenerator", func() {
 	const kernelLabel = "kernel-label"
 
 	Describe("SetAsDesired", func() {
-		dg := controllers.NewDaemonSetCreator(nil, kernelLabel, "", scheme)
+		dg := controllers.NewDaemonSetCreator(nil, kernelLabel, scheme)
 
 		It("should return an error if the DaemonSet is nil", func() {
 			Expect(
@@ -107,7 +107,10 @@ var _ = Describe("daemonSetGenerator", func() {
 					APIVersion: ootov1alpha1.GroupVersion.String(),
 					Kind:       "Module",
 				},
-				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
 				Spec: ootov1alpha1.ModuleSpec{
 					DriverContainer: v1.Container{
 						VolumeMounts: []v1.VolumeMount{dcVolMount},
@@ -123,7 +126,7 @@ var _ = Describe("daemonSetGenerator", func() {
 			ds := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      dsName,
-					Namespace: dsNamespace,
+					Namespace: namespace,
 				},
 			}
 
@@ -141,7 +144,7 @@ var _ = Describe("daemonSetGenerator", func() {
 			expected := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      dsName,
-					Namespace: dsNamespace,
+					Namespace: namespace,
 					Labels:    podLabels,
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -246,16 +249,16 @@ var _ = Describe("daemonSetGenerator", func() {
 			)
 
 			dsLegit := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{Name: legitName, Namespace: dsNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: legitName, Namespace: namespace},
 			}
 
 			dsNotLegit := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: dsNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: namespace},
 			}
 
 			client := fake.NewClientBuilder().WithObjects(&dsLegit, &dsNotLegit).Build()
 
-			dc := controllers.NewDaemonSetCreator(client, "", dsNamespace, scheme)
+			dc := controllers.NewDaemonSetCreator(client, "", scheme)
 
 			existingDS := map[string]*appsv1.DaemonSet{
 				legitKernelVersion:    &dsLegit,
@@ -286,7 +289,6 @@ var _ = Describe("daemonSetGenerator", func() {
 			dc := controllers.NewDaemonSetCreator(
 				fake.NewClientBuilder().Build(),
 				"",
-				dsNamespace,
 				scheme)
 
 			existingDS := map[string]*appsv1.DaemonSet{
@@ -303,11 +305,13 @@ var _ = Describe("daemonSetGenerator", func() {
 			dc := controllers.NewDaemonSetCreator(
 				fake.NewClientBuilder().WithScheme(scheme).Build(),
 				kernelLabel,
-				dsNamespace,
 				scheme)
 
 			mod := ootov1alpha1.Module{
-				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
 			}
 
 			m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod)
@@ -324,7 +328,7 @@ var _ = Describe("daemonSetGenerator", func() {
 			ds1 := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ds1",
-					Namespace: dsNamespace,
+					Namespace: namespace,
 					Labels:    dsLabels,
 				},
 			}
@@ -332,7 +336,7 @@ var _ = Describe("daemonSetGenerator", func() {
 			ds2 := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ds2",
-					Namespace: dsNamespace,
+					Namespace: namespace,
 					Labels:    dsLabels,
 				},
 			}
@@ -340,11 +344,13 @@ var _ = Describe("daemonSetGenerator", func() {
 			dc := controllers.NewDaemonSetCreator(
 				fake.NewClientBuilder().WithScheme(scheme).WithObjects(&ds1, &ds2).Build(),
 				kernelLabel,
-				dsNamespace,
 				scheme)
 
 			mod := ootov1alpha1.Module{
-				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
 			}
 
 			_, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod)
@@ -357,7 +363,7 @@ var _ = Describe("daemonSetGenerator", func() {
 			ds1 := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ds1",
-					Namespace: dsNamespace,
+					Namespace: namespace,
 					Labels: map[string]string{
 						"oot.node.kubernetes.io/module.name": moduleName,
 						kernelLabel:                          kernelVersion,
@@ -368,7 +374,7 @@ var _ = Describe("daemonSetGenerator", func() {
 			ds2 := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ds2",
-					Namespace: dsNamespace,
+					Namespace: namespace,
 					Labels: map[string]string{
 						"oot.node.kubernetes.io/module.name": moduleName,
 						kernelLabel:                          otherKernelVersion,
@@ -379,11 +385,13 @@ var _ = Describe("daemonSetGenerator", func() {
 			dc := controllers.NewDaemonSetCreator(
 				fake.NewClientBuilder().WithScheme(scheme).WithObjects(&ds1, &ds2).Build(),
 				kernelLabel,
-				dsNamespace,
 				scheme)
 
 			mod := ootov1alpha1.Module{
-				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
 			}
 
 			m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod)

@@ -13,7 +13,7 @@ spec:
     listKind: ModuleList
     plural: modules
     singular: module
-  scope: Cluster
+  scope: Namespaced
   versions:
   - name: v1alpha1
     schema:

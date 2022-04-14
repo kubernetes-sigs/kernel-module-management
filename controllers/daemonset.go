@@ -27,15 +27,13 @@ type DaemonSetCreator interface {
 type daemonSetGenerator struct {
 	client      client.Client
 	kernelLabel string
-	namespace   string
 	scheme      *runtime.Scheme
 }
 
-func NewDaemonSetCreator(client client.Client, kernelLabel, namespace string, scheme *runtime.Scheme) *daemonSetGenerator {
+func NewDaemonSetCreator(client client.Client, kernelLabel string, scheme *runtime.Scheme) *daemonSetGenerator {
 	return &daemonSetGenerator{
 		client:      client,
 		kernelLabel: kernelLabel,
-		namespace:   namespace,
 		scheme:      scheme,
 	}
 }
@@ -61,7 +59,7 @@ func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Contex
 
 	opts := []client.ListOption{
 		client.MatchingLabels(map[string]string{constants.ModuleNameLabel: mod.Name}),
-		client.InNamespace(dc.namespace),
+		client.InNamespace(mod.Namespace),
 	}
 
 	if err := dc.client.List(ctx, &dsList, opts...); err != nil {

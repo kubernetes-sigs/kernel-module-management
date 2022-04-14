@@ -123,7 +123,7 @@ type ModuleStatus struct {
 }
 
 //+kubebuilder:object:root=true
-//+kubebuilder:resource:scope=Cluster
+//+kubebuilder:resource:scope=Namespaced
 //+kubebuilder:subresource:status
 
 // Module is the Schema for the modules API

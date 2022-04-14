@@ -20,17 +20,12 @@ type Maker interface {
 }
 
 type maker struct {
-	mh        build.ModuleHelper
-	namespace string
-	scheme    *runtime.Scheme
+	mh     build.ModuleHelper
+	scheme *runtime.Scheme
 }
 
-func NewMaker(mh build.ModuleHelper, namespace string, scheme *runtime.Scheme) Maker {
-	return &maker{
-		mh:        mh,
-		namespace: namespace,
-		scheme:    scheme,
-	}
+func NewMaker(mh build.ModuleHelper, scheme *runtime.Scheme) Maker {
+	return &maker{mh: mh, scheme: scheme}
 }
 
 func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, targetKernel string) (*batchv1.Job, error) {
@@ -80,7 +75,7 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mod.Name + "-build-",
-			Namespace:    m.namespace,
+			Namespace:    mod.Namespace,
 			Labels:       Labels(mod, targetKernel),
 		},
 		Spec: batchv1.JobSpec{

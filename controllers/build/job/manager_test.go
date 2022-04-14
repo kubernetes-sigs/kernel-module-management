@@ -66,7 +66,7 @@ var _ = Describe("JobManager", func() {
 
 			getter.EXPECT().ImageExists(ctx, imageName, po).Return(false, errors.New("random error"))
 
-			mgr := job.NewBuildManager(nil, getter, maker, namespace)
+			mgr := job.NewBuildManager(nil, getter, maker)
 
 			_, err := mgr.Sync(ctx, ootov1alpha1.Module{}, km, "")
 			Expect(err).To(HaveOccurred())
@@ -77,7 +77,7 @@ var _ = Describe("JobManager", func() {
 
 			getter.EXPECT().ImageExists(ctx, imageName, po).Return(true, nil)
 
-			mgr := job.NewBuildManager(nil, getter, maker, namespace)
+			mgr := job.NewBuildManager(nil, getter, maker)
 
 			Expect(
 				mgr.Sync(ctx, ootov1alpha1.Module{}, km, ""),
@@ -112,7 +112,7 @@ var _ = Describe("JobManager", func() {
 
 				getter.EXPECT().ImageExists(ctx, imageName, po).Return(false, nil)
 
-				mgr := job.NewBuildManager(client, getter, maker, namespace)
+				mgr := job.NewBuildManager(client, getter, maker)
 
 				res, err := mgr.Sync(ctx, mod, km, kernelVersion)
 
@@ -138,7 +138,7 @@ var _ = Describe("JobManager", func() {
 					Return(nil, errors.New("random error")),
 			)
 
-			mgr := job.NewBuildManager(fake.NewClientBuilder().Build(), getter, maker, namespace)
+			mgr := job.NewBuildManager(fake.NewClientBuilder().Build(), getter, maker)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion),
@@ -170,7 +170,7 @@ var _ = Describe("JobManager", func() {
 
 			client := fake.NewClientBuilder().Build()
 
-			mgr := job.NewBuildManager(client, getter, maker, namespace)
+			mgr := job.NewBuildManager(client, getter, maker)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion),

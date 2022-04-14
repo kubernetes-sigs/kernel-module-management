@@ -31,7 +31,10 @@ var _ = Describe("Maker", func() {
 		)
 
 		mod := ootov1alpha1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
 		}
 
 		buildArgs := []ootov1alpha1.BuildArg{
@@ -52,7 +55,7 @@ var _ = Describe("Maker", func() {
 		BeforeEach(func() {
 			ctrl := gomock.NewController(GinkgoT())
 			mh = build.NewMockModuleHelper(ctrl)
-			m = job.NewMaker(mh, namespace, scheme)
+			m = job.NewMaker(mh, scheme)
 		})
 
 		It("should set fields correctly", func() {

@@ -16,18 +16,16 @@ import (
 var errNoMatchingBuild = errors.New("no matching build")
 
 type jobManager struct {
-	client    client.Client
-	getter    build.Getter
-	maker     Maker
-	namespace string
+	client client.Client
+	getter build.Getter
+	maker  Maker
 }
 
-func NewBuildManager(client client.Client, getter build.Getter, maker Maker, namespace string) build.Manager {
+func NewBuildManager(client client.Client, getter build.Getter, maker Maker) build.Manager {
 	return &jobManager{
-		client:    client,
-		getter:    getter,
-		maker:     maker,
-		namespace: namespace,
+		client: client,
+		getter: getter,
+		maker:  maker,
 	}
 }
 
@@ -43,7 +41,7 @@ func (jbm *jobManager) getJob(ctx context.Context, mod ootov1alpha1.Module, targ
 
 	opts := []client.ListOption{
 		client.MatchingLabels(Labels(mod, targetKernel)),
-		client.InNamespace(jbm.namespace),
+		client.InNamespace(mod.Namespace),
 	}
 
 	if err := jbm.client.List(ctx, &jobList, opts...); err != nil {

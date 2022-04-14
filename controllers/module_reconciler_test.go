@@ -41,12 +41,18 @@ var _ = Describe("ModuleReconciler", func() {
 		const moduleName = "test-module"
 
 		req := reconcile.Request{
-			NamespacedName: types.NamespacedName{Name: moduleName},
+			NamespacedName: types.NamespacedName{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
 		}
 
 		It("should do nothing when no nodes match the selector", func() {
 			mod := ootov1alpha1.Module{
-				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
 				Spec: ootov1alpha1.ModuleSpec{
 					Selector: map[string]string{"key": "value"},
 				},
@@ -67,7 +73,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(client, "", mockBM, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(client, mockBM, mockDC, mockKM, mockCU)
 
 			ctx := context.TODO()
 
@@ -87,7 +93,10 @@ var _ = Describe("ModuleReconciler", func() {
 			const kernelVersion = "1.2.3"
 
 			mod := ootov1alpha1.Module{
-				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
 				Spec: ootov1alpha1.ModuleSpec{
 					Selector: map[string]string{"key": "value"},
 				},
@@ -96,7 +105,7 @@ var _ = Describe("ModuleReconciler", func() {
 			ds := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "some-daemonset",
-					Namespace: dsNamespace,
+					Namespace: namespace,
 				},
 			}
 
@@ -106,7 +115,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithObjects(&mod, &ds).
 				Build()
 
-			mr := controllers.NewModuleReconciler(c, dsNamespace, mockBM, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU)
 
 			ctx := context.TODO()
 
@@ -136,7 +145,10 @@ var _ = Describe("ModuleReconciler", func() {
 			}
 
 			mod := ootov1alpha1.Module{
-				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
 				Spec: ootov1alpha1.ModuleSpec{
 					KernelMappings: mappings,
 					Selector:       map[string]string{"key": "value"},
@@ -164,9 +176,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			const namespace = "test-namespace"
-
-			mr := controllers.NewModuleReconciler(c, namespace, mockBM, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU)
 
 			ctx := context.TODO()
 
@@ -211,7 +221,10 @@ var _ = Describe("ModuleReconciler", func() {
 			nodeLabels := map[string]string{"key": "value"}
 
 			mod := ootov1alpha1.Module{
-				ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
 				Spec: ootov1alpha1.ModuleSpec{
 					KernelMappings: mappings,
 					Selector:       nodeLabels,
@@ -251,7 +264,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(c, namespace, mockBM, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU)
 
 			ctx := context.TODO()
 

@@ -66,7 +66,7 @@ func (nmm *NodeModuleMapper) FindModulesForNode(node client.Object) []reconcile.
 			continue
 		}
 
-		nsn := types.NamespacedName{Name: mod.Name}
+		nsn := types.NamespacedName{Name: mod.Name, Namespace: mod.Namespace}
 
 		reqs = append(reqs, reconcile.Request{NamespacedName: nsn})
 	}

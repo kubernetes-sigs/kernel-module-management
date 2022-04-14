@@ -43,28 +43,25 @@ import (
 type ModuleReconciler struct {
 	client.Client
 
-	namespace string
-	bm        build.Manager
-	dc        DaemonSetCreator
-	km        module.KernelMapper
-	su        module.ConditionsUpdater
+	bm build.Manager
+	dc DaemonSetCreator
+	km module.KernelMapper
+	su module.ConditionsUpdater
 }
 
 func NewModuleReconciler(
 	client client.Client,
-	namespace string,
 	bm build.Manager,
 	dg DaemonSetCreator,
 	km module.KernelMapper,
 	su module.ConditionsUpdater,
 ) *ModuleReconciler {
 	return &ModuleReconciler{
-		Client:    client,
-		bm:        bm,
-		dc:        dg,
-		km:        km,
-		namespace: namespace,
-		su:        su,
+		Client: client,
+		bm:     bm,
+		dc:     dg,
+		km:     km,
+		su:     su,
 	}
 }
 
@@ -159,7 +156,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 
 		ds := &appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: r.namespace},
+			ObjectMeta: metav1.ObjectMeta{Namespace: req.Namespace},
 		}
 
 		if existingDS := dsByKernelVersion[kernelVersion]; existingDS != nil {

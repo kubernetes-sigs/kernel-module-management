@@ -96,12 +96,9 @@ func main() {
 
 	setupLogger.Info("Creating manager", "git commit", commit)
 
-	namespace := GetEnvWithDefault("OPERATOR_NAMESPACE", "default")
-
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
-		Namespace:              namespace,
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
@@ -144,12 +141,12 @@ func main() {
 
 	setupLogger.V(1).Info("Using kernel label", "label", kernelLabel)
 
-	bm := job.NewBuildManager(client, build.NewGetter(), job.NewMaker(build.NewModuleHelper(), namespace, scheme), namespace)
-	dc := controllers.NewDaemonSetCreator(client, kernelLabel, namespace, scheme)
+	bm := job.NewBuildManager(client, build.NewGetter(), job.NewMaker(build.NewModuleHelper(), scheme))
+	dc := controllers.NewDaemonSetCreator(client, kernelLabel, scheme)
 	km := module.NewKernelMapper()
 	su := module.NewConditionsUpdater(client.Status())
 
-	mc := controllers.NewModuleReconciler(client, namespace, bm, dc, km, su)
+	mc := controllers.NewModuleReconciler(client, bm, dc, km, su)
 
 	if err = mc.SetupWithManager(mgr, kernelLabel); err != nil {
 		setupLogger.Error(err, "unable to create controller", "controller", "Module")
