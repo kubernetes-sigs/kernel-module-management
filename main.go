@@ -27,20 +27,19 @@ import (
 	"github.com/qbarrand/oot-operator/controllers/build/job"
 	"github.com/qbarrand/oot-operator/controllers/module"
 	"k8s.io/apimachinery/pkg/util/sets"
-
+	"k8s.io/klog/v2/klogr"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	"github.com/qbarrand/oot-operator/controllers"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -53,7 +52,6 @@ const (
 
 var (
 	scheme               = runtime.NewScheme()
-	setupLog             = ctrl.Log.WithName("setup")
 	validLabelingMethods = sets.NewString(OOTOKernelLabelingMethod, NFDKernelLabelingMethod)
 )
 
@@ -80,22 +78,23 @@ func main() {
 
 	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
 
-	opts := zap.Options{
-		//Development: true,
-	}
+	klog.InitFlags(flag.CommandLine)
 
-	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	logger := klogr.New()
+
+	ctrl.SetLogger(logger)
+
+	setupLogger := logger.WithName("setup")
 
 	commit, err := gitCommit()
 	if err != nil {
-		setupLog.Error(err, "Could not get the git commit; using <undefined>")
+		setupLogger.Error(err, "Could not get the git commit; using <undefined>")
 		commit = "<undefined>"
 	}
 
-	setupLog.Info("Creating manager", "git commit", commit)
+	setupLogger.Info("Creating manager", "git commit", commit)
 
 	namespace := GetEnvWithDefault("OPERATOR_NAMESPACE", "default")
 
@@ -109,7 +108,7 @@ func main() {
 		LeaderElectionID:       "c5baf8af.sigs.k8s.io",
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		setupLogger.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
@@ -120,7 +119,7 @@ func main() {
 		kernelLabelingMethod = GetEnvWithDefault(KernelLabelingMethodEnvVar, OOTOKernelLabelingMethod)
 	)
 
-	setupLog.V(1).Info("Determining kernel labeling method", KernelLabelingMethodEnvVar, kernelLabelingMethod)
+	setupLogger.V(1).Info("Determining kernel labeling method", KernelLabelingMethodEnvVar, kernelLabelingMethod)
 
 	switch kernelLabelingMethod {
 	case OOTOKernelLabelingMethod:
@@ -129,13 +128,13 @@ func main() {
 		nkr := controllers.NewNodeKernelReconciler(client, kernelLabel)
 
 		if err = nkr.SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "NodeKernel")
+			setupLogger.Error(err, "unable to create controller", "controller", "NodeKernel")
 			os.Exit(1)
 		}
 	case NFDKernelLabelingMethod:
 		kernelLabel = "feature.node.kubernetes.io/kernel-version.full"
 	default:
-		setupLog.Error(
+		setupLogger.Error(
 			fmt.Errorf("%q is not in %v", kernelLabelingMethod, validLabelingMethods.List()),
 			"Invalid kernel labeling method",
 		)
@@ -143,7 +142,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.V(1).Info("Using kernel label", "label", kernelLabel)
+	setupLogger.V(1).Info("Using kernel label", "label", kernelLabel)
 
 	bm := job.NewBuildManager(client, build.NewGetter(), job.NewMaker(build.NewModuleHelper(), namespace, scheme), namespace)
 	dc := controllers.NewDaemonSetCreator(client, kernelLabel, namespace, scheme)
@@ -153,24 +152,24 @@ func main() {
 	mc := controllers.NewModuleReconciler(client, namespace, bm, dc, km, su)
 
 	if err = mc.SetupWithManager(mgr, kernelLabel); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Module")
+		setupLogger.Error(err, "unable to create controller", "controller", "Module")
 		os.Exit(1)
 	}
 
 	//+kubebuilder:scaffold:builder
 
 	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
+		setupLogger.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
 	if err = mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
+		setupLogger.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLogger.Info("starting manager")
 	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLogger.Error(err, "problem running manager")
 		os.Exit(1)
 	}
 }

@@ -62,7 +62,7 @@ func (r *NodeKernelReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *NodeKernelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.
 		NewControllerManagedBy(mgr).
-		Named("NodeKernelReconciler").
+		Named("node-kernel").
 		For(&v1.Node{}).
 		WithEventFilter(
 			NodeKernelReconcilerPredicate(r.labelName),

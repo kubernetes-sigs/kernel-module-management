@@ -200,7 +200,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string) error {
 	nmm := NewNodeModuleMapper(
 		r.Client,
-		mgr.GetLogger().WithName("NodeModuleMapper"),
+		mgr.GetLogger().WithName("controller/module/node-module-mapper"),
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -214,6 +214,7 @@ func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string
 				ModuleReconcilerNodePredicate(kernelLabel),
 			),
 		).
+		Named("module").
 		Complete(r)
 }
 
