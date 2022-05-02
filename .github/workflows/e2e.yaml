@@ -2,6 +2,9 @@ name: e2e
 
 on: [pull_request]
 
+env:
+  GO_VERSION: 1.18
+
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -34,9 +37,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-
-      - name: 'DEBUG: List all kernel modules'
-        run: find /lib/modules/$(uname -r) -type f -name '*.ko*'
 
       - name: Save the kernel version
         run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
@@ -78,15 +78,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Download and install minikube
-        run: |
-          wget https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
-          sudo dpkg -i ./minikube_latest_amd64.deb
-
-      - name: Start minikube and wait until CoreDNS is available
-        run: |
-          minikube start --driver=docker
-          kubectl wait --for=condition=available deployment coredns -n kube-system
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
 
       - name: Install NFD
         run: kubectl apply -k https://github.com/kubernetes-sigs/node-feature-discovery/deployment/overlays/default?ref=v0.10.1
@@ -105,11 +98,17 @@ jobs:
           minikube image load ooto_local.tar
           minikube image load ooto-kmod_local.tar
 
-      - run: minikube image ls
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.18
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
 
       - name: Deploy OOTO
         run: make deploy
@@ -159,32 +158,8 @@ jobs:
           done
         timeout-minutes: 1
 
-      - name: Get all resources in the oot-operator-system namespace
-        run: kubectl get all -n oot-operator-system
-        if: ${{ always() }}
-
-      - name: Get all resources in the default namespace
-        run: kubectl get all
-        if: ${{ always() }}
-
-      - name: Describe nodes
-        run: kubectl describe node
-        if: ${{ always() }}
-
-      - name: Describe DaemonSets
-        run: kubectl describe daemonset -l oot.node.kubernetes.io/module.name
-        if: ${{ always() }}
-
-      - name: Describe Pods
-        run: kubectl describe pod -l oot.node.kubernetes.io/module.name
-        if: ${{ always() }}
-
-      - name: Collect dmesg
-        run: sudo dmesg
-        if: ${{ always() }}
-
-      - name: Get all operator logs
-        run: kubectl logs deployment.apps/oot-operator-controller-manager -n oot-operator-system
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
         if: ${{ always() }}
 
   e2e-two-nodes:
@@ -198,15 +173,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Download and install minikube
-        run: |
-          wget https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
-          sudo dpkg -i ./minikube_latest_amd64.deb
-
-      - name: Start minikube and wait until CoreDNS is available
-        run: |
-          minikube start --driver=docker -n 2
-          kubectl wait --for=condition=available deployment coredns -n kube-system
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
+        with:
+          start-args: --nodes 2
 
       - name: Download container images
         uses: actions/download-artifact@v3
@@ -218,9 +188,17 @@ jobs:
           minikube image load ooto_local.tar
           minikube image load ooto-kmod_local.tar
 
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.18
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
 
       - name: Deploy OOTO
         run: make deploy
@@ -296,32 +274,8 @@ jobs:
           done
         timeout-minutes: 1
 
-      - name: Get all resources in the oot-operator-system namespace
-        run: kubectl get all -n oot-operator-system
-        if: ${{ always() }}
-
-      - name: Get all resources in the default namespace
-        run: kubectl get all
-        if: ${{ always() }}
-
-      - name: Describe nodes
-        run: kubectl describe node
-        if: ${{ always() }}
-
-      - name: Describe DaemonSets
-        run: kubectl describe daemonset -l oot.node.kubernetes.io/module.name
-        if: ${{ always() }}
-
-      - name: Describe Pods
-        run: kubectl describe pod -l oot.node.kubernetes.io/module.name
-        if: ${{ always() }}
-
-      - name: Collect dmesg
-        run: sudo dmesg
-        if: ${{ always() }}
-
-      - name: Get all operator logs
-        run: kubectl logs deployment.apps/oot-operator-controller-manager -n oot-operator-system
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
         if: ${{ always() }}
 
   in-cluster-build:
@@ -335,17 +289,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Download and install minikube
-        run: |
-          wget https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
-          sudo dpkg -i ./minikube_latest_amd64.deb
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
+        with:
+          start-args: --addons registry,registry-aliases
 
-      - name: Start minikube and wait until CoreDNS is available
-        run: |
-          minikube start --driver=docker --addons registry,registry-aliases
-          kubectl wait --for=condition=available deployment coredns -n kube-system
-
-          kubectl apply -f ci/registry-nodeport.yaml
+      - name: Expose the registry outside the cluster
+        run: kubectl apply -f ci/registry-nodeport.yaml
 
       - name: Install skopeo
         run: |
@@ -365,9 +315,17 @@ jobs:
       - name: Import the OOTO image into minikube
         run: minikube image load ooto_local.tar
 
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.17.6
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
 
       - name: Deploy OOTO
         run: make deploy
@@ -437,34 +395,6 @@ jobs:
           done
         timeout-minutes: 1
 
-      - name: Get all resources in the oot-operator-system namespace
-        run: kubectl get all -n oot-operator-system
-        if: ${{ always() }}
-
-      - name: Get all resources in the default namespace
-        run: kubectl get all
-        if: ${{ always() }}
-
-      - name: Describe nodes
-        run: kubectl describe node
-        if: ${{ always() }}
-
-      - name: Describe Jobs
-        run: kubectl describe job
-        if: ${{ always() }}
-
-      - name: Describe DaemonSets
-        run: kubectl describe daemonset -l oot.node.kubernetes.io/module.name
-        if: ${{ always() }}
-
-      - name: Describe Pods
-        run: kubectl describe pod -l oot.node.kubernetes.io/module.name
-        if: ${{ always() }}
-
-      - name: Collect dmesg
-        run: sudo dmesg
-        if: ${{ always() }}
-
-      - name: Get all operator logs
-        run: kubectl logs deployment.apps/oot-operator-controller-manager -n oot-operator-system
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
         if: ${{ always() }}

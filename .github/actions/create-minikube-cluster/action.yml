@@ -1,0 +1,32 @@
+name: Create minikube cluster
+
+description: This action creates a minikube cluster
+
+inputs:
+  start-args:
+    required: false
+    description: Arguments passed to `minikube start`
+
+runs:
+  using: composite
+
+  steps:
+    - name: Download and install minikube
+      id: install-minikube
+      run: |
+        wget https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
+        sudo dpkg -i ./minikube_latest_amd64.deb
+        echo "::set-output name=version::$(minikube version --short)"
+      shell: bash
+
+    - name: Cache Minikube artifacts
+      uses: actions/cache@v3
+      with:
+        path: ~/.minikube/cache
+        key: ${{ runner.os }}-minikube-${{ steps.install-minikube.outputs.version }}
+
+    - name: Start minikube and wait until CoreDNS is available
+      run: |
+        minikube start --driver=docker ${{ inputs.start-args }}
+        kubectl wait --for=condition=available deployment coredns -n kube-system
+      shell: bash

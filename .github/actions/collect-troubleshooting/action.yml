@@ -1,0 +1,35 @@
+name: Collect troubleshooting data
+
+description: This action fetches some troubleshooting data for OOTO
+
+runs:
+  using: composite
+
+  steps:
+    - name: Get all resources in the oot-operator-system namespace
+      run: kubectl get all -n oot-operator-system
+      shell: bash
+
+    - name: Get all resources in the default namespace
+      run: kubectl get all
+      shell: bash
+
+    - name: Describe nodes
+      run: kubectl describe node
+      shell: bash
+
+    - name: Describe DaemonSets
+      run: kubectl describe daemonset -l oot.node.kubernetes.io/module.name
+      shell: bash
+
+    - name: Describe Pods
+      run: kubectl describe pod -l oot.node.kubernetes.io/module.name
+      shell: bash
+
+    - name: Collect dmesg
+      run: sudo dmesg
+      shell: bash
+
+    - name: Get all operator logs
+      run: kubectl logs deployment.apps/oot-operator-controller-manager -n oot-operator-system
+      shell: bash
