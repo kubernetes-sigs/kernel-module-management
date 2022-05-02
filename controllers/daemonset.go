@@ -210,9 +210,10 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 		Template: v1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{Labels: standardLabels},
 			Spec: v1.PodSpec{
-				NodeSelector: nodeSelector,
-				Containers:   containers,
-				Volumes:      volumes,
+				NodeSelector:       nodeSelector,
+				Containers:         containers,
+				ServiceAccountName: mod.Spec.ServiceAccountName,
+				Volumes:            volumes,
 			},
 		},
 	}

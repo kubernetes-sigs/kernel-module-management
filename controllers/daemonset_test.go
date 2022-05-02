@@ -89,6 +89,7 @@ var _ = Describe("daemonSetGenerator", func() {
 				devicePluginImage    = "device-plugin-image"
 				driverContainerImage = "driver-image"
 				dsName               = "ds-name"
+				serviceAccountName   = "some-service-account"
 			)
 
 			dcVolMount := v1.VolumeMount{
@@ -119,7 +120,8 @@ var _ = Describe("daemonSetGenerator", func() {
 						Image:        devicePluginImage,
 						VolumeMounts: []v1.VolumeMount{dpVolMount},
 					},
-					Selector: map[string]string{"has-feature-x": "true"},
+					Selector:           map[string]string{"has-feature-x": "true"},
+					ServiceAccountName: serviceAccountName,
 				},
 			}
 
@@ -197,6 +199,7 @@ var _ = Describe("daemonSetGenerator", func() {
 								"has-feature-x": "true",
 								kernelLabel:     kernelVersion,
 							},
+							ServiceAccountName: serviceAccountName,
 							Volumes: []v1.Volume{
 								{
 									Name: "node-lib-modules",

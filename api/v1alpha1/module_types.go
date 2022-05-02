@@ -114,6 +114,11 @@ type ModuleSpec struct {
 
 	// Selector describes on which nodes the Module should be loaded.
 	Selector map[string]string `json:"selector"`
+
+	// ServiceAccountName is the name of the ServiceAccount to use to run this pod.
+	// More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 // ModuleStatus defines the observed state of Module.
