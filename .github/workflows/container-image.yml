@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Generate image metadata for operator
         id: meta-operator
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         with:
           images: ghcr.io/qbarrand/oot-operator
           tags: |
@@ -28,7 +28,7 @@ jobs:
 
       - name: Generate image metadata for bundle
         id: meta-bundle
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         with:
           images: ghcr.io/qbarrand/oot-operator-bundle
           tags: |
@@ -40,7 +40,7 @@ jobs:
 
       - name: Generate image metadata for catalog
         id: meta-catalog
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         with:
           images: ghcr.io/qbarrand/oot-operator-catalog
           tags: |
