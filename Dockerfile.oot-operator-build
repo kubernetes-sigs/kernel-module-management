@@ -1,0 +1,17 @@
+FROM registry.ci.openshift.org/openshift/release:golang-1.18
+
+ENV GO111MODULE=on
+ENV GOFLAGS=""
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+ENV GOARCH=amd64
+
+RUN yum install -y which
+RUN yum install -y podman docker
+RUN go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.1
+RUN curl -L --retry 5 "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv4.3.0/kustomize_v4.3.0_linux_amd64.tar.gz" | \
+    tar -zx -C /usr/bin
+RUN go install github.com/golang/mock/mockgen@v1.5.0
+RUN curl -L "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o /tmp/kubectl
+RUN install -o root -g root -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+COPY --from=quay.io/openshift/origin-cli:latest /usr/bin/oc /usr/bin
