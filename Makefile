@@ -120,7 +120,7 @@ lint: ## Uses gofmt to determine if some files do not follow the recommended for
 
 ##@ Build
 
-.PHONY: build
+.PHONY: manager
 manager: ## Build manager binary.
 	go build -o $@
 

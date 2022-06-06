@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-openapi/swag"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers/constants"
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,12 +17,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+const (
+	kubeletDevicePluginsVolumeName = "kubelet-device-plugins"
+	kubeletDevicePluginsPath       = "/var/lib/kubelet/device-plugins"
+	nodeLibModulesPath             = "/lib/modules"
+	nodeLibModulesVolumeName       = "node-lib-modules"
+	nodeUsrLibModulesPath          = "/usr/lib/modules"
+	nodeUsrLibModulesVolumeName    = "node-usr-lib-modules"
+)
+
 //go:generate mockgen -source=daemonset.go -package=controllers -destination=mock_daemonset.go
 
 type DaemonSetCreator interface {
 	GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.String) ([]string, error)
 	ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1alpha1.Module) (map[string]*appsv1.DaemonSet, error)
-	SetAsDesired(ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error
+	SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error
+	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *ootov1alpha1.Module) error
 }
 
 type daemonSetGenerator struct {
@@ -72,6 +83,10 @@ func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Contex
 		ds := dsList.Items[i]
 
 		kernelVersion := ds.Labels[dc.kernelLabel]
+		if kernelVersion == "" {
+			// this is a device plugin, skipping
+			continue
+		}
 
 		if dsByKernelVersion[kernelVersion] != nil {
 			return nil, fmt.Errorf("multiple DaemonSets found for kernel %q", kernelVersion)
@@ -83,7 +98,7 @@ func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Contex
 	return dsByKernelVersion, nil
 }
 
-func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error {
+func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error {
 	if ds == nil {
 		return errors.New("ds cannot be nil")
 	}
@@ -101,31 +116,8 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 		dc.kernelLabel:            kernelVersion,
 	}
 
-	labels := ds.GetLabels()
-
-	if labels == nil {
-		labels = make(map[string]string, len(standardLabels))
-	}
-
-	for k, v := range standardLabels {
-		labels[k] = v
-	}
-
-	ds.SetLabels(labels)
-
 	nodeSelector := CopyMapStringString(mod.Spec.Selector)
 	nodeSelector[dc.kernelLabel] = kernelVersion
-
-	const (
-		kubeletDevicePluginsVolumeName = "kubelet-device-plugins"
-		kubeletDevicePluginsPath       = "/var/lib/kubelet/device-plugins"
-		nodeLibModulesPath             = "/lib/modules"
-		nodeLibModulesVolumeName       = "node-lib-modules"
-		nodeUsrLibModulesPath          = "/usr/lib/modules"
-		nodeUsrLibModulesVolumeName    = "node-usr-lib-modules"
-	)
-
-	containers := make([]v1.Container, 0, 2)
 
 	driverContainerVolumeMounts := []v1.VolumeMount{
 		{
@@ -140,16 +132,7 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 		},
 	}
 
-	driverContainer := mod.Spec.DriverContainer
-	driverContainer.Name = "driver-container"
-	driverContainer.Image = image
-	driverContainer.VolumeMounts = append(driverContainer.VolumeMounts, driverContainerVolumeMounts...)
-
-	containers = append(containers, driverContainer)
-
 	hostPathDirectory := v1.HostPathDirectory
-	varTrue := true
-
 	volumes := []v1.Volume{
 		{
 			Name: nodeLibModulesVolumeName,
@@ -171,26 +154,33 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 		},
 	}
 
-	if mod.Spec.DevicePlugin != nil {
-		devicePlugin := *mod.Spec.DevicePlugin
-		devicePlugin.Name = "device-plugin"
+	return dc.constructDaemonSet(ctx, ds, &mod, mod.Spec.DriverContainer, "driver-container", image, standardLabels,
+		nodeSelector, driverContainerVolumeMounts, volumes, false)
+}
 
-		if devicePlugin.SecurityContext == nil {
-			devicePlugin.SecurityContext = &v1.SecurityContext{}
-		}
+func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *ootov1alpha1.Module) error {
+	if ds == nil {
+		return errors.New("ds cannot be nil")
+	}
 
-		devicePlugin.SecurityContext.Privileged = &varTrue
+	if mod.Spec.DevicePlugin == nil {
+		return errors.New("device plugin in module should not be nil")
+	}
 
-		devicePluginsVolumeMount := v1.VolumeMount{
+	standardLabels := map[string]string{
+		constants.ModuleNameLabel: mod.Name,
+	}
+
+	containerVolumeMounts := []v1.VolumeMount{
+		{
 			Name:      kubeletDevicePluginsVolumeName,
 			MountPath: kubeletDevicePluginsPath,
-		}
+		},
+	}
 
-		devicePlugin.VolumeMounts = append(devicePlugin.VolumeMounts, devicePluginsVolumeMount)
-
-		containers = append(containers, devicePlugin)
-
-		devicePluginsVolume := v1.Volume{
+	hostPathDirectory := v1.HostPathDirectory
+	dsVolumes := []v1.Volume{
+		{
 			Name: kubeletDevicePluginsVolumeName,
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{
@@ -198,17 +188,57 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 					Type: &hostPathDirectory,
 				},
 			},
-		}
-
-		volumes = append(volumes, devicePluginsVolume)
+		},
 	}
 
+	return dc.constructDaemonSet(ctx, ds, mod, *mod.Spec.DevicePlugin, "device-plugin", "", standardLabels,
+		mod.Spec.Selector, containerVolumeMounts, dsVolumes, true)
+}
+
+func (dc *daemonSetGenerator) constructDaemonSet(ctx context.Context,
+	ds *appsv1.DaemonSet,
+	mod *ootov1alpha1.Module,
+	container v1.Container,
+	containerName string,
+	overrideContainerImage string,
+	labels map[string]string,
+	nodeSelector map[string]string,
+	volumeMounts []v1.VolumeMount,
+	volumes []v1.Volume,
+	privilege bool) error {
+
+	existingLabels := ds.GetLabels()
+
+	if existingLabels == nil {
+		existingLabels = make(map[string]string, len(labels))
+	}
+
+	for k, v := range labels {
+		existingLabels[k] = v
+	}
+
+	ds.SetLabels(existingLabels)
+
+	container.Name = containerName
+	if overrideContainerImage != "" {
+		container.Image = overrideContainerImage
+	}
+
+	container.VolumeMounts = append(container.VolumeMounts, volumeMounts...)
+	if privilege {
+		if container.SecurityContext == nil {
+			container.SecurityContext = &v1.SecurityContext{}
+		}
+		container.SecurityContext.Privileged = swag.Bool(true)
+	}
+
+	containers := []v1.Container{container}
 	volumes = append(volumes, mod.Spec.AdditionalVolumes...)
 
 	ds.Spec = appsv1.DaemonSetSpec{
-		Selector: &metav1.LabelSelector{MatchLabels: standardLabels},
+		Selector: &metav1.LabelSelector{MatchLabels: labels},
 		Template: v1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{Labels: standardLabels},
+			ObjectMeta: metav1.ObjectMeta{Labels: labels},
 			Spec: v1.PodSpec{
 				NodeSelector:       nodeSelector,
 				Containers:         containers,
@@ -217,12 +247,7 @@ func (dc *daemonSetGenerator) SetAsDesired(ds *appsv1.DaemonSet, image string, m
 			},
 		},
 	}
-
-	if err := controllerutil.SetControllerReference(&mod, ds, dc.scheme); err != nil {
-		return fmt.Errorf("could not set the owner reference: %v", err)
-	}
-
-	return nil
+	return controllerutil.SetControllerReference(mod, ds, dc.scheme)
 }
 
 // CopyMapStringString returns a deep copy of m.

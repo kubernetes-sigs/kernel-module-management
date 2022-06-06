@@ -27,7 +27,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -98,7 +100,59 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("could not list nodes: %v", err)
 	}
 
+	mappings := r.getKernelMappings(ctx, nodes, &mod)
+
+	dsByKernelVersion, err := r.dc.ModuleDaemonSetsByKernelVersion(ctx, mod)
+	if err != nil {
+		return res, fmt.Errorf("could get DaemonSets for module %s: %v", mod.Name, err)
+	}
+
+	//// TODO qbarrand: find a better place for this
+	//if err := r.su.SetAsReady(ctx, &mod, "TODO", "TODO"); err != nil {
+	//	return res, fmt.Errorf("could not set the initial conditions: %v", err)
+	//}
+
+	for kernelVersion, m := range mappings {
+		requeue, err := r.handleBuild(ctx, &mod, m, kernelVersion)
+		if err != nil {
+			return res, fmt.Errorf("failed to handle build for kernel version %s: %w", kernelVersion, err)
+		}
+		if requeue {
+			logger.Info("Build requires a requeue; skipping handling driver container for now", "kernelVersion", kernelVersion, "image", m)
+			res.Requeue = true
+			continue
+		}
+
+		err = r.handleDriverContainer(ctx, &mod, m, dsByKernelVersion, kernelVersion)
+		if err != nil {
+			return res, fmt.Errorf("failed to handle driver container for kernel version %s: %v", kernelVersion, err)
+		}
+	}
+
+	logger.Info("Handle device plugin")
+	err = r.handleDevicePlugin(ctx, &mod)
+	if err != nil {
+		return res, fmt.Errorf("could handle device plugin: %w", err)
+	}
+
+	logger.Info("Garbage-collecting DaemonSets")
+
+	// Garbage collect old DaemonSets for which there are no nodes.
+	validKernels := sets.StringKeySet(mappings)
+
+	deleted, err := r.dc.GarbageCollect(ctx, dsByKernelVersion, validKernels)
+	if err != nil {
+		return res, fmt.Errorf("could not garbage collect DaemonSets: %v", err)
+	}
+
+	logger.Info("Garbage-collected DaemonSets", "names", deleted)
+
+	return res, nil
+}
+
+func (r *ModuleReconciler) getKernelMappings(ctx context.Context, nodes v1.NodeList, mod *ootov1alpha1.Module) map[string]*ootov1alpha1.KernelMapping {
 	mappings := make(map[string]*ootov1alpha1.KernelMapping)
+	logger := log.FromContext(ctx)
 
 	for _, node := range nodes.Items {
 		kernelVersion := node.Status.NodeInfo.KernelVersion
@@ -126,71 +180,79 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		mappings[kernelVersion] = m
 	}
+	return mappings
+}
 
-	dsByKernelVersion, err := r.dc.ModuleDaemonSetsByKernelVersion(ctx, mod)
+func (r *ModuleReconciler) handleBuild(ctx context.Context,
+	mod *ootov1alpha1.Module,
+	km *ootov1alpha1.KernelMapping,
+	kernelVersion string) (bool, error) {
+	if km.Build == nil {
+		return false, nil
+	}
+
+	// TODO check access to the image - execute build only if needed
+	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km)
+	buildCtx := log.IntoContext(ctx, logger)
+
+	buildRes, err := r.bm.Sync(buildCtx, *mod, *km, kernelVersion)
 	if err != nil {
-		return res, fmt.Errorf("could get DaemonSets for module %s: %v", mod.Name, err)
+		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
 
-	//// TODO qbarrand: find a better place for this
-	//if err := r.su.SetAsReady(ctx, &mod, "TODO", "TODO"); err != nil {
-	//	return res, fmt.Errorf("could not set the initial conditions: %v", err)
-	//}
+	return buildRes.Requeue, nil
+}
 
-	for kernelVersion, m := range mappings {
-		logger.WithValues("kernel version", kernelVersion, "image", m)
-
-		if m.Build != nil {
-			buildCtx := log.IntoContext(ctx, logger)
-
-			buildRes, err := r.bm.Sync(buildCtx, mod, *m, kernelVersion)
-			if err != nil {
-				return res, fmt.Errorf("could not synchronize the build: %v", err)
-			}
-
-			if buildRes.Requeue {
-				logger.Info("Build requires a requeue; skipping this mapping for now", "status", buildRes.Status)
-				res.Requeue = true
-				continue
-			}
-		}
-
-		ds := &appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: req.Namespace},
-		}
-
-		if existingDS := dsByKernelVersion[kernelVersion]; existingDS != nil {
-			ds = existingDS
-		} else {
-			ds.GenerateName = mod.Name + "-"
-		}
-
-		var opRes controllerutil.OperationResult
-
-		opRes, err = controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-			return r.dc.SetAsDesired(ds, m.ContainerImage, mod, kernelVersion)
-		})
-
-		if err != nil {
-			return res, fmt.Errorf("could not create or patch DaemonSet: %v", err)
-		}
-
-		logger.Info("Reconciled DaemonSet", "name", ds.Name, "result", opRes)
+func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
+	mod *ootov1alpha1.Module,
+	km *ootov1alpha1.KernelMapping,
+	dsByKernelVersion map[string]*appsv1.DaemonSet,
+	kernelVersion string) error {
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace},
 	}
 
-	logger.Info("Garbage-collecting DaemonSets")
-
-	// Garbage collect old DaemonSets for which there are no nodes.
-	validKernels := sets.StringKeySet(mappings)
-
-	deleted, err := r.dc.GarbageCollect(ctx, dsByKernelVersion, validKernels)
-	if err != nil {
-		return res, fmt.Errorf("could not garbage collect DaemonSets: %v", err)
+	logger := log.FromContext(ctx)
+	if existingDS := dsByKernelVersion[kernelVersion]; existingDS != nil {
+		logger.Info("updating existing driver container DS", "kernel version", kernelVersion, "image", km, "name", ds.Name)
+		ds = existingDS
+	} else {
+		logger.Info("creating new driver container DS", "kernel version", kernelVersion, "image", km)
+		ds.GenerateName = mod.Name + "-"
 	}
 
-	logger.Info("Garbage-collected DaemonSets", "names", deleted)
+	_, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
+		return r.dc.SetDriverContainerAsDesired(ctx, ds, km.ContainerImage, *mod, kernelVersion)
+	})
 
-	return res, nil
+	return err
+}
+
+func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *ootov1alpha1.Module) error {
+	if mod.Spec.DevicePlugin == nil {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace},
+	}
+	name := mod.Name + "-device-plugin"
+	ds.Name = name
+	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: mod.Namespace}, ds)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to get the device plugin daemonset %s/%s: %w", name, mod.Namespace, err)
+	}
+
+	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
+		return r.dc.SetDevicePluginAsDesired(ctx, ds, mod)
+	})
+
+	if err == nil {
+		logger.Info("Reconciled Device Plugin", "name", ds.Name, "result", opRes)
+	}
+
+	return err
 }
 
 // SetupWithManager sets up the controller with the Manager.

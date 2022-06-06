@@ -190,7 +190,7 @@ var _ = Describe("ModuleReconciler", func() {
 			gomock.InOrder(
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)),
-				mockDC.EXPECT().SetAsDesired(&ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
+				mockDC.EXPECT().SetDriverContainerAsDesired(context.TODO(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
 				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString(kernelVersion)),
 			)
 
@@ -273,8 +273,8 @@ var _ = Describe("ModuleReconciler", func() {
 			gomock.InOrder(
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
-				mockDC.EXPECT().SetAsDesired(&ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
-					func(d *appsv1.DaemonSet, _ string, _ ootov1alpha1.Module, _ string) {
+				mockDC.EXPECT().SetDriverContainerAsDesired(context.TODO(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
+					func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ ootov1alpha1.Module, _ string) {
 						d.SetLabels(map[string]string{"test": "test"})
 					}),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
