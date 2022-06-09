@@ -155,6 +155,7 @@ func (r *ModuleReconciler) getKernelMappings(ctx context.Context, nodes v1.NodeL
 	logger := log.FromContext(ctx)
 
 	for _, node := range nodes.Items {
+		osConfig := r.km.GetNodeOSConfig(&node)
 		kernelVersion := node.Status.NodeInfo.KernelVersion
 
 		nodeLogger := logger.WithValues(
@@ -170,6 +171,12 @@ func (r *ModuleReconciler) getKernelMappings(ctx context.Context, nodes v1.NodeL
 		m, err := r.km.FindMappingForKernel(mod.Spec.KernelMappings, kernelVersion)
 		if err != nil {
 			nodeLogger.Info("no suitable container image found; skipping node")
+			continue
+		}
+
+		m, err = r.km.PrepareKernelMapping(m, osConfig)
+		if err != nil {
+			nodeLogger.Info("failed to substitute the template variables in the mapping", "error", err)
 			continue
 		}
 

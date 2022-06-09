@@ -144,6 +144,8 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
+			osConfig := module.NodeOSConfig{}
+
 			mod := ootov1alpha1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      moduleName,
@@ -188,7 +190,9 @@ var _ = Describe("ModuleReconciler", func() {
 			}
 
 			gomock.InOrder(
+				mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
+				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)),
 				mockDC.EXPECT().SetDriverContainerAsDesired(context.TODO(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
 				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString(kernelVersion)),
@@ -210,6 +214,8 @@ var _ = Describe("ModuleReconciler", func() {
 				imageName     = "test-image"
 				kernelVersion = "1.2.3"
 			)
+
+			osConfig := module.NodeOSConfig{}
 
 			mappings := []ootov1alpha1.KernelMapping{
 				{
@@ -271,7 +277,9 @@ var _ = Describe("ModuleReconciler", func() {
 			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
 			gomock.InOrder(
+				mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
+				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().SetDriverContainerAsDesired(context.TODO(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
 					func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ ootov1alpha1.Module, _ string) {

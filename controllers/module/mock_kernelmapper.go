@@ -9,6 +9,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	v1 "k8s.io/api/core/v1"
 )
 
 // MockKernelMapper is a mock of KernelMapper interface.
@@ -47,4 +48,33 @@ func (m *MockKernelMapper) FindMappingForKernel(mappings []v1alpha1.KernelMappin
 func (mr *MockKernelMapperMockRecorder) FindMappingForKernel(mappings, kernelVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindMappingForKernel", reflect.TypeOf((*MockKernelMapper)(nil).FindMappingForKernel), mappings, kernelVersion)
+}
+
+// GetNodeOSConfig mocks base method.
+func (m *MockKernelMapper) GetNodeOSConfig(node *v1.Node) *NodeOSConfig {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNodeOSConfig", node)
+	ret0, _ := ret[0].(*NodeOSConfig)
+	return ret0
+}
+
+// GetNodeOSConfig indicates an expected call of GetNodeOSConfig.
+func (mr *MockKernelMapperMockRecorder) GetNodeOSConfig(node interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeOSConfig", reflect.TypeOf((*MockKernelMapper)(nil).GetNodeOSConfig), node)
+}
+
+// PrepareKernelMapping mocks base method.
+func (m *MockKernelMapper) PrepareKernelMapping(mapping *v1alpha1.KernelMapping, osConfig *NodeOSConfig) (*v1alpha1.KernelMapping, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PrepareKernelMapping", mapping, osConfig)
+	ret0, _ := ret[0].(*v1alpha1.KernelMapping)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PrepareKernelMapping indicates an expected call of PrepareKernelMapping.
+func (mr *MockKernelMapperMockRecorder) PrepareKernelMapping(mapping, osConfig interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareKernelMapping", reflect.TypeOf((*MockKernelMapper)(nil).PrepareKernelMapping), mapping, osConfig)
 }
