@@ -89,7 +89,7 @@ type KernelMapping struct {
 // ModuleSpec describes how the OOT operator should deploy a Module on those nodes that need it.
 type ModuleSpec struct {
 	// +optional
-	Build Build `json:"build"`
+	Build *Build `json:"build"`
 
 	// +optional
 

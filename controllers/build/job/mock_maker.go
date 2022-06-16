@@ -36,16 +36,16 @@ func (m *MockMaker) EXPECT() *MockMakerMockRecorder {
 }
 
 // MakeJob mocks base method.
-func (m_2 *MockMaker) MakeJob(mod v1alpha1.Module, m v1alpha1.KernelMapping, targetKernel string) (*v1.Job, error) {
-	m_2.ctrl.T.Helper()
-	ret := m_2.ctrl.Call(m_2, "MakeJob", mod, m, targetKernel)
+func (m *MockMaker) MakeJob(mod v1alpha1.Module, buildConfig *v1alpha1.Build, targetKernel, containerImage string) (*v1.Job, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MakeJob", mod, buildConfig, targetKernel, containerImage)
 	ret0, _ := ret[0].(*v1.Job)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // MakeJob indicates an expected call of MakeJob.
-func (mr *MockMakerMockRecorder) MakeJob(mod, m, targetKernel interface{}) *gomock.Call {
+func (mr *MockMakerMockRecorder) MakeJob(mod, buildConfig, targetKernel, containerImage interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeJob", reflect.TypeOf((*MockMaker)(nil).MakeJob), mod, m, targetKernel)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeJob", reflect.TypeOf((*MockMaker)(nil).MakeJob), mod, buildConfig, targetKernel, containerImage)
 }

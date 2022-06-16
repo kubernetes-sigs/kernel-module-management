@@ -194,12 +194,12 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	mod *ootov1alpha1.Module,
 	km *ootov1alpha1.KernelMapping,
 	kernelVersion string) (bool, error) {
-	if km.Build == nil {
+	if mod.Spec.Build == nil && km.Build == nil {
 		return false, nil
 	}
 
-	// TODO check access to the image - execute build only if needed
-	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km)
+	// [TODO] check access to the image - execute build only if needed (image is inaccessible)
+	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
 	buildRes, err := r.bm.Sync(buildCtx, *mod, *km, kernelVersion)

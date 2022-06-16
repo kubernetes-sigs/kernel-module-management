@@ -52,3 +52,17 @@ func (mr *MockModuleHelperMockRecorder) ApplyBuildArgOverrides(args interface{},
 	varargs := append([]interface{}{args}, overrides...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBuildArgOverrides", reflect.TypeOf((*MockModuleHelper)(nil).ApplyBuildArgOverrides), varargs...)
 }
+
+// GetReleventBuild mocks base method.
+func (m *MockModuleHelper) GetReleventBuild(mod v1alpha1.Module, km v1alpha1.KernelMapping) *v1alpha1.Build {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReleventBuild", mod, km)
+	ret0, _ := ret[0].(*v1alpha1.Build)
+	return ret0
+}
+
+// GetReleventBuild indicates an expected call of GetReleventBuild.
+func (mr *MockModuleHelperMockRecorder) GetReleventBuild(mod, km interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReleventBuild", reflect.TypeOf((*MockModuleHelper)(nil).GetReleventBuild), mod, km)
+}

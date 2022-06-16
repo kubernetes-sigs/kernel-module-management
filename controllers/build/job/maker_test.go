@@ -142,13 +142,9 @@ var _ = Describe("Maker", func() {
 			}
 
 			override := ootov1alpha1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
+			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override).Return(append(slices.Clone(buildArgs), override))
 
-			mh.
-				EXPECT().
-				ApplyBuildArgOverrides(buildArgs, override).
-				Return(append(slices.Clone(buildArgs), override))
-
-			actual, err := m.MakeJob(mod, km, kernelVersion)
+			actual, err := m.MakeJob(mod, km.Build, kernelVersion, km.ContainerImage)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(

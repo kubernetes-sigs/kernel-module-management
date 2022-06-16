@@ -19,13 +19,15 @@ type jobManager struct {
 	client client.Client
 	getter build.Getter
 	maker  Maker
+	helper build.ModuleHelper
 }
 
-func NewBuildManager(client client.Client, getter build.Getter, maker Maker) build.Manager {
+func NewBuildManager(client client.Client, getter build.Getter, maker Maker, helper build.ModuleHelper) build.Manager {
 	return &jobManager{
 		client: client,
 		getter: getter,
 		maker:  maker,
+		helper: helper,
 	}
 }
 
@@ -60,7 +62,9 @@ func (jbm *jobManager) getJob(ctx context.Context, mod ootov1alpha1.Module, targ
 func (jbm *jobManager) Sync(ctx context.Context, mod ootov1alpha1.Module, m ootov1alpha1.KernelMapping, targetKernel string) (build.Result, error) {
 	logger := log.FromContext(ctx)
 
-	imageAvailable, err := jbm.getter.ImageExists(ctx, m.ContainerImage, m.Build.Pull)
+	buildConfig := jbm.helper.GetReleventBuild(mod, m)
+
+	imageAvailable, err := jbm.getter.ImageExists(ctx, m.ContainerImage, buildConfig.Pull)
 	if err != nil {
 		return build.Result{}, fmt.Errorf("could not check if the image is available: %v", err)
 	}
@@ -79,7 +83,7 @@ func (jbm *jobManager) Sync(ctx context.Context, mod ootov1alpha1.Module, m ooto
 
 		logger.Info("Creating job")
 
-		job, err = jbm.maker.MakeJob(mod, m, targetKernel)
+		job, err = jbm.maker.MakeJob(mod, buildConfig, targetKernel, m.ContainerImage)
 		if err != nil {
 			return build.Result{}, fmt.Errorf("could not make Job: %v", err)
 		}

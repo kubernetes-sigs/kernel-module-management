@@ -5,7 +5,6 @@ import (
 
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/controllers/build"
-	"golang.org/x/exp/slices"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +15,7 @@ import (
 //go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
 
 type Maker interface {
-	MakeJob(mod ootov1alpha1.Module, m ootov1alpha1.KernelMapping, targetKernel string) (*batchv1.Job, error)
+	MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build, targetKernel, containerImage string) (*batchv1.Job, error)
 }
 
 type maker struct {
@@ -28,11 +27,11 @@ func NewMaker(mh build.ModuleHelper, scheme *runtime.Scheme) Maker {
 	return &maker{mh: mh, scheme: scheme}
 }
 
-func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, targetKernel string) (*batchv1.Job, error) {
-	args := []string{"--destination", km.ContainerImage}
+func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build, targetKernel, containerImage string) (*batchv1.Job, error) {
+	args := []string{"--destination", containerImage}
 
 	buildArgs := m.mh.ApplyBuildArgOverrides(
-		slices.Clone(km.Build.BuildArgs),
+		buildConfig.BuildArgs,
 		ootov1alpha1.BuildArg{Name: "KERNEL_VERSION", Value: targetKernel},
 	)
 
@@ -40,11 +39,11 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, 
 		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", ba.Name, ba.Value))
 	}
 
-	if km.Build.Pull.Insecure {
+	if buildConfig.Pull.Insecure {
 		args = append(args, "--insecure-pull")
 	}
 
-	if km.Build.Push.Insecure {
+	if buildConfig.Push.Insecure {
 		args = append(args, "--insecure")
 	}
 
@@ -82,7 +81,7 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, 
 			Completions: &one,
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{"Dockerfile": km.Build.Dockerfile},
+					Annotations: map[string]string{"Dockerfile": buildConfig.Dockerfile},
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -90,11 +89,11 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping, 
 							Args:         args,
 							Name:         "kaniko",
 							Image:        "gcr.io/kaniko-project/executor:latest",
-							VolumeMounts: append([]v1.VolumeMount{dockerFileVolumeMount}, MakeSecretVolumeMounts(km.Build.Secrets)...),
+							VolumeMounts: append([]v1.VolumeMount{dockerFileVolumeMount}, MakeSecretVolumeMounts(buildConfig.Secrets)...),
 						},
 					},
 					RestartPolicy: v1.RestartPolicyOnFailure,
-					Volumes:       append([]v1.Volume{dockerFileVolume}, MakeSecretVolumes(km.Build.Secrets)...),
+					Volumes:       append([]v1.Volume{dockerFileVolume}, MakeSecretVolumes(buildConfig.Secrets)...),
 				},
 			},
 		},
