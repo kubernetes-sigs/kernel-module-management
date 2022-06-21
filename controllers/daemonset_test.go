@@ -450,14 +450,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			kernelLabel,
 			scheme)
 
-		mod := ootov1alpha1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-		}
-
-		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod)
+		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).To(BeEmpty())
 	})
@@ -489,14 +482,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			kernelLabel,
 			scheme)
 
-		mod := ootov1alpha1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-		}
-
-		_, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod)
+		_, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -530,14 +516,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			kernelLabel,
 			scheme)
 
-		mod := ootov1alpha1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-		}
-
-		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod)
+		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).To(HaveLen(2))
 		Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
@@ -571,14 +550,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			kernelLabel,
 			scheme)
 
-		mod := ootov1alpha1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-		}
-
-		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod)
+		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).To(HaveLen(1))
 		Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))

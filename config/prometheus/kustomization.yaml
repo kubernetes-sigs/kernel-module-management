@@ -1,2 +1,5 @@
 resources:
 - monitor.yaml
+
+  # in case of OCP, a openshift.io/cluster-monitoring: "true"
+  # must be added to the namespace of KMMO operator

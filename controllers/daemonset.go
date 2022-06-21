@@ -30,7 +30,7 @@ const (
 
 type DaemonSetCreator interface {
 	GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.String) ([]string, error)
-	ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1alpha1.Module) (map[string]*appsv1.DaemonSet, error)
+	ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error)
 	SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error
 	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *ootov1alpha1.Module) error
 }
@@ -65,12 +65,12 @@ func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, existingDS map
 	return deleted, nil
 }
 
-func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, mod ootov1alpha1.Module) (map[string]*appsv1.DaemonSet, error) {
+func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error) {
 	dsList := appsv1.DaemonSetList{}
 
 	opts := []client.ListOption{
-		client.MatchingLabels(map[string]string{constants.ModuleNameLabel: mod.Name}),
-		client.InNamespace(mod.Namespace),
+		client.MatchingLabels(map[string]string{constants.ModuleNameLabel: name}),
+		client.InNamespace(namespace),
 	}
 
 	if err := dc.client.List(ctx, &dsList, opts...); err != nil {

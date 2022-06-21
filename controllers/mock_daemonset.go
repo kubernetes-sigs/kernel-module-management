@@ -53,18 +53,18 @@ func (mr *MockDaemonSetCreatorMockRecorder) GarbageCollect(ctx, existingDS, vali
 }
 
 // ModuleDaemonSetsByKernelVersion mocks base method.
-func (m *MockDaemonSetCreator) ModuleDaemonSetsByKernelVersion(ctx context.Context, mod v1alpha1.Module) (map[string]*v1.DaemonSet, error) {
+func (m *MockDaemonSetCreator) ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*v1.DaemonSet, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ModuleDaemonSetsByKernelVersion", ctx, mod)
+	ret := m.ctrl.Call(m, "ModuleDaemonSetsByKernelVersion", ctx, name, namespace)
 	ret0, _ := ret[0].(map[string]*v1.DaemonSet)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ModuleDaemonSetsByKernelVersion indicates an expected call of ModuleDaemonSetsByKernelVersion.
-func (mr *MockDaemonSetCreatorMockRecorder) ModuleDaemonSetsByKernelVersion(ctx, mod interface{}) *gomock.Call {
+func (mr *MockDaemonSetCreatorMockRecorder) ModuleDaemonSetsByKernelVersion(ctx, name, namespace interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModuleDaemonSetsByKernelVersion", reflect.TypeOf((*MockDaemonSetCreator)(nil).ModuleDaemonSetsByKernelVersion), ctx, mod)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModuleDaemonSetsByKernelVersion", reflect.TypeOf((*MockDaemonSetCreator)(nil).ModuleDaemonSetsByKernelVersion), ctx, name, namespace)
 }
 
 // SetDevicePluginAsDesired mocks base method.

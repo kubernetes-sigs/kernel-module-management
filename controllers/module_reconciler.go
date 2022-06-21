@@ -24,6 +24,7 @@ import (
 	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/module"
 	"github.com/qbarrand/oot-operator/controllers/predicates"
+	"github.com/qbarrand/oot-operator/pkg/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -45,10 +46,11 @@ import (
 type ModuleReconciler struct {
 	client.Client
 
-	bm build.Manager
-	dc DaemonSetCreator
-	km module.KernelMapper
-	su module.ConditionsUpdater
+	bm      build.Manager
+	dc      DaemonSetCreator
+	km      module.KernelMapper
+	su      module.ConditionsUpdater
+	metrics metrics.Metrics
 }
 
 func NewModuleReconciler(
@@ -57,13 +59,14 @@ func NewModuleReconciler(
 	dg DaemonSetCreator,
 	km module.KernelMapper,
 	su module.ConditionsUpdater,
-) *ModuleReconciler {
+	metrics metrics.Metrics) *ModuleReconciler {
 	return &ModuleReconciler{
-		Client: client,
-		bm:     bm,
-		dc:     dg,
-		km:     km,
-		su:     su,
+		Client:  client,
+		bm:      bm,
+		dc:      dg,
+		km:      km,
+		su:      su,
+		metrics: metrics,
 	}
 }
 
@@ -82,12 +85,12 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	logger := log.FromContext(ctx)
 
-	mod := ootov1alpha1.Module{}
-
-	if err := r.Client.Get(ctx, req.NamespacedName, &mod); err != nil {
-		logger.Error(err, "Could not get module")
-		return res, err
+	mod, err := r.getRequestedModule(ctx, req.NamespacedName)
+	if err != nil {
+		return res, fmt.Errorf("failed to get the requested %s KMMO CR: %w", req.NamespacedName, err)
 	}
+
+	r.setKMMOMetrics(ctx)
 
 	logger.V(1).Info("Listing nodes", "selector", mod.Spec.Selector)
 
@@ -100,9 +103,9 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("could not list nodes: %v", err)
 	}
 
-	mappings := r.getKernelMappings(ctx, nodes, &mod)
+	mappings := r.getKernelMappings(ctx, nodes, mod)
 
-	dsByKernelVersion, err := r.dc.ModuleDaemonSetsByKernelVersion(ctx, mod)
+	dsByKernelVersion, err := r.dc.ModuleDaemonSetsByKernelVersion(ctx, mod.Name, mod.Namespace)
 	if err != nil {
 		return res, fmt.Errorf("could get DaemonSets for module %s: %v", mod.Name, err)
 	}
@@ -113,7 +116,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	//}
 
 	for kernelVersion, m := range mappings {
-		requeue, err := r.handleBuild(ctx, &mod, m, kernelVersion)
+		requeue, err := r.handleBuild(ctx, mod, m, kernelVersion)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle build for kernel version %s: %w", kernelVersion, err)
 		}
@@ -123,14 +126,14 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			continue
 		}
 
-		err = r.handleDriverContainer(ctx, &mod, m, dsByKernelVersion, kernelVersion)
+		err = r.handleDriverContainer(ctx, mod, m, dsByKernelVersion, kernelVersion)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle driver container for kernel version %s: %v", kernelVersion, err)
 		}
 	}
 
 	logger.Info("Handle device plugin")
-	err = r.handleDevicePlugin(ctx, &mod)
+	err = r.handleDevicePlugin(ctx, mod)
 	if err != nil {
 		return res, fmt.Errorf("could handle device plugin: %w", err)
 	}
@@ -260,6 +263,27 @@ func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *ootov1al
 	}
 
 	return err
+}
+
+func (r *ModuleReconciler) setKMMOMetrics(ctx context.Context) {
+	logger := log.FromContext(ctx)
+
+	mods := ootov1alpha1.ModuleList{}
+	err := r.Client.List(ctx, &mods)
+	if err != nil {
+		logger.V(1).Info("failed to list KMMomodules for metrics", "error", err)
+	}
+
+	r.metrics.SetExistingKMMOModules(len(mods.Items))
+}
+
+func (r *ModuleReconciler) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*ootov1alpha1.Module, error) {
+	mod := ootov1alpha1.Module{}
+
+	if err := r.Client.Get(ctx, namespacedName, &mod); err != nil {
+		return nil, fmt.Errorf("failed to get the kmmo module %s: %w", namespacedName, err)
+	}
+	return &mod, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

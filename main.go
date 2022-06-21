@@ -26,6 +26,7 @@ import (
 	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/build/job"
 	"github.com/qbarrand/oot-operator/controllers/module"
+	"github.com/qbarrand/oot-operator/pkg/metrics"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2/klogr"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -141,6 +142,8 @@ func main() {
 
 	setupLogger.V(1).Info("Using kernel label", "label", kernelLabel)
 
+	metrics := metrics.New()
+	metrics.Register()
 	getter := build.NewGetter()
 	helper := build.NewModuleHelper()
 	maker := job.NewMaker(helper, scheme)
@@ -149,7 +152,7 @@ func main() {
 	km := module.NewKernelMapper()
 	su := module.NewConditionsUpdater(client.Status())
 
-	mc := controllers.NewModuleReconciler(client, bm, dc, km, su)
+	mc := controllers.NewModuleReconciler(client, bm, dc, km, su, metrics)
 
 	if err = mc.SetupWithManager(mgr, kernelLabel); err != nil {
 		setupLogger.Error(err, "unable to create controller", "controller", "Module")

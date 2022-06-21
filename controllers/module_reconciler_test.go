@@ -10,6 +10,7 @@ import (
 	"github.com/qbarrand/oot-operator/controllers"
 	"github.com/qbarrand/oot-operator/controllers/build"
 	"github.com/qbarrand/oot-operator/controllers/module"
+	"github.com/qbarrand/oot-operator/pkg/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,11 +24,12 @@ import (
 var _ = Describe("ModuleReconciler", func() {
 	Describe("Reconcile", func() {
 		var (
-			ctrl   *gomock.Controller
-			mockBM *build.MockManager
-			mockCU *module.MockConditionsUpdater
-			mockDC *controllers.MockDaemonSetCreator
-			mockKM *module.MockKernelMapper
+			ctrl        *gomock.Controller
+			mockBM      *build.MockManager
+			mockCU      *module.MockConditionsUpdater
+			mockDC      *controllers.MockDaemonSetCreator
+			mockKM      *module.MockKernelMapper
+			mockMetrics *metrics.MockMetrics
 		)
 
 		BeforeEach(func() {
@@ -36,6 +38,7 @@ var _ = Describe("ModuleReconciler", func() {
 			mockCU = module.NewMockConditionsUpdater(ctrl)
 			mockDC = controllers.NewMockDaemonSetCreator(ctrl)
 			mockKM = module.NewMockKernelMapper(ctrl)
+			mockMetrics = metrics.NewMockMetrics(ctrl)
 		})
 
 		const moduleName = "test-module"
@@ -73,14 +76,15 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(client, mockBM, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(client, mockBM, mockDC, mockKM, mockCU, mockMetrics)
 
 			ctx := context.TODO()
 
 			dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
 
 			gomock.InOrder(
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
+				mockMetrics.EXPECT().SetExistingKMMOModules(1),
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
 			)
 
@@ -115,14 +119,15 @@ var _ = Describe("ModuleReconciler", func() {
 				WithObjects(&mod, &ds).
 				Build()
 
-			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics)
 
 			ctx := context.TODO()
 
 			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
 			gomock.InOrder(
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
+				mockMetrics.EXPECT().SetExistingKMMOModules(1),
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
 			)
 
@@ -178,7 +183,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics)
 
 			ctx := context.TODO()
 
@@ -190,10 +195,11 @@ var _ = Describe("ModuleReconciler", func() {
 			}
 
 			gomock.InOrder(
+				mockMetrics.EXPECT().SetExistingKMMOModules(1),
 				mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)),
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace),
 				mockDC.EXPECT().SetDriverContainerAsDesired(context.TODO(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
 				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString(kernelVersion)),
 			)
@@ -252,14 +258,14 @@ var _ = Describe("ModuleReconciler", func() {
 			}
 
 			const (
-				dsName    = "some-daemonset"
-				namespace = "test-namespace"
+				dsName      = "some-daemonset"
+				dsNamespace = "test-namespace"
 			)
 
 			ds := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      dsName,
-					Namespace: namespace,
+					Namespace: dsNamespace,
 				},
 			}
 
@@ -270,17 +276,18 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU)
+			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics)
 
 			ctx := context.TODO()
 
 			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
 			gomock.InOrder(
+				mockMetrics.EXPECT().SetExistingKMMOModules(1),
 				mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, gomock.AssignableToTypeOf(mod)).Return(dsByKernelVersion, nil),
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().SetDriverContainerAsDesired(context.TODO(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
 					func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ ootov1alpha1.Module, _ string) {
 						d.SetLabels(map[string]string{"test": "test"})
