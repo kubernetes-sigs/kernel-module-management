@@ -3,17 +3,19 @@ module github.com/qbarrand/oot-operator
 go 1.18
 
 require (
+	github.com/a8m/envsubst v1.3.0
 	github.com/go-logr/logr v1.2.3
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.8
 	github.com/google/go-containerregistry v0.9.0
 	github.com/onsi/ginkgo/v2 v2.1.4
 	github.com/onsi/gomega v1.19.0
+	github.com/prometheus/client_golang v1.11.0
 	golang.org/x/exp v0.0.0-20220407100705-7b9b53b0aca4
 	k8s.io/api v0.23.6
 	k8s.io/apimachinery v0.23.6
 	k8s.io/client-go v0.23.6
-	k8s.io/klog/v2 v2.60.1
+	k8s.io/klog/v2 v2.70.0
 	sigs.k8s.io/controller-runtime v0.11.2
 )
 
@@ -25,7 +27,6 @@ require (
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
-	github.com/a8m/envsubst v1.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/cli v20.10.16+incompatible // indirect
@@ -52,7 +53,6 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.3-0.20220114050600-8b9d41f48198 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/prometheus/client_golang v1.11.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.28.0 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
