@@ -30,7 +30,7 @@ jobs:
         fi
 
     - name: Run tests
-      run: make test
+      run: make unit-test
 
     - name: Build
       run: make
