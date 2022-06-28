@@ -1,4 +1,4 @@
-package job_test
+package job
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers/build"
-	"github.com/qbarrand/oot-operator/controllers/build/job"
-	"github.com/qbarrand/oot-operator/controllers/constants"
+	"github.com/qbarrand/oot-operator/internal/build"
+	"github.com/qbarrand/oot-operator/internal/constants"
+	"github.com/qbarrand/oot-operator/internal/registry"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,7 +29,7 @@ var _ = Describe("Labels", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 		}
 
-		labels := job.Labels(mod, targetKernel)
+		labels := labels(mod, targetKernel)
 
 		Expect(labels).To(HaveKeyWithValue(constants.ModuleNameLabel, moduleName))
 		Expect(labels).To(HaveKeyWithValue(constants.TargetKernelTarget, targetKernel))
@@ -39,16 +39,16 @@ var _ = Describe("Labels", func() {
 var _ = Describe("JobManager", func() {
 	Describe("Sync", func() {
 		var (
-			getter *build.MockGetter
-			maker  *job.MockMaker
-			helper *build.MockModuleHelper
+			getter *registry.MockGetter
+			maker  *MockMaker
+			helper *build.MockHelper
 		)
 
 		BeforeEach(func() {
 			ctrl := gomock.NewController(GinkgoT())
-			getter = build.NewMockGetter(ctrl)
-			maker = job.NewMockMaker(ctrl)
-			helper = build.NewMockModuleHelper(ctrl)
+			getter = registry.NewMockGetter(ctrl)
+			maker = NewMockMaker(ctrl)
+			helper = build.NewMockHelper(ctrl)
 		})
 
 		const (
@@ -66,10 +66,10 @@ var _ = Describe("JobManager", func() {
 		It("should return an error if there was an error getting the image", func() {
 			ctx := context.TODO()
 			gomock.InOrder(
-				helper.EXPECT().GetReleventBuild(gomock.Any(), km).Return(km.Build),
+				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
 				getter.EXPECT().ImageExists(ctx, imageName, po).Return(false, errors.New("random error")),
 			)
-			mgr := job.NewBuildManager(nil, getter, maker, helper)
+			mgr := NewBuildManager(nil, getter, maker, helper)
 
 			_, err := mgr.Sync(ctx, ootov1alpha1.Module{}, km, "")
 			Expect(err).To(HaveOccurred())
@@ -79,11 +79,11 @@ var _ = Describe("JobManager", func() {
 			ctx := context.TODO()
 
 			gomock.InOrder(
-				helper.EXPECT().GetReleventBuild(gomock.Any(), km).Return(km.Build),
+				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
 				getter.EXPECT().ImageExists(ctx, imageName, po).Return(true, nil),
 			)
 
-			mgr := job.NewBuildManager(nil, getter, maker, helper)
+			mgr := NewBuildManager(nil, getter, maker, helper)
 
 			Expect(
 				mgr.Sync(ctx, ootov1alpha1.Module{}, km, ""),
@@ -106,7 +106,7 @@ var _ = Describe("JobManager", func() {
 
 				j := batchv1.Job{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels:    job.Labels(mod, kernelVersion),
+						Labels:    labels(mod, kernelVersion),
 						Namespace: namespace,
 					},
 					Status: s,
@@ -117,11 +117,11 @@ var _ = Describe("JobManager", func() {
 				ctx := context.TODO()
 
 				gomock.InOrder(
-					helper.EXPECT().GetReleventBuild(mod, km).Return(km.Build),
+					helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
 					getter.EXPECT().ImageExists(ctx, imageName, po).Return(false, nil),
 				)
 
-				mgr := job.NewBuildManager(client, getter, maker, helper)
+				mgr := NewBuildManager(client, getter, maker, helper)
 
 				res, err := mgr.Sync(ctx, mod, km, kernelVersion)
 
@@ -141,12 +141,12 @@ var _ = Describe("JobManager", func() {
 			ctx := context.TODO()
 
 			gomock.InOrder(
-				helper.EXPECT().GetReleventBuild(mod, km).Return(km.Build),
+				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
 				getter.EXPECT().ImageExists(ctx, imageName, po),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(nil, errors.New("random error")),
 			)
 
-			mgr := job.NewBuildManager(fake.NewClientBuilder().Build(), getter, maker, helper)
+			mgr := NewBuildManager(fake.NewClientBuilder().Build(), getter, maker, helper)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion),
@@ -172,14 +172,14 @@ var _ = Describe("JobManager", func() {
 			}
 
 			gomock.InOrder(
-				helper.EXPECT().GetReleventBuild(mod, km).Return(km.Build),
+				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
 				getter.EXPECT().ImageExists(ctx, imageName, po),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(&j, nil),
 			)
 
 			client := fake.NewClientBuilder().Build()
 
-			mgr := job.NewBuildManager(client, getter, maker, helper)
+			mgr := NewBuildManager(client, getter, maker, helper)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion),

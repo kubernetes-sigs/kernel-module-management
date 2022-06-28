@@ -6,8 +6,9 @@ import (
 	"fmt"
 
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers/build"
-	"github.com/qbarrand/oot-operator/controllers/constants"
+	"github.com/qbarrand/oot-operator/internal/build"
+	"github.com/qbarrand/oot-operator/internal/constants"
+	"github.com/qbarrand/oot-operator/internal/registry"
 	batchv1 "k8s.io/api/batch/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -16,22 +17,22 @@ import (
 var errNoMatchingBuild = errors.New("no matching build")
 
 type jobManager struct {
-	client client.Client
-	getter build.Getter
-	maker  Maker
-	helper build.ModuleHelper
+	client   client.Client
+	registry registry.Getter
+	maker    Maker
+	helper   build.Helper
 }
 
-func NewBuildManager(client client.Client, getter build.Getter, maker Maker, helper build.ModuleHelper) build.Manager {
+func NewBuildManager(client client.Client, getter registry.Getter, maker Maker, helper build.Helper) *jobManager {
 	return &jobManager{
-		client: client,
-		getter: getter,
-		maker:  maker,
-		helper: helper,
+		client:   client,
+		registry: getter,
+		maker:    maker,
+		helper:   helper,
 	}
 }
 
-func Labels(mod ootov1alpha1.Module, targetKernel string) map[string]string {
+func labels(mod ootov1alpha1.Module, targetKernel string) map[string]string {
 	return map[string]string{
 		constants.ModuleNameLabel:    mod.Name,
 		constants.TargetKernelTarget: targetKernel,
@@ -42,7 +43,7 @@ func (jbm *jobManager) getJob(ctx context.Context, mod ootov1alpha1.Module, targ
 	jobList := batchv1.JobList{}
 
 	opts := []client.ListOption{
-		client.MatchingLabels(Labels(mod, targetKernel)),
+		client.MatchingLabels(labels(mod, targetKernel)),
 		client.InNamespace(mod.Namespace),
 	}
 
@@ -62,9 +63,9 @@ func (jbm *jobManager) getJob(ctx context.Context, mod ootov1alpha1.Module, targ
 func (jbm *jobManager) Sync(ctx context.Context, mod ootov1alpha1.Module, m ootov1alpha1.KernelMapping, targetKernel string) (build.Result, error) {
 	logger := log.FromContext(ctx)
 
-	buildConfig := jbm.helper.GetReleventBuild(mod, m)
+	buildConfig := jbm.helper.GetRelevantBuild(mod, m)
 
-	imageAvailable, err := jbm.getter.ImageExists(ctx, m.ContainerImage, buildConfig.Pull)
+	imageAvailable, err := jbm.registry.ImageExists(ctx, m.ContainerImage, buildConfig.Pull)
 	if err != nil {
 		return build.Result{}, fmt.Errorf("could not check if the image is available: %v", err)
 	}

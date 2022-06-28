@@ -1,17 +1,15 @@
-package controllers_test
+package controllers
 
 import (
 	"context"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/qbarrand/oot-operator/controllers"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
+	runtimectrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 var _ = Describe("NodeKernelReconciler", func() {
@@ -23,8 +21,8 @@ var _ = Describe("NodeKernelReconciler", func() {
 		)
 
 		It("should return an error if the node cannot be found anymore", func() {
-			nkr := controllers.NewNodeKernelReconciler(fake.NewClientBuilder().Build(), labelName)
-			req := ctrl.Request{
+			nkr := NewNodeKernelReconciler(fake.NewClientBuilder().Build(), labelName, nil)
+			req := runtimectrl.Request{
 				NamespacedName: types.NamespacedName{Name: nodeName},
 			}
 
@@ -42,8 +40,8 @@ var _ = Describe("NodeKernelReconciler", func() {
 
 			client := fake.NewClientBuilder().WithObjects(&node).Build()
 
-			nkr := controllers.NewNodeKernelReconciler(client, labelName)
-			req := ctrl.Request{
+			nkr := NewNodeKernelReconciler(client, labelName, nil)
+			req := runtimectrl.Request{
 				NamespacedName: types.NamespacedName{Name: nodeName},
 			}
 
@@ -73,8 +71,8 @@ var _ = Describe("NodeKernelReconciler", func() {
 
 			client := fake.NewClientBuilder().WithObjects(&node).Build()
 
-			nkr := controllers.NewNodeKernelReconciler(client, labelName)
-			req := ctrl.Request{
+			nkr := NewNodeKernelReconciler(client, labelName, nil)
+			req := runtimectrl.Request{
 				NamespacedName: types.NamespacedName{Name: nodeName},
 			}
 
@@ -90,87 +88,5 @@ var _ = Describe("NodeKernelReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedNode.Labels).To(HaveKeyWithValue(labelName, kernelVersion))
 		})
-	})
-})
-
-var _ = Describe("NodeKernelReconcilerPredicate", func() {
-	const (
-		kernelVersion = "1.2.3"
-		labelName     = "test-label"
-	)
-
-	p := controllers.NodeKernelReconcilerPredicate(labelName)
-
-	It("should return true if the node has no labels", func() {
-		ev := event.CreateEvent{
-			Object: &v1.Node{
-				Status: v1.NodeStatus{
-					NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-				},
-			},
-		}
-
-		Expect(
-			p.Create(ev),
-		).To(
-			BeTrue(),
-		)
-	})
-
-	It("should return true if the node has the wrong label value", func() {
-		ev := event.CreateEvent{
-			Object: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{labelName: "some-other-value"},
-				},
-				Status: v1.NodeStatus{
-					NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-				},
-			},
-		}
-
-		Expect(
-			p.Create(ev),
-		).To(
-			BeTrue(),
-		)
-	})
-
-	It("should return false if the node has the wrong label value but event is deletion", func() {
-		ev := event.DeleteEvent{
-			Object: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{labelName: labelName},
-				},
-				Status: v1.NodeStatus{
-					NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-				},
-			},
-		}
-
-		Expect(
-			p.Delete(ev),
-		).To(
-			BeFalse(),
-		)
-	})
-
-	It("should return false if the label is correctly set", func() {
-		ev := event.CreateEvent{
-			Object: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{labelName: kernelVersion},
-				},
-				Status: v1.NodeStatus{
-					NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-				},
-			},
-		}
-
-		Expect(
-			p.Create(ev),
-		).To(
-			BeFalse(),
-		)
 	})
 })

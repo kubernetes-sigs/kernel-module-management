@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers/build"
+	"github.com/qbarrand/oot-operator/internal/build"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,18 +19,18 @@ type Maker interface {
 }
 
 type maker struct {
-	mh     build.ModuleHelper
+	helper build.Helper
 	scheme *runtime.Scheme
 }
 
-func NewMaker(mh build.ModuleHelper, scheme *runtime.Scheme) Maker {
-	return &maker{mh: mh, scheme: scheme}
+func NewMaker(helper build.Helper, scheme *runtime.Scheme) Maker {
+	return &maker{helper: helper, scheme: scheme}
 }
 
 func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build, targetKernel, containerImage string) (*batchv1.Job, error) {
 	args := []string{"--destination", containerImage}
 
-	buildArgs := m.mh.ApplyBuildArgOverrides(
+	buildArgs := m.helper.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
 		ootov1alpha1.BuildArg{Name: "KERNEL_VERSION", Value: targetKernel},
 	)
@@ -75,7 +75,7 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mod.Name + "-build-",
 			Namespace:    mod.Namespace,
-			Labels:       Labels(mod, targetKernel),
+			Labels:       labels(mod, targetKernel),
 		},
 		Spec: batchv1.JobSpec{
 			Completions: &one,

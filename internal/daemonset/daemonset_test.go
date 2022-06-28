@@ -1,4 +1,4 @@
-package controllers_test
+package daemonset
 
 import (
 	"context"
@@ -8,8 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers"
-	"github.com/qbarrand/oot-operator/controllers/constants"
+	"github.com/qbarrand/oot-operator/internal/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,7 +25,7 @@ const (
 )
 
 var _ = Describe("SetDriverContainerAsDesired", func() {
-	dg := controllers.NewDaemonSetCreator(nil, kernelLabel, scheme)
+	dg := NewCreator(nil, kernelLabel, scheme)
 
 	It("should return an error if the DaemonSet is nil", func() {
 		Expect(
@@ -220,7 +219,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 })
 
 var _ = Describe("SetDevicePluginAsDesired", func() {
-	dg := controllers.NewDaemonSetCreator(nil, kernelLabel, scheme)
+	dg := NewCreator(nil, kernelLabel, scheme)
 
 	It("should return an error if the DaemonSet is nil", func() {
 		Expect(
@@ -401,7 +400,7 @@ var _ = Describe("GarbageCollect", func() {
 
 		client := fake.NewClientBuilder().WithObjects(&dsLegit, &dsNotLegit).Build()
 
-		dc := controllers.NewDaemonSetCreator(client, "", scheme)
+		dc := NewCreator(client, "", scheme)
 
 		existingDS := map[string]*appsv1.DaemonSet{
 			legitKernelVersion:    &dsLegit,
@@ -429,7 +428,7 @@ var _ = Describe("GarbageCollect", func() {
 	})
 
 	It("should return an error if a deletion failed", func() {
-		dc := controllers.NewDaemonSetCreator(
+		dc := NewCreator(
 			fake.NewClientBuilder().Build(),
 			"",
 			scheme)
@@ -445,7 +444,7 @@ var _ = Describe("GarbageCollect", func() {
 
 var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 	It("should return an empty map if no DaemonSets are present", func() {
-		dc := controllers.NewDaemonSetCreator(
+		dc := NewCreator(
 			fake.NewClientBuilder().WithScheme(scheme).Build(),
 			kernelLabel,
 			scheme)
@@ -477,7 +476,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		dc := controllers.NewDaemonSetCreator(
+		dc := NewCreator(
 			fake.NewClientBuilder().WithScheme(scheme).WithObjects(&ds1, &ds2).Build(),
 			kernelLabel,
 			scheme)
@@ -511,7 +510,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		dc := controllers.NewDaemonSetCreator(
+		dc := NewCreator(
 			fake.NewClientBuilder().WithScheme(scheme).WithObjects(&ds1, &ds2).Build(),
 			kernelLabel,
 			scheme)
@@ -545,7 +544,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		dc := controllers.NewDaemonSetCreator(
+		dc := NewCreator(
 			fake.NewClientBuilder().WithScheme(scheme).WithObjects(&ds1, &ds2).Build(),
 			kernelLabel,
 			scheme)

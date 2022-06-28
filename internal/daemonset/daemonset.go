@@ -1,4 +1,4 @@
-package controllers
+package daemonset
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-openapi/swag"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers/constants"
+	"github.com/qbarrand/oot-operator/internal/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,7 +26,7 @@ const (
 	nodeUsrLibModulesVolumeName    = "node-usr-lib-modules"
 )
 
-//go:generate mockgen -source=daemonset.go -package=controllers -destination=mock_daemonset.go
+//go:generate mockgen -source=daemonset.go -package=daemonset -destination=mock_daemonset.go
 
 type DaemonSetCreator interface {
 	GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.String) ([]string, error)
@@ -41,7 +41,7 @@ type daemonSetGenerator struct {
 	scheme      *runtime.Scheme
 }
 
-func NewDaemonSetCreator(client client.Client, kernelLabel string, scheme *runtime.Scheme) *daemonSetGenerator {
+func NewCreator(client client.Client, kernelLabel string, scheme *runtime.Scheme) DaemonSetCreator {
 	return &daemonSetGenerator{
 		client:      client,
 		kernelLabel: kernelLabel,

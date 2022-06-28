@@ -1,4 +1,4 @@
-package job_test
+package job
 
 import (
 	"github.com/golang/mock/gomock"
@@ -6,9 +6,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers/build"
-	"github.com/qbarrand/oot-operator/controllers/build/job"
-	"github.com/qbarrand/oot-operator/controllers/constants"
+	"github.com/qbarrand/oot-operator/internal/build"
+	"github.com/qbarrand/oot-operator/internal/constants"
 	"golang.org/x/exp/slices"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -26,8 +25,8 @@ var _ = Describe("Maker", func() {
 		)
 
 		var (
-			m  job.Maker
-			mh *build.MockModuleHelper
+			m  Maker
+			mh *build.MockHelper
 		)
 
 		mod := ootov1alpha1.Module{
@@ -54,8 +53,8 @@ var _ = Describe("Maker", func() {
 
 		BeforeEach(func() {
 			ctrl := gomock.NewController(GinkgoT())
-			mh = build.NewMockModuleHelper(ctrl)
-			m = job.NewMaker(mh, scheme)
+			mh = build.NewMockHelper(ctrl)
+			m = NewMaker(mh, scheme)
 		})
 
 		It("should set fields correctly", func() {
@@ -158,7 +157,7 @@ var _ = Describe("Maker", func() {
 	Describe("MakeSecretVolumes", func() {
 		It("should return an empty list if there are no secrets", func() {
 			Expect(
-				job.MakeSecretVolumes(nil),
+				MakeSecretVolumes(nil),
 			).To(
 				BeEmpty(),
 			)
@@ -171,7 +170,7 @@ var _ = Describe("Maker", func() {
 			}
 
 			Expect(
-				job.MakeSecretVolumes(secretRefs),
+				MakeSecretVolumes(secretRefs),
 			).To(
 				Equal([]v1.Volume{
 					{
@@ -194,7 +193,7 @@ var _ = Describe("Maker", func() {
 	Describe("MakeSecretVolumeMounts", func() {
 		It("should return an empty list if there are no secrets", func() {
 			Expect(
-				job.MakeSecretVolumeMounts(nil),
+				MakeSecretVolumeMounts(nil),
 			).To(
 				BeEmpty(),
 			)
@@ -207,7 +206,7 @@ var _ = Describe("Maker", func() {
 			}
 
 			Expect(
-				job.MakeSecretVolumeMounts(secretRefs),
+				MakeSecretVolumeMounts(secretRefs),
 			).To(
 				Equal([]v1.VolumeMount{
 					{

@@ -1,4 +1,4 @@
-package module_test
+package filter
 
 import (
 	"testing"
@@ -15,9 +15,8 @@ func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	var err error
-
 	scheme, err = test.TestScheme()
 	Expect(err).NotTo(HaveOccurred())
 
-	RunSpecs(t, "Module Suite")
+	RunSpecs(t, "Filter Suite")
 }

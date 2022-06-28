@@ -1,31 +1,60 @@
-package controllers
+package filter
 
 import (
 	"context"
 
 	"github.com/go-logr/logr"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-type NodeModuleMapper struct {
+func hasLabel(label string) predicate.Predicate {
+	return predicate.NewPredicateFuncs(func(o client.Object) bool {
+		return o.GetLabels()[label] != ""
+	})
+}
+
+var skipDeletions predicate.Predicate = predicate.Funcs{
+	DeleteFunc: func(_ event.DeleteEvent) bool { return false },
+}
+
+type Filter struct {
 	client client.Client
 	logger logr.Logger
 }
 
-func NewNodeModuleMapper(client client.Client, logger logr.Logger) *NodeModuleMapper {
-	return &NodeModuleMapper{
+func New(client client.Client, logger logr.Logger) *Filter {
+	return &Filter{
 		client: client,
 		logger: logger,
 	}
 }
 
-func (nmm *NodeModuleMapper) FindModulesForNode(node client.Object) []reconcile.Request {
-	logger := nmm.logger.WithValues("node", node.GetName())
+func (f *Filter) ModuleReconcilerNodePredicate(kernelLabel string) predicate.Predicate {
+	return predicate.And(
+		skipDeletions,
+		hasLabel(kernelLabel),
+		predicate.LabelChangedPredicate{},
+	)
+}
+
+func (f *Filter) NodeKernelReconcilerPredicate(labelName string) predicate.Predicate {
+	labelMismatch := predicate.NewPredicateFuncs(func(o client.Object) bool {
+		return o.GetLabels()[labelName] != o.(*v1.Node).Status.NodeInfo.KernelVersion
+	})
+
+	return predicate.And(skipDeletions, labelMismatch)
+}
+
+func (f *Filter) FindModulesForNode(node client.Object) []reconcile.Request {
+	logger := f.logger.WithValues("node", node.GetName())
 
 	reqs := make([]reconcile.Request, 0)
 
@@ -33,7 +62,7 @@ func (nmm *NodeModuleMapper) FindModulesForNode(node client.Object) []reconcile.
 
 	mods := ootov1alpha1.ModuleList{}
 
-	if err := nmm.client.List(context.Background(), &mods); err != nil {
+	if err := f.client.List(context.Background(), &mods); err != nil {
 		logger.Error(err, "could not list modules")
 		return reqs
 	}

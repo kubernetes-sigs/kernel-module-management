@@ -1,4 +1,4 @@
-package job_test
+package module
 
 import (
 	"testing"
@@ -19,5 +19,5 @@ func TestSuite(t *testing.T) {
 	scheme, err = test.TestScheme()
 	Expect(err).NotTo(HaveOccurred())
 
-	RunSpecs(t, "Job Suite")
+	RunSpecs(t, "Module Suite")
 }

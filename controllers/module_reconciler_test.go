@@ -1,4 +1,4 @@
-package controllers_test
+package controllers
 
 import (
 	"context"
@@ -7,18 +7,21 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers"
-	"github.com/qbarrand/oot-operator/controllers/build"
-	"github.com/qbarrand/oot-operator/controllers/module"
-	"github.com/qbarrand/oot-operator/pkg/metrics"
+	"github.com/qbarrand/oot-operator/internal/build"
+	"github.com/qbarrand/oot-operator/internal/daemonset"
+	"github.com/qbarrand/oot-operator/internal/metrics"
+	"github.com/qbarrand/oot-operator/internal/module"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+const (
+	namespace = "namespace"
 )
 
 var _ = Describe("ModuleReconciler", func() {
@@ -27,7 +30,7 @@ var _ = Describe("ModuleReconciler", func() {
 			ctrl        *gomock.Controller
 			mockBM      *build.MockManager
 			mockCU      *module.MockConditionsUpdater
-			mockDC      *controllers.MockDaemonSetCreator
+			mockDC      *daemonset.MockDaemonSetCreator
 			mockKM      *module.MockKernelMapper
 			mockMetrics *metrics.MockMetrics
 		)
@@ -36,7 +39,7 @@ var _ = Describe("ModuleReconciler", func() {
 			ctrl = gomock.NewController(GinkgoT())
 			mockBM = build.NewMockManager(ctrl)
 			mockCU = module.NewMockConditionsUpdater(ctrl)
-			mockDC = controllers.NewMockDaemonSetCreator(ctrl)
+			mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 			mockKM = module.NewMockKernelMapper(ctrl)
 			mockMetrics = metrics.NewMockMetrics(ctrl)
 		})
@@ -76,7 +79,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(client, mockBM, mockDC, mockKM, mockCU, mockMetrics)
+			mr := NewModuleReconciler(client, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
 
 			ctx := context.TODO()
 
@@ -119,7 +122,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithObjects(&mod, &ds).
 				Build()
 
-			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics)
+			mr := NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
 
 			ctx := context.TODO()
 
@@ -183,7 +186,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics)
+			mr := NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
 
 			ctx := context.TODO()
 
@@ -276,7 +279,7 @@ var _ = Describe("ModuleReconciler", func() {
 				WithLists(&nodeList).
 				Build()
 
-			mr := controllers.NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics)
+			mr := NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
 
 			ctx := context.TODO()
 
@@ -307,81 +310,5 @@ var _ = Describe("ModuleReconciler", func() {
 			Expect(dsList.Items[0].Name).To(Equal(dsName))
 			Expect(dsList.Items[0].Labels).To(HaveKeyWithValue("test", "test"))
 		})
-	})
-})
-
-var _ = Describe("ModuleReconcilerNodePredicate", func() {
-	const kernelLabel = "kernel-label"
-
-	p := controllers.ModuleReconcilerNodePredicate(kernelLabel)
-
-	It("should return true for creations", func() {
-		ev := event.CreateEvent{
-			Object: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{kernelLabel: "1.2.3"},
-				},
-			},
-		}
-
-		Expect(
-			p.Create(ev),
-		).To(
-			BeTrue(),
-		)
-	})
-
-	It("should return true for label updates", func() {
-		ev := event.UpdateEvent{
-			ObjectOld: &v1.Node{},
-			ObjectNew: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{kernelLabel: "1.2.3"},
-				},
-			},
-		}
-
-		Expect(
-			p.Update(ev),
-		).To(
-			BeTrue(),
-		)
-	})
-
-	It("should return false for label updates without the expected label", func() {
-		ev := event.UpdateEvent{
-			ObjectOld: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"a": "b"},
-				},
-			},
-			ObjectNew: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"c": "d"},
-				},
-			},
-		}
-
-		Expect(
-			p.Update(ev),
-		).To(
-			BeFalse(),
-		)
-	})
-
-	It("should return false for deletions", func() {
-		ev := event.DeleteEvent{
-			Object: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{kernelLabel: "1.2.3"},
-				},
-			},
-		}
-
-		Expect(
-			p.Delete(ev),
-		).To(
-			BeFalse(),
-		)
 	})
 })

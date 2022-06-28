@@ -1,4 +1,4 @@
-package module_test
+package module
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers/module"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -34,8 +33,8 @@ var _ = Describe("SetAs{Ready,Progressing,Errored}", func() {
 	})
 
 	DescribeTable("Setting one condition to true, should set others to false",
-		func(expectedType string, call func(cu module.ConditionsUpdater) error) {
-			cu := module.NewConditionsUpdater(c)
+		func(expectedType string, call func(cu ConditionsUpdater) error) {
+			cu := NewConditionsUpdater(c)
 
 			Expect(
 				call(cu),
@@ -56,16 +55,16 @@ var _ = Describe("SetAs{Ready,Progressing,Errored}", func() {
 			Expect(mod.Status.Conditions).To(HaveLen(3))
 		},
 		Entry("Ready",
-			module.Ready,
-			func(su module.ConditionsUpdater) error { return su.SetAsReady(context.Background(), mod, "x", "x") },
+			ready,
+			func(su ConditionsUpdater) error { return su.SetAsReady(context.Background(), mod, "x", "x") },
 		),
 		Entry("Errored",
-			module.Errored,
-			func(su module.ConditionsUpdater) error { return su.SetAsErrored(context.Background(), mod, "x", "x") },
+			errored,
+			func(su ConditionsUpdater) error { return su.SetAsErrored(context.Background(), mod, "x", "x") },
 		),
 		Entry("Progressing",
-			module.Progressing,
-			func(cu module.ConditionsUpdater) error {
+			progressing,
+			func(cu ConditionsUpdater) error {
 				return cu.SetAsProgressing(context.Background(), mod, "x", "x")
 			},
 		),

@@ -7,20 +7,20 @@ import (
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 )
 
-//go:generate mockgen -source=modulehelper.go -package=build -destination=mock_modulehelper.go
+//go:generate mockgen -source=helper.go -package=build -destination=mock_helper.go
 
-type ModuleHelper interface {
+type Helper interface {
 	ApplyBuildArgOverrides(args []v1alpha1.BuildArg, overrides ...v1alpha1.BuildArg) []v1alpha1.BuildArg
-	GetReleventBuild(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping) *ootov1alpha1.Build
+	GetRelevantBuild(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping) *ootov1alpha1.Build
 }
 
-type moduleHelper struct{}
+type helper struct{}
 
-func NewModuleHelper() ModuleHelper {
-	return moduleHelper{}
+func NewHelper() Helper {
+	return &helper{}
 }
 
-func (m moduleHelper) ApplyBuildArgOverrides(args []v1alpha1.BuildArg, overrides ...v1alpha1.BuildArg) []v1alpha1.BuildArg {
+func (m *helper) ApplyBuildArgOverrides(args []v1alpha1.BuildArg, overrides ...v1alpha1.BuildArg) []v1alpha1.BuildArg {
 	overridesMap := make(map[string]v1alpha1.BuildArg, len(overrides))
 
 	for _, o := range overrides {
@@ -45,7 +45,7 @@ func (m moduleHelper) ApplyBuildArgOverrides(args []v1alpha1.BuildArg, overrides
 	return args
 }
 
-func (m moduleHelper) GetReleventBuild(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping) *ootov1alpha1.Build {
+func (m *helper) GetRelevantBuild(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping) *ootov1alpha1.Build {
 	if mod.Spec.Build == nil {
 		// km.Build cannot be nil in case mod.Build is nil, checked above
 		return km.Build.DeepCopy()

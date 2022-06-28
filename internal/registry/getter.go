@@ -1,4 +1,4 @@
-package build
+package registry
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 )
 
-//go:generate mockgen -source=getter.go -package=build -destination=mock_getter.go
+//go:generate mockgen -source=getter.go -package=registry -destination=mock_getter.go
 
 type Getter interface {
 	ImageExists(ctx context.Context, containerImage string, po ootov1alpha1.PullOptions) (bool, error)

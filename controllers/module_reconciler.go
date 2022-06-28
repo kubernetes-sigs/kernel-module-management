@@ -21,10 +21,11 @@ import (
 	"fmt"
 
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	"github.com/qbarrand/oot-operator/controllers/build"
-	"github.com/qbarrand/oot-operator/controllers/module"
-	"github.com/qbarrand/oot-operator/controllers/predicates"
-	"github.com/qbarrand/oot-operator/pkg/metrics"
+	"github.com/qbarrand/oot-operator/internal/build"
+	"github.com/qbarrand/oot-operator/internal/daemonset"
+	"github.com/qbarrand/oot-operator/internal/filter"
+	"github.com/qbarrand/oot-operator/internal/metrics"
+	"github.com/qbarrand/oot-operator/internal/module"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -38,7 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -46,27 +46,30 @@ import (
 type ModuleReconciler struct {
 	client.Client
 
-	bm      build.Manager
-	dc      DaemonSetCreator
-	km      module.KernelMapper
-	su      module.ConditionsUpdater
-	metrics metrics.Metrics
+	buildAPI      build.Manager
+	daemonAPI     daemonset.DaemonSetCreator
+	kernelAPI     module.KernelMapper
+	conditionsAPI module.ConditionsUpdater
+	metricsAPI    metrics.Metrics
+	filter        *filter.Filter
 }
 
 func NewModuleReconciler(
 	client client.Client,
-	bm build.Manager,
-	dg DaemonSetCreator,
-	km module.KernelMapper,
-	su module.ConditionsUpdater,
-	metrics metrics.Metrics) *ModuleReconciler {
+	buildAPI build.Manager,
+	daemonAPI daemonset.DaemonSetCreator,
+	kernelAPI module.KernelMapper,
+	conditionsAPI module.ConditionsUpdater,
+	metricsAPI metrics.Metrics,
+	filter *filter.Filter) *ModuleReconciler {
 	return &ModuleReconciler{
-		Client:  client,
-		bm:      bm,
-		dc:      dg,
-		km:      km,
-		su:      su,
-		metrics: metrics,
+		Client:        client,
+		buildAPI:      buildAPI,
+		daemonAPI:     daemonAPI,
+		kernelAPI:     kernelAPI,
+		conditionsAPI: conditionsAPI,
+		metricsAPI:    metricsAPI,
+		filter:        filter,
 	}
 }
 
@@ -105,7 +108,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	mappings := r.getKernelMappings(ctx, nodes, mod)
 
-	dsByKernelVersion, err := r.dc.ModuleDaemonSetsByKernelVersion(ctx, mod.Name, mod.Namespace)
+	dsByKernelVersion, err := r.daemonAPI.ModuleDaemonSetsByKernelVersion(ctx, mod.Name, mod.Namespace)
 	if err != nil {
 		return res, fmt.Errorf("could get DaemonSets for module %s: %v", mod.Name, err)
 	}
@@ -143,7 +146,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Garbage collect old DaemonSets for which there are no nodes.
 	validKernels := sets.StringKeySet(mappings)
 
-	deleted, err := r.dc.GarbageCollect(ctx, dsByKernelVersion, validKernels)
+	deleted, err := r.daemonAPI.GarbageCollect(ctx, dsByKernelVersion, validKernels)
 	if err != nil {
 		return res, fmt.Errorf("could not garbage collect DaemonSets: %v", err)
 	}
@@ -158,7 +161,7 @@ func (r *ModuleReconciler) getKernelMappings(ctx context.Context, nodes v1.NodeL
 	logger := log.FromContext(ctx)
 
 	for _, node := range nodes.Items {
-		osConfig := r.km.GetNodeOSConfig(&node)
+		osConfig := r.kernelAPI.GetNodeOSConfig(&node)
 		kernelVersion := node.Status.NodeInfo.KernelVersion
 
 		nodeLogger := logger.WithValues(
@@ -171,13 +174,13 @@ func (r *ModuleReconciler) getKernelMappings(ctx context.Context, nodes v1.NodeL
 			continue
 		}
 
-		m, err := r.km.FindMappingForKernel(mod.Spec.KernelMappings, kernelVersion)
+		m, err := r.kernelAPI.FindMappingForKernel(mod.Spec.KernelMappings, kernelVersion)
 		if err != nil {
 			nodeLogger.Info("no suitable container image found; skipping node")
 			continue
 		}
 
-		m, err = r.km.PrepareKernelMapping(m, osConfig)
+		m, err = r.kernelAPI.PrepareKernelMapping(m, osConfig)
 		if err != nil {
 			nodeLogger.Info("failed to substitute the template variables in the mapping", "error", err)
 			continue
@@ -205,7 +208,7 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildRes, err := r.bm.Sync(buildCtx, *mod, *km, kernelVersion)
+	buildRes, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
@@ -232,7 +235,7 @@ func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
 	}
 
 	_, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-		return r.dc.SetDriverContainerAsDesired(ctx, ds, km.ContainerImage, *mod, kernelVersion)
+		return r.daemonAPI.SetDriverContainerAsDesired(ctx, ds, km.ContainerImage, *mod, kernelVersion)
 	})
 
 	return err
@@ -255,7 +258,7 @@ func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *ootov1al
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-		return r.dc.SetDevicePluginAsDesired(ctx, ds, mod)
+		return r.daemonAPI.SetDevicePluginAsDesired(ctx, ds, mod)
 	})
 
 	if err == nil {
@@ -274,7 +277,7 @@ func (r *ModuleReconciler) setKMMOMetrics(ctx context.Context) {
 		logger.V(1).Info("failed to list KMMomodules for metrics", "error", err)
 	}
 
-	r.metrics.SetExistingKMMOModules(len(mods.Items))
+	r.metricsAPI.SetExistingKMMOModules(len(mods.Items))
 }
 
 func (r *ModuleReconciler) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*ootov1alpha1.Module, error) {
@@ -288,30 +291,17 @@ func (r *ModuleReconciler) getRequestedModule(ctx context.Context, namespacedNam
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string) error {
-	nmm := NewNodeModuleMapper(
-		r.Client,
-		mgr.GetLogger().WithName("controller/module/node-module-mapper"),
-	)
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ootov1alpha1.Module{}).
 		Owns(&appsv1.DaemonSet{}).
 		Owns(&batchv1.Job{}).
 		Watches(
 			&source.Kind{Type: &v1.Node{}},
-			handler.EnqueueRequestsFromMapFunc(nmm.FindModulesForNode),
+			handler.EnqueueRequestsFromMapFunc(r.filter.FindModulesForNode),
 			builder.WithPredicates(
-				ModuleReconcilerNodePredicate(kernelLabel),
+				r.filter.ModuleReconcilerNodePredicate(kernelLabel),
 			),
 		).
 		Named("module").
 		Complete(r)
-}
-
-func ModuleReconcilerNodePredicate(kernelLabel string) predicate.Predicate {
-	return predicate.And(
-		predicates.SkipDeletions,
-		predicates.HasLabel(kernelLabel),
-		predicate.LabelChangedPredicate{},
-	)
 }
