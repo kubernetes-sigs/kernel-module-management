@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/internal/build"
+	"github.com/qbarrand/oot-operator/internal/client"
 	"github.com/qbarrand/oot-operator/internal/daemonset"
 	"github.com/qbarrand/oot-operator/internal/metrics"
 	"github.com/qbarrand/oot-operator/internal/module"
@@ -16,7 +17,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -28,6 +28,7 @@ var _ = Describe("ModuleReconciler", func() {
 	Describe("Reconcile", func() {
 		var (
 			ctrl        *gomock.Controller
+			clnt        *client.MockClient
 			mockBM      *build.MockManager
 			mockCU      *module.MockConditionsUpdater
 			mockDC      *daemonset.MockDaemonSetCreator
@@ -37,6 +38,7 @@ var _ = Describe("ModuleReconciler", func() {
 
 		BeforeEach(func() {
 			ctrl = gomock.NewController(GinkgoT())
+			clnt = client.NewMockClient(ctrl)
 			mockBM = build.NewMockManager(ctrl)
 			mockCU = module.NewMockConditionsUpdater(ctrl)
 			mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
@@ -64,29 +66,31 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			nodeList := v1.NodeList{
-				Items: []v1.Node{
-					{
-						ObjectMeta: metav1.ObjectMeta{Name: "node1"},
-					},
-				},
-			}
-
-			client := fake.
-				NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(&mod).
-				WithLists(&nodeList).
-				Build()
-
-			mr := NewModuleReconciler(client, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
-
 			ctx := context.TODO()
+
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+						m.ObjectMeta = mod.ObjectMeta
+						m.Spec = mod.Spec
+						return nil
+					},
+				),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
+						list.Items = []ootov1alpha1.Module{mod}
+						return nil
+					},
+				),
+				mockMetrics.EXPECT().SetExistingKMMOModules(1),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()),
+			)
+
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
 
 			dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
 
 			gomock.InOrder(
-				mockMetrics.EXPECT().SetExistingKMMOModules(1),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
 			)
@@ -116,20 +120,30 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			c := fake.
-				NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(&mod, &ds).
-				Build()
-
-			mr := NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
-
 			ctx := context.TODO()
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+						m.ObjectMeta = mod.ObjectMeta
+						m.Spec = mod.Spec
+						return nil
+					},
+				),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
+						list.Items = []ootov1alpha1.Module{mod}
+						return nil
+					},
+				),
+				mockMetrics.EXPECT().SetExistingKMMOModules(1),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()),
+			)
+
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
 
 			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
 			gomock.InOrder(
-				mockMetrics.EXPECT().SetExistingKMMOModules(1),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
 			)
@@ -179,16 +193,32 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			c := fake.
-				NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(&mod).
-				WithLists(&nodeList).
-				Build()
-
-			mr := NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
-
 			ctx := context.TODO()
+
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+						m.ObjectMeta = mod.ObjectMeta
+						m.Spec = mod.Spec
+						return nil
+					},
+				),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
+						return nil
+					},
+				),
+				mockMetrics.EXPECT().SetExistingKMMOModules(0),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+						list.Items = nodeList.Items
+						return nil
+					},
+				),
+				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()),
+			)
+
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
 
 			ds := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -198,7 +228,6 @@ var _ = Describe("ModuleReconciler", func() {
 			}
 
 			gomock.InOrder(
-				mockMetrics.EXPECT().SetExistingKMMOModules(1),
 				mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
@@ -210,12 +239,6 @@ var _ = Describe("ModuleReconciler", func() {
 			res, err := mr.Reconcile(context.TODO(), req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{}))
-
-			dsList := appsv1.DaemonSetList{}
-
-			err = c.List(ctx, &dsList)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(dsList.Items).To(HaveLen(1))
 		})
 
 		It("should patch the DaemonSet when it already exists", func() {
@@ -272,21 +295,38 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			c := fake.
-				NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(&mod, &ds).
-				WithLists(&nodeList).
-				Build()
-
-			mr := NewModuleReconciler(c, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
-
 			ctx := context.TODO()
+
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+						m.ObjectMeta = mod.ObjectMeta
+						m.Spec = mod.Spec
+						return nil
+					},
+				),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
+						list.Items = []ootov1alpha1.Module{mod}
+						return nil
+					},
+				),
+				mockMetrics.EXPECT().SetExistingKMMOModules(1),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+						list.Items = nodeList.Items
+						return nil
+					},
+				),
+				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()),
+				clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
+			)
+
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
 
 			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
 			gomock.InOrder(
-				mockMetrics.EXPECT().SetExistingKMMOModules(1),
 				mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
@@ -301,14 +341,6 @@ var _ = Describe("ModuleReconciler", func() {
 			res, err := mr.Reconcile(context.TODO(), req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{}))
-
-			dsList := appsv1.DaemonSetList{}
-
-			err = c.List(ctx, &dsList)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(dsList.Items).To(HaveLen(1))
-			Expect(dsList.Items[0].Name).To(Equal(dsName))
-			Expect(dsList.Items[0].Labels).To(HaveKeyWithValue("test", "test"))
 		})
 	})
 })

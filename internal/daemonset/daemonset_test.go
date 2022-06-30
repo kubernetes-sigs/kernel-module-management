@@ -2,18 +2,20 @@ package daemonset
 
 import (
 	"context"
-
+	"errors"
 	"github.com/go-openapi/swag"
+
+	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	"github.com/qbarrand/oot-operator/internal/client"
 	"github.com/qbarrand/oot-operator/internal/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const (
@@ -24,8 +26,18 @@ const (
 	devicePluginImage = "device-plugin-image"
 )
 
+var (
+	ctrl *gomock.Controller
+	clnt *client.MockClient
+)
+
 var _ = Describe("SetDriverContainerAsDesired", func() {
 	dg := NewCreator(nil, kernelLabel, scheme)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+	})
 
 	It("should return an error if the DaemonSet is nil", func() {
 		Expect(
@@ -216,6 +228,137 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			BeTrue(), cmp.Diff(expected, ds),
 		)
 	})
+
+	Describe("GarbageCollect", func() {
+		It("should only delete one of the two DaemonSets if only one is not used", func() {
+			const (
+				legitKernelVersion    = "legit-kernel-version"
+				legitName             = "legit"
+				notLegitKernelVersion = "not-legit-kernel-version"
+				notLegitName          = "not-legit"
+			)
+
+			dsLegit := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: legitName, Namespace: namespace},
+			}
+
+			dsNotLegit := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: namespace},
+			}
+
+			clnt.EXPECT().Delete(context.TODO(), &dsNotLegit).AnyTimes()
+
+			dc := NewCreator(clnt, "", scheme)
+
+			existingDS := map[string]*appsv1.DaemonSet{
+				legitKernelVersion:    &dsLegit,
+				notLegitKernelVersion: &dsNotLegit,
+			}
+
+			validKernels := sets.NewString(legitKernelVersion)
+
+			res, err := dc.GarbageCollect(context.TODO(), existingDS, validKernels)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal([]string{notLegitName}))
+		})
+
+		It("should return an error if a deletion failed", func() {
+			clnt.EXPECT().Delete(context.TODO(), gomock.Any()).Return(
+				errors.New("client returns some error"),
+			)
+
+			dc := NewCreator(clnt, "", scheme)
+
+			existingDS := map[string]*appsv1.DaemonSet{
+				"some-kernel-version": {},
+			}
+
+			_, err := dc.GarbageCollect(context.TODO(), existingDS, sets.NewString())
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("ModuleDaemonSetsByKernelVersion", func() {
+		It("should return an empty map if no DaemonSets are present", func() {
+			clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any())
+
+			dc := NewCreator(clnt, kernelLabel, scheme)
+
+			mod := ootov1alpha1.Module{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
+			}
+
+			m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod.Name, mod.Namespace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(m).To(BeEmpty())
+		})
+
+		It("should return an error if two DaemonSets are present for the same kernel", func() {
+			clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any()).Return(errors.New("some error"))
+
+			dc := NewCreator(clnt, kernelLabel, scheme)
+			mod := ootov1alpha1.Module{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
+			}
+
+			_, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod.Name, mod.Namespace)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return a map if two DaemonSets are present for different kernels", func() {
+			const otherKernelVersion = "4.5.6"
+
+			ds1 := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ds1",
+					Namespace: namespace,
+					Labels: map[string]string{
+						"oot.node.kubernetes.io/module.name": moduleName,
+						kernelLabel:                          kernelVersion,
+					},
+				},
+			}
+
+			ds2 := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ds2",
+					Namespace: namespace,
+					Labels: map[string]string{
+						"oot.node.kubernetes.io/module.name": moduleName,
+						kernelLabel:                          otherKernelVersion,
+					},
+				},
+			}
+
+			clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
+					list.Items = append(list.Items, ds1)
+					list.Items = append(list.Items, ds2)
+					return nil
+				},
+			)
+
+			dc := NewCreator(clnt, kernelLabel, scheme)
+			mod := ootov1alpha1.Module{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
+			}
+
+			m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod.Name, mod.Namespace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(m).To(HaveLen(2))
+			Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
+			Expect(m).To(HaveKeyWithValue(otherKernelVersion, &ds2))
+		})
+	})
 })
 
 var _ = Describe("SetDevicePluginAsDesired", func() {
@@ -378,10 +521,14 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 			BeTrue(), cmp.Diff(expected, ds),
 		)
 	})
-
 })
 
 var _ = Describe("GarbageCollect", func() {
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+	})
+
 	It("should only delete one of the two DaemonSets if only one is not used", func() {
 		const (
 			legitKernelVersion    = "legit-kernel-version"
@@ -398,9 +545,8 @@ var _ = Describe("GarbageCollect", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: namespace},
 		}
 
-		client := fake.NewClientBuilder().WithObjects(&dsLegit, &dsNotLegit).Build()
-
-		dc := NewCreator(client, "", scheme)
+		clnt.EXPECT().Delete(context.TODO(), &dsNotLegit).AnyTimes()
+		dc := NewCreator(clnt, "", scheme)
 
 		existingDS := map[string]*appsv1.DaemonSet{
 			legitKernelVersion:    &dsLegit,
@@ -414,24 +560,12 @@ var _ = Describe("GarbageCollect", func() {
 		).To(
 			Equal([]string{notLegitName}),
 		)
-
-		afterDeleteDaemonSetList := appsv1.DaemonSetList{}
-
-		Expect(
-			client.List(context.TODO(), &afterDeleteDaemonSetList),
-		).To(
-			Succeed(),
-		)
-
-		Expect(afterDeleteDaemonSetList.Items).To(HaveLen(1))
-		Expect(afterDeleteDaemonSetList.Items[0].Name).To(Equal(legitName))
 	})
 
 	It("should return an error if a deletion failed", func() {
-		dc := NewCreator(
-			fake.NewClientBuilder().Build(),
-			"",
-			scheme)
+		clnt.EXPECT().Delete(context.TODO(), gomock.Any()).Return(errors.New("some deleting error"))
+
+		dc := NewCreator(clnt, "", scheme)
 
 		existingDS := map[string]*appsv1.DaemonSet{
 			"some-kernel-version": {},
@@ -443,11 +577,15 @@ var _ = Describe("GarbageCollect", func() {
 })
 
 var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+	})
+
 	It("should return an empty map if no DaemonSets are present", func() {
-		dc := NewCreator(
-			fake.NewClientBuilder().WithScheme(scheme).Build(),
-			kernelLabel,
-			scheme)
+		clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any())
+
+		dc := NewCreator(clnt, kernelLabel, scheme)
 
 		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
@@ -476,12 +614,16 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		dc := NewCreator(
-			fake.NewClientBuilder().WithScheme(scheme).WithObjects(&ds1, &ds2).Build(),
-			kernelLabel,
-			scheme)
+		ctx := context.TODO()
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
+				list.Items = []appsv1.DaemonSet{ds1, ds2}
+				return nil
+			},
+		)
+		dc := NewCreator(clnt, kernelLabel, scheme)
 
-		_, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
+		_, err := dc.ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -510,12 +652,18 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		dc := NewCreator(
-			fake.NewClientBuilder().WithScheme(scheme).WithObjects(&ds1, &ds2).Build(),
-			kernelLabel,
-			scheme)
+		ctx := context.TODO()
 
-		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
+				list.Items = []appsv1.DaemonSet{ds1, ds2}
+				return nil
+			},
+		)
+
+		dc := NewCreator(clnt, kernelLabel, scheme)
+
+		m, err := dc.ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).To(HaveLen(2))
 		Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
@@ -544,15 +692,20 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		dc := NewCreator(
-			fake.NewClientBuilder().WithScheme(scheme).WithObjects(&ds1, &ds2).Build(),
-			kernelLabel,
-			scheme)
+		ctx := context.TODO()
+
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
+				list.Items = []appsv1.DaemonSet{ds1, ds2}
+				return nil
+			},
+		)
+
+		dc := NewCreator(clnt, kernelLabel, scheme)
 
 		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).To(HaveLen(1))
 		Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
 	})
-
 })

@@ -1,18 +1,28 @@
 package filter
 
 import (
+	"context"
+
 	"github.com/go-logr/logr"
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	mockClient "github.com/qbarrand/oot-operator/internal/client"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+var (
+	ctrl *gomock.Controller
+	clnt *mockClient.MockClient
 )
 
 var _ = Describe("hasLabel", func() {
@@ -56,8 +66,11 @@ var _ = Describe("skipDeletions", func() {
 
 var _ = Describe("ModuleReconcilerNodePredicate", func() {
 	const kernelLabel = "kernel-label"
+	var p predicate.Predicate
 
-	p := New(fake.NewClientBuilder().WithScheme(scheme).Build(), logr.Discard()).ModuleReconcilerNodePredicate(kernelLabel)
+	BeforeEach(func() {
+		p = New(nil, logr.Discard()).ModuleReconcilerNodePredicate(kernelLabel)
+	})
 
 	It("should return true for creations", func() {
 		ev := event.CreateEvent{
@@ -135,7 +148,12 @@ var _ = Describe("NodeKernelReconcilerPredicate", func() {
 		labelName     = "test-label"
 	)
 
-	p := New(fake.NewClientBuilder().WithScheme(scheme).Build(), logr.Discard()).NodeKernelReconcilerPredicate(labelName)
+	var p predicate.Predicate
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		p = New(nil, logr.Discard()).NodeKernelReconcilerPredicate(labelName)
+	})
 
 	It("should return true if the node has no labels", func() {
 		ev := event.CreateEvent{
@@ -212,9 +230,15 @@ var _ = Describe("NodeKernelReconcilerPredicate", func() {
 })
 
 var _ = Describe("FindModulesForNode", func() {
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = mockClient.NewMockClient(ctrl)
+	})
 
 	It("should return nothing if there are no modules", func() {
-		p := New(fake.NewClientBuilder().WithScheme(scheme).Build(), logr.Discard())
+		clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any())
+
+		p := New(clnt, logr.Discard())
 		Expect(
 			p.FindModulesForNode(&v1.Node{}),
 		).To(
@@ -229,7 +253,14 @@ var _ = Describe("FindModulesForNode", func() {
 			},
 		}
 
-		p := New(fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mod).Build(), logr.Discard())
+		clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
+				list.Items = []ootov1alpha1.Module{mod}
+				return nil
+			},
+		)
+
+		p := New(clnt, logr.Discard())
 
 		Expect(
 			p.FindModulesForNode(&v1.Node{}),
@@ -258,8 +289,14 @@ var _ = Describe("FindModulesForNode", func() {
 				Selector: map[string]string{"other-key": "other-value"},
 			},
 		}
+		clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
+				list.Items = []ootov1alpha1.Module{mod1, mod2}
+				return nil
+			},
+		)
 
-		p := New(fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mod1, &mod2, &node).Build(), logr.Discard())
+		p := New(clnt, logr.Discard())
 
 		expectedReq := reconcile.Request{
 			NamespacedName: types.NamespacedName{Name: mod1Name},

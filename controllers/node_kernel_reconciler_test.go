@@ -2,18 +2,28 @@ package controllers
 
 import (
 	"context"
+	"errors"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/qbarrand/oot-operator/internal/client"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	runtimectrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("NodeKernelReconciler", func() {
 	Describe("Reconcile", func() {
+		var (
+			gCtrl *gomock.Controller
+			clnt  *client.MockClient
+		)
+		BeforeEach(func() {
+			gCtrl = gomock.NewController(GinkgoT())
+			clnt = client.NewMockClient(gCtrl)
+		})
 		const (
 			kernelVersion = "1.2.3"
 			labelName     = "label-name"
@@ -21,12 +31,15 @@ var _ = Describe("NodeKernelReconciler", func() {
 		)
 
 		It("should return an error if the node cannot be found anymore", func() {
-			nkr := NewNodeKernelReconciler(fake.NewClientBuilder().Build(), labelName, nil)
+			ctx := context.TODO()
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(errors.New("some error"))
+
+			nkr := NewNodeKernelReconciler(clnt, labelName, nil)
 			req := runtimectrl.Request{
 				NamespacedName: types.NamespacedName{Name: nodeName},
 			}
 
-			_, err := nkr.Reconcile(context.TODO(), req)
+			_, err := nkr.Reconcile(ctx, req)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -38,24 +51,26 @@ var _ = Describe("NodeKernelReconciler", func() {
 				},
 			}
 
-			client := fake.NewClientBuilder().WithObjects(&node).Build()
+			ctx := context.TODO()
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, n *v1.Node) error {
+						n.ObjectMeta = node.ObjectMeta
+						n.Status = node.Status
+						return nil
+					},
+				),
+				clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
+			)
 
-			nkr := NewNodeKernelReconciler(client, labelName, nil)
+			nkr := NewNodeKernelReconciler(clnt, labelName, nil)
 			req := runtimectrl.Request{
 				NamespacedName: types.NamespacedName{Name: nodeName},
 			}
 
-			ctx := context.TODO()
-
 			res, err := nkr.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(res))
-
-			updatedNode := v1.Node{}
-
-			err = client.Get(ctx, types.NamespacedName{Name: nodeName}, &updatedNode)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updatedNode.Labels).To(HaveKeyWithValue(labelName, kernelVersion))
 		})
 
 		It("should set the label if it already exists", func() {
@@ -69,24 +84,26 @@ var _ = Describe("NodeKernelReconciler", func() {
 				},
 			}
 
-			client := fake.NewClientBuilder().WithObjects(&node).Build()
+			ctx := context.TODO()
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, n *v1.Node) error {
+						n.ObjectMeta = node.ObjectMeta
+						n.Status = node.Status
+						return nil
+					},
+				),
+				clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
+			)
 
-			nkr := NewNodeKernelReconciler(client, labelName, nil)
+			nkr := NewNodeKernelReconciler(clnt, labelName, nil)
 			req := runtimectrl.Request{
 				NamespacedName: types.NamespacedName{Name: nodeName},
 			}
 
-			ctx := context.TODO()
-
 			res, err := nkr.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(res))
-
-			updatedNode := v1.Node{}
-
-			err = client.Get(ctx, types.NamespacedName{Name: nodeName}, &updatedNode)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updatedNode.Labels).To(HaveKeyWithValue(labelName, kernelVersion))
 		})
 	})
 })

@@ -3,12 +3,12 @@ package module
 import (
 	"context"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	"github.com/qbarrand/oot-operator/internal/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("SetAs{Ready,Progressing,Errored}", func() {
@@ -17,31 +17,24 @@ var _ = Describe("SetAs{Ready,Progressing,Errored}", func() {
 		namespace = "sr-namespace"
 	)
 
-	var (
-		c   ctrlclient.StatusWriter
-		mod *ootov1alpha1.Module
-	)
+	var mod *ootov1alpha1.Module
 
 	BeforeEach(func() {
 		mod = &ootov1alpha1.Module{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
-
-		c = fake.
-			NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(mod).
-			Build()
 	})
 
 	DescribeTable("Setting one condition to true, should set others to false",
 		func(expectedType string, call func(cu ConditionsUpdater) error) {
+			c := client.NewMockClient(gomock.NewController(GinkgoT()))
+			c.EXPECT().Update(context.TODO(), mod)
+
 			cu := NewConditionsUpdater(c)
 
 			Expect(
 				call(cu),
-			).
-				To(
-					Succeed(),
-				)
+			).To(
+				Succeed(),
+			)
 
 			for _, cond := range mod.Status.Conditions {
 				if cond.Type == expectedType {

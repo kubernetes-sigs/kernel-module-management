@@ -5,17 +5,15 @@ import (
 	"errors"
 
 	"github.com/golang/mock/gomock"
-	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/internal/build"
+	"github.com/qbarrand/oot-operator/internal/client"
 	"github.com/qbarrand/oot-operator/internal/constants"
 	"github.com/qbarrand/oot-operator/internal/registry"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Labels", func() {
@@ -39,13 +37,16 @@ var _ = Describe("Labels", func() {
 var _ = Describe("JobManager", func() {
 	Describe("Sync", func() {
 		var (
+			ctrl   *gomock.Controller
+			clnt   *client.MockClient
 			getter *registry.MockGetter
 			maker  *MockMaker
 			helper *build.MockHelper
 		)
 
 		BeforeEach(func() {
-			ctrl := gomock.NewController(GinkgoT())
+			ctrl = gomock.NewController(GinkgoT())
+			clnt = client.NewMockClient(ctrl)
 			getter = registry.NewMockGetter(ctrl)
 			maker = NewMockMaker(ctrl)
 			helper = build.NewMockHelper(ctrl)
@@ -103,7 +104,6 @@ var _ = Describe("JobManager", func() {
 
 		DescribeTable("should return the correct status depending on the job status",
 			func(s batchv1.JobStatus, r build.Result, expectsErr bool) {
-
 				j := batchv1.Job{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels:    labels(mod, kernelVersion),
@@ -111,17 +111,20 @@ var _ = Describe("JobManager", func() {
 					},
 					Status: s,
 				}
-
-				client := fake.NewClientBuilder().WithObjects(&j).Build()
-
 				ctx := context.TODO()
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
+						list.Items = []batchv1.Job{j}
+						return nil
+					},
+				)
 
 				gomock.InOrder(
 					helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
 					getter.EXPECT().ImageExists(ctx, imageName, po).Return(false, nil),
 				)
 
-				mgr := NewBuildManager(client, getter, maker, helper)
+				mgr := NewBuildManager(clnt, getter, maker, helper)
 
 				res, err := mgr.Sync(ctx, mod, km, kernelVersion)
 
@@ -145,8 +148,9 @@ var _ = Describe("JobManager", func() {
 				getter.EXPECT().ImageExists(ctx, imageName, po),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(nil, errors.New("random error")),
 			)
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any())
 
-			mgr := NewBuildManager(fake.NewClientBuilder().Build(), getter, maker, helper)
+			mgr := NewBuildManager(clnt, getter, maker, helper)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion),
@@ -177,30 +181,17 @@ var _ = Describe("JobManager", func() {
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(&j, nil),
 			)
 
-			client := fake.NewClientBuilder().Build()
+			gomock.InOrder(
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()),
+				clnt.EXPECT().Create(ctx, &j),
+			)
 
-			mgr := NewBuildManager(client, getter, maker, helper)
+			mgr := NewBuildManager(clnt, getter, maker, helper)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion),
 			).To(
 				Equal(build.Result{Requeue: true, Status: build.StatusCreated}),
-			)
-
-			newJob := batchv1.Job{}
-
-			key := types.NamespacedName{Name: jobName, Namespace: namespace}
-
-			Expect(
-				client.Get(ctx, key, &newJob),
-			).To(
-				Succeed(),
-			)
-
-			Expect(
-				cmp.Diff(j, newJob),
-			).To(
-				BeEmpty(),
 			)
 		})
 	})
