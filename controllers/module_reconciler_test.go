@@ -66,7 +66,7 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
@@ -95,7 +95,7 @@ var _ = Describe("ModuleReconciler", func() {
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
 			)
 
-			res, err := mr.Reconcile(context.TODO(), req)
+			res, err := mr.Reconcile(context.Background(), req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{}))
 		})
@@ -120,7 +120,7 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			ctx := context.TODO()
+			ctx := context.Background()
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
 					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
@@ -148,7 +148,7 @@ var _ = Describe("ModuleReconciler", func() {
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
 			)
 
-			res, err := mr.Reconcile(context.TODO(), req)
+			res, err := mr.Reconcile(context.Background(), req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{}))
 		})
@@ -193,7 +193,7 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
@@ -232,11 +232,11 @@ var _ = Describe("ModuleReconciler", func() {
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace),
-				mockDC.EXPECT().SetDriverContainerAsDesired(context.TODO(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
+				mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
 				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString(kernelVersion)),
 			)
 
-			res, err := mr.Reconcile(context.TODO(), req)
+			res, err := mr.Reconcile(context.Background(), req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{}))
 		})
@@ -295,7 +295,7 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
@@ -331,14 +331,14 @@ var _ = Describe("ModuleReconciler", func() {
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-				mockDC.EXPECT().SetDriverContainerAsDesired(context.TODO(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
+				mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
 					func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ ootov1alpha1.Module, _ string) {
 						d.SetLabels(map[string]string{"test": "test"})
 					}),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
 			)
 
-			res, err := mr.Reconcile(context.TODO(), req)
+			res, err := mr.Reconcile(context.Background(), req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{}))
 		})

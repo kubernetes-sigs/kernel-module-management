@@ -31,7 +31,7 @@ var _ = Describe("NodeKernelReconciler", func() {
 		)
 
 		It("should return an error if the node cannot be found anymore", func() {
-			ctx := context.TODO()
+			ctx := context.Background()
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(errors.New("some error"))
 
 			nkr := NewNodeKernelReconciler(clnt, labelName, nil)
@@ -51,7 +51,7 @@ var _ = Describe("NodeKernelReconciler", func() {
 				},
 			}
 
-			ctx := context.TODO()
+			ctx := context.Background()
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 					func(_ interface{}, _ interface{}, n *v1.Node) error {
@@ -84,7 +84,7 @@ var _ = Describe("NodeKernelReconciler", func() {
 				},
 			}
 
-			ctx := context.TODO()
+			ctx := context.Background()
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 					func(_ interface{}, _ interface{}, n *v1.Node) error {

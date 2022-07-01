@@ -41,7 +41,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should return an error if the DaemonSet is nil", func() {
 		Expect(
-			dg.SetDriverContainerAsDesired(context.TODO(), nil, "", ootov1alpha1.Module{}, ""),
+			dg.SetDriverContainerAsDesired(context.Background(), nil, "", ootov1alpha1.Module{}, ""),
 		).To(
 			HaveOccurred(),
 		)
@@ -49,7 +49,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should return an error if the image is empty", func() {
 		Expect(
-			dg.SetDriverContainerAsDesired(context.TODO(), &appsv1.DaemonSet{}, "", ootov1alpha1.Module{}, ""),
+			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, "", ootov1alpha1.Module{}, ""),
 		).To(
 			HaveOccurred(),
 		)
@@ -57,7 +57,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should return an error if the kernel version is empty", func() {
 		Expect(
-			dg.SetDriverContainerAsDesired(context.TODO(), &appsv1.DaemonSet{}, "", ootov1alpha1.Module{}, ""),
+			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, "", ootov1alpha1.Module{}, ""),
 		).To(
 			HaveOccurred(),
 		)
@@ -72,7 +72,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 		ds := appsv1.DaemonSet{}
 
-		err := dg.SetDriverContainerAsDesired(context.TODO(), &ds, "test-image", mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
@@ -89,7 +89,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 		ds := appsv1.DaemonSet{}
 
-		err := dg.SetDriverContainerAsDesired(context.TODO(), &ds, "test-image", mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
 		Expect(ds.Spec.Template.Spec.Volumes[2]).To(Equal(vol))
@@ -142,7 +142,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			},
 		}
 
-		err := dg.SetDriverContainerAsDesired(context.TODO(), &ds, driverContainerImage, mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, driverContainerImage, mod, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 
 		podLabels := map[string]string{
@@ -246,7 +246,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: namespace},
 			}
 
-			clnt.EXPECT().Delete(context.TODO(), &dsNotLegit).AnyTimes()
+			clnt.EXPECT().Delete(context.Background(), &dsNotLegit).AnyTimes()
 
 			dc := NewCreator(clnt, "", scheme)
 
@@ -257,13 +257,13 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 			validKernels := sets.NewString(legitKernelVersion)
 
-			res, err := dc.GarbageCollect(context.TODO(), existingDS, validKernels)
+			res, err := dc.GarbageCollect(context.Background(), existingDS, validKernels)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal([]string{notLegitName}))
 		})
 
 		It("should return an error if a deletion failed", func() {
-			clnt.EXPECT().Delete(context.TODO(), gomock.Any()).Return(
+			clnt.EXPECT().Delete(context.Background(), gomock.Any()).Return(
 				errors.New("client returns some error"),
 			)
 
@@ -273,14 +273,14 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				"some-kernel-version": {},
 			}
 
-			_, err := dc.GarbageCollect(context.TODO(), existingDS, sets.NewString())
+			_, err := dc.GarbageCollect(context.Background(), existingDS, sets.NewString())
 			Expect(err).To(HaveOccurred())
 		})
 	})
 
 	Describe("ModuleDaemonSetsByKernelVersion", func() {
 		It("should return an empty map if no DaemonSets are present", func() {
-			clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any())
+			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any())
 
 			dc := NewCreator(clnt, kernelLabel, scheme)
 
@@ -291,13 +291,13 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				},
 			}
 
-			m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod.Name, mod.Namespace)
+			m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), mod.Name, mod.Namespace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(m).To(BeEmpty())
 		})
 
 		It("should return an error if two DaemonSets are present for the same kernel", func() {
-			clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any()).Return(errors.New("some error"))
+			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).Return(errors.New("some error"))
 
 			dc := NewCreator(clnt, kernelLabel, scheme)
 			mod := ootov1alpha1.Module{
@@ -307,7 +307,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				},
 			}
 
-			_, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod.Name, mod.Namespace)
+			_, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), mod.Name, mod.Namespace)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -336,7 +336,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				},
 			}
 
-			clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any()).DoAndReturn(
+			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
 					list.Items = append(list.Items, ds1)
 					list.Items = append(list.Items, ds2)
@@ -352,7 +352,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				},
 			}
 
-			m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), mod.Name, mod.Namespace)
+			m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), mod.Name, mod.Namespace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(m).To(HaveLen(2))
 			Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
@@ -366,7 +366,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 
 	It("should return an error if the DaemonSet is nil", func() {
 		Expect(
-			dg.SetDevicePluginAsDesired(context.TODO(), nil, &ootov1alpha1.Module{}),
+			dg.SetDevicePluginAsDesired(context.Background(), nil, &ootov1alpha1.Module{}),
 		).To(
 			HaveOccurred(),
 		)
@@ -375,7 +375,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 	It("should return an error if DevicePlugin not set in the Spec", func() {
 		ds := appsv1.DaemonSet{}
 		Expect(
-			dg.SetDevicePluginAsDesired(context.TODO(), &ds, &ootov1alpha1.Module{}),
+			dg.SetDevicePluginAsDesired(context.Background(), &ds, &ootov1alpha1.Module{}),
 		).To(
 			HaveOccurred(),
 		)
@@ -395,7 +395,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 
 		ds := appsv1.DaemonSet{}
 
-		err := dg.SetDevicePluginAsDesired(context.TODO(), &ds, &mod)
+		err := dg.SetDevicePluginAsDesired(context.Background(), &ds, &mod)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		Expect(ds.Spec.Template.Spec.Volumes[1]).To(Equal(vol))
@@ -403,9 +403,8 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 
 	It("should work as expected", func() {
 		const (
-			driverContainerImage = "driver-image"
-			dsName               = "ds-name"
-			serviceAccountName   = "some-service-account"
+			dsName             = "ds-name"
+			serviceAccountName = "some-service-account"
 		)
 
 		dcVolMount := v1.VolumeMount{
@@ -448,7 +447,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 			},
 		}
 
-		err := dg.SetDevicePluginAsDesired(context.TODO(), &ds, &mod)
+		err := dg.SetDevicePluginAsDesired(context.Background(), &ds, &mod)
 		Expect(err).NotTo(HaveOccurred())
 
 		podLabels := map[string]string{
@@ -545,7 +544,7 @@ var _ = Describe("GarbageCollect", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: namespace},
 		}
 
-		clnt.EXPECT().Delete(context.TODO(), &dsNotLegit).AnyTimes()
+		clnt.EXPECT().Delete(context.Background(), &dsNotLegit).AnyTimes()
 		dc := NewCreator(clnt, "", scheme)
 
 		existingDS := map[string]*appsv1.DaemonSet{
@@ -556,14 +555,14 @@ var _ = Describe("GarbageCollect", func() {
 		validKernels := sets.NewString(legitKernelVersion)
 
 		Expect(
-			dc.GarbageCollect(context.TODO(), existingDS, validKernels),
+			dc.GarbageCollect(context.Background(), existingDS, validKernels),
 		).To(
 			Equal([]string{notLegitName}),
 		)
 	})
 
 	It("should return an error if a deletion failed", func() {
-		clnt.EXPECT().Delete(context.TODO(), gomock.Any()).Return(errors.New("some deleting error"))
+		clnt.EXPECT().Delete(context.Background(), gomock.Any()).Return(errors.New("some deleting error"))
 
 		dc := NewCreator(clnt, "", scheme)
 
@@ -571,7 +570,7 @@ var _ = Describe("GarbageCollect", func() {
 			"some-kernel-version": {},
 		}
 
-		_, err := dc.GarbageCollect(context.TODO(), existingDS, sets.NewString())
+		_, err := dc.GarbageCollect(context.Background(), existingDS, sets.NewString())
 		Expect(err).To(HaveOccurred())
 	})
 })
@@ -583,11 +582,11 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 	})
 
 	It("should return an empty map if no DaemonSets are present", func() {
-		clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any())
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any())
 
 		dc := NewCreator(clnt, kernelLabel, scheme)
 
-		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
+		m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).To(BeEmpty())
 	})
@@ -614,7 +613,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		ctx := context.TODO()
+		ctx := context.Background()
 		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
 				list.Items = []appsv1.DaemonSet{ds1, ds2}
@@ -652,7 +651,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		ctx := context.TODO()
+		ctx := context.Background()
 
 		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
@@ -692,7 +691,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		ctx := context.TODO()
+		ctx := context.Background()
 
 		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
@@ -703,7 +702,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 
 		dc := NewCreator(clnt, kernelLabel, scheme)
 
-		m, err := dc.ModuleDaemonSetsByKernelVersion(context.TODO(), moduleName, namespace)
+		m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).To(HaveLen(1))
 		Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))

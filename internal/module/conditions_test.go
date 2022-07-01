@@ -26,7 +26,7 @@ var _ = Describe("SetAs{Ready,Progressing,Errored}", func() {
 	DescribeTable("Setting one condition to true, should set others to false",
 		func(expectedType string, call func(cu ConditionsUpdater) error) {
 			c := client.NewMockClient(gomock.NewController(GinkgoT()))
-			c.EXPECT().Update(context.TODO(), mod)
+			c.EXPECT().Update(context.Background(), mod)
 
 			cu := NewConditionsUpdater(c)
 

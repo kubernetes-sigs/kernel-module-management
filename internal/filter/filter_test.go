@@ -236,7 +236,7 @@ var _ = Describe("FindModulesForNode", func() {
 	})
 
 	It("should return nothing if there are no modules", func() {
-		clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any())
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any())
 
 		p := New(clnt, logr.Discard())
 		Expect(
@@ -253,7 +253,7 @@ var _ = Describe("FindModulesForNode", func() {
 			},
 		}
 
-		clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any()).DoAndReturn(
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
 				list.Items = []ootov1alpha1.Module{mod}
 				return nil
@@ -289,7 +289,7 @@ var _ = Describe("FindModulesForNode", func() {
 				Selector: map[string]string{"other-key": "other-value"},
 			},
 		}
-		clnt.EXPECT().List(context.TODO(), gomock.Any(), gomock.Any()).DoAndReturn(
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
 				list.Items = []ootov1alpha1.Module{mod1, mod2}
 				return nil

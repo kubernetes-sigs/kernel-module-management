@@ -65,7 +65,7 @@ var _ = Describe("JobManager", func() {
 		}
 
 		It("should return an error if there was an error getting the image", func() {
-			ctx := context.TODO()
+			ctx := context.Background()
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
 				getter.EXPECT().ImageExists(ctx, imageName, po).Return(false, errors.New("random error")),
@@ -77,7 +77,7 @@ var _ = Describe("JobManager", func() {
 		})
 
 		It("should return StatusCompleted if the image already exists", func() {
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
@@ -111,7 +111,7 @@ var _ = Describe("JobManager", func() {
 					},
 					Status: s,
 				}
-				ctx := context.TODO()
+				ctx := context.Background()
 				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 					func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
 						list.Items = []batchv1.Job{j}
@@ -141,7 +141,7 @@ var _ = Describe("JobManager", func() {
 		)
 
 		It("should return an error if there was an error creating the job", func() {
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
@@ -160,7 +160,7 @@ var _ = Describe("JobManager", func() {
 		})
 
 		It("should create the job if there was no error making it", func() {
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			const jobName = "some-job"
 
