@@ -12,6 +12,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/pointer"
 )
 
 var _ = Describe("Maker", func() {
@@ -58,11 +59,6 @@ var _ = Describe("Maker", func() {
 		})
 
 		It("should set fields correctly", func() {
-			var (
-				one     int32 = 1
-				trueVar       = true
-			)
-
 			expected := &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: mod.Name + "-build-",
@@ -76,13 +72,13 @@ var _ = Describe("Maker", func() {
 							APIVersion:         "ooto.sigs.k8s.io/v1alpha1",
 							Kind:               "Module",
 							Name:               moduleName,
-							Controller:         &trueVar,
-							BlockOwnerDeletion: &trueVar,
+							Controller:         pointer.Bool(true),
+							BlockOwnerDeletion: pointer.Bool(true),
 						},
 					},
 				},
 				Spec: batchv1.JobSpec{
-					Completions: &one,
+					Completions: pointer.Int32(1),
 					Template: v1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{"Dockerfile": dockerfile},

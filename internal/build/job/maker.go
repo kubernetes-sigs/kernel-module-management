@@ -9,6 +9,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -47,8 +48,6 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build
 		args = append(args, "--insecure")
 	}
 
-	var one int32 = 1
-
 	const dockerfileVolumeName = "dockerfile"
 
 	dockerFileVolume := v1.Volume{
@@ -78,7 +77,7 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build
 			Labels:       labels(mod, targetKernel),
 		},
 		Spec: batchv1.JobSpec{
-			Completions: &one,
+			Completions: pointer.Int32(1),
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{"Dockerfile": buildConfig.Dockerfile},

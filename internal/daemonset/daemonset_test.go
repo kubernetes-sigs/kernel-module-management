@@ -3,7 +3,6 @@ package daemonset
 import (
 	"context"
 	"errors"
-	"github.com/go-openapi/swag"
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
@@ -16,6 +15,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/pointer"
 )
 
 const (
@@ -160,8 +160,8 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						APIVersion:         mod.APIVersion,
-						BlockOwnerDeletion: swag.Bool(true),
-						Controller:         swag.Bool(true),
+						BlockOwnerDeletion: pointer.Bool(true),
+						Controller:         pointer.Bool(true),
 						Kind:               mod.Kind,
 						Name:               moduleName,
 						UID:                mod.UID,
@@ -455,7 +455,6 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 		}
 
 		directory := v1.HostPathDirectory
-		trueVar := true
 
 		expected := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -465,8 +464,8 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						APIVersion:         mod.APIVersion,
-						BlockOwnerDeletion: &trueVar,
-						Controller:         &trueVar,
+						BlockOwnerDeletion: pointer.Bool(true),
+						Controller:         pointer.Bool(true),
 						Kind:               mod.Kind,
 						Name:               moduleName,
 						UID:                mod.UID,
@@ -490,7 +489,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 									},
 								},
 								SecurityContext: &v1.SecurityContext{
-									Privileged: swag.Bool(true),
+									Privileged: pointer.Bool(true),
 								},
 							},
 						},

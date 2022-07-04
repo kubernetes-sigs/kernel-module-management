@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/go-openapi/swag"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/internal/constants"
 	appsv1 "k8s.io/api/apps/v1"
@@ -13,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -229,7 +229,7 @@ func (dc *daemonSetGenerator) constructDaemonSet(ctx context.Context,
 		if container.SecurityContext == nil {
 			container.SecurityContext = &v1.SecurityContext{}
 		}
-		container.SecurityContext.Privileged = swag.Bool(true)
+		container.SecurityContext.Privileged = pointer.Bool(true)
 	}
 
 	containers := []v1.Container{container}
