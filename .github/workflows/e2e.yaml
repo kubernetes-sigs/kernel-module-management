@@ -406,3 +406,96 @@ jobs:
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
         if: ${{ always() }}
+
+  e2e-crd-variable:
+    runs-on: ubuntu-latest
+
+    name: Container image CRD variable
+
+    needs: [build-operator-image]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
+
+      - name: Download container images
+        uses: actions/download-artifact@v3
+        with:
+          name: ci-images
+
+      - name: Save the kernel version
+        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
+
+      - name: Build the DriverContainer image
+        uses: ./.github/actions/build-drivercontainer-image
+        with:
+          kernel-version: ${{ env.KERNEL_VERSION }}
+
+      - name: Import images into minikube
+        run: |
+          minikube image load ooto_local.tar
+          minikube image load ooto-kmod_local.tar
+
+      - name: Tag the DriverContainer image with the kernel version
+        run: minikube image tag ooto-kmod:local ooto-kmod:${{ env.KERNEL_VERSION }}
+
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
+
+      - name: Deploy OOTO
+        run: make deploy
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
+
+      - name: Wait until the OOTO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+        timeout-minutes: 1
+
+      - name: Describe the Deployment and get its YAML if that failed
+        run: |
+          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+        if: ${{ failure() }}
+
+      - name: Check that the ooto_ci_a module is not loaded on the node
+        run: |
+          if minikube ssh -- lsmod | grep ooto_ci_a; then
+            echo "Unexpected lsmod output - the module should not be loaded"
+            exit 1
+          fi
+
+      - name: Add an ooto-ci Module that contains a valid mapping
+        run: kubectl apply -f ci/module-ooto-ci-variable.yaml
+
+      - name: Check that the module gets loaded on the node
+        run: |
+          until minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Remove the Module
+        run: kubectl delete -f ci/module-ooto-ci-variable.yaml
+
+      - name: Check that the module gets unloaded from the node
+        run: |
+          until ! minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
+        if: ${{ always() }}
