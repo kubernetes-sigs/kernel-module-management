@@ -11,7 +11,7 @@ import (
 	"github.com/qbarrand/oot-operator/internal/build"
 	"github.com/qbarrand/oot-operator/internal/client"
 	"github.com/qbarrand/oot-operator/internal/constants"
-	"github.com/qbarrand/oot-operator/internal/registry"
+	registrypkg "github.com/qbarrand/oot-operator/internal/registry"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -37,17 +37,17 @@ var _ = Describe("Labels", func() {
 var _ = Describe("JobManager", func() {
 	Describe("Sync", func() {
 		var (
-			ctrl   *gomock.Controller
-			clnt   *client.MockClient
-			getter *registry.MockGetter
-			maker  *MockMaker
-			helper *build.MockHelper
+			ctrl     *gomock.Controller
+			clnt     *client.MockClient
+			registry *registrypkg.MockRegistry
+			maker    *MockMaker
+			helper   *build.MockHelper
 		)
 
 		BeforeEach(func() {
 			ctrl = gomock.NewController(GinkgoT())
 			clnt = client.NewMockClient(ctrl)
-			getter = registry.NewMockGetter(ctrl)
+			registry = registrypkg.NewMockRegistry(ctrl)
 			maker = NewMockMaker(ctrl)
 			helper = build.NewMockHelper(ctrl)
 		})
@@ -68,9 +68,9 @@ var _ = Describe("JobManager", func() {
 			ctx := context.Background()
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
-				getter.EXPECT().ImageExists(ctx, imageName, po).Return(false, errors.New("random error")),
+				registry.EXPECT().ImageExists(ctx, imageName, po).Return(false, errors.New("random error")),
 			)
-			mgr := NewBuildManager(nil, getter, maker, helper)
+			mgr := NewBuildManager(nil, registry, maker, helper)
 
 			_, err := mgr.Sync(ctx, ootov1alpha1.Module{}, km, "")
 			Expect(err).To(HaveOccurred())
@@ -81,10 +81,10 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
-				getter.EXPECT().ImageExists(ctx, imageName, po).Return(true, nil),
+				registry.EXPECT().ImageExists(ctx, imageName, po).Return(true, nil),
 			)
 
-			mgr := NewBuildManager(nil, getter, maker, helper)
+			mgr := NewBuildManager(nil, registry, maker, helper)
 
 			Expect(
 				mgr.Sync(ctx, ootov1alpha1.Module{}, km, ""),
@@ -121,10 +121,10 @@ var _ = Describe("JobManager", func() {
 
 				gomock.InOrder(
 					helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-					getter.EXPECT().ImageExists(ctx, imageName, po).Return(false, nil),
+					registry.EXPECT().ImageExists(ctx, imageName, po).Return(false, nil),
 				)
 
-				mgr := NewBuildManager(clnt, getter, maker, helper)
+				mgr := NewBuildManager(clnt, registry, maker, helper)
 
 				res, err := mgr.Sync(ctx, mod, km, kernelVersion)
 
@@ -145,12 +145,12 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				getter.EXPECT().ImageExists(ctx, imageName, po),
+				registry.EXPECT().ImageExists(ctx, imageName, po),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(nil, errors.New("random error")),
 			)
 			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any())
 
-			mgr := NewBuildManager(clnt, getter, maker, helper)
+			mgr := NewBuildManager(clnt, registry, maker, helper)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion),
@@ -177,7 +177,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				getter.EXPECT().ImageExists(ctx, imageName, po),
+				registry.EXPECT().ImageExists(ctx, imageName, po),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(&j, nil),
 			)
 
@@ -186,7 +186,7 @@ var _ = Describe("JobManager", func() {
 				clnt.EXPECT().Create(ctx, &j),
 			)
 
-			mgr := NewBuildManager(clnt, getter, maker, helper)
+			mgr := NewBuildManager(clnt, registry, maker, helper)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion),

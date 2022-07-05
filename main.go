@@ -149,10 +149,10 @@ func main() {
 
 	metricsAPI := metrics.New()
 	metricsAPI.Register()
-	getterAPI := registry.NewGetter()
+	registryAPI := registry.NewRegistry()
 	helperAPI := build.NewHelper()
 	makerAPI := job.NewMaker(helperAPI, scheme)
-	buildAPI := job.NewBuildManager(client, getterAPI, makerAPI, helperAPI)
+	buildAPI := job.NewBuildManager(client, registryAPI, makerAPI, helperAPI)
 	daemonAPI := daemonset.NewCreator(client, kernelLabel, scheme)
 	kernelAPI := module.NewKernelMapper()
 	conditionsAPI := module.NewConditionsUpdater(client.Status())

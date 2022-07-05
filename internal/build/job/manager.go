@@ -18,15 +18,15 @@ var errNoMatchingBuild = errors.New("no matching build")
 
 type jobManager struct {
 	client   client.Client
-	registry registry.Getter
+	registry registry.Registry
 	maker    Maker
 	helper   build.Helper
 }
 
-func NewBuildManager(client client.Client, getter registry.Getter, maker Maker, helper build.Helper) *jobManager {
+func NewBuildManager(client client.Client, registry registry.Registry, maker Maker, helper build.Helper) *jobManager {
 	return &jobManager{
 		client:   client,
-		registry: getter,
+		registry: registry,
 		maker:    maker,
 		helper:   helper,
 	}
