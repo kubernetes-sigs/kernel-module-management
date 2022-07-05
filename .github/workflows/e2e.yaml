@@ -340,6 +340,22 @@ jobs:
       - name: Create a build secret
         run: kubectl create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
 
+      # The minikube registry-alias addon creates a Job that adds registry.minikube to the CoreDNS configuration.
+      # https://github.com/kubernetes/minikube/blob/master/deploy/addons/registry-aliases/patch-coredns-job.tmpl
+      # This job sometimes does not finish before the operator starts looking for the image in the registry, which
+      # results in failed DNS resolution.
+      # Add a job that tries to resolve registry.minikube, like the operator.
+      # Wait up to 6 minutes, which corresponds to our job's maximum lifetime including backoffs.
+      - name: Wait for the internal registry to be available in CoreDNS
+        run: |
+          kubectl apply -f ci/job-wait-minikube-registry-alias.yaml
+          kubectl wait --for=condition=Complete --timeout -1s job/wait-minikube-registry-alias
+        timeout-minutes: 6
+
+      - name: Check the status of components in the kube-system namespace
+        run: kubectl get all -n kube-system
+        if: ${{ failure() }}
+
       - name: Add an ooto-ci Module that contains a valid mapping
         run: |
           sed -e "s/KVER_CHANGEME/$(uname -r)/g" ci/module-ooto-ci-build.template.yaml | tee module-ooto-ci.yaml
