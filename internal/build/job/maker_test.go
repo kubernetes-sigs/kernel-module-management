@@ -148,6 +148,38 @@ var _ = Describe("Maker", func() {
 				BeEmpty(),
 			)
 		})
+
+		DescribeTable(
+			"should set correct kaniko flags",
+			func(b ootov1alpha1.Build, flag string) {
+				mh.EXPECT().ApplyBuildArgOverrides(nil, ootov1alpha1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion})
+
+				job, err := m.MakeJob(mod, &b, kernelVersion, km.ContainerImage)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(job.Spec.Template.Spec.Containers[0].Args).To(ContainElement(flag))
+
+			},
+			Entry(
+				"PullOptions.Insecure",
+				ootov1alpha1.Build{Pull: ootov1alpha1.PullOptions{Insecure: true}},
+				"--insecure-pull",
+			),
+			Entry(
+				"PullOptions.InsecureSkipTLSVerify",
+				ootov1alpha1.Build{Pull: ootov1alpha1.PullOptions{InsecureSkipTLSVerify: true}},
+				"--skip-tls-verify-pull",
+			),
+			Entry(
+				"PushOptions.Insecure",
+				ootov1alpha1.Build{Push: ootov1alpha1.PushOptions{Insecure: true}},
+				"--insecure",
+			),
+			Entry(
+				"PushOptions.InsecureSkipTLSVerify",
+				ootov1alpha1.Build{Push: ootov1alpha1.PushOptions{InsecureSkipTLSVerify: true}},
+				"--skip-tls-verify",
+			),
+		)
 	})
 
 	Describe("MakeSecretVolumes", func() {

@@ -1558,18 +1558,30 @@ spec:
                       the DriverContainer image already exists.
                     properties:
                       insecure:
-                        description: When Insecure is true, images can be pulled from
+                        description: If Insecure is true, images can be pulled from
                           an insecure (plain HTTP) registry.
                         type: boolean
+                      insecureSkipTLSVerify:
+                        description: If InsecureSkipTLSVerify, the operator will accept
+                          any certificate provided by the registry
+                        type: boolean
+                    required:
+                    - insecureSkipTLSVerify
                     type: object
                   push:
                     description: Push contains settings determining how to push a
                       built DriverContainer image.
                     properties:
                       insecure:
-                        description: When Insecure is true, built images can be pushed
+                        description: If Insecure is true, built images can be pushed
                           to an insecure (plain HTTP) registry.
                         type: boolean
+                      insecureSkipTLSVerify:
+                        description: If InsecureSkipTLSVerify, the operator will accept
+                          any certificate provided by the registry
+                        type: boolean
+                    required:
+                    - insecureSkipTLSVerify
                     type: object
                   secrets:
                     description: Secrets is an optional list of secrets to be made
@@ -4012,18 +4024,30 @@ spec:
                             if the DriverContainer image already exists.
                           properties:
                             insecure:
-                              description: When Insecure is true, images can be pulled
+                              description: If Insecure is true, images can be pulled
                                 from an insecure (plain HTTP) registry.
                               type: boolean
+                            insecureSkipTLSVerify:
+                              description: If InsecureSkipTLSVerify, the operator
+                                will accept any certificate provided by the registry
+                              type: boolean
+                          required:
+                          - insecureSkipTLSVerify
                           type: object
                         push:
                           description: Push contains settings determining how to push
                             a built DriverContainer image.
                           properties:
                             insecure:
-                              description: When Insecure is true, built images can
-                                be pushed to an insecure (plain HTTP) registry.
+                              description: If Insecure is true, built images can be
+                                pushed to an insecure (plain HTTP) registry.
                               type: boolean
+                            insecureSkipTLSVerify:
+                              description: If InsecureSkipTLSVerify, the operator
+                                will accept any certificate provided by the registry
+                              type: boolean
+                          required:
+                          - insecureSkipTLSVerify
                           type: object
                         secrets:
                           description: Secrets is an optional list of secrets to be

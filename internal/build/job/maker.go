@@ -44,8 +44,16 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build
 		args = append(args, "--insecure-pull")
 	}
 
+	if buildConfig.Pull.InsecureSkipTLSVerify {
+		args = append(args, "--skip-tls-verify-pull")
+	}
+
 	if buildConfig.Push.Insecure {
 		args = append(args, "--insecure")
+	}
+
+	if buildConfig.Push.InsecureSkipTLSVerify {
+		args = append(args, "--skip-tls-verify")
 	}
 
 	const dockerfileVolumeName = "dockerfile"

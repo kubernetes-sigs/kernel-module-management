@@ -51,7 +51,7 @@ func NewRegistry() Registry {
 }
 
 func (r *registry) ImageExists(ctx context.Context, image string, po ootov1alpha1.PullOptions) (bool, error) {
-	pullConfig, err := r.getPullOptions(image, &po)
+	pullConfig, err := r.getPullOptions(ctx, image, &po)
 	if err != nil {
 		return false, fmt.Errorf("failed to get pull options for image %s: %w", image, err)
 	}
@@ -67,7 +67,7 @@ func (r *registry) ImageExists(ctx context.Context, image string, po ootov1alpha
 }
 
 func (r *registry) GetLayersDigests(ctx context.Context, image string) ([]string, *RepoPullConfig, error) {
-	pullConfig, err := r.getPullOptions(image, nil)
+	pullConfig, err := r.getPullOptions(ctx, image, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get pull options for image %s: %w", image, err)
 	}
@@ -113,7 +113,7 @@ func (r *registry) ExtractToolkitRelease(layer v1.Layer) (*DriverToolkitEntry, e
 	return dtk, nil
 }
 
-func (r *registry) getPullOptions(image string, po *ootov1alpha1.PullOptions) (*RepoPullConfig, error) {
+func (r *registry) getPullOptions(ctx context.Context, image string, po *ootov1alpha1.PullOptions) (*RepoPullConfig, error) {
 	var repo string
 	if hash := strings.Split(image, "@"); len(hash) > 1 {
 		repo = hash[0]
@@ -124,9 +124,25 @@ func (r *registry) getPullOptions(image string, po *ootov1alpha1.PullOptions) (*
 	if repo == "" {
 		return nil, fmt.Errorf("image url %s is not valid, does not contain hash or tag", image)
 	}
-	var options []crane.Option
-	if po != nil && po.Insecure {
-		options = append(options, crane.Insecure)
+
+	options := []crane.Option{
+		crane.WithContext(ctx),
+	}
+
+	if po != nil {
+		if po.Insecure {
+			options = append(options, crane.Insecure)
+		}
+
+		if po.InsecureSkipTLSVerify {
+			rt := http.DefaultTransport.(*http.Transport).Clone()
+			rt.TLSClientConfig.InsecureSkipVerify = true
+
+			options = append(
+				options,
+				crane.WithTransport(rt),
+			)
+		}
 	}
 
 	return &RepoPullConfig{repo: repo, authOptions: options}, nil

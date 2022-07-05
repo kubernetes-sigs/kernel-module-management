@@ -28,17 +28,23 @@ type BuildArg struct {
 }
 
 type PullOptions struct {
+	// If Insecure is true, images can be pulled from an insecure (plain HTTP) registry.
 	// +optional
+	Insecure bool `json:"insecure,omitempty"`
 
-	// When Insecure is true, images can be pulled from an insecure (plain HTTP) registry.
-	Insecure bool `json:"insecure"`
+	// If InsecureSkipTLSVerify, the operator will accept any certificate provided by the registry.
+	// +optional
+	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 }
 
 type PushOptions struct {
+	// If Insecure is true, built images can be pushed to an insecure (plain HTTP) registry.
 	// +optional
+	Insecure bool `json:"insecure,omitempty"`
 
-	// When Insecure is true, built images can be pushed to an insecure (plain HTTP) registry.
-	Insecure bool `json:"insecure"`
+	// If InsecureSkipTLSVerify, the operator will accept any certificate provided by the registry.
+	// +optional
+	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 }
 
 type Build struct {
