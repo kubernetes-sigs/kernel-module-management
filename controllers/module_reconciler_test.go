@@ -30,20 +30,20 @@ var _ = Describe("ModuleReconciler", func() {
 			ctrl        *gomock.Controller
 			clnt        *client.MockClient
 			mockBM      *build.MockManager
-			mockCU      *module.MockConditionsUpdater
 			mockDC      *daemonset.MockDaemonSetCreator
 			mockKM      *module.MockKernelMapper
 			mockMetrics *metrics.MockMetrics
+			mockSU      *module.MockStatusUpdater
 		)
 
 		BeforeEach(func() {
 			ctrl = gomock.NewController(GinkgoT())
 			clnt = client.NewMockClient(ctrl)
 			mockBM = build.NewMockManager(ctrl)
-			mockCU = module.NewMockConditionsUpdater(ctrl)
 			mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 			mockKM = module.NewMockKernelMapper(ctrl)
 			mockMetrics = metrics.NewMockMetrics(ctrl)
+			mockSU = module.NewMockStatusUpdater(ctrl)
 		})
 
 		const moduleName = "test-module"
@@ -83,16 +83,22 @@ var _ = Describe("ModuleReconciler", func() {
 					},
 				),
 				mockMetrics.EXPECT().SetExistingKMMOModules(1),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+						list.Items = []v1.Node{}
+						return nil
+					},
+				),
 			)
 
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
 
 			dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
 
 			gomock.InOrder(
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -136,16 +142,22 @@ var _ = Describe("ModuleReconciler", func() {
 					},
 				),
 				mockMetrics.EXPECT().SetExistingKMMOModules(1),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+						list.Items = []v1.Node{}
+						return nil
+					},
+				),
 			)
 
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
 
 			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
 			gomock.InOrder(
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -218,7 +230,7 @@ var _ = Describe("ModuleReconciler", func() {
 				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()),
 			)
 
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
 
 			ds := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -234,6 +246,7 @@ var _ = Describe("ModuleReconciler", func() {
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace),
 				mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
 				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString(kernelVersion)),
+				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, nodeList.Items, nodeList.Items).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -322,7 +335,7 @@ var _ = Describe("ModuleReconciler", func() {
 				clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
 			)
 
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockCU, mockMetrics, nil)
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
 
 			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
@@ -336,6 +349,7 @@ var _ = Describe("ModuleReconciler", func() {
 						d.SetLabels(map[string]string{"test": "test"})
 					}),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
+				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, nodeList.Items, nodeList.Items).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)

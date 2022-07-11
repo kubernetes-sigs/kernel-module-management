@@ -46,12 +46,12 @@ import (
 type ModuleReconciler struct {
 	client.Client
 
-	buildAPI      build.Manager
-	daemonAPI     daemonset.DaemonSetCreator
-	kernelAPI     module.KernelMapper
-	conditionsAPI module.ConditionsUpdater
-	metricsAPI    metrics.Metrics
-	filter        *filter.Filter
+	buildAPI         build.Manager
+	daemonAPI        daemonset.DaemonSetCreator
+	kernelAPI        module.KernelMapper
+	metricsAPI       metrics.Metrics
+	filter           *filter.Filter
+	statusUpdaterAPI module.StatusUpdater
 }
 
 func NewModuleReconciler(
@@ -59,17 +59,17 @@ func NewModuleReconciler(
 	buildAPI build.Manager,
 	daemonAPI daemonset.DaemonSetCreator,
 	kernelAPI module.KernelMapper,
-	conditionsAPI module.ConditionsUpdater,
 	metricsAPI metrics.Metrics,
-	filter *filter.Filter) *ModuleReconciler {
+	filter *filter.Filter,
+	statusUpdaterAPI module.StatusUpdater) *ModuleReconciler {
 	return &ModuleReconciler{
-		Client:        client,
-		buildAPI:      buildAPI,
-		daemonAPI:     daemonAPI,
-		kernelAPI:     kernelAPI,
-		conditionsAPI: conditionsAPI,
-		metricsAPI:    metricsAPI,
-		filter:        filter,
+		Client:           client,
+		buildAPI:         buildAPI,
+		daemonAPI:        daemonAPI,
+		kernelAPI:        kernelAPI,
+		metricsAPI:       metricsAPI,
+		filter:           filter,
+		statusUpdaterAPI: statusUpdaterAPI,
 	}
 }
 
@@ -95,18 +95,15 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	r.setKMMOMetrics(ctx)
 
-	logger.V(1).Info("Listing nodes", "selector", mod.Spec.Selector)
-
-	nodes := v1.NodeList{}
-
-	opt := client.MatchingLabels(mod.Spec.Selector)
-
-	if err := r.Client.List(ctx, &nodes, opt); err != nil {
-		logger.Error(err, "Could not list nodes; retrying")
-		return res, fmt.Errorf("could not list nodes: %v", err)
+	targetedNodes, err := r.getNodesListBySelector(ctx, mod)
+	if err != nil {
+		return res, fmt.Errorf("could get targeted nodes for module %s: %w", mod.Name, err)
 	}
 
-	mappings := r.getKernelMappings(ctx, nodes, mod)
+	mappings, nodesWithMapping, err := r.getRelevantKernelMappingsAndNodes(ctx, mod, targetedNodes)
+	if err != nil {
+		return res, fmt.Errorf("could get kernel mappings and nodes for modules %s: %w", mod.Name, err)
+	}
 
 	dsByKernelVersion, err := r.daemonAPI.ModuleDaemonSetsByKernelVersion(ctx, mod.Name, mod.Namespace)
 	if err != nil {
@@ -151,16 +148,26 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("could not garbage collect DaemonSets: %v", err)
 	}
 
+	err = r.statusUpdaterAPI.UpdateModuleStatus(ctx, mod, nodesWithMapping, targetedNodes)
+	if err != nil {
+		return res, fmt.Errorf("failed to update status of the module: %w", err)
+	}
+
 	logger.Info("Garbage-collected DaemonSets", "names", deleted)
 
 	return res, nil
 }
 
-func (r *ModuleReconciler) getKernelMappings(ctx context.Context, nodes v1.NodeList, mod *ootov1alpha1.Module) map[string]*ootov1alpha1.KernelMapping {
+func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context,
+	mod *ootov1alpha1.Module,
+	targetedNodes []v1.Node) (map[string]*ootov1alpha1.KernelMapping, []v1.Node, error) {
+
 	mappings := make(map[string]*ootov1alpha1.KernelMapping)
 	logger := log.FromContext(ctx)
 
-	for _, node := range nodes.Items {
+	nodes := make([]v1.Node, 0, len(targetedNodes))
+
+	for _, node := range targetedNodes {
 		osConfig := r.kernelAPI.GetNodeOSConfig(&node)
 		kernelVersion := node.Status.NodeInfo.KernelVersion
 
@@ -170,6 +177,7 @@ func (r *ModuleReconciler) getKernelMappings(ctx context.Context, nodes v1.NodeL
 		)
 
 		if image, ok := mappings[kernelVersion]; ok {
+			nodes = append(nodes, node)
 			nodeLogger.V(1).Info("Using cached image", "image", image)
 			continue
 		}
@@ -182,6 +190,7 @@ func (r *ModuleReconciler) getKernelMappings(ctx context.Context, nodes v1.NodeL
 
 		m, err = r.kernelAPI.PrepareKernelMapping(m, osConfig)
 		if err != nil {
+			nodes = append(nodes, node)
 			nodeLogger.Info("failed to substitute the template variables in the mapping", "error", err)
 			continue
 		}
@@ -192,8 +201,22 @@ func (r *ModuleReconciler) getKernelMappings(ctx context.Context, nodes v1.NodeL
 		)
 
 		mappings[kernelVersion] = m
+		nodes = append(nodes, node)
 	}
-	return mappings
+	return mappings, nodes, nil
+}
+
+func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *ootov1alpha1.Module) ([]v1.Node, error) {
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("Listing nodes", "selector", mod.Spec.Selector)
+
+	nodes := v1.NodeList{}
+	opt := client.MatchingLabels(mod.Spec.Selector)
+	if err := r.Client.List(ctx, &nodes, opt); err != nil {
+		logger.Error(err, "Could not list nodes")
+		return nil, fmt.Errorf("could not list nodes: %v", err)
+	}
+	return nodes.Items, nil
 }
 
 func (r *ModuleReconciler) handleBuild(ctx context.Context,

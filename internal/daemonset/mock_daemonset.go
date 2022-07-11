@@ -52,6 +52,35 @@ func (mr *MockDaemonSetCreatorMockRecorder) GarbageCollect(ctx, existingDS, vali
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockDaemonSetCreator)(nil).GarbageCollect), ctx, existingDS, validKernels)
 }
 
+// IsDevicePluginDaemonSet mocks base method.
+func (m *MockDaemonSetCreator) IsDevicePluginDaemonSet(ds v1.DaemonSet) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsDevicePluginDaemonSet", ds)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsDevicePluginDaemonSet indicates an expected call of IsDevicePluginDaemonSet.
+func (mr *MockDaemonSetCreatorMockRecorder) IsDevicePluginDaemonSet(ds interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDevicePluginDaemonSet", reflect.TypeOf((*MockDaemonSetCreator)(nil).IsDevicePluginDaemonSet), ds)
+}
+
+// ModuleDaemonSets mocks base method.
+func (m *MockDaemonSetCreator) ModuleDaemonSets(ctx context.Context, name, namespace string) ([]v1.DaemonSet, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ModuleDaemonSets", ctx, name, namespace)
+	ret0, _ := ret[0].([]v1.DaemonSet)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ModuleDaemonSets indicates an expected call of ModuleDaemonSets.
+func (mr *MockDaemonSetCreatorMockRecorder) ModuleDaemonSets(ctx, name, namespace interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModuleDaemonSets", reflect.TypeOf((*MockDaemonSetCreator)(nil).ModuleDaemonSets), ctx, name, namespace)
+}
+
 // ModuleDaemonSetsByKernelVersion mocks base method.
 func (m *MockDaemonSetCreator) ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*v1.DaemonSet, error) {
 	m.ctrl.T.Helper()

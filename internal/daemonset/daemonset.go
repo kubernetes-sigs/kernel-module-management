@@ -30,9 +30,11 @@ const (
 
 type DaemonSetCreator interface {
 	GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.String) ([]string, error)
+	ModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error)
 	SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error
 	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *ootov1alpha1.Module) error
+	IsDevicePluginDaemonSet(ds appsv1.DaemonSet) bool
 }
 
 type daemonSetGenerator struct {
@@ -65,22 +67,28 @@ func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, existingDS map
 	return deleted, nil
 }
 
-func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error) {
+func (dc *daemonSetGenerator) ModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
 	dsList := appsv1.DaemonSetList{}
-
 	opts := []client.ListOption{
 		client.MatchingLabels(map[string]string{constants.ModuleNameLabel: name}),
 		client.InNamespace(namespace),
 	}
-
 	if err := dc.client.List(ctx, &dsList, opts...); err != nil {
 		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
 	}
+	return dsList.Items, nil
+}
 
-	dsByKernelVersion := make(map[string]*appsv1.DaemonSet, len(dsList.Items))
+func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error) {
+	dsList, err := dc.ModuleDaemonSets(ctx, name, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("could not get all DaemonSets: %w", err)
+	}
 
-	for i := 0; i < len(dsList.Items); i++ {
-		ds := dsList.Items[i]
+	dsByKernelVersion := make(map[string]*appsv1.DaemonSet, len(dsList))
+
+	for i := 0; i < len(dsList); i++ {
+		ds := dsList[i]
 
 		kernelVersion := ds.Labels[dc.kernelLabel]
 		if kernelVersion == "" {
@@ -193,6 +201,10 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 
 	return dc.constructDaemonSet(ctx, ds, mod, *mod.Spec.DevicePlugin, "device-plugin", "", standardLabels,
 		mod.Spec.Selector, containerVolumeMounts, dsVolumes, true)
+}
+
+func (dc *daemonSetGenerator) IsDevicePluginDaemonSet(ds appsv1.DaemonSet) bool {
+	return ds.Labels[dc.kernelLabel] == ""
 }
 
 func (dc *daemonSetGenerator) constructDaemonSet(ctx context.Context,

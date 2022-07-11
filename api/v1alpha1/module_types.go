@@ -127,10 +127,24 @@ type ModuleSpec struct {
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
+// DaemonSetStatus contains the status for a daemonset deployed during
+// reconciliation loop
+type DaemonSetStatus struct {
+	// number of nodes that are targeted by the module selector
+	NodesMatchingSelectorNumber int32 `json:"nodesMatchingSelectorNumber"`
+	// number of the pods that should be deployed for daemonset
+	DesiredNumber int32 `json:"desiredNumber"`
+	// number of the actually deployed and running pods
+	AvailableNumber int32 `json:"availableNumber"`
+}
+
 // ModuleStatus defines the observed state of Module.
 type ModuleStatus struct {
-	// Conditions is a list of conditions representing the Module's current state.
-	Conditions []metav1.Condition `json:"conditions"`
+	// DevicePlugin contains the status of the Device Plugin daemonset
+	// if it was deployed during reconciliation
+	DevicePlugin DaemonSetStatus `json:"devicePlugin,omitempty"`
+	// DriverContainer contains the status of the DriverContainer daemonset
+	DriverContainer DaemonSetStatus `json:"driverContainer"`
 }
 
 //+kubebuilder:object:root=true
