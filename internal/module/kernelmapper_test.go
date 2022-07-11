@@ -87,27 +87,35 @@ var _ = Describe("PrepareKernelMapping", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("flow with replacement", func() {
+	It("should only substitute the ContainerImage field", func() {
+		const (
+			dockerfile = "RUN echo $MYVAR"
+			literal    = "some literal:${KERNEL_XYZ"
+			regexp     = "some regexp:${KERNEL_XYZ"
+		)
+
 		mapping := ootov1alpha1.KernelMapping{
 			ContainerImage: "some image:${KERNEL_XYZ}",
-			Literal:        "some literal",
-			Regexp:         "regexp",
+			Literal:        literal,
+			Regexp:         regexp,
 			Build: &ootov1alpha1.Build{
 				BuildArgs: []ootov1alpha1.BuildArg{
 					{Name: "name1", Value: "value1"},
 					{Name: "kernel version", Value: "${KERNEL_FULL_VERSION}"},
 				},
+				Dockerfile: dockerfile,
 			},
 		}
 		expectMapping := ootov1alpha1.KernelMapping{
 			ContainerImage: "some image:kernelMMP",
-			Literal:        "some literal",
-			Regexp:         "regexp",
+			Literal:        literal,
+			Regexp:         regexp,
 			Build: &ootov1alpha1.Build{
 				BuildArgs: []ootov1alpha1.BuildArg{
 					{Name: "name1", Value: "value1"},
-					{Name: "kernel version", Value: "kernelFullVersion"},
+					{Name: "kernel version", Value: "${KERNEL_FULL_VERSION}"},
 				},
+				Dockerfile: dockerfile,
 			},
 		}
 

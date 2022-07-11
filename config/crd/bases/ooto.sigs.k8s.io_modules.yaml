@@ -1563,10 +1563,8 @@ spec:
                         type: boolean
                       insecureSkipTLSVerify:
                         description: If InsecureSkipTLSVerify, the operator will accept
-                          any certificate provided by the registry
+                          any certificate provided by the registry.
                         type: boolean
-                    required:
-                    - insecureSkipTLSVerify
                     type: object
                   push:
                     description: Push contains settings determining how to push a
@@ -1578,10 +1576,8 @@ spec:
                         type: boolean
                       insecureSkipTLSVerify:
                         description: If InsecureSkipTLSVerify, the operator will accept
-                          any certificate provided by the registry
+                          any certificate provided by the registry.
                         type: boolean
-                    required:
-                    - insecureSkipTLSVerify
                     type: object
                   secrets:
                     description: Secrets is an optional list of secrets to be made
@@ -4029,10 +4025,8 @@ spec:
                               type: boolean
                             insecureSkipTLSVerify:
                               description: If InsecureSkipTLSVerify, the operator
-                                will accept any certificate provided by the registry
+                                will accept any certificate provided by the registry.
                               type: boolean
-                          required:
-                          - insecureSkipTLSVerify
                           type: object
                         push:
                           description: Push contains settings determining how to push
@@ -4044,10 +4038,8 @@ spec:
                               type: boolean
                             insecureSkipTLSVerify:
                               description: If InsecureSkipTLSVerify, the operator
-                                will accept any certificate provided by the registry
+                                will accept any certificate provided by the registry.
                               type: boolean
-                          required:
-                          - insecureSkipTLSVerify
                           type: object
                         secrets:
                           description: Secrets is an optional list of secrets to be

@@ -388,7 +388,35 @@ jobs:
 
       - name: Check that the DriverContainer prints the secret's value to the standard output
         run: |
-          until kubectl logs -l oot.node.kubernetes.io/module.name | grep super-secret-value; do
+          function check_output {
+            out=$(kubectl logs -l oot.node.kubernetes.io/module.name)
+            if $? -ne 0; then
+              echo 'kubectl failed'
+              return 1;
+            fi
+
+            if ! echo $out | grep super-secret-value; then
+              echo 'secret value not found'
+              return 1
+            fi
+
+            if ! echo $out | grep some-build-arg; then
+              echo 'build argument not found'
+              return 1
+            fi
+
+            if ! echo $out | grep $KERNEL_VERSION; then
+              echo 'kernel version not found'
+              return 1
+            fi
+
+            if ! echo $out | grep default-value; then
+              echo 'build argument with default value not found'
+              return 1
+            fi
+          }
+
+          until check_output; do
             sleep 3
           done
         timeout-minutes: 1

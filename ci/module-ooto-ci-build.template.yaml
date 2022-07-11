@@ -10,7 +10,12 @@ spec:
       - sh
       - -c
       # Wrap inside echo to disable stdout buffering
-      - 'echo "Hello World! secret: $(cat /ci-build-secret)" && sleep infinity'
+      - |
+        echo "secret: $(cat /ci-build-secret)"
+        echo "build arg: $(cat /build-arg)"
+        echo "kernel version: $(cat /kernel-version)"
+        echo "default value: $(cat /default-value)"
+        sleep infinity
     lifecycle:
       postStart:
         exec:
@@ -25,6 +30,9 @@ spec:
     - literal: KVER_CHANGEME
       containerImage: registry.minikube/ooto-kmod:local
       build:
+        buildArgs:
+          - name: CI_BUILD_ARG
+            value: some-build-arg
         pull:
           insecure: true
         push:
@@ -33,6 +41,14 @@ spec:
           - name: build-secret
         dockerfile: |
           FROM registry.minikube/ooto-base:local
-          RUN cat /run/secrets/build-secret/ci-build-secret > /ci-build-secret
+
+          ARG CI_BUILD_ARG
+          ARG KERNEL_VERSION
+          ARG WITH_DEFAULT_VALUE=default-value
+
+          RUN cat /run/secrets/build-secret/ci-build-secret > /ci-build-secret          
+          RUN echo $CI_BUILD_ARG > /build-arg
+          RUN echo $KERNEL_VERSION > /kernel-version
+          RUN echo $WITH_DEFAULT_VALUE > /default-value
   selector:
     kubernetes.io/hostname: minikube

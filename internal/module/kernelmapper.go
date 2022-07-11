@@ -1,7 +1,6 @@
 package module
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -88,19 +87,19 @@ func (k *kernelMapper) GetNodeOSConfig(node *v1.Node) *NodeOSConfig {
 }
 
 func (k *kernelMapper) PrepareKernelMapping(mapping *ootov1alpha1.KernelMapping, osConfig *NodeOSConfig) (*ootov1alpha1.KernelMapping, error) {
-	mappingString, err := json.Marshal(mapping)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal mapping: %w", err)
-	}
 	osConfigStrings := k.prepareOSConfigList(*osConfig)
+
 	parser := parse.New("mapping", osConfigStrings, &parse.Restrictions{})
-	parsedMapping, err := parser.Parse(string(mappingString))
+
+	substContainerImage, err := parser.Parse(mapping.ContainerImage)
 	if err != nil {
-		return nil, fmt.Errorf("failed to substitute the os config into mapping: %w", err)
+		return nil, fmt.Errorf("failed to substitute the os config into ContainerImage field: %w", err)
 	}
-	substMapping := ootov1alpha1.KernelMapping{}
-	err = json.Unmarshal([]byte(parsedMapping), &substMapping)
-	return &substMapping, err
+
+	substMapping := mapping.DeepCopy()
+	substMapping.ContainerImage = substContainerImage
+
+	return substMapping, nil
 }
 
 func (k *kernelMapper) prepareOSConfigList(osConfig NodeOSConfig) []string {
