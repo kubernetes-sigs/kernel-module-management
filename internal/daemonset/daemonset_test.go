@@ -494,7 +494,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 							},
 						},
 						NodeSelector: map[string]string{
-							"has-feature-x": "true",
+							GetDriverContainerNodeLabel(mod.Name): "",
 						},
 						ServiceAccountName: serviceAccountName,
 						Volumes: []v1.Volume{

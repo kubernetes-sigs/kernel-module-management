@@ -179,6 +179,8 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 		constants.ModuleNameLabel: mod.Name,
 	}
 
+	nodeSelector := map[string]string{GetDriverContainerNodeLabel(mod.Name): ""}
+
 	containerVolumeMounts := []v1.VolumeMount{
 		{
 			Name:      kubeletDevicePluginsVolumeName,
@@ -200,7 +202,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 	}
 
 	return dc.constructDaemonSet(ctx, ds, mod, *mod.Spec.DevicePlugin, "device-plugin", "", standardLabels,
-		mod.Spec.Selector, containerVolumeMounts, dsVolumes, true)
+		nodeSelector, containerVolumeMounts, dsVolumes, true)
 }
 
 func (dc *daemonSetGenerator) IsDevicePluginDaemonSet(ds appsv1.DaemonSet) bool {
@@ -271,4 +273,8 @@ func CopyMapStringString(m map[string]string) map[string]string {
 	}
 
 	return n
+}
+
+func GetDriverContainerNodeLabel(moduleName string) string {
+	return fmt.Sprintf("oot.node.kubernetes.io/%s.ready", moduleName)
 }
