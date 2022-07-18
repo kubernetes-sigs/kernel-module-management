@@ -126,12 +126,26 @@ jobs:
           done
         timeout-minutes: 1
 
+      - name: Check that the node gets labeled with the module's name
+        run: |
+          until kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("oot.node.kubernetes.io/ooto-ci.ready")'; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
       - name: Remove the Module
         run: kubectl delete -f module-ooto-ci.yaml
 
       - name: Check that the module gets unloaded from the node
         run: |
           until ! minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Check that the node gets unlabeled with the module's name
+        run: |
+          until ! kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("oot.node.kubernetes.io/ooto-ci.ready")'; do
             sleep 3
           done
         timeout-minutes: 1

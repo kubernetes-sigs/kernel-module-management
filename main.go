@@ -167,6 +167,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = controllers.NewPodNodeModuleReconciler(client).SetupWithManager(mgr); err != nil {
+		setupLogger.Error(err, "unable to create controller", "controller", "PodNodeModule")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

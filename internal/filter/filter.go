@@ -9,13 +9,14 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/kubectl/pkg/util/podutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func hasLabel(label string) predicate.Predicate {
+func HasLabel(label string) predicate.Predicate {
 	return predicate.NewPredicateFuncs(func(o client.Object) bool {
 		return o.GetLabels()[label] != ""
 	})
@@ -40,7 +41,7 @@ func New(client client.Client, logger logr.Logger) *Filter {
 func (f *Filter) ModuleReconcilerNodePredicate(kernelLabel string) predicate.Predicate {
 	return predicate.And(
 		skipDeletions,
-		hasLabel(kernelLabel),
+		HasLabel(kernelLabel),
 		predicate.LabelChangedPredicate{},
 	)
 }
@@ -104,4 +105,35 @@ func (f *Filter) FindModulesForNode(node client.Object) []reconcile.Request {
 	logger.V(1).Info("New requests", "requests", reqs)
 
 	return reqs
+}
+
+// PodHasSpecNodeName returns a predicate that returns true if the object is a *v1.Pod and its .spec.nodeName
+// property is set.
+func PodHasSpecNodeName() predicate.Predicate {
+	return predicate.NewPredicateFuncs(func(o client.Object) bool {
+		pod, ok := o.(*v1.Pod)
+		return ok && pod.Spec.NodeName != ""
+	})
+}
+
+// PodReadinessChangedPredicate returns a predicate for Update events that only returns true if the Ready condition
+// changed.
+func PodReadinessChangedPredicate(logger logr.Logger) predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldPod, ok := e.ObjectOld.(*v1.Pod)
+			if !ok {
+				logger.Info("Old object is not a pod", "object", e.ObjectOld)
+				return true
+			}
+
+			newPod, ok := e.ObjectNew.(*v1.Pod)
+			if !ok {
+				logger.Info("New object is not a pod", "object", e.ObjectNew)
+				return true
+			}
+
+			return podutils.IsPodReady(oldPod) != podutils.IsPodReady(newPod)
+		},
+	}
 }

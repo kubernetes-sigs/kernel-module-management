@@ -174,7 +174,10 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			Spec: appsv1.DaemonSetSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: podLabels},
 				Template: v1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{Labels: podLabels},
+					ObjectMeta: metav1.ObjectMeta{
+						Finalizers: []string{constants.NodeLabelerFinalizer},
+						Labels:     podLabels,
+					},
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{
 							{
@@ -714,5 +717,52 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 		Expect(m).To(HaveLen(2))
 		Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
 		Expect(m).To(HaveKeyWithValue(devicePluginKernelVersion, &ds2))
+	})
+})
+
+var _ = Describe("GetPodPullSecrets", func() {
+	It("should return nil if the Module has no pull secret", func() {
+		Expect(
+			GetPodPullSecrets(ootov1alpha1.Module{}),
+		).To(
+			BeNil(),
+		)
+	})
+
+	It("should a list with the reference nil if the Module has no pull secret", func() {
+		lor := &v1.LocalObjectReference{Name: "test"}
+
+		mod := ootov1alpha1.Module{
+			Spec: ootov1alpha1.ModuleSpec{ImagePullSecret: lor},
+		}
+
+		Expect(
+			GetPodPullSecrets(mod),
+		).To(
+			Equal([]v1.LocalObjectReference{*lor}),
+		)
+	})
+})
+
+var _ = Describe("OverrideLabels", func() {
+	It("should create a labels map if it was empty", func() {
+		overrides := map[string]string{"a": "b"}
+
+		Expect(
+			OverrideLabels(nil, overrides),
+		).To(
+			Equal(overrides),
+		)
+	})
+
+	It("should override existing values", func() {
+		labels := map[string]string{"a": "b", "c": "d"}
+		overrides := map[string]string{"a": "z"}
+
+		Expect(
+			OverrideLabels(labels, overrides),
+		).To(
+			Equal(map[string]string{"a": "z", "c": "d"}),
+		)
 	})
 })

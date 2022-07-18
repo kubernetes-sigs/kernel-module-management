@@ -25,7 +25,7 @@ var (
 	clnt *mockClient.MockClient
 )
 
-var _ = Describe("hasLabel", func() {
+var _ = Describe("HasLabel", func() {
 	const label = "test-label"
 
 	dsWithEmptyLabel := &appsv1.DaemonSet{
@@ -43,7 +43,7 @@ var _ = Describe("hasLabel", func() {
 	DescribeTable("Should return the expected value",
 		func(obj client.Object, expected bool) {
 			Expect(
-				hasLabel(label).Delete(event.DeleteEvent{Object: obj}),
+				HasLabel(label).Delete(event.DeleteEvent{Object: obj}),
 			).To(
 				Equal(expected),
 			)
@@ -305,4 +305,68 @@ var _ = Describe("FindModulesForNode", func() {
 		reqs := p.FindModulesForNode(&node)
 		Expect(reqs).To(Equal([]reconcile.Request{expectedReq}))
 	})
+})
+
+var _ = Describe("PodHasSpecNodeName", func() {
+	p := PodHasSpecNodeName()
+
+	DescribeTable(
+		"should return the expected value",
+		func(o client.Object, expected bool) {
+			Expect(
+				p.Create(event.CreateEvent{Object: o}),
+			).To(
+				Equal(expected),
+			)
+		},
+		Entry("ConfigMap: false", &v1.ConfigMap{}, false),
+		Entry("Pod with no nodeName: false", &v1.Pod{}, false),
+		Entry("Pod with a nodeName: true", &v1.Pod{Spec: v1.PodSpec{NodeName: "test"}}, true),
+	)
+})
+
+var _ = Describe("PodReadinessChangedPredicate", func() {
+	p := PodReadinessChangedPredicate(logr.Discard())
+
+	DescribeTable(
+		"should return the expected value",
+		func(e event.UpdateEvent, expected bool) {
+			Expect(p.Update(e)).To(Equal(expected))
+		},
+		Entry("objects are nil", event.UpdateEvent{}, true),
+		Entry("old object is not a Pod", event.UpdateEvent{ObjectOld: &v1.Node{}}, true),
+		Entry(
+			"new object is not a Pod",
+			event.UpdateEvent{
+				ObjectOld: &v1.Pod{},
+				ObjectNew: &v1.Node{},
+			},
+			true,
+		),
+		Entry(
+			"both objects are pods with the same conditions",
+			event.UpdateEvent{
+				ObjectOld: &v1.Pod{},
+				ObjectNew: &v1.Pod{},
+			},
+			false,
+		),
+		Entry(
+			"both objects are pods with different conditions",
+			event.UpdateEvent{
+				ObjectOld: &v1.Pod{},
+				ObjectNew: &v1.Pod{
+					Status: v1.PodStatus{
+						Conditions: []v1.PodCondition{
+							{
+								Type:   v1.PodReady,
+								Status: v1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			true,
+		),
+	)
 })

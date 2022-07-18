@@ -106,6 +106,10 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 		dc.kernelLabel:            kernelVersion,
 	}
 
+	ds.SetLabels(
+		OverrideLabels(ds.GetLabels(), standardLabels),
+	)
+
 	nodeSelector := CopyMapStringString(mod.Spec.Selector)
 	nodeSelector[dc.kernelLabel] = kernelVersion
 
@@ -144,8 +148,29 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 		},
 	}
 
-	return dc.constructDaemonSet(ctx, ds, &mod, mod.Spec.DriverContainer, "driver-container", image, standardLabels,
-		nodeSelector, driverContainerVolumeMounts, volumes, false)
+	container := mod.Spec.DriverContainer
+	container.Name = "driver-container"
+	container.Image = image
+	container.VolumeMounts = append(container.VolumeMounts, driverContainerVolumeMounts...)
+
+	ds.Spec = appsv1.DaemonSetSpec{
+		Template: v1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:     standardLabels,
+				Finalizers: []string{constants.NodeLabelerFinalizer},
+			},
+			Spec: v1.PodSpec{
+				Containers:         []v1.Container{container},
+				ImagePullSecrets:   GetPodPullSecrets(mod),
+				NodeSelector:       nodeSelector,
+				ServiceAccountName: mod.Spec.ServiceAccountName,
+				Volumes:            append(volumes, mod.Spec.AdditionalVolumes...),
+			},
+		},
+		Selector: &metav1.LabelSelector{MatchLabels: standardLabels},
+	}
+
+	return controllerutil.SetControllerReference(&mod, ds, dc.scheme)
 }
 
 func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *ootov1alpha1.Module) error {
@@ -157,12 +182,6 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 		return errors.New("device plugin in module should not be nil")
 	}
 
-	standardLabels := map[string]string{
-		constants.ModuleNameLabel: mod.Name,
-	}
-
-	nodeSelector := map[string]string{GetDriverContainerNodeLabel(mod.Name): ""}
-
 	containerVolumeMounts := []v1.VolumeMount{
 		{
 			Name:      kubeletDevicePluginsVolumeName,
@@ -171,20 +190,48 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 	}
 
 	hostPathDirectory := v1.HostPathDirectory
-	dsVolumes := []v1.Volume{
-		{
-			Name: kubeletDevicePluginsVolumeName,
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
-					Path: kubeletDevicePluginsPath,
-					Type: &hostPathDirectory,
-				},
+
+	devicePluginVolume := v1.Volume{
+		Name: kubeletDevicePluginsVolumeName,
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: kubeletDevicePluginsPath,
+				Type: &hostPathDirectory,
 			},
 		},
 	}
 
-	return dc.constructDaemonSet(ctx, ds, mod, *mod.Spec.DevicePlugin, "device-plugin", "", standardLabels,
-		nodeSelector, containerVolumeMounts, dsVolumes, true)
+	standardLabels := map[string]string{constants.ModuleNameLabel: mod.Name}
+
+	ds.SetLabels(
+		OverrideLabels(ds.GetLabels(), standardLabels),
+	)
+
+	container := *mod.Spec.DevicePlugin
+	container.Name = "device-plugin"
+	container.VolumeMounts = append(container.VolumeMounts, containerVolumeMounts...)
+
+	if container.SecurityContext == nil {
+		container.SecurityContext = &v1.SecurityContext{}
+	}
+
+	container.SecurityContext.Privileged = pointer.Bool(true)
+
+	ds.Spec = appsv1.DaemonSetSpec{
+		Selector: &metav1.LabelSelector{MatchLabels: standardLabels},
+		Template: v1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: standardLabels},
+			Spec: v1.PodSpec{
+				Containers:         []v1.Container{container},
+				ImagePullSecrets:   GetPodPullSecrets(*mod),
+				NodeSelector:       map[string]string{GetDriverContainerNodeLabel(mod.Name): ""},
+				ServiceAccountName: mod.Spec.ServiceAccountName,
+				Volumes:            append([]v1.Volume{devicePluginVolume}, mod.Spec.AdditionalVolumes...),
+			},
+		},
+	}
+
+	return controllerutil.SetControllerReference(mod, ds, dc.scheme)
 }
 
 func (dc *daemonSetGenerator) moduleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
@@ -197,67 +244,6 @@ func (dc *daemonSetGenerator) moduleDaemonSets(ctx context.Context, name, namesp
 		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
 	}
 	return dsList.Items, nil
-}
-
-func (dc *daemonSetGenerator) constructDaemonSet(ctx context.Context,
-	ds *appsv1.DaemonSet,
-	mod *ootov1alpha1.Module,
-	container v1.Container,
-	containerName string,
-	overrideContainerImage string,
-	labels map[string]string,
-	nodeSelector map[string]string,
-	volumeMounts []v1.VolumeMount,
-	volumes []v1.Volume,
-	privilege bool) error {
-
-	existingLabels := ds.GetLabels()
-
-	if existingLabels == nil {
-		existingLabels = make(map[string]string, len(labels))
-	}
-
-	for k, v := range labels {
-		existingLabels[k] = v
-	}
-
-	ds.SetLabels(existingLabels)
-
-	container.Name = containerName
-	if overrideContainerImage != "" {
-		container.Image = overrideContainerImage
-	}
-
-	container.VolumeMounts = append(container.VolumeMounts, volumeMounts...)
-	if privilege {
-		if container.SecurityContext == nil {
-			container.SecurityContext = &v1.SecurityContext{}
-		}
-		container.SecurityContext.Privileged = pointer.Bool(true)
-	}
-
-	containers := []v1.Container{container}
-	volumes = append(volumes, mod.Spec.AdditionalVolumes...)
-
-	var imagePullSecrets []v1.LocalObjectReference
-	if mod.Spec.ImagePullSecret != nil {
-		imagePullSecrets = []v1.LocalObjectReference{*mod.Spec.ImagePullSecret}
-	}
-
-	ds.Spec = appsv1.DaemonSetSpec{
-		Selector: &metav1.LabelSelector{MatchLabels: labels},
-		Template: v1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{Labels: labels},
-			Spec: v1.PodSpec{
-				NodeSelector:       nodeSelector,
-				Containers:         containers,
-				ImagePullSecrets:   imagePullSecrets,
-				ServiceAccountName: mod.Spec.ServiceAccountName,
-				Volumes:            volumes,
-			},
-		},
-	}
-	return controllerutil.SetControllerReference(mod, ds, dc.scheme)
 }
 
 // CopyMapStringString returns a deep copy of m.
@@ -281,4 +267,26 @@ func IsDevicePluginKernelVersion(kernelVersion string) bool {
 
 func GetDevicePluginKernelVersion() string {
 	return devicePluginKernelVersion
+}
+
+func GetPodPullSecrets(mod ootov1alpha1.Module) []v1.LocalObjectReference {
+	var pullSecrets []v1.LocalObjectReference
+
+	if ips := mod.Spec.ImagePullSecret; ips != nil {
+		pullSecrets = []v1.LocalObjectReference{*ips}
+	}
+
+	return pullSecrets
+}
+
+func OverrideLabels(labels, overrides map[string]string) map[string]string {
+	if labels == nil {
+		labels = make(map[string]string, len(overrides))
+	}
+
+	for k, v := range overrides {
+		labels[k] = v
+	}
+
+	return labels
 }
