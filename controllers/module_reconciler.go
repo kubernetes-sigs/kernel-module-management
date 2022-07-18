@@ -149,7 +149,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("could not garbage collect DaemonSets: %v", err)
 	}
 
-	err = r.statusUpdaterAPI.UpdateModuleStatus(ctx, mod, nodesWithMapping, targetedNodes)
+	err = r.statusUpdaterAPI.UpdateModuleStatus(ctx, mod, nodesWithMapping, targetedNodes, dsByKernelVersion)
 	if err != nil {
 		return res, fmt.Errorf("failed to update status of the module: %w", err)
 	}
@@ -237,6 +237,13 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
 
+	switch buildRes.Status {
+	case build.StatusCreated:
+		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, false)
+	case build.StatusCompleted:
+		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, true)
+	}
+
 	return buildRes.Requeue, nil
 }
 
@@ -258,9 +265,16 @@ func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
 		ds.GenerateName = mod.Name + "-"
 	}
 
-	_, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
+	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
 		return r.daemonAPI.SetDriverContainerAsDesired(ctx, ds, km.ContainerImage, *mod, kernelVersion)
 	})
+
+	if err == nil {
+		if opRes == controllerutil.OperationResultCreated {
+			r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.DriverContainerStage, false)
+		}
+		logger.Info("Reconciled Driver Container", "name", ds.Name, "result", opRes)
+	}
 
 	return err
 }
@@ -286,6 +300,9 @@ func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *ootov1al
 	})
 
 	if err == nil {
+		if opRes == controllerutil.OperationResultCreated {
+			r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, "", metrics.DevicePluginStage, false)
+		}
 		logger.Info("Reconciled Device Plugin", "name", ds.Name, "result", opRes)
 	}
 

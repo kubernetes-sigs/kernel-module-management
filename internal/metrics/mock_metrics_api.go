@@ -45,6 +45,18 @@ func (mr *MockMetricsMockRecorder) Register() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockMetrics)(nil).Register))
 }
 
+// SetCompletedStage mocks base method.
+func (m *MockMetrics) SetCompletedStage(kmmoName, kmmoNamespace, kernelVersion, stage string, completed bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetCompletedStage", kmmoName, kmmoNamespace, kernelVersion, stage, completed)
+}
+
+// SetCompletedStage indicates an expected call of SetCompletedStage.
+func (mr *MockMetricsMockRecorder) SetCompletedStage(kmmoName, kmmoNamespace, kernelVersion, stage, completed interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCompletedStage", reflect.TypeOf((*MockMetrics)(nil).SetCompletedStage), kmmoName, kmmoNamespace, kernelVersion, stage, completed)
+}
+
 // SetExistingKMMOModules mocks base method.
 func (m *MockMetrics) SetExistingKMMOModules(value int) {
 	m.ctrl.T.Helper()

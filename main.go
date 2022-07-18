@@ -158,7 +158,7 @@ func main() {
 	buildAPI := job.NewBuildManager(client, registryAPI, makerAPI, helperAPI)
 	daemonAPI := daemonset.NewCreator(client, kernelLabel, scheme)
 	kernelAPI := module.NewKernelMapper()
-	statusUpdaterAPI := module.NewStatusUpdater(client, daemonAPI)
+	statusUpdaterAPI := module.NewStatusUpdater(client, daemonAPI, metricsAPI)
 
 	mc := controllers.NewModuleReconciler(client, buildAPI, daemonAPI, kernelAPI, metricsAPI, filter, statusUpdaterAPI)
 

@@ -24,17 +24,16 @@ const (
 	nodeLibModulesVolumeName       = "node-lib-modules"
 	nodeUsrLibModulesPath          = "/usr/lib/modules"
 	nodeUsrLibModulesVolumeName    = "node-usr-lib-modules"
+	devicePluginKernelVersion      = ""
 )
 
 //go:generate mockgen -source=daemonset.go -package=daemonset -destination=mock_daemonset.go
 
 type DaemonSetCreator interface {
 	GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.String) ([]string, error)
-	ModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error)
 	SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error
 	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *ootov1alpha1.Module) error
-	IsDevicePluginDaemonSet(ds appsv1.DaemonSet) bool
 }
 
 type daemonSetGenerator struct {
@@ -67,20 +66,8 @@ func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, existingDS map
 	return deleted, nil
 }
 
-func (dc *daemonSetGenerator) ModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
-	dsList := appsv1.DaemonSetList{}
-	opts := []client.ListOption{
-		client.MatchingLabels(map[string]string{constants.ModuleNameLabel: name}),
-		client.InNamespace(namespace),
-	}
-	if err := dc.client.List(ctx, &dsList, opts...); err != nil {
-		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
-	}
-	return dsList.Items, nil
-}
-
 func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error) {
-	dsList, err := dc.ModuleDaemonSets(ctx, name, namespace)
+	dsList, err := dc.moduleDaemonSets(ctx, name, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("could not get all DaemonSets: %w", err)
 	}
@@ -91,11 +78,6 @@ func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Contex
 		ds := dsList[i]
 
 		kernelVersion := ds.Labels[dc.kernelLabel]
-		if kernelVersion == "" {
-			// this is a device plugin, skipping
-			continue
-		}
-
 		if dsByKernelVersion[kernelVersion] != nil {
 			return nil, fmt.Errorf("multiple DaemonSets found for kernel %q", kernelVersion)
 		}
@@ -205,8 +187,16 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 		nodeSelector, containerVolumeMounts, dsVolumes, true)
 }
 
-func (dc *daemonSetGenerator) IsDevicePluginDaemonSet(ds appsv1.DaemonSet) bool {
-	return ds.Labels[dc.kernelLabel] == ""
+func (dc *daemonSetGenerator) moduleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
+	dsList := appsv1.DaemonSetList{}
+	opts := []client.ListOption{
+		client.MatchingLabels(map[string]string{constants.ModuleNameLabel: name}),
+		client.InNamespace(namespace),
+	}
+	if err := dc.client.List(ctx, &dsList, opts...); err != nil {
+		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
+	}
+	return dsList.Items, nil
 }
 
 func (dc *daemonSetGenerator) constructDaemonSet(ctx context.Context,
@@ -283,4 +273,12 @@ func CopyMapStringString(m map[string]string) map[string]string {
 
 func GetDriverContainerNodeLabel(moduleName string) string {
 	return fmt.Sprintf("oot.node.kubernetes.io/%s.ready", moduleName)
+}
+
+func IsDevicePluginKernelVersion(kernelVersion string) bool {
+	return kernelVersion == devicePluginKernelVersion
+}
+
+func GetDevicePluginKernelVersion() string {
+	return devicePluginKernelVersion
 }

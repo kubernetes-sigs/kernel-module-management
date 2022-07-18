@@ -10,7 +10,8 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	v1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/apps/v1"
+	v10 "k8s.io/api/core/v1"
 )
 
 // MockStatusUpdater is a mock of StatusUpdater interface.
@@ -37,15 +38,15 @@ func (m *MockStatusUpdater) EXPECT() *MockStatusUpdaterMockRecorder {
 }
 
 // UpdateModuleStatus mocks base method.
-func (m *MockStatusUpdater) UpdateModuleStatus(ctx context.Context, mod *v1alpha1.Module, kernelMappingNodes, targetedNodes []v1.Node) error {
+func (m *MockStatusUpdater) UpdateModuleStatus(ctx context.Context, mod *v1alpha1.Module, kernelMappingNodes, targetedNodes []v10.Node, dsByKernelVersion map[string]*v1.DaemonSet) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateModuleStatus", ctx, mod, kernelMappingNodes, targetedNodes)
+	ret := m.ctrl.Call(m, "UpdateModuleStatus", ctx, mod, kernelMappingNodes, targetedNodes, dsByKernelVersion)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateModuleStatus indicates an expected call of UpdateModuleStatus.
-func (mr *MockStatusUpdaterMockRecorder) UpdateModuleStatus(ctx, mod, kernelMappingNodes, targetedNodes interface{}) *gomock.Call {
+func (mr *MockStatusUpdaterMockRecorder) UpdateModuleStatus(ctx, mod, kernelMappingNodes, targetedNodes, dsByKernelVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateModuleStatus", reflect.TypeOf((*MockStatusUpdater)(nil).UpdateModuleStatus), ctx, mod, kernelMappingNodes, targetedNodes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateModuleStatus", reflect.TypeOf((*MockStatusUpdater)(nil).UpdateModuleStatus), ctx, mod, kernelMappingNodes, targetedNodes, dsByKernelVersion)
 }

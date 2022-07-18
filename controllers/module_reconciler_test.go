@@ -14,7 +14,9 @@ import (
 	"github.com/qbarrand/oot-operator/internal/module"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -98,7 +100,7 @@ var _ = Describe("ModuleReconciler", func() {
 			gomock.InOrder(
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
-				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}).Return(nil),
+				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -157,7 +159,7 @@ var _ = Describe("ModuleReconciler", func() {
 			gomock.InOrder(
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
-				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}).Return(nil),
+				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -205,7 +207,18 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
+			dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
+
 			ctx := context.Background()
+
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
+
+			ds := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: moduleName + "-",
+					Namespace:    namespace,
+				},
+			}
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
@@ -227,26 +240,16 @@ var _ = Describe("ModuleReconciler", func() {
 						return nil
 					},
 				),
-				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()),
-			)
-
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
-
-			ds := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: moduleName + "-",
-					Namespace:    namespace,
-				},
-			}
-
-			gomock.InOrder(
 				mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace),
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
+				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
 				mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
-				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString(kernelVersion)),
-				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, nodeList.Items, nodeList.Items).Return(nil),
+				clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
+				mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.DriverContainerStage, false),
+				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
+				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -349,7 +352,78 @@ var _ = Describe("ModuleReconciler", func() {
 						d.SetLabels(map[string]string{"test": "test"})
 					}),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
-				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, nodeList.Items, nodeList.Items).Return(nil),
+				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
+			)
+
+			res, err := mr.Reconcile(context.Background(), req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(reconcile.Result{}))
+		})
+
+		It("should create a Device plugin if defined in the module", func() {
+			const (
+				imageName     = "test-image"
+				kernelVersion = "1.2.3"
+			)
+
+			mappings := []ootov1alpha1.KernelMapping{
+				{
+					ContainerImage: imageName,
+					Literal:        kernelVersion,
+				},
+			}
+
+			mod := ootov1alpha1.Module{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
+				Spec: ootov1alpha1.ModuleSpec{
+					DevicePlugin:   &v1.Container{},
+					KernelMappings: mappings,
+					Selector:       map[string]string{"key": "value"},
+				},
+			}
+
+			ctx := context.Background()
+
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
+
+			ds := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName + "-device-plugin",
+					Namespace: namespace,
+				},
+			}
+
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+						m.ObjectMeta = mod.ObjectMeta
+						m.Spec = mod.Spec
+						return nil
+					},
+				),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
+						return nil
+					},
+				),
+				mockMetrics.EXPECT().SetExistingKMMOModules(0),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+						list.Items = []v1.Node{}
+						return nil
+					},
+				),
+				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(nil, nil),
+				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
+				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
+				mockDC.EXPECT().SetDevicePluginAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&mod)),
+				clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
+				mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, "", metrics.DevicePluginStage, false),
+				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString()),
+				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, nil).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)

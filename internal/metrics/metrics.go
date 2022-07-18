@@ -8,6 +8,10 @@ import (
 // When adding metric names, see https://prometheus.io/docs/practices/naming/#metric-names
 const (
 	existingKMMOModulesQuery = "kmmo_module_total"
+	completedKMMOStageQuery  = "kmmo_completed_stage"
+	BuildStage               = "build"
+	DriverContainerStage     = "driver-container"
+	DevicePluginStage        = "device-plugin"
 )
 
 //go:generate mockgen -source=metrics.go -package=metrics -destination=mock_metrics_api.go
@@ -16,10 +20,12 @@ const (
 type Metrics interface {
 	Register()
 	SetExistingKMMOModules(value int)
+	SetCompletedStage(kmmoName, kmmoNamespace, kernelVersion, stage string, completed bool)
 }
 
 type metrics struct {
-	kmmoResourcesNum prometheus.Gauge
+	kmmoResourcesNum   prometheus.Gauge
+	kmmoCompletedStage *prometheus.GaugeVec
 }
 
 func New() Metrics {
@@ -30,15 +36,35 @@ func New() Metrics {
 			Help: "Number of existing KMMO Modules",
 		},
 	)
-	return &metrics{kmmoResourcesNum: kmmoResourcesNum}
+	completedStages := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: completedKMMOStageQuery,
+			Help: "For a given kmmo,namespace, kernel version, stage(device-plugin, driver-container, build), 1 if the stage is completed, 0 if it is not.",
+		},
+		[]string{"kmmo", "namespace", "kernel", "stage"},
+	)
+
+	return &metrics{
+		kmmoResourcesNum:   kmmoResourcesNum,
+		kmmoCompletedStage: completedStages,
+	}
 }
 
 func (m *metrics) Register() {
 	runtimemetrics.Registry.MustRegister(
 		m.kmmoResourcesNum,
+		m.kmmoCompletedStage,
 	)
 }
 
 func (m *metrics) SetExistingKMMOModules(value int) {
 	m.kmmoResourcesNum.Set(float64(value))
+}
+
+func (m *metrics) SetCompletedStage(kmmoName, kmmoNamespace, kernelVersion, stage string, completed bool) {
+	var value float64
+	if completed {
+		value = 1
+	}
+	m.kmmoCompletedStage.WithLabelValues(kmmoName, kmmoNamespace, kernelVersion, stage).Set(value)
 }

@@ -676,7 +676,7 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 		Expect(m).To(HaveKeyWithValue(otherKernelVersion, &ds2))
 	})
 
-	It("should skip a map entry for device plugin", func() {
+	It("should include a map entry for device plugin", func() {
 		ds1 := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ds1",
@@ -711,7 +711,8 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 
 		m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(HaveLen(1))
+		Expect(m).To(HaveLen(2))
 		Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
+		Expect(m).To(HaveKeyWithValue(devicePluginKernelVersion, &ds2))
 	})
 })
