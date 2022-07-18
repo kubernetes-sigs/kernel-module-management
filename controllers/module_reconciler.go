@@ -78,6 +78,7 @@ func NewModuleReconciler(
 //+kubebuilder:rbac:groups=ooto.sigs.k8s.io,resources=modules/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=create;delete;get;list;patch;watch
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
+//+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups="batch",resources=jobs,verbs=create;list;watch
 
 // Reconcile lists all nodes and looks for kernels that match its mappings.

@@ -1581,7 +1581,9 @@ spec:
                     type: object
                   secrets:
                     description: Secrets is an optional list of secrets to be made
-                      available to the build system.
+                      available to the build system. Those secrets should be used
+                      for private resources such as a private Github repo. For container
+                      registries auth use module.spec.imagePullSecret instead.
                     items:
                       description: LocalObjectReference contains enough information
                         to let you locate the referenced object inside the same namespace.
@@ -3983,6 +3985,15 @@ spec:
                 required:
                 - name
                 type: object
+              imagePullSecret:
+                description: ImagePullSecret is the name of the single Secret to use
+                  for all container image registries that requires auth.
+                properties:
+                  name:
+                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    type: string
+                type: object
               kernelMappings:
                 description: KernelMappings is a list of kernel mappings. When a node's
                   labels match Selector, then the OOT Operator will look for the first
@@ -4043,7 +4054,10 @@ spec:
                           type: object
                         secrets:
                           description: Secrets is an optional list of secrets to be
-                            made available to the build system.
+                            made available to the build system. Those secrets should
+                            be used for private resources such as a private Github
+                            repo. For container registries auth use module.spec.imagePullSecret
+                            instead.
                           items:
                             description: LocalObjectReference contains enough information
                               to let you locate the referenced object inside the same

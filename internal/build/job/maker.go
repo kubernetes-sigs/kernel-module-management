@@ -78,6 +78,15 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build
 		MountPath: "/workspace",
 	}
 
+	volumes := []v1.Volume{dockerFileVolume}
+	volumeMounts := []v1.VolumeMount{dockerFileVolumeMount}
+	if mod.Spec.ImagePullSecret != nil {
+		volumes = append(volumes, makeImagePullSecretVolume(mod.Spec.ImagePullSecret))
+		volumeMounts = append(volumeMounts, makeImagePullSecretVolumeMount(mod.Spec.ImagePullSecret))
+	}
+	volumes = append(volumes, makeBuildSecretVolumes(buildConfig.Secrets)...)
+	volumeMounts = append(volumeMounts, makeBuildSecretVolumeMounts(buildConfig.Secrets)...)
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mod.Name + "-build-",
@@ -96,11 +105,11 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build
 							Args:         args,
 							Name:         "kaniko",
 							Image:        "gcr.io/kaniko-project/executor:latest",
-							VolumeMounts: append([]v1.VolumeMount{dockerFileVolumeMount}, MakeSecretVolumeMounts(buildConfig.Secrets)...),
+							VolumeMounts: volumeMounts,
 						},
 					},
 					RestartPolicy: v1.RestartPolicyOnFailure,
-					Volumes:       append([]v1.Volume{dockerFileVolume}, MakeSecretVolumes(buildConfig.Secrets)...),
+					Volumes:       volumes,
 				},
 			},
 		},
@@ -113,14 +122,52 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build
 	return job, nil
 }
 
-func MakeSecretVolumes(secretRefs []v1.LocalObjectReference) []v1.Volume {
+func makeImagePullSecretVolume(secretRef *v1.LocalObjectReference) v1.Volume {
+
+	if secretRef == nil {
+		return v1.Volume{}
+	}
+
+	return v1.Volume{
+		Name: volumeNameFromSecretRef(*secretRef),
+		VolumeSource: v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: secretRef.Name,
+				Items: []v1.KeyToPath{
+					{
+						Key:  v1.DockerConfigJsonKey,
+						Path: "config.json",
+					},
+				},
+			},
+		},
+	}
+}
+
+func makeImagePullSecretVolumeMount(secretRef *v1.LocalObjectReference) v1.VolumeMount {
+
+	if secretRef == nil {
+		return v1.VolumeMount{}
+	}
+
+	return v1.VolumeMount{
+		Name:      volumeNameFromSecretRef(*secretRef),
+		ReadOnly:  true,
+		MountPath: "/kaniko/.docker",
+	}
+}
+
+func makeBuildSecretVolumes(secretRefs []v1.LocalObjectReference) []v1.Volume {
+
 	volumes := make([]v1.Volume, 0, len(secretRefs))
 
 	for _, secretRef := range secretRefs {
 		vol := v1.Volume{
 			Name: volumeNameFromSecretRef(secretRef),
 			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{SecretName: secretRef.Name},
+				Secret: &v1.SecretVolumeSource{
+					SecretName: secretRef.Name,
+				},
 			},
 		}
 
@@ -130,7 +177,8 @@ func MakeSecretVolumes(secretRefs []v1.LocalObjectReference) []v1.Volume {
 	return volumes
 }
 
-func MakeSecretVolumeMounts(secretRefs []v1.LocalObjectReference) []v1.VolumeMount {
+func makeBuildSecretVolumeMounts(secretRefs []v1.LocalObjectReference) []v1.VolumeMount {
+
 	secretVolumeMounts := make([]v1.VolumeMount, 0, len(secretRefs))
 
 	for _, secretRef := range secretRefs {

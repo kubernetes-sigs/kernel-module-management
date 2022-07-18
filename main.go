@@ -23,6 +23,7 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/qbarrand/oot-operator/internal/auth"
 	"github.com/qbarrand/oot-operator/internal/build"
 	"github.com/qbarrand/oot-operator/internal/build/job"
 	"github.com/qbarrand/oot-operator/internal/daemonset"
@@ -32,6 +33,7 @@ import (
 	"github.com/qbarrand/oot-operator/internal/registry"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2/klogr"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -149,7 +151,8 @@ func main() {
 
 	metricsAPI := metrics.New()
 	metricsAPI.Register()
-	registryAPI := registry.NewRegistry()
+	registryAuthAPI := auth.NewRegistryAuth(client)
+	registryAPI := registry.NewRegistry(registryAuthAPI)
 	helperAPI := build.NewHelper()
 	makerAPI := job.NewMaker(helperAPI, scheme)
 	buildAPI := job.NewBuildManager(client, registryAPI, makerAPI, helperAPI)

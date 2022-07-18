@@ -28,53 +28,55 @@ type BuildArg struct {
 }
 
 type PullOptions struct {
-	// If Insecure is true, images can be pulled from an insecure (plain HTTP) registry.
+
 	// +optional
+	// If Insecure is true, images can be pulled from an insecure (plain HTTP) registry.
 	Insecure bool `json:"insecure,omitempty"`
 
-	// If InsecureSkipTLSVerify, the operator will accept any certificate provided by the registry.
 	// +optional
+	// If InsecureSkipTLSVerify, the operator will accept any certificate provided by the registry.
 	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 }
 
 type PushOptions struct {
-	// If Insecure is true, built images can be pushed to an insecure (plain HTTP) registry.
+
 	// +optional
+	// If Insecure is true, built images can be pushed to an insecure (plain HTTP) registry.
 	Insecure bool `json:"insecure,omitempty"`
 
-	// If InsecureSkipTLSVerify, the operator will accept any certificate provided by the registry.
 	// +optional
+	// If InsecureSkipTLSVerify, the operator will accept any certificate provided by the registry.
 	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 }
 
 type Build struct {
-	// +optional
 
+	// +optional
 	// BuildArgs is an array of build variables that are provided to the image building backend.
 	BuildArgs []BuildArg `json:"buildArgs"`
 
 	Dockerfile string `json:"dockerfile"`
 
 	// +optional
-
 	// Pull contains settings determining how to check if the DriverContainer image already exists.
 	Pull PullOptions `json:"pull"`
 
 	// +optional
-
 	// Push contains settings determining how to push a built DriverContainer image.
 	Push PushOptions `json:"push"`
 
-	// Secrets is an optional list of secrets to be made available to the build system.
 	// +optional
+	// Secrets is an optional list of secrets to be made available to the build system.
+	// Those secrets should be used for private resources such as a private Github repo.
+	// For container registries auth use module.spec.imagePullSecret instead.
 	Secrets []v1.LocalObjectReference `json:"secrets"`
 }
 
 // KernelMapping pairs kernel versions with a DriverContainer image.
 // Kernel versions can be matched literally or using a regular expression.
 type KernelMapping struct {
-	// +optional
 
+	// +optional
 	// Build enables in-cluster builds for this mapping and allows overriding the Module's build settings.
 	Build *Build `json:"build"`
 
@@ -82,29 +84,26 @@ type KernelMapping struct {
 	ContainerImage string `json:"containerImage"`
 
 	// +optional
-
 	// Literal defines a literal target kernel version to be matched exactly against node kernels.
 	Literal string `json:"literal"`
 
 	// +optional
-
 	// Regexp is a regular expression to be match against node kernels.
 	Regexp string `json:"regexp"`
 }
 
 // ModuleSpec describes how the OOT operator should deploy a Module on those nodes that need it.
 type ModuleSpec struct {
+
 	// +optional
 	Build *Build `json:"build"`
 
 	// +optional
-
 	// AdditionalVolumes is a list of volumes that will be attached to the DriverContainer / DevicePlugin pod,
 	// in addition to the default ones.
 	AdditionalVolumes []v1.Volume `json:"additionalVolumes"`
 
 	// +optional
-
 	// DevicePlugin allows overriding some properties of the container that deploys the device plugin on the node.
 	// Name is ignored and is set automatically by the OOT Operator.
 	DevicePlugin *v1.Container `json:"devicePlugin"`
@@ -121,10 +120,14 @@ type ModuleSpec struct {
 	// Selector describes on which nodes the Module should be loaded.
 	Selector map[string]string `json:"selector"`
 
+	// +optional
 	// ServiceAccountName is the name of the ServiceAccount to use to run this pod.
 	// More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
-	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// +optional
+	// ImagePullSecret is the name of the single Secret to use for all container image registries that requires auth.
+	ImagePullSecret *v1.LocalObjectReference `json:"imagePullSecret,omitempty"`
 }
 
 // DaemonSetStatus contains the status for a daemonset deployed during

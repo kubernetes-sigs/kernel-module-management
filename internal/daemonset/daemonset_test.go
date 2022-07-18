@@ -132,6 +132,9 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				},
 				Selector:           map[string]string{"has-feature-x": "true"},
 				ServiceAccountName: serviceAccountName,
+				ImagePullSecret: &v1.LocalObjectReference{
+					Name: "pull-push-secret",
+				},
 			},
 		}
 
@@ -215,6 +218,11 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 										Type: &directory,
 									},
 								},
+							},
+						},
+						ImagePullSecrets: []v1.LocalObjectReference{
+							{
+								Name: "pull-push-secret",
 							},
 						},
 					},

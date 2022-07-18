@@ -249,6 +249,11 @@ func (dc *daemonSetGenerator) constructDaemonSet(ctx context.Context,
 	containers := []v1.Container{container}
 	volumes = append(volumes, mod.Spec.AdditionalVolumes...)
 
+	var imagePullSecrets []v1.LocalObjectReference
+	if mod.Spec.ImagePullSecret != nil {
+		imagePullSecrets = []v1.LocalObjectReference{*mod.Spec.ImagePullSecret}
+	}
+
 	ds.Spec = appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{MatchLabels: labels},
 		Template: v1.PodTemplateSpec{
@@ -256,6 +261,7 @@ func (dc *daemonSetGenerator) constructDaemonSet(ctx context.Context,
 			Spec: v1.PodSpec{
 				NodeSelector:       nodeSelector,
 				Containers:         containers,
+				ImagePullSecrets:   imagePullSecrets,
 				ServiceAccountName: mod.Spec.ServiceAccountName,
 				Volumes:            volumes,
 			},

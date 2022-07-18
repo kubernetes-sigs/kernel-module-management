@@ -36,12 +36,18 @@ var _ = Describe("Labels", func() {
 
 var _ = Describe("JobManager", func() {
 	Describe("Sync", func() {
+
 		var (
 			ctrl     *gomock.Controller
 			clnt     *client.MockClient
 			registry *registrypkg.MockRegistry
 			maker    *MockMaker
 			helper   *build.MockHelper
+		)
+
+		const (
+			imageName = "image-name"
+			namespace = "some-namespace"
 		)
 
 		BeforeEach(func() {
@@ -51,11 +57,6 @@ var _ = Describe("JobManager", func() {
 			maker = NewMockMaker(ctrl)
 			helper = build.NewMockHelper(ctrl)
 		})
-
-		const (
-			imageName = "image-name"
-			namespace = "some-namespace"
-		)
 
 		po := ootov1alpha1.PullOptions{}
 
@@ -68,7 +69,7 @@ var _ = Describe("JobManager", func() {
 			ctx := context.Background()
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
-				registry.EXPECT().ImageExists(ctx, imageName, po).Return(false, errors.New("random error")),
+				registry.EXPECT().ImageExists(ctx, imageName, po, nil, "").Return(false, errors.New("random error")),
 			)
 			mgr := NewBuildManager(nil, registry, maker, helper)
 
@@ -81,7 +82,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
-				registry.EXPECT().ImageExists(ctx, imageName, po).Return(true, nil),
+				registry.EXPECT().ImageExists(ctx, imageName, po, nil, "").Return(true, nil),
 			)
 
 			mgr := NewBuildManager(nil, registry, maker, helper)
@@ -121,7 +122,7 @@ var _ = Describe("JobManager", func() {
 
 				gomock.InOrder(
 					helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-					registry.EXPECT().ImageExists(ctx, imageName, po).Return(false, nil),
+					registry.EXPECT().ImageExists(ctx, imageName, po, mod.Spec.ImagePullSecret, mod.Namespace).Return(false, nil),
 				)
 
 				mgr := NewBuildManager(clnt, registry, maker, helper)
@@ -145,7 +146,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				registry.EXPECT().ImageExists(ctx, imageName, po),
+				registry.EXPECT().ImageExists(ctx, imageName, po, mod.Spec.ImagePullSecret, mod.Namespace),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(nil, errors.New("random error")),
 			)
 			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any())
@@ -177,7 +178,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				registry.EXPECT().ImageExists(ctx, imageName, po),
+				registry.EXPECT().ImageExists(ctx, imageName, po, mod.Spec.ImagePullSecret, mod.Namespace),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(&j, nil),
 			)
 
