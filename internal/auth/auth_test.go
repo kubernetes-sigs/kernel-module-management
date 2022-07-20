@@ -9,9 +9,10 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/qbarrand/oot-operator/internal/client"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
-var _ = Describe("GetKeyChainFromSecret", func() {
+var _ = Describe("GetKeyChain", func() {
 
 	const (
 		secretName      = "pull-push-secret"
@@ -22,14 +23,12 @@ var _ = Describe("GetKeyChainFromSecret", func() {
 		ctrl       *gomock.Controller
 		ctx        context.Context
 		mockClient *client.MockClient
-		a          RegistryAuth
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		ctx = context.TODO()
 		mockClient = client.NewMockClient(ctrl)
-		a = NewRegistryAuth(mockClient)
 	})
 
 	AfterEach(func() {
@@ -40,7 +39,13 @@ var _ = Describe("GetKeyChainFromSecret", func() {
 
 		mockClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(errors.New("some error"))
 
-		_, err := a.GetKeyChainFromSecret(ctx, secretName, secretNamespace)
+		namespacedNamespace := types.NamespacedName{
+			Name:      secretName,
+			Namespace: secretNamespace,
+		}
+		registryAuthGetter := NewRegistryAuthGetter(mockClient, namespacedNamespace)
+
+		_, err := registryAuthGetter.GetKeyChain(ctx)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("cannot find secret"))
 	})
@@ -57,7 +62,13 @@ var _ = Describe("GetKeyChainFromSecret", func() {
 			},
 		)
 
-		_, err := a.GetKeyChainFromSecret(ctx, secretName, secretNamespace)
+		namespacedNamespace := types.NamespacedName{
+			Name:      secretName,
+			Namespace: secretNamespace,
+		}
+		registryAuthGetter := NewRegistryAuthGetter(mockClient, namespacedNamespace)
+
+		_, err := registryAuthGetter.GetKeyChain(ctx)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("could not create a keycahin from secret"))
 	})
@@ -66,7 +77,13 @@ var _ = Describe("GetKeyChainFromSecret", func() {
 
 		mockClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil)
 
-		_, err := a.GetKeyChainFromSecret(ctx, secretName, secretNamespace)
+		namespacedNamespace := types.NamespacedName{
+			Name:      secretName,
+			Namespace: secretNamespace,
+		}
+		registryAuthGetter := NewRegistryAuthGetter(mockClient, namespacedNamespace)
+
+		_, err := registryAuthGetter.GetKeyChain(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

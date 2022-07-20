@@ -17,7 +17,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	"github.com/qbarrand/oot-operator/internal/auth"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -40,24 +39,20 @@ type RepoPullConfig struct {
 //go:generate mockgen -source=registry.go -package=registry -destination=mock_registry_api.go
 
 type Registry interface {
-	ImageExists(ctx context.Context, image string, po ootov1alpha1.PullOptions, ps *corev1.LocalObjectReference, psNamespace string) (bool, error)
+	ImageExists(ctx context.Context, image string, po ootov1alpha1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error)
 	ExtractToolkitRelease(v1.Layer) (*DriverToolkitEntry, error)
-	GetLayersDigests(ctx context.Context, image string) ([]string, *RepoPullConfig, error)
+	GetLayersDigests(ctx context.Context, image string, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error)
 	GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error)
 }
 
-type registry struct {
-	auth auth.RegistryAuth
+type registry struct{}
+
+func NewRegistry() Registry {
+	return &registry{}
 }
 
-func NewRegistry(auth auth.RegistryAuth) Registry {
-	return &registry{
-		auth: auth,
-	}
-}
-
-func (r *registry) ImageExists(ctx context.Context, image string, po ootov1alpha1.PullOptions, ps *corev1.LocalObjectReference, psNamespace string) (bool, error) {
-	pullConfig, err := r.getPullOptions(ctx, image, &po, ps, psNamespace)
+func (r *registry) ImageExists(ctx context.Context, image string, po ootov1alpha1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
+	pullConfig, err := r.getPullOptions(ctx, image, &po, registryAuthGetter)
 	if err != nil {
 		return false, fmt.Errorf("failed to get pull options for image %s: %w", image, err)
 	}
@@ -72,8 +67,8 @@ func (r *registry) ImageExists(ctx context.Context, image string, po ootov1alpha
 	return true, nil
 }
 
-func (r *registry) GetLayersDigests(ctx context.Context, image string) ([]string, *RepoPullConfig, error) {
-	pullConfig, err := r.getPullOptions(ctx, image, nil, nil, "")
+func (r *registry) GetLayersDigests(ctx context.Context, image string, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error) {
+	pullConfig, err := r.getPullOptions(ctx, image, nil, registryAuthGetter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get pull options for image %s: %w", image, err)
 	}
@@ -119,7 +114,7 @@ func (r *registry) ExtractToolkitRelease(layer v1.Layer) (*DriverToolkitEntry, e
 	return dtk, nil
 }
 
-func (r *registry) getPullOptions(ctx context.Context, image string, po *ootov1alpha1.PullOptions, ps *corev1.LocalObjectReference, psNamespace string) (*RepoPullConfig, error) {
+func (r *registry) getPullOptions(ctx context.Context, image string, po *ootov1alpha1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (*RepoPullConfig, error) {
 	var repo string
 	if hash := strings.Split(image, "@"); len(hash) > 1 {
 		repo = hash[0]
@@ -151,10 +146,10 @@ func (r *registry) getPullOptions(ctx context.Context, image string, po *ootov1a
 		}
 	}
 
-	if ps != nil {
-		keyChain, err := r.auth.GetKeyChainFromSecret(ctx, ps.Name, psNamespace)
+	if registryAuthGetter != nil {
+		keyChain, err := registryAuthGetter.GetKeyChain(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("cannot get keychain for secret %s/%s: %w", psNamespace, ps, err)
+			return nil, fmt.Errorf("cannot get keychain from the registry auth getter: %w", err)
 		}
 		options = append(
 			options,

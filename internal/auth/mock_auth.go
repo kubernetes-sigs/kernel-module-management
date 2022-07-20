@@ -12,40 +12,40 @@ import (
 	authn "github.com/google/go-containerregistry/pkg/authn"
 )
 
-// MockRegistryAuth is a mock of RegistryAuth interface.
-type MockRegistryAuth struct {
+// MockRegistryAuthGetter is a mock of RegistryAuthGetter interface.
+type MockRegistryAuthGetter struct {
 	ctrl     *gomock.Controller
-	recorder *MockRegistryAuthMockRecorder
+	recorder *MockRegistryAuthGetterMockRecorder
 }
 
-// MockRegistryAuthMockRecorder is the mock recorder for MockRegistryAuth.
-type MockRegistryAuthMockRecorder struct {
-	mock *MockRegistryAuth
+// MockRegistryAuthGetterMockRecorder is the mock recorder for MockRegistryAuthGetter.
+type MockRegistryAuthGetterMockRecorder struct {
+	mock *MockRegistryAuthGetter
 }
 
-// NewMockRegistryAuth creates a new mock instance.
-func NewMockRegistryAuth(ctrl *gomock.Controller) *MockRegistryAuth {
-	mock := &MockRegistryAuth{ctrl: ctrl}
-	mock.recorder = &MockRegistryAuthMockRecorder{mock}
+// NewMockRegistryAuthGetter creates a new mock instance.
+func NewMockRegistryAuthGetter(ctrl *gomock.Controller) *MockRegistryAuthGetter {
+	mock := &MockRegistryAuthGetter{ctrl: ctrl}
+	mock.recorder = &MockRegistryAuthGetterMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockRegistryAuth) EXPECT() *MockRegistryAuthMockRecorder {
+func (m *MockRegistryAuthGetter) EXPECT() *MockRegistryAuthGetterMockRecorder {
 	return m.recorder
 }
 
-// GetKeyChainFromSecret mocks base method.
-func (m *MockRegistryAuth) GetKeyChainFromSecret(ctx context.Context, secretName, secretNamespace string) (authn.Keychain, error) {
+// GetKeyChain mocks base method.
+func (m *MockRegistryAuthGetter) GetKeyChain(ctx context.Context) (authn.Keychain, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetKeyChainFromSecret", ctx, secretName, secretNamespace)
+	ret := m.ctrl.Call(m, "GetKeyChain", ctx)
 	ret0, _ := ret[0].(authn.Keychain)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetKeyChainFromSecret indicates an expected call of GetKeyChainFromSecret.
-func (mr *MockRegistryAuthMockRecorder) GetKeyChainFromSecret(ctx, secretName, secretNamespace interface{}) *gomock.Call {
+// GetKeyChain indicates an expected call of GetKeyChain.
+func (mr *MockRegistryAuthGetterMockRecorder) GetKeyChain(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKeyChainFromSecret", reflect.TypeOf((*MockRegistryAuth)(nil).GetKeyChainFromSecret), ctx, secretName, secretNamespace)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKeyChain", reflect.TypeOf((*MockRegistryAuthGetter)(nil).GetKeyChain), ctx)
 }

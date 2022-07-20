@@ -8,11 +8,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	"github.com/qbarrand/oot-operator/internal/auth"
 	"github.com/qbarrand/oot-operator/internal/build"
 	"github.com/qbarrand/oot-operator/internal/client"
 	"github.com/qbarrand/oot-operator/internal/constants"
 	registrypkg "github.com/qbarrand/oot-operator/internal/registry"
 	batchv1 "k8s.io/api/batch/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -69,7 +71,7 @@ var _ = Describe("JobManager", func() {
 			ctx := context.Background()
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
-				registry.EXPECT().ImageExists(ctx, imageName, po, nil, "").Return(false, errors.New("random error")),
+				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()).Return(false, errors.New("random error")),
 			)
 			mgr := NewBuildManager(nil, registry, maker, helper)
 
@@ -82,7 +84,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
-				registry.EXPECT().ImageExists(ctx, imageName, po, nil, "").Return(true, nil),
+				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()).Return(true, nil),
 			)
 
 			mgr := NewBuildManager(nil, registry, maker, helper)
@@ -97,6 +99,7 @@ var _ = Describe("JobManager", func() {
 		const (
 			moduleName    = "module-name"
 			kernelVersion = "1.2.3"
+			jobName       = "some-job"
 		)
 
 		mod := ootov1alpha1.Module{
@@ -122,7 +125,7 @@ var _ = Describe("JobManager", func() {
 
 				gomock.InOrder(
 					helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-					registry.EXPECT().ImageExists(ctx, imageName, po, mod.Spec.ImagePullSecret, mod.Namespace).Return(false, nil),
+					registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()).Return(false, nil),
 				)
 
 				mgr := NewBuildManager(clnt, registry, maker, helper)
@@ -146,7 +149,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				registry.EXPECT().ImageExists(ctx, imageName, po, mod.Spec.ImagePullSecret, mod.Namespace),
+				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(nil, errors.New("random error")),
 			)
 			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any())
@@ -163,8 +166,6 @@ var _ = Describe("JobManager", func() {
 		It("should create the job if there was no error making it", func() {
 			ctx := context.Background()
 
-			const jobName = "some-job"
-
 			j := batchv1.Job{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "batch/v1",
@@ -178,12 +179,53 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				registry.EXPECT().ImageExists(ctx, imageName, po, mod.Spec.ImagePullSecret, mod.Namespace),
+				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(&j, nil),
 			)
 
 			gomock.InOrder(
 				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()),
+				clnt.EXPECT().Create(ctx, &j),
+			)
+
+			mgr := NewBuildManager(clnt, registry, maker, helper)
+
+			Expect(
+				mgr.Sync(ctx, mod, km, kernelVersion),
+			).To(
+				Equal(build.Result{Requeue: true, Status: build.StatusCreated}),
+			)
+		})
+
+		It("should use a non-nil RegistryAuthGetter if the imagePullSecret is set in the module", func() {
+
+			ctx := context.Background()
+
+			j := batchv1.Job{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "batch/v1",
+					Kind:       "Job",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      jobName,
+					Namespace: namespace,
+				},
+			}
+
+			mod.Spec.ImagePullSecret = &v1.LocalObjectReference{
+				Name: "pull-push-secret",
+			}
+
+			gomock.InOrder(
+				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
+				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, _ interface{}, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
+						Expect(registryAuthGetter).ToNot(BeNil())
+						return false, nil
+					},
+				),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()),
+				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(&j, nil),
 				clnt.EXPECT().Create(ctx, &j),
 			)
 

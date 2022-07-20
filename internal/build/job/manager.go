@@ -6,10 +6,12 @@ import (
 	"fmt"
 
 	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	"github.com/qbarrand/oot-operator/internal/auth"
 	"github.com/qbarrand/oot-operator/internal/build"
 	"github.com/qbarrand/oot-operator/internal/constants"
 	"github.com/qbarrand/oot-operator/internal/registry"
 	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -65,7 +67,16 @@ func (jbm *jobManager) Sync(ctx context.Context, mod ootov1alpha1.Module, m ooto
 
 	buildConfig := jbm.helper.GetRelevantBuild(mod, m)
 
-	imageAvailable, err := jbm.registry.ImageExists(ctx, m.ContainerImage, buildConfig.Pull, mod.Spec.ImagePullSecret, mod.Namespace)
+	var registryAuthGetter auth.RegistryAuthGetter
+
+	if mod.Spec.ImagePullSecret != nil {
+		namespacedName := types.NamespacedName{
+			Name:      mod.Spec.ImagePullSecret.Name,
+			Namespace: mod.Namespace,
+		}
+		registryAuthGetter = auth.NewRegistryAuthGetter(jbm.client, namespacedName)
+	}
+	imageAvailable, err := jbm.registry.ImageExists(ctx, m.ContainerImage, buildConfig.Pull, registryAuthGetter)
 	if err != nil {
 		return build.Result{}, fmt.Errorf("could not check if the image is available: %v", err)
 	}

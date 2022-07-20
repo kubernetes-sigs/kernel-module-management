@@ -23,7 +23,6 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/qbarrand/oot-operator/internal/auth"
 	"github.com/qbarrand/oot-operator/internal/build"
 	"github.com/qbarrand/oot-operator/internal/build/job"
 	"github.com/qbarrand/oot-operator/internal/daemonset"
@@ -151,8 +150,7 @@ func main() {
 
 	metricsAPI := metrics.New()
 	metricsAPI.Register()
-	registryAuthAPI := auth.NewRegistryAuth(client)
-	registryAPI := registry.NewRegistry(registryAuthAPI)
+	registryAPI := registry.NewRegistry()
 	helperAPI := build.NewHelper()
 	makerAPI := job.NewMaker(helperAPI, scheme)
 	buildAPI := job.NewBuildManager(client, registryAPI, makerAPI, helperAPI)

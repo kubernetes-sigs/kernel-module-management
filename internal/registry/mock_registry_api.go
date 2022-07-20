@@ -11,7 +11,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
-	v10 "k8s.io/api/core/v1"
+	auth "github.com/qbarrand/oot-operator/internal/auth"
 )
 
 // MockRegistry is a mock of Registry interface.
@@ -68,9 +68,9 @@ func (mr *MockRegistryMockRecorder) GetLayerByDigest(digest, pullConfig interfac
 }
 
 // GetLayersDigests mocks base method.
-func (m *MockRegistry) GetLayersDigests(ctx context.Context, image string) ([]string, *RepoPullConfig, error) {
+func (m *MockRegistry) GetLayersDigests(ctx context.Context, image string, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLayersDigests", ctx, image)
+	ret := m.ctrl.Call(m, "GetLayersDigests", ctx, image, registryAuthGetter)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(*RepoPullConfig)
 	ret2, _ := ret[2].(error)
@@ -78,22 +78,22 @@ func (m *MockRegistry) GetLayersDigests(ctx context.Context, image string) ([]st
 }
 
 // GetLayersDigests indicates an expected call of GetLayersDigests.
-func (mr *MockRegistryMockRecorder) GetLayersDigests(ctx, image interface{}) *gomock.Call {
+func (mr *MockRegistryMockRecorder) GetLayersDigests(ctx, image, registryAuthGetter interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLayersDigests", reflect.TypeOf((*MockRegistry)(nil).GetLayersDigests), ctx, image)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLayersDigests", reflect.TypeOf((*MockRegistry)(nil).GetLayersDigests), ctx, image, registryAuthGetter)
 }
 
 // ImageExists mocks base method.
-func (m *MockRegistry) ImageExists(ctx context.Context, image string, po v1alpha1.PullOptions, ps *v10.LocalObjectReference, psNamespace string) (bool, error) {
+func (m *MockRegistry) ImageExists(ctx context.Context, image string, po v1alpha1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ImageExists", ctx, image, po, ps, psNamespace)
+	ret := m.ctrl.Call(m, "ImageExists", ctx, image, po, registryAuthGetter)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ImageExists indicates an expected call of ImageExists.
-func (mr *MockRegistryMockRecorder) ImageExists(ctx, image, po, ps, psNamespace interface{}) *gomock.Call {
+func (mr *MockRegistryMockRecorder) ImageExists(ctx, image, po, registryAuthGetter interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImageExists", reflect.TypeOf((*MockRegistry)(nil).ImageExists), ctx, image, po, ps, psNamespace)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImageExists", reflect.TypeOf((*MockRegistry)(nil).ImageExists), ctx, image, po, registryAuthGetter)
 }

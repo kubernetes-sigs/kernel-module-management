@@ -13,29 +13,27 @@ import (
 
 //go:generate mockgen -source=auth.go -package=auth -destination=mock_auth.go
 
-type RegistryAuth interface {
-	GetKeyChainFromSecret(ctx context.Context, secretName, secretNamespace string) (authn.Keychain, error)
+type RegistryAuthGetter interface {
+	GetKeyChain(ctx context.Context) (authn.Keychain, error)
 }
 
-type registryAuth struct {
-	client client.Client
+type registrySecretAuthGetter struct {
+	client         client.Client
+	namespacedName types.NamespacedName
 }
 
-func NewRegistryAuth(client client.Client) RegistryAuth {
-	return &registryAuth{
-		client: client,
+func NewRegistryAuthGetter(client client.Client, namespacedName types.NamespacedName) RegistryAuthGetter {
+	return &registrySecretAuthGetter{
+		client:         client,
+		namespacedName: namespacedName,
 	}
 }
 
-func (a *registryAuth) GetKeyChainFromSecret(ctx context.Context, secretName, secretNamespace string) (authn.Keychain, error) {
+func (rsag *registrySecretAuthGetter) GetKeyChain(ctx context.Context) (authn.Keychain, error) {
 
 	secret := v1.Secret{}
-	secretNamespacedName := types.NamespacedName{
-		Name:      secretName,
-		Namespace: secretNamespace,
-	}
-	if err := a.client.Get(ctx, secretNamespacedName, &secret); err != nil {
-		return nil, fmt.Errorf("cannot find secret %s: %w", secretNamespacedName.String(), err)
+	if err := rsag.client.Get(ctx, rsag.namespacedName, &secret); err != nil {
+		return nil, fmt.Errorf("cannot find secret %s: %w", rsag.namespacedName, err)
 	}
 
 	keychain, err := kubernetes.NewFromPullSecrets(ctx, []v1.Secret{secret})
