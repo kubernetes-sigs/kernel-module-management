@@ -240,55 +240,6 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 		)
 	})
 
-	Describe("GarbageCollect", func() {
-		It("should only delete one of the two DaemonSets if only one is not used", func() {
-			const (
-				legitKernelVersion    = "legit-kernel-version"
-				legitName             = "legit"
-				notLegitKernelVersion = "not-legit-kernel-version"
-				notLegitName          = "not-legit"
-			)
-
-			dsLegit := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{Name: legitName, Namespace: namespace},
-			}
-
-			dsNotLegit := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: namespace},
-			}
-
-			clnt.EXPECT().Delete(context.Background(), &dsNotLegit).AnyTimes()
-
-			dc := NewCreator(clnt, "", scheme)
-
-			existingDS := map[string]*appsv1.DaemonSet{
-				legitKernelVersion:    &dsLegit,
-				notLegitKernelVersion: &dsNotLegit,
-			}
-
-			validKernels := sets.NewString(legitKernelVersion)
-
-			res, err := dc.GarbageCollect(context.Background(), existingDS, validKernels)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal([]string{notLegitName}))
-		})
-
-		It("should return an error if a deletion failed", func() {
-			clnt.EXPECT().Delete(context.Background(), gomock.Any()).Return(
-				errors.New("client returns some error"),
-			)
-
-			dc := NewCreator(clnt, "", scheme)
-
-			existingDS := map[string]*appsv1.DaemonSet{
-				"some-kernel-version": {},
-			}
-
-			_, err := dc.GarbageCollect(context.Background(), existingDS, sets.NewString())
-			Expect(err).To(HaveOccurred())
-		})
-	})
-
 	Describe("ModuleDaemonSetsByKernelVersion", func() {
 		It("should return an empty map if no DaemonSets are present", func() {
 			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any())
@@ -547,15 +498,16 @@ var _ = Describe("GarbageCollect", func() {
 		)
 
 		dsLegit := appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: legitName, Namespace: namespace},
+			ObjectMeta: metav1.ObjectMeta{Name: legitName, Namespace: namespace, Labels: map[string]string{kernelLabel: legitKernelVersion}},
 		}
 
 		dsNotLegit := appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: namespace},
+			ObjectMeta: metav1.ObjectMeta{Name: notLegitName, Namespace: namespace, Labels: map[string]string{kernelLabel: notLegitKernelVersion}},
 		}
 
 		clnt.EXPECT().Delete(context.Background(), &dsNotLegit).AnyTimes()
-		dc := NewCreator(clnt, "", scheme)
+
+		dc := NewCreator(clnt, kernelLabel, scheme)
 
 		existingDS := map[string]*appsv1.DaemonSet{
 			legitKernelVersion:    &dsLegit,
@@ -564,20 +516,24 @@ var _ = Describe("GarbageCollect", func() {
 
 		validKernels := sets.NewString(legitKernelVersion)
 
-		Expect(
-			dc.GarbageCollect(context.Background(), existingDS, validKernels),
-		).To(
-			Equal([]string{notLegitName}),
-		)
+		res, err := dc.GarbageCollect(context.Background(), existingDS, validKernels)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal([]string{notLegitName}))
 	})
 
 	It("should return an error if a deletion failed", func() {
-		clnt.EXPECT().Delete(context.Background(), gomock.Any()).Return(errors.New("some deleting error"))
+		clnt.EXPECT().Delete(context.Background(), gomock.Any()).Return(
+			errors.New("client returns some error"),
+		)
 
-		dc := NewCreator(clnt, "", scheme)
+		dc := NewCreator(clnt, kernelLabel, scheme)
+
+		dsNotLegit := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "namespace", Labels: map[string]string{kernelLabel: "kernel version"}},
+		}
 
 		existingDS := map[string]*appsv1.DaemonSet{
-			"some-kernel-version": {},
+			"some-kernel-version": &dsNotLegit,
 		}
 
 		_, err := dc.GarbageCollect(context.Background(), existingDS, sets.NewString())

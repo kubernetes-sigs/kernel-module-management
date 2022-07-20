@@ -54,7 +54,7 @@ func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, existingDS map
 	deleted := make([]string, 0)
 
 	for kernelVersion, ds := range existingDS {
-		if !validKernels.Has(kernelVersion) {
+		if !dc.isDevicePluginDaemonSet(ds) && !validKernels.Has(kernelVersion) {
 			if err := dc.client.Delete(ctx, ds); err != nil {
 				return nil, fmt.Errorf("could not delete DaemonSet %s: %v", ds.Name, err)
 			}
@@ -244,6 +244,10 @@ func (dc *daemonSetGenerator) moduleDaemonSets(ctx context.Context, name, namesp
 		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
 	}
 	return dsList.Items, nil
+}
+
+func (dc *daemonSetGenerator) isDevicePluginDaemonSet(ds *appsv1.DaemonSet) bool {
+	return ds.Labels[dc.kernelLabel] == ""
 }
 
 // CopyMapStringString returns a deep copy of m.
