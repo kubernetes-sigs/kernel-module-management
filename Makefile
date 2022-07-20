@@ -110,7 +110,7 @@ vet: ## Run go vet against code.
 TEST ?= ./...
 
 .PHONY: test
-unit-test: manifests generate lint vet envtest ## Run tests.
+unit-test: vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $(TEST) -coverprofile cover.out
 
 .PHONY: lint
