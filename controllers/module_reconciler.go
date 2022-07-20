@@ -30,6 +30,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -91,6 +92,11 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	mod, err := r.getRequestedModule(ctx, req.NamespacedName)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			logger.Info("Module deleted")
+			return ctrl.Result{}, nil
+		}
+
 		return res, fmt.Errorf("failed to get the requested %s KMMO CR: %w", req.NamespacedName, err)
 	}
 
@@ -110,11 +116,6 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err != nil {
 		return res, fmt.Errorf("could get DaemonSets for module %s: %v", mod.Name, err)
 	}
-
-	//// TODO qbarrand: find a better place for this
-	//if err := r.su.SetAsReady(ctx, &mod, "TODO", "TODO"); err != nil {
-	//	return res, fmt.Errorf("could not set the initial conditions: %v", err)
-	//}
 
 	for kernelVersion, m := range mappings {
 		requeue, err := r.handleBuild(ctx, mod, m, kernelVersion)

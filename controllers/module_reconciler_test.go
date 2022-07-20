@@ -50,12 +50,30 @@ var _ = Describe("ModuleReconciler", func() {
 
 		const moduleName = "test-module"
 
-		req := reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
+		nsn := types.NamespacedName{
+			Name:      moduleName,
+			Namespace: namespace,
 		}
+
+		req := reconcile.Request{NamespacedName: nsn}
+
+		ctx := context.Background()
+
+		It("should do nothing if the Module is not available anymore", func() {
+			clnt.
+				EXPECT().
+				Get(ctx, nsn, &ootov1alpha1.Module{}).
+				Return(
+					apierrors.NewNotFound(schema.GroupResource{}, moduleName),
+				)
+
+			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
+			Expect(
+				mr.Reconcile(ctx, req),
+			).To(
+				Equal(reconcile.Result{}),
+			)
+		})
 
 		It("should do nothing when no nodes match the selector", func() {
 			mod := ootov1alpha1.Module{
@@ -67,8 +85,6 @@ var _ = Describe("ModuleReconciler", func() {
 					Selector: map[string]string{"key": "value"},
 				},
 			}
-
-			ctx := context.Background()
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
@@ -128,7 +144,6 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			ctx := context.Background()
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
 					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
@@ -208,8 +223,6 @@ var _ = Describe("ModuleReconciler", func() {
 			}
 
 			dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
-
-			ctx := context.Background()
 
 			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
 
@@ -311,8 +324,6 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 			}
 
-			ctx := context.Background()
-
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
 					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
@@ -384,8 +395,6 @@ var _ = Describe("ModuleReconciler", func() {
 					Selector:       map[string]string{"key": "value"},
 				},
 			}
-
-			ctx := context.Background()
 
 			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
 
