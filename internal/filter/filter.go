@@ -107,6 +107,13 @@ func (f *Filter) FindModulesForNode(node client.Object) []reconcile.Request {
 	return reqs
 }
 
+// DeletingPredicate returns a predicate that returns true if the object is being deleted.
+func DeletingPredicate() predicate.Predicate {
+	return predicate.NewPredicateFuncs(func(object client.Object) bool {
+		return !object.GetDeletionTimestamp().IsZero()
+	})
+}
+
 // PodHasSpecNodeName returns a predicate that returns true if the object is a *v1.Pod and its .spec.nodeName
 // property is set.
 func PodHasSpecNodeName() predicate.Predicate {

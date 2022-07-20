@@ -307,6 +307,22 @@ var _ = Describe("FindModulesForNode", func() {
 	})
 })
 
+var _ = Describe("DeletingPredicate", func() {
+	now := metav1.Now()
+
+	DescribeTable("should return the expected value",
+		func(o client.Object, expected bool) {
+			Expect(
+				DeletingPredicate().Generic(event.GenericEvent{Object: o}),
+			).To(
+				Equal(expected),
+			)
+		},
+		Entry(nil, &v1.Pod{ObjectMeta: metav1.ObjectMeta{DeletionTimestamp: &now}}, true),
+		Entry(nil, &v1.Pod{}, false),
+	)
+})
+
 var _ = Describe("PodHasSpecNodeName", func() {
 	p := PodHasSpecNodeName()
 

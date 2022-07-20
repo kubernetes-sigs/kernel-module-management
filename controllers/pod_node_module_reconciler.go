@@ -88,8 +88,11 @@ func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 // SetupWithManager sets up the controller with the Manager.
 func (pnmr *PodNodeModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	p := predicate.And(
-		filter.PodReadinessChangedPredicate(
-			mgr.GetLogger().WithName("pod-readiness-changed"),
+		predicate.Or(
+			filter.PodReadinessChangedPredicate(
+				mgr.GetLogger().WithName("pod-readiness-changed"),
+			),
+			filter.DeletingPredicate(),
 		),
 		filter.HasLabel(constants.ModuleNameLabel),
 		filter.PodHasSpecNodeName(),
