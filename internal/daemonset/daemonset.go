@@ -34,6 +34,7 @@ type DaemonSetCreator interface {
 	ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error)
 	SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, image string, mod ootov1alpha1.Module, kernelVersion string) error
 	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *ootov1alpha1.Module) error
+	GetNodeLabelFromPod(pod *v1.Pod, moduleName string) string
 }
 
 type daemonSetGenerator struct {
@@ -220,11 +221,14 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 	ds.Spec = appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{MatchLabels: standardLabels},
 		Template: v1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{Labels: standardLabels},
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:     standardLabels,
+				Finalizers: []string{constants.NodeLabelerFinalizer},
+			},
 			Spec: v1.PodSpec{
 				Containers:         []v1.Container{container},
 				ImagePullSecrets:   GetPodPullSecrets(*mod),
-				NodeSelector:       map[string]string{GetDriverContainerNodeLabel(mod.Name): ""},
+				NodeSelector:       map[string]string{getDriverContainerNodeLabel(mod.Name): ""},
 				ServiceAccountName: mod.Spec.ServiceAccountName,
 				Volumes:            append([]v1.Volume{devicePluginVolume}, mod.Spec.AdditionalVolumes...),
 			},
@@ -232,6 +236,14 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 	}
 
 	return controllerutil.SetControllerReference(mod, ds, dc.scheme)
+}
+
+func (dc *daemonSetGenerator) GetNodeLabelFromPod(pod *v1.Pod, moduleName string) string {
+	kernelVersion := pod.Labels[dc.kernelLabel]
+	if kernelVersion == devicePluginKernelVersion {
+		return getDevicePluginNodeLabel(moduleName)
+	}
+	return getDriverContainerNodeLabel(moduleName)
 }
 
 func (dc *daemonSetGenerator) moduleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
@@ -261,8 +273,12 @@ func CopyMapStringString(m map[string]string) map[string]string {
 	return n
 }
 
-func GetDriverContainerNodeLabel(moduleName string) string {
+func getDriverContainerNodeLabel(moduleName string) string {
 	return fmt.Sprintf("oot.node.kubernetes.io/%s.ready", moduleName)
+}
+
+func getDevicePluginNodeLabel(moduleName string) string {
+	return fmt.Sprintf("oot.node.kubernetes.io/%s.device-plugin-ready", moduleName)
 }
 
 func IsDevicePluginKernelVersion(kernelVersion string) bool {

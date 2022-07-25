@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	mock_client "github.com/qbarrand/oot-operator/internal/client"
 	"github.com/qbarrand/oot-operator/internal/constants"
+	"github.com/qbarrand/oot-operator/internal/daemonset"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,17 +23,20 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 			nodeName     = "node-name"
 			podName      = "pod-name"
 			podNamespace = "pod-namespace"
+			nodeLabel    = "some node label"
 		)
 
 		var (
 			kubeClient *mock_client.MockClient
 			r          *PodNodeModuleReconciler
+			mockDC     *daemonset.MockDaemonSetCreator
 		)
 
 		BeforeEach(func() {
 			ctrl := gomock.NewController(GinkgoT())
 			kubeClient = mock_client.NewMockClient(ctrl)
-			r = NewPodNodeModuleReconciler(kubeClient)
+			mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
+			r = NewPodNodeModuleReconciler(kubeClient, mockDC)
 		})
 
 		ctx := context.Background()
@@ -53,6 +57,10 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 
 		It("should unlabel the node when a Pod is not ready", func() {
 			pod := v1.Pod{}
+			podWithModuleName := v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{constants.ModuleNameLabel: moduleName}},
+				Spec:       v1.PodSpec{NodeName: nodeName},
+			}
 			node := v1.Node{}
 			nodeWithEmptyLabels := v1.Node{
 				ObjectMeta: metav1.ObjectMeta{Labels: make(map[string]string)},
@@ -66,11 +74,12 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 						o.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
 						o.(*v1.Pod).Spec.NodeName = nodeName
 					}),
+				mockDC.EXPECT().GetNodeLabelFromPod(&podWithModuleName, moduleName).Return(nodeLabel),
 				kubeClient.
 					EXPECT().
 					Get(ctx, types.NamespacedName{Name: nodeName}, &node).
 					Do(func(_ context.Context, _ types.NamespacedName, o client.Object) {
-						o.SetLabels(map[string]string{"oot.node.kubernetes.io/module-name.ready": ""})
+						o.SetLabels(map[string]string{nodeLabel: ""})
 					}),
 				kubeClient.
 					EXPECT().
@@ -91,9 +100,21 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 
 		It("should label the node when a Pod is ready", func() {
 			pod := v1.Pod{}
+			readyPod := v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{constants.ModuleNameLabel: moduleName}},
+				Spec:       v1.PodSpec{NodeName: nodeName},
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:   v1.PodReady,
+							Status: v1.ConditionTrue,
+						},
+					},
+				},
+			}
 			node := v1.Node{}
 			nodeWithLabel := node
-			nodeWithLabel.SetLabels(map[string]string{"oot.node.kubernetes.io/module-name.ready": ""})
+			nodeWithLabel.SetLabels(map[string]string{nodeLabel: ""})
 			patch := client.MergeFrom(&node)
 
 			gomock.InOrder(
@@ -110,6 +131,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 							},
 						}
 					}),
+				mockDC.EXPECT().GetNodeLabelFromPod(&readyPod, moduleName).Return(nodeLabel),
 				kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nodeName}, &node),
 				kubeClient.
 					EXPECT().
@@ -118,7 +140,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 						Expect(p.Type()).To(Equal(types.MergePatchType))
 						Expect(p.Data(n)).To(
 							Equal(
-								[]byte(`{"metadata":{"labels":{"oot.node.kubernetes.io/module-name.ready":""}}}`),
+								[]byte(`{"metadata":{"labels":{"some node label":""}}}`),
 							),
 						)
 					}),
@@ -132,6 +154,14 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 			now := metav1.Now()
 
 			pod := v1.Pod{}
+			deletedPod := v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					DeletionTimestamp: &now,
+					Finalizers:        []string{constants.NodeLabelerFinalizer},
+					Labels:            map[string]string{constants.ModuleNameLabel: moduleName},
+				},
+				Spec: v1.PodSpec{NodeName: nodeName},
+			}
 			podWithoutFinalizer := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					DeletionTimestamp: &now,
@@ -156,11 +186,12 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 						o.SetDeletionTimestamp(&now)
 						o.SetFinalizers([]string{constants.NodeLabelerFinalizer})
 					}),
+				mockDC.EXPECT().GetNodeLabelFromPod(&deletedPod, moduleName).Return(nodeLabel),
 				kubeClient.
 					EXPECT().
 					Get(ctx, types.NamespacedName{Name: nodeName}, &node).
 					Do(func(_ context.Context, _ types.NamespacedName, o client.Object) {
-						o.SetLabels(map[string]string{"oot.node.kubernetes.io/module-name.ready": ""})
+						o.SetLabels(map[string]string{nodeLabel: ""})
 					}),
 				kubeClient.
 					EXPECT().

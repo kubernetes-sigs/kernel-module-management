@@ -21,11 +21,12 @@ import (
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;watch
 
 type PodNodeModuleReconciler struct {
-	client client.Client
+	client    client.Client
+	daemonAPI daemonset.DaemonSetCreator
 }
 
-func NewPodNodeModuleReconciler(client client.Client) *PodNodeModuleReconciler {
-	return &PodNodeModuleReconciler{client: client}
+func NewPodNodeModuleReconciler(client client.Client, daemonAPI daemonset.DaemonSetCreator) *PodNodeModuleReconciler {
+	return &PodNodeModuleReconciler{client: client, daemonAPI: daemonAPI}
 }
 
 func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -50,7 +51,7 @@ func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, fmt.Errorf("pod %s has no %q label", podNamespacedName, constants.ModuleNameLabel)
 	}
 
-	labelName := daemonset.GetDriverContainerNodeLabel(moduleName)
+	labelName := pnmr.daemonAPI.GetNodeLabelFromPod(&pod, moduleName)
 
 	logger = logger.WithValues(
 		"node name", nodeName,

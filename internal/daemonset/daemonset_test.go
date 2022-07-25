@@ -437,7 +437,10 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 			Spec: appsv1.DaemonSetSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: podLabels},
 				Template: v1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{Labels: podLabels},
+					ObjectMeta: metav1.ObjectMeta{
+						Labels:     podLabels,
+						Finalizers: []string{constants.NodeLabelerFinalizer},
+					},
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{
 							{
@@ -456,7 +459,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 							},
 						},
 						NodeSelector: map[string]string{
-							GetDriverContainerNodeLabel(mod.Name): "",
+							getDriverContainerNodeLabel(mod.Name): "",
 						},
 						ServiceAccountName: serviceAccountName,
 						Volumes: []v1.Volume{
@@ -720,5 +723,38 @@ var _ = Describe("OverrideLabels", func() {
 		).To(
 			Equal(map[string]string{"a": "z", "c": "d"}),
 		)
+	})
+})
+
+var _ = Describe("GetNodeLabelFromPod", func() {
+	var dc DaemonSetCreator
+
+	BeforeEach(func() {
+		dc = NewCreator(clnt, kernelLabel, scheme)
+	})
+
+	It("should return a driver container label", func() {
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					constants.ModuleNameLabel: moduleName,
+					kernelLabel:               "some kernel",
+				},
+			},
+		}
+		res := dc.GetNodeLabelFromPod(&pod, "module-name")
+		Expect(res).To(Equal(getDriverContainerNodeLabel("module-name")))
+	})
+
+	It("should return a device plugin label", func() {
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					constants.ModuleNameLabel: moduleName,
+				},
+			},
+		}
+		res := dc.GetNodeLabelFromPod(&pod, "module-name")
+		Expect(res).To(Equal(getDevicePluginNodeLabel("module-name")))
 	})
 })

@@ -11,6 +11,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
 	v1 "k8s.io/api/apps/v1"
+	v10 "k8s.io/api/core/v1"
 	sets "k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -50,6 +51,20 @@ func (m *MockDaemonSetCreator) GarbageCollect(ctx context.Context, existingDS ma
 func (mr *MockDaemonSetCreatorMockRecorder) GarbageCollect(ctx, existingDS, validKernels interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockDaemonSetCreator)(nil).GarbageCollect), ctx, existingDS, validKernels)
+}
+
+// GetNodeLabelFromPod mocks base method.
+func (m *MockDaemonSetCreator) GetNodeLabelFromPod(pod *v10.Pod, moduleName string) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNodeLabelFromPod", pod, moduleName)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetNodeLabelFromPod indicates an expected call of GetNodeLabelFromPod.
+func (mr *MockDaemonSetCreatorMockRecorder) GetNodeLabelFromPod(pod, moduleName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeLabelFromPod", reflect.TypeOf((*MockDaemonSetCreator)(nil).GetNodeLabelFromPod), pod, moduleName)
 }
 
 // ModuleDaemonSetsByKernelVersion mocks base method.

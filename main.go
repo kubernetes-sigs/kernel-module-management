@@ -165,7 +165,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controllers.NewPodNodeModuleReconciler(client).SetupWithManager(mgr); err != nil {
+	if err = controllers.NewPodNodeModuleReconciler(client, daemonAPI).SetupWithManager(mgr); err != nil {
 		setupLogger.Error(err, "unable to create controller", "controller", "PodNodeModule")
 		os.Exit(1)
 	}
