@@ -4,9 +4,6 @@ on:
   push:
     tags: ['*']
     branches: [main]
-  pull_request:
-    branches:
-      - main
 
 jobs:
   build-push:
@@ -24,7 +21,6 @@ jobs:
           images: ghcr.io/qbarrand/oot-operator
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
@@ -37,7 +33,6 @@ jobs:
           images: ghcr.io/qbarrand/oot-operator-bundle
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
@@ -48,10 +43,8 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: ghcr.io/qbarrand/oot-operator-catalog
-          sep-tags: ' '
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
@@ -104,13 +97,7 @@ jobs:
           labels: ${{ steps.meta-bundle.outputs.labels }}
 
       - name: Build and push catalog
-        run: |
-          cat >tags <<EOF
-          ${{ steps.meta-catalog.outputs.tags }}
-          EOF
-
-          for img in $(cat tags); do
-            make catalog-build catalog-push CATALOG_IMG=$img
-          done
+        run: make catalog-build && make catalog-push
         env:
           BUNDLE_IMG: ghcr.io/qbarrand/oot-operator-bundle@${{ steps.build-push-bundle.outputs.digest }}
+          VERSION: ${{ github.ref_name }}
