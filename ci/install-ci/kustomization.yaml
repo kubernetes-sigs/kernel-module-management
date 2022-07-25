@@ -9,6 +9,16 @@ images:
     newName: ooto
     newTag: local
 
+patchesJson6902:
+  - target:
+      version: v1
+      kind: Deployment
+      name: controller-manager
+      namespace: system
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/nodeSelector/node-role.kubernetes.io~1master
+
 patchesStrategicMerge:
   - |
     apiVersion: apps/v1
@@ -19,9 +29,6 @@ patchesStrategicMerge:
     spec:
       template:
         spec:
-          nodeSelector:
-            # This is the node we're building the ooto:local image on
-            kubernetes.io/hostname: minikube
           containers:
             - name: manager
               imagePullPolicy: Never

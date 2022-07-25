@@ -24,6 +24,8 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
+      nodeSelector:
+        node-role.kubernetes.io/master: ''
       securityContext:
         runAsNonRoot: true
       containers:
