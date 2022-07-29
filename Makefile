@@ -35,6 +35,9 @@ IMAGE_TAG_BASE ?= ghcr.io/qbarrand/oot-operator
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 
+# GATHER_IMG define the must-gather image used to get all the information for debugging purpose.
+GATHER_IMG ?= ghcr.io/qbarrand/oot-operator-must-gather
+
 # BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
 BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
 
@@ -135,9 +138,17 @@ run: manifests generate fmt vet ## Run a controller from your host.
 docker-build: unit-test ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
+.PHONY: docker-build-must-gather
+docker-build-must-gather: ## Build the must-gather image.
+	docker build -t ${GATHER_IMG} -f Dockerfile.must-gather .
+
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
+
+.PHONY: docker-push-must-gather
+docker-push-must-gather: ## Push the must-gather docker image.
+	docker push ${GATHER_IMG}
 
 ##@ Deployment
 

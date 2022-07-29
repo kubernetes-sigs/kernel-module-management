@@ -1,0 +1,21 @@
+FROM quay.io/openshift/origin-cli:4.10 as builder
+
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+
+RUN microdnf update -y \
+    && microdnf install -y tar rsync findutils gzip iproute util-linux \
+    && microdnf clean all
+
+LABEL org.opencontainers.image.title=oot-operator-must-gather
+LABEL org.opencontainers.image.description="Must-gather image for KMMO"
+LABEL org.opencontainers.image.url=https://github.com/qbarrand/oot-operator
+LABEL org.opencontainers.image.source=https://github.com/qbarrand/oot-operator
+LABEL org.opencontainers.image.version=main
+
+# Copy oc binary
+COPY --from=builder /usr/bin/oc /usr/bin/oc
+
+# copy all collection scripts to /usr/bin
+COPY must-gather/* /usr/bin/
+
+CMD /usr/bin/gather
