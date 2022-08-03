@@ -2,5 +2,8 @@
 
 approvers:
   - adrianchiris
+  - qbarrand
   - zvonkok
   - mrunalp
+reviewers:
+  - qbarrand
