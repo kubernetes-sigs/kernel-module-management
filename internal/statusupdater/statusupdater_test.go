@@ -1,4 +1,4 @@
-package module
+package statusupdater
 
 import (
 	"context"
@@ -22,7 +22,7 @@ type daemonSetConfig struct {
 	isDevicePlugin  bool
 }
 
-var _ = Describe("status update", func() {
+var _ = Describe("module status update", func() {
 	const (
 		name      = "sr-name"
 		namespace = "sr-namespace"
@@ -34,7 +34,7 @@ var _ = Describe("status update", func() {
 		mockDC      *daemonset.MockDaemonSetCreator
 		mockMetrics *metrics.MockMetrics
 		mod         *ootov1alpha1.Module
-		su          StatusUpdater
+		su          ModuleStatusUpdater
 	)
 
 	BeforeEach(func() {
@@ -43,7 +43,7 @@ var _ = Describe("status update", func() {
 		mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 		mockMetrics = metrics.NewMockMetrics(ctrl)
 		mod = &ootov1alpha1.Module{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
-		su = NewStatusUpdater(clnt, mockDC, mockMetrics)
+		su = NewModuleStatusUpdater(clnt, mockDC, mockMetrics)
 	})
 
 	DescribeTable("checking status updater based on module",
@@ -75,7 +75,7 @@ var _ = Describe("status update", func() {
 			clnt.EXPECT().Status().Return(statusWrite)
 			statusWrite.EXPECT().Update(context.Background(), mod).Return(nil)
 
-			res := su.UpdateModuleStatus(context.Background(), mod, mappingsNodes, targetedNodes, dsMap)
+			res := su.ModuleUpdateStatus(context.Background(), mod, mappingsNodes, targetedNodes, dsMap)
 
 			Expect(res).To(BeNil())
 			Expect(mod.Status.DriverContainer.NodesMatchingSelectorNumber).To(Equal(int32(len(targetedNodes))))
@@ -116,6 +116,61 @@ var _ = Describe("status update", func() {
 			true,
 		),
 	)
+})
+
+var _ = Describe("preflight status updates", func() {
+	const (
+		name      = "preflight-name"
+		namespace = "preflight-namespace"
+	)
+
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		pv   *ootov1alpha1.PreflightValidation
+		ps   *ootov1alpha1.CRStatus
+		su   PreflightStatusUpdater
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		pv = &ootov1alpha1.PreflightValidation{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+		ps = &ootov1alpha1.CRStatus{Name: "cr-name"}
+		su = NewPreflightStatusUpdater(clnt)
+	})
+
+	It("preset preflight status", func() {
+		statusWrite := client.NewMockStatusWriter(ctrl)
+		clnt.EXPECT().Status().Return(statusWrite)
+		statusWrite.EXPECT().Update(context.Background(), pv).Return(nil)
+
+		res := su.PreflightPresetVerificationStatus(context.Background(), pv, ps)
+		Expect(res).To(BeNil())
+		Expect(ps.VerificationStatus).To(Equal(ootov1alpha1.VerificationFalse))
+		Expect(ps.VerificationStage).To(Equal(ootov1alpha1.VerificationStageImage))
+	})
+
+	It("set preflight verification status", func() {
+		statusWrite := client.NewMockStatusWriter(ctrl)
+		clnt.EXPECT().Status().Return(statusWrite)
+		statusWrite.EXPECT().Patch(context.Background(), pv, gomock.Any()).Return(nil)
+
+		res := su.PreflightSetVerificationStatus(context.Background(), pv, ps, "verificationStatus", "verificationReason")
+		Expect(res).To(BeNil())
+		Expect(ps.VerificationStatus).To(Equal("verificationStatus"))
+		Expect(ps.StatusReason).To(Equal("verificationReason"))
+	})
+
+	It("set preflight verification stage", func() {
+		statusWrite := client.NewMockStatusWriter(ctrl)
+		clnt.EXPECT().Status().Return(statusWrite)
+		statusWrite.EXPECT().Patch(context.Background(), pv, gomock.Any()).Return(nil)
+
+		res := su.PreflightSetVerificationStage(context.Background(), pv, ps, "verificationStage")
+		Expect(res).To(BeNil())
+		Expect(ps.VerificationStage).To(Equal("verificationStage"))
+	})
 })
 
 func getDaemonSet(kernelNumber int, dsConfig daemonSetConfig) (string, *appsv1.DaemonSet) {

@@ -26,6 +26,7 @@ import (
 	"github.com/qbarrand/oot-operator/internal/filter"
 	"github.com/qbarrand/oot-operator/internal/metrics"
 	"github.com/qbarrand/oot-operator/internal/module"
+	"github.com/qbarrand/oot-operator/internal/statusupdater"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -52,7 +53,7 @@ type ModuleReconciler struct {
 	kernelAPI        module.KernelMapper
 	metricsAPI       metrics.Metrics
 	filter           *filter.Filter
-	statusUpdaterAPI module.StatusUpdater
+	statusUpdaterAPI statusupdater.ModuleStatusUpdater
 }
 
 func NewModuleReconciler(
@@ -62,7 +63,7 @@ func NewModuleReconciler(
 	kernelAPI module.KernelMapper,
 	metricsAPI metrics.Metrics,
 	filter *filter.Filter,
-	statusUpdaterAPI module.StatusUpdater) *ModuleReconciler {
+	statusUpdaterAPI statusupdater.ModuleStatusUpdater) *ModuleReconciler {
 	return &ModuleReconciler{
 		Client:           client,
 		buildAPI:         buildAPI,
@@ -150,7 +151,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("could not garbage collect DaemonSets: %v", err)
 	}
 
-	err = r.statusUpdaterAPI.UpdateModuleStatus(ctx, mod, nodesWithMapping, targetedNodes, dsByKernelVersion)
+	err = r.statusUpdaterAPI.ModuleUpdateStatus(ctx, mod, nodesWithMapping, targetedNodes, dsByKernelVersion)
 	if err != nil {
 		return res, fmt.Errorf("failed to update status of the module: %w", err)
 	}

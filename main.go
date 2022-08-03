@@ -30,6 +30,7 @@ import (
 	"github.com/qbarrand/oot-operator/internal/metrics"
 	"github.com/qbarrand/oot-operator/internal/module"
 	"github.com/qbarrand/oot-operator/internal/registry"
+	"github.com/qbarrand/oot-operator/internal/statusupdater"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2/klogr"
 
@@ -156,9 +157,9 @@ func main() {
 	buildAPI := job.NewBuildManager(client, registryAPI, makerAPI, helperAPI)
 	daemonAPI := daemonset.NewCreator(client, kernelLabel, scheme)
 	kernelAPI := module.NewKernelMapper()
-	statusUpdaterAPI := module.NewStatusUpdater(client, daemonAPI, metricsAPI)
+	moduleStatusUpdaterAPI := statusupdater.NewModuleStatusUpdater(client, daemonAPI, metricsAPI)
 
-	mc := controllers.NewModuleReconciler(client, buildAPI, daemonAPI, kernelAPI, metricsAPI, filter, statusUpdaterAPI)
+	mc := controllers.NewModuleReconciler(client, buildAPI, daemonAPI, kernelAPI, metricsAPI, filter, moduleStatusUpdaterAPI)
 
 	if err = mc.SetupWithManager(mgr, kernelLabel); err != nil {
 		setupLogger.Error(err, "unable to create controller", "controller", "Module")

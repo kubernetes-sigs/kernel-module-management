@@ -12,6 +12,7 @@ import (
 	"github.com/qbarrand/oot-operator/internal/daemonset"
 	"github.com/qbarrand/oot-operator/internal/metrics"
 	"github.com/qbarrand/oot-operator/internal/module"
+	"github.com/qbarrand/oot-operator/internal/statusupdater"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -35,7 +36,7 @@ var _ = Describe("ModuleReconciler", func() {
 			mockDC      *daemonset.MockDaemonSetCreator
 			mockKM      *module.MockKernelMapper
 			mockMetrics *metrics.MockMetrics
-			mockSU      *module.MockStatusUpdater
+			mockSU      *statusupdater.MockModuleStatusUpdater
 		)
 
 		BeforeEach(func() {
@@ -45,7 +46,7 @@ var _ = Describe("ModuleReconciler", func() {
 			mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 			mockKM = module.NewMockKernelMapper(ctrl)
 			mockMetrics = metrics.NewMockMetrics(ctrl)
-			mockSU = module.NewMockStatusUpdater(ctrl)
+			mockSU = statusupdater.NewMockModuleStatusUpdater(ctrl)
 		})
 
 		const moduleName = "test-module"
@@ -116,7 +117,7 @@ var _ = Describe("ModuleReconciler", func() {
 			gomock.InOrder(
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
-				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
+				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -174,7 +175,7 @@ var _ = Describe("ModuleReconciler", func() {
 			gomock.InOrder(
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
-				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
+				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -262,7 +263,7 @@ var _ = Describe("ModuleReconciler", func() {
 				clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 				mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.DriverContainerStage, false),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
-				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
+				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -363,7 +364,7 @@ var _ = Describe("ModuleReconciler", func() {
 						d.SetLabels(map[string]string{"test": "test"})
 					}),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
-				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
+				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
@@ -432,7 +433,7 @@ var _ = Describe("ModuleReconciler", func() {
 				clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 				mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, "", metrics.DevicePluginStage, false),
 				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString()),
-				mockSU.EXPECT().UpdateModuleStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, nil).Return(nil),
+				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, nil).Return(nil),
 			)
 
 			res, err := mr.Reconcile(context.Background(), req)
