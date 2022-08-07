@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -21,7 +22,7 @@ import (
 )
 
 const (
-	driverToolkitJSONFile = "etc/driver-toolkit-release.json"
+	modulesLocationPath = "lib/modules"
 )
 
 type DriverToolkitEntry struct {
@@ -40,7 +41,7 @@ type RepoPullConfig struct {
 
 type Registry interface {
 	ImageExists(ctx context.Context, image string, po ootov1alpha1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error)
-	ExtractToolkitRelease(v1.Layer) (*DriverToolkitEntry, error)
+	VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVersion, moduleFileName string) bool
 	GetLayersDigests(ctx context.Context, image string, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error)
 	GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error)
 }
@@ -89,29 +90,10 @@ func (r *registry) GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (
 	return crane.PullLayer(pullConfig.repo+"@"+digest, pullConfig.authOptions...)
 }
 
-func (r *registry) ExtractToolkitRelease(layer v1.Layer) (*DriverToolkitEntry, error) {
-	var found bool
-	dtk := &DriverToolkitEntry{}
-	obj, err := r.getHeaderFromLayer(layer, driverToolkitJSONFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find file %s in image layer: %w", driverToolkitJSONFile, err)
-	}
-
-	dtk.KernelFullVersion, found, err = unstructured.NestedString(obj.Object, "KERNEL_VERSION")
-	if !found || err != nil {
-		return nil, fmt.Errorf("failed to get KERNEL_VERSION from %s, found %t: %w", driverToolkitJSONFile, found, err)
-	}
-
-	dtk.RTKernelFullVersion, found, err = unstructured.NestedString(obj.Object, "RT_KERNEL_VERSION")
-	if !found || err != nil {
-		return nil, fmt.Errorf("failed to get RT_KERNEL_VERSION from %s, found %t: %w", driverToolkitJSONFile, found, err)
-	}
-
-	dtk.OSVersion, found, err = unstructured.NestedString(obj.Object, "RHEL_VERSION")
-	if !found || err != nil {
-		return nil, fmt.Errorf("failed to get RHEL_VERSION from %s, found %t: %w", driverToolkitJSONFile, found, err)
-	}
-	return dtk, nil
+func (r *registry) VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVersion, moduleFileName string) bool {
+	fullPath := filepath.Join(pathPrefix, modulesLocationPath, kernelVersion, moduleFileName)
+	_, err := r.getHeaderStreamFromLayer(layer, fullPath)
+	return err == nil
 }
 
 func (r *registry) getPullOptions(ctx context.Context, image string, po *ootov1alpha1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (*RepoPullConfig, error) {
@@ -216,7 +198,7 @@ func (r *registry) getLayersDigestsFromManifestStream(manifestStream []byte) ([]
 	return digests, nil
 }
 
-func (r *registry) getHeaderFromLayer(layer v1.Layer, headerName string) (*unstructured.Unstructured, error) {
+func (r *registry) getHeaderStreamFromLayer(layer v1.Layer, headerName string) (io.Reader, error) {
 
 	targz, err := layer.Compressed()
 	if err != nil {
@@ -244,17 +226,7 @@ func (r *registry) getHeaderFromLayer(layer v1.Layer, headerName string) (*unstr
 			return nil, fmt.Errorf("failed to get next entry from targz: %w", err)
 		}
 		if header.Name == headerName {
-			buff, err := io.ReadAll(tr)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read tar entry: %w", err)
-			}
-
-			obj := unstructured.Unstructured{}
-
-			if err = json.Unmarshal(buff, &obj.Object); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal tar entry: %w", err)
-			}
-			return &obj, nil
+			return tr, nil
 		}
 	}
 

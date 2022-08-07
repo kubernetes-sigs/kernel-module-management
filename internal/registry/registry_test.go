@@ -335,8 +335,26 @@ var _ = Describe("GetLayersDigests", func() {
 	)
 })
 
-var _ = Describe("ExtractToolkitRelease", func() {
-	//TODO: implement when the preflight feature starst using that method
+var _ = Describe("VerifyModuleExists", func() {
+	reg := NewRegistry()
+
+	It("file is not present", func() {
+		const fileName = "/etc/fileName"
+		layer, err := prepareLayer(fileName, []byte("some data"))
+		Expect(err).ToNot(HaveOccurred())
+
+		res := reg.VerifyModuleExists(layer, "", "somekernel", "module_name.ko")
+		Expect(res).To(BeFalse())
+	})
+
+	It("file is present", func() {
+		const fileName = "/opt/lib/modules/somekernel/module_name.ko"
+		layer, err := prepareLayer(fileName, []byte("some data"))
+		Expect(err).ToNot(HaveOccurred())
+
+		res := reg.VerifyModuleExists(layer, "/opt", "somekernel", "module_name.ko")
+		Expect(res).To(BeTrue())
+	})
 })
 
 func mustParseURL(rawURL string) *url.URL {

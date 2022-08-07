@@ -37,21 +37,6 @@ func (m *MockRegistry) EXPECT() *MockRegistryMockRecorder {
 	return m.recorder
 }
 
-// ExtractToolkitRelease mocks base method.
-func (m *MockRegistry) ExtractToolkitRelease(arg0 v1.Layer) (*DriverToolkitEntry, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExtractToolkitRelease", arg0)
-	ret0, _ := ret[0].(*DriverToolkitEntry)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ExtractToolkitRelease indicates an expected call of ExtractToolkitRelease.
-func (mr *MockRegistryMockRecorder) ExtractToolkitRelease(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtractToolkitRelease", reflect.TypeOf((*MockRegistry)(nil).ExtractToolkitRelease), arg0)
-}
-
 // GetLayerByDigest mocks base method.
 func (m *MockRegistry) GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error) {
 	m.ctrl.T.Helper()
@@ -96,4 +81,18 @@ func (m *MockRegistry) ImageExists(ctx context.Context, image string, po v1alpha
 func (mr *MockRegistryMockRecorder) ImageExists(ctx, image, po, registryAuthGetter interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImageExists", reflect.TypeOf((*MockRegistry)(nil).ImageExists), ctx, image, po, registryAuthGetter)
+}
+
+// VerifyModuleExists mocks base method.
+func (m *MockRegistry) VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVersion, moduleFileName string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyModuleExists", layer, pathPrefix, kernelVersion, moduleFileName)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// VerifyModuleExists indicates an expected call of VerifyModuleExists.
+func (mr *MockRegistryMockRecorder) VerifyModuleExists(layer, pathPrefix, kernelVersion, moduleFileName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyModuleExists", reflect.TypeOf((*MockRegistry)(nil).VerifyModuleExists), layer, pathPrefix, kernelVersion, moduleFileName)
 }
