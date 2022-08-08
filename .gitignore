@@ -1,8 +1,8 @@
 # Bundle files are generated
-bundle
+/bundle
 
 # Operator's binaries
-manager
+/manager
 
 # Binaries for programs and plugins
 *.exe
@@ -10,7 +10,7 @@ manager
 *.dll
 *.so
 *.dylib
-bin
+/bin
 testbin/*
 
 # Test binary, build with `go test -c`
