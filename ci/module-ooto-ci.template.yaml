@@ -1,25 +1,16 @@
 ---
-apiVersion: ooto.sigs.k8s.io/v1alpha1
+apiVersion: kmm.sigs.k8s.io/v1beta1
 kind: Module
 metadata:
   name: NAME_CHANGEME
 spec:
   driverContainer:
-    name: overwritten-anyway
-    command: [sleep, infinity]
-    imagePullPolicy: Never
-    lifecycle:
-      postStart:
-        exec:
-          command: [modprobe, -vd, /opt, KMOD_CHANGEME]
-      preStop:
-        exec:
-          command: [modprobe, -rvd, /opt, KMOD_CHANGEME]
-    securityContext:
-      capabilities:
-        add: [SYS_MODULE]
-  kernelMappings:
-    - literal: KVER_CHANGEME
-      containerImage: ooto-kmod:local
+    container:
+      modprobe:
+        moduleName: KMOD_CHANGEME
+      imagePullPolicy: Never
+      kernelMappings:
+        - literal: KVER_CHANGEME
+          containerImage: ooto-kmod:local
   selector:
     wants-oot-module: KMOD_CHANGEME

@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	v1 "k8s.io/api/apps/v1"
 	v10 "k8s.io/api/core/v1"
 	sets "k8s.io/apimachinery/pkg/util/sets"
@@ -83,7 +83,7 @@ func (mr *MockDaemonSetCreatorMockRecorder) ModuleDaemonSetsByKernelVersion(ctx,
 }
 
 // SetDevicePluginAsDesired mocks base method.
-func (m *MockDaemonSetCreator) SetDevicePluginAsDesired(ctx context.Context, ds *v1.DaemonSet, mod *v1alpha1.Module) error {
+func (m *MockDaemonSetCreator) SetDevicePluginAsDesired(ctx context.Context, ds *v1.DaemonSet, mod *v1beta1.Module) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetDevicePluginAsDesired", ctx, ds, mod)
 	ret0, _ := ret[0].(error)
@@ -97,7 +97,7 @@ func (mr *MockDaemonSetCreatorMockRecorder) SetDevicePluginAsDesired(ctx, ds, mo
 }
 
 // SetDriverContainerAsDesired mocks base method.
-func (m *MockDaemonSetCreator) SetDriverContainerAsDesired(ctx context.Context, ds *v1.DaemonSet, image string, mod v1alpha1.Module, kernelVersion string) error {
+func (m *MockDaemonSetCreator) SetDriverContainerAsDesired(ctx context.Context, ds *v1.DaemonSet, image string, mod v1beta1.Module, kernelVersion string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetDriverContainerAsDesired", ctx, ds, image, mod, kernelVersion)
 	ret0, _ := ret[0].(error)

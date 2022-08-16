@@ -38,7 +38,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	"github.com/qbarrand/oot-operator/controllers"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -64,7 +64,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(ootov1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kmmv1beta1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -128,7 +128,7 @@ func main() {
 
 	switch kernelLabelingMethod {
 	case OOTOKernelLabelingMethod:
-		kernelLabel = "oot.node.kubernetes.io/kernel-version.full"
+		kernelLabel = "kmm.node.kubernetes.io/kernel-version.full"
 
 		nodeKernelReconciler := controllers.NewNodeKernelReconciler(client, kernelLabel, filter)
 

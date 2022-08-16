@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	v1 "k8s.io/api/batch/v1"
 )
 
@@ -36,7 +36,7 @@ func (m *MockMaker) EXPECT() *MockMakerMockRecorder {
 }
 
 // MakeJob mocks base method.
-func (m *MockMaker) MakeJob(mod v1alpha1.Module, buildConfig *v1alpha1.Build, targetKernel, containerImage string) (*v1.Job, error) {
+func (m *MockMaker) MakeJob(mod v1beta1.Module, buildConfig *v1beta1.Build, targetKernel, containerImage string) (*v1.Job, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MakeJob", mod, buildConfig, targetKernel, containerImage)
 	ret0, _ := ret[0].(*v1.Job)

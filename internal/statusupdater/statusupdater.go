@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	"github.com/qbarrand/oot-operator/internal/daemonset"
 	"github.com/qbarrand/oot-operator/internal/metrics"
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,19 +16,19 @@ import (
 //go:generate mockgen -source=statusupdater.go -package=statusupdater -destination=mock_statusupdater.go
 
 type ModuleStatusUpdater interface {
-	ModuleUpdateStatus(ctx context.Context, mod *ootov1alpha1.Module, kernelMappingNodes []v1.Node,
+	ModuleUpdateStatus(ctx context.Context, mod *kmmv1beta1.Module, kernelMappingNodes []v1.Node,
 		targetedNodes []v1.Node, dsByKernelVersion map[string]*appsv1.DaemonSet) error
 }
 
 //go:generate mockgen -source=statusupdater.go -package=statusupdater -destination=mock_statusupdater.go
 
 type PreflightStatusUpdater interface {
-	PreflightPresetVerificationStatus(ctx context.Context, pv *ootov1alpha1.PreflightValidation,
-		status *ootov1alpha1.CRStatus) error
-	PreflightSetVerificationStatus(ctx context.Context, preflight *ootov1alpha1.PreflightValidation, status *ootov1alpha1.CRStatus,
+	PreflightPresetVerificationStatus(ctx context.Context, pv *kmmv1beta1.PreflightValidation,
+		status *kmmv1beta1.CRStatus) error
+	PreflightSetVerificationStatus(ctx context.Context, preflight *kmmv1beta1.PreflightValidation, status *kmmv1beta1.CRStatus,
 		verificationStatus string, message string) error
-	PreflightSetVerificationStage(ctx context.Context, preflight *ootov1alpha1.PreflightValidation,
-		status *ootov1alpha1.CRStatus, stage string) error
+	PreflightSetVerificationStage(ctx context.Context, preflight *kmmv1beta1.PreflightValidation,
+		status *kmmv1beta1.CRStatus, stage string) error
 }
 
 type moduleStatusUpdater struct {
@@ -56,7 +56,7 @@ func NewPreflightStatusUpdater(client client.Client) PreflightStatusUpdater {
 }
 
 func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
-	mod *ootov1alpha1.Module,
+	mod *kmmv1beta1.Module,
 	kernelMappingNodes []v1.Node,
 	targetedNodes []v1.Node,
 	dsByKernelVersion map[string]*appsv1.DaemonSet) error {
@@ -85,15 +85,15 @@ func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
 }
 
 func (p *preflightStatusUpdater) PreflightPresetVerificationStatus(ctx context.Context,
-	pv *ootov1alpha1.PreflightValidation,
-	status *ootov1alpha1.CRStatus) error {
-	status.VerificationStatus = ootov1alpha1.VerificationFalse
-	status.VerificationStage = ootov1alpha1.VerificationStageImage
+	pv *kmmv1beta1.PreflightValidation,
+	status *kmmv1beta1.CRStatus) error {
+	status.VerificationStatus = kmmv1beta1.VerificationFalse
+	status.VerificationStage = kmmv1beta1.VerificationStageImage
 	status.LastTransitionTime = metav1.NewTime(time.Now())
 	return p.client.Status().Update(ctx, pv)
 }
 
-func (p *preflightStatusUpdater) PreflightSetVerificationStatus(ctx context.Context, pv *ootov1alpha1.PreflightValidation, status *ootov1alpha1.CRStatus,
+func (p *preflightStatusUpdater) PreflightSetVerificationStatus(ctx context.Context, pv *kmmv1beta1.PreflightValidation, status *kmmv1beta1.CRStatus,
 	verificationStatus string, message string) error {
 	original := pv.DeepCopy()
 	status.VerificationStatus = verificationStatus
@@ -103,8 +103,8 @@ func (p *preflightStatusUpdater) PreflightSetVerificationStatus(ctx context.Cont
 	return p.client.Status().Patch(ctx, pv, patch)
 }
 
-func (p *preflightStatusUpdater) PreflightSetVerificationStage(ctx context.Context, pv *ootov1alpha1.PreflightValidation,
-	status *ootov1alpha1.CRStatus, stage string) error {
+func (p *preflightStatusUpdater) PreflightSetVerificationStage(ctx context.Context, pv *kmmv1beta1.PreflightValidation,
+	status *kmmv1beta1.CRStatus, stage string) error {
 	original := pv.DeepCopy()
 	status.VerificationStage = stage
 	status.LastTransitionTime = metav1.NewTime(time.Now())
@@ -112,7 +112,7 @@ func (p *preflightStatusUpdater) PreflightSetVerificationStage(ctx context.Conte
 	return p.client.Status().Patch(ctx, pv, patch)
 }
 
-func (m *moduleStatusUpdater) updateMetrics(ctx context.Context, mod *ootov1alpha1.Module, dsByKernelVersion map[string]*appsv1.DaemonSet) {
+func (m *moduleStatusUpdater) updateMetrics(ctx context.Context, mod *kmmv1beta1.Module, dsByKernelVersion map[string]*appsv1.DaemonSet) {
 	for kernelVersion, ds := range dsByKernelVersion {
 		stage := metrics.DriverContainerStage
 		if daemonset.IsDevicePluginKernelVersion(kernelVersion) {

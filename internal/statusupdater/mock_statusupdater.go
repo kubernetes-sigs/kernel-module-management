@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	v1 "k8s.io/api/apps/v1"
 	v10 "k8s.io/api/core/v1"
 )
@@ -38,7 +38,7 @@ func (m *MockModuleStatusUpdater) EXPECT() *MockModuleStatusUpdaterMockRecorder 
 }
 
 // ModuleUpdateStatus mocks base method.
-func (m *MockModuleStatusUpdater) ModuleUpdateStatus(ctx context.Context, mod *v1alpha1.Module, kernelMappingNodes, targetedNodes []v10.Node, dsByKernelVersion map[string]*v1.DaemonSet) error {
+func (m *MockModuleStatusUpdater) ModuleUpdateStatus(ctx context.Context, mod *v1beta1.Module, kernelMappingNodes, targetedNodes []v10.Node, dsByKernelVersion map[string]*v1.DaemonSet) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ModuleUpdateStatus", ctx, mod, kernelMappingNodes, targetedNodes, dsByKernelVersion)
 	ret0, _ := ret[0].(error)
@@ -75,7 +75,7 @@ func (m *MockPreflightStatusUpdater) EXPECT() *MockPreflightStatusUpdaterMockRec
 }
 
 // PreflightPresetVerificationStatus mocks base method.
-func (m *MockPreflightStatusUpdater) PreflightPresetVerificationStatus(ctx context.Context, pv *v1alpha1.PreflightValidation, status *v1alpha1.CRStatus) error {
+func (m *MockPreflightStatusUpdater) PreflightPresetVerificationStatus(ctx context.Context, pv *v1beta1.PreflightValidation, status *v1beta1.CRStatus) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PreflightPresetVerificationStatus", ctx, pv, status)
 	ret0, _ := ret[0].(error)
@@ -89,7 +89,7 @@ func (mr *MockPreflightStatusUpdaterMockRecorder) PreflightPresetVerificationSta
 }
 
 // PreflightSetVerificationStage mocks base method.
-func (m *MockPreflightStatusUpdater) PreflightSetVerificationStage(ctx context.Context, preflight *v1alpha1.PreflightValidation, status *v1alpha1.CRStatus, stage string) error {
+func (m *MockPreflightStatusUpdater) PreflightSetVerificationStage(ctx context.Context, preflight *v1beta1.PreflightValidation, status *v1beta1.CRStatus, stage string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PreflightSetVerificationStage", ctx, preflight, status, stage)
 	ret0, _ := ret[0].(error)
@@ -103,7 +103,7 @@ func (mr *MockPreflightStatusUpdaterMockRecorder) PreflightSetVerificationStage(
 }
 
 // PreflightSetVerificationStatus mocks base method.
-func (m *MockPreflightStatusUpdater) PreflightSetVerificationStatus(ctx context.Context, preflight *v1alpha1.PreflightValidation, status *v1alpha1.CRStatus, verificationStatus, message string) error {
+func (m *MockPreflightStatusUpdater) PreflightSetVerificationStatus(ctx context.Context, preflight *v1beta1.PreflightValidation, status *v1beta1.CRStatus, verificationStatus, message string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PreflightSetVerificationStatus", ctx, preflight, status, verificationStatus, message)
 	ret0, _ := ret[0].(error)

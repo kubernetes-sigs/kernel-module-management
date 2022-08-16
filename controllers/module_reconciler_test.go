@@ -6,7 +6,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	"github.com/qbarrand/oot-operator/internal/build"
 	"github.com/qbarrand/oot-operator/internal/client"
 	"github.com/qbarrand/oot-operator/internal/daemonset"
@@ -63,7 +63,7 @@ var _ = Describe("ModuleReconciler", func() {
 		It("should do nothing if the Module is not available anymore", func() {
 			clnt.
 				EXPECT().
-				Get(ctx, nsn, &ootov1alpha1.Module{}).
+				Get(ctx, nsn, &kmmv1beta1.Module{}).
 				Return(
 					apierrors.NewNotFound(schema.GroupResource{}, moduleName),
 				)
@@ -77,27 +77,27 @@ var _ = Describe("ModuleReconciler", func() {
 		})
 
 		It("should do nothing when no nodes match the selector", func() {
-			mod := ootov1alpha1.Module{
+			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      moduleName,
 					Namespace: namespace,
 				},
-				Spec: ootov1alpha1.ModuleSpec{
+				Spec: kmmv1beta1.ModuleSpec{
 					Selector: map[string]string{"key": "value"},
 				},
 			}
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
 						m.ObjectMeta = mod.ObjectMeta
 						m.Spec = mod.Spec
 						return nil
 					},
 				),
 				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
-						list.Items = []ootov1alpha1.Module{mod}
+					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+						list.Items = []kmmv1beta1.Module{mod}
 						return nil
 					},
 				),
@@ -128,12 +128,12 @@ var _ = Describe("ModuleReconciler", func() {
 		It("should remove obsolete DaemonSets when no nodes match the selector", func() {
 			const kernelVersion = "1.2.3"
 
-			mod := ootov1alpha1.Module{
+			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      moduleName,
 					Namespace: namespace,
 				},
-				Spec: ootov1alpha1.ModuleSpec{
+				Spec: kmmv1beta1.ModuleSpec{
 					Selector: map[string]string{"key": "value"},
 				},
 			}
@@ -147,15 +147,15 @@ var _ = Describe("ModuleReconciler", func() {
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
 						m.ObjectMeta = mod.ObjectMeta
 						m.Spec = mod.Spec
 						return nil
 					},
 				),
 				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
-						list.Items = []ootov1alpha1.Module{mod}
+					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+						list.Items = []kmmv1beta1.Module{mod}
 						return nil
 					},
 				),
@@ -189,7 +189,7 @@ var _ = Describe("ModuleReconciler", func() {
 				kernelVersion = "1.2.3"
 			)
 
-			mappings := []ootov1alpha1.KernelMapping{
+			mappings := []kmmv1beta1.KernelMapping{
 				{
 					ContainerImage: imageName,
 					Literal:        kernelVersion,
@@ -198,14 +198,18 @@ var _ = Describe("ModuleReconciler", func() {
 
 			osConfig := module.NodeOSConfig{}
 
-			mod := ootov1alpha1.Module{
+			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      moduleName,
 					Namespace: namespace,
 				},
-				Spec: ootov1alpha1.ModuleSpec{
-					KernelMappings: mappings,
-					Selector:       map[string]string{"key": "value"},
+				Spec: kmmv1beta1.ModuleSpec{
+					DriverContainer: kmmv1beta1.DriverContainerSpec{
+						Container: kmmv1beta1.DriverContainerContainerSpec{
+							KernelMappings: mappings,
+						},
+					},
+					Selector: map[string]string{"key": "value"},
 				},
 			}
 
@@ -236,14 +240,14 @@ var _ = Describe("ModuleReconciler", func() {
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
 						m.ObjectMeta = mod.ObjectMeta
 						m.Spec = mod.Spec
 						return nil
 					},
 				),
 				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
+					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
 						return nil
 					},
 				),
@@ -279,7 +283,7 @@ var _ = Describe("ModuleReconciler", func() {
 
 			osConfig := module.NodeOSConfig{}
 
-			mappings := []ootov1alpha1.KernelMapping{
+			mappings := []kmmv1beta1.KernelMapping{
 				{
 					ContainerImage: imageName,
 					Literal:        kernelVersion,
@@ -288,14 +292,18 @@ var _ = Describe("ModuleReconciler", func() {
 
 			nodeLabels := map[string]string{"key": "value"}
 
-			mod := ootov1alpha1.Module{
+			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      moduleName,
 					Namespace: namespace,
 				},
-				Spec: ootov1alpha1.ModuleSpec{
-					KernelMappings: mappings,
-					Selector:       nodeLabels,
+				Spec: kmmv1beta1.ModuleSpec{
+					DriverContainer: kmmv1beta1.DriverContainerSpec{
+						Container: kmmv1beta1.DriverContainerContainerSpec{
+							KernelMappings: mappings,
+						},
+					},
+					Selector: nodeLabels,
 				},
 			}
 
@@ -327,15 +335,15 @@ var _ = Describe("ModuleReconciler", func() {
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
 						m.ObjectMeta = mod.ObjectMeta
 						m.Spec = mod.Spec
 						return nil
 					},
 				),
 				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
-						list.Items = []ootov1alpha1.Module{mod}
+					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+						list.Items = []kmmv1beta1.Module{mod}
 						return nil
 					},
 				),
@@ -360,7 +368,7 @@ var _ = Describe("ModuleReconciler", func() {
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 				mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
-					func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ ootov1alpha1.Module, _ string) {
+					func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ kmmv1beta1.Module, _ string) {
 						d.SetLabels(map[string]string{"test": "test"})
 					}),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
@@ -378,22 +386,26 @@ var _ = Describe("ModuleReconciler", func() {
 				kernelVersion = "1.2.3"
 			)
 
-			mappings := []ootov1alpha1.KernelMapping{
+			mappings := []kmmv1beta1.KernelMapping{
 				{
 					ContainerImage: imageName,
 					Literal:        kernelVersion,
 				},
 			}
 
-			mod := ootov1alpha1.Module{
+			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      moduleName,
 					Namespace: namespace,
 				},
-				Spec: ootov1alpha1.ModuleSpec{
-					DevicePlugin:   &v1.Container{},
-					KernelMappings: mappings,
-					Selector:       map[string]string{"key": "value"},
+				Spec: kmmv1beta1.ModuleSpec{
+					DevicePlugin: &kmmv1beta1.DevicePluginSpec{},
+					DriverContainer: kmmv1beta1.DriverContainerSpec{
+						Container: kmmv1beta1.DriverContainerContainerSpec{
+							KernelMappings: mappings,
+						},
+					},
+					Selector: map[string]string{"key": "value"},
 				},
 			}
 
@@ -408,14 +420,14 @@ var _ = Describe("ModuleReconciler", func() {
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *ootov1alpha1.Module) error {
+					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
 						m.ObjectMeta = mod.ObjectMeta
 						m.Spec = mod.Spec
 						return nil
 					},
 				),
 				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
+					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
 						return nil
 					},
 				),

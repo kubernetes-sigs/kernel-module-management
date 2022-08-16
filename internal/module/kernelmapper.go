@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/a8m/envsubst/parse"
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -32,9 +32,9 @@ type NodeOSConfig struct {
 //go:generate mockgen -source=kernelmapper.go -package=module -destination=mock_kernelmapper.go
 
 type KernelMapper interface {
-	FindMappingForKernel(mappings []ootov1alpha1.KernelMapping, kernelVersion string) (*ootov1alpha1.KernelMapping, error)
+	FindMappingForKernel(mappings []kmmv1beta1.KernelMapping, kernelVersion string) (*kmmv1beta1.KernelMapping, error)
 	GetNodeOSConfig(node *v1.Node) *NodeOSConfig
-	PrepareKernelMapping(mapping *ootov1alpha1.KernelMapping, osConfig *NodeOSConfig) (*ootov1alpha1.KernelMapping, error)
+	PrepareKernelMapping(mapping *kmmv1beta1.KernelMapping, osConfig *NodeOSConfig) (*kmmv1beta1.KernelMapping, error)
 }
 
 type kernelMapper struct{}
@@ -45,7 +45,7 @@ func NewKernelMapper() KernelMapper {
 
 // FindMappingForKernel tries to match kernelVersion against mappings. It returns the first mapping that has a Literal
 // field equal to kernelVersion or a Regexp field that matches kernelVersion.
-func (k *kernelMapper) FindMappingForKernel(mappings []ootov1alpha1.KernelMapping, kernelVersion string) (*ootov1alpha1.KernelMapping, error) {
+func (k *kernelMapper) FindMappingForKernel(mappings []kmmv1beta1.KernelMapping, kernelVersion string) (*kmmv1beta1.KernelMapping, error) {
 	for _, m := range mappings {
 		if m.Literal != "" && m.Literal == kernelVersion {
 			return &m, nil
@@ -86,7 +86,7 @@ func (k *kernelMapper) GetNodeOSConfig(node *v1.Node) *NodeOSConfig {
 	return &osConfig
 }
 
-func (k *kernelMapper) PrepareKernelMapping(mapping *ootov1alpha1.KernelMapping, osConfig *NodeOSConfig) (*ootov1alpha1.KernelMapping, error) {
+func (k *kernelMapper) PrepareKernelMapping(mapping *kmmv1beta1.KernelMapping, osConfig *NodeOSConfig) (*kmmv1beta1.KernelMapping, error) {
 	osConfigStrings := k.prepareOSConfigList(*osConfig)
 
 	parser := parse.New("mapping", osConfigStrings, &parse.Restrictions{})

@@ -19,11 +19,11 @@ runs:
       shell: bash
 
     - name: Describe DaemonSets
-      run: kubectl describe daemonset -l oot.node.kubernetes.io/module.name
+      run: kubectl describe daemonset -l kmm.node.kubernetes.io/module.name
       shell: bash
 
     - name: Describe Pods
-      run: kubectl describe pod -l oot.node.kubernetes.io/module.name
+      run: kubectl describe pod -l kmm.node.kubernetes.io/module.name
       shell: bash
 
     - name: Collect dmesg

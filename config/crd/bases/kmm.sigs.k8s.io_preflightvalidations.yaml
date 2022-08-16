@@ -5,9 +5,9 @@ metadata:
     api-approved.kubernetes.io: unapproved, testing-only
     controller-gen.kubebuilder.io/version: v0.8.0
   creationTimestamp: null
-  name: preflightvalidations.ooto.sigs.k8s.io
+  name: preflightvalidations.kmm.sigs.k8s.io
 spec:
-  group: ooto.sigs.k8s.io
+  group: kmm.sigs.k8s.io
   names:
     kind: PreflightValidation
     listKind: PreflightValidationList
@@ -17,7 +17,7 @@ spec:
     singular: preflightvalidation
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - name: v1beta1
     schema:
       openAPIV3Schema:
         description: PreflightValidation initiates a preflight validations for all
@@ -65,7 +65,7 @@ spec:
                       format: date-time
                       type: string
                     name:
-                      description: Name of the KMMO CR being checked
+                      description: Name of the Module CR being checked
                       type: string
                     statusReason:
                       description: StatusReason contains a string describing the status
@@ -79,7 +79,7 @@ spec:
                       - Build
                       type: string
                     verificationStatus:
-                      description: 'Status of KMMO CR verification: true (verified),
+                      description: 'Status of Module CR verification: true (verified),
                         false (verification failed), error (error during verification
                         process), unknown (verification has not started yet)'
                       enum:

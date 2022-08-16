@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1beta1
 
 import (
 	v1 "k8s.io/api/core/v1"
@@ -50,7 +50,6 @@ type PushOptions struct {
 }
 
 type Build struct {
-
 	// +optional
 	// BuildArgs is an array of build variables that are provided to the image building backend.
 	BuildArgs []BuildArg `json:"buildArgs"`
@@ -92,42 +91,117 @@ type KernelMapping struct {
 	Regexp string `json:"regexp"`
 }
 
-// ModuleSpec describes how the OOT operator should deploy a Module on those nodes that need it.
-type ModuleSpec struct {
+type ModprobeArgs struct {
+	// Load is an optional list of arguments to be used when loading the kernel module.
+	// +kubebuilder:validation:MinItems=1
+	Load []string `json:"load,omitempty"`
 
+	// Unload is an optional list of arguments to be used when unloading the kernel module.
+	// +kubebuilder:validation:MinItems=1
+	Unload []string `json:"unload,omitempty"`
+}
+
+type ModprobeSpec struct {
+	// ModuleName is the name of the Module to be loaded.
+	ModuleName string `json:"moduleName"`
+
+	// Parameters is an optional list of kernel module parameters to be provided to modprobe.
+	// They should be in the form of key=value and will be separated by spaces in the modprobe command.
+	// The resulting loading command will be: `modprobe module_name ${Parameters}`.
+	Parameters []string `json:"parameters,omitempty"`
+
+	// DirName is the root directory for modules.
+	// It adds `-d ${DirName}` to the modprobe command-line.
+	// +kubebuilder:default=/opt
+	DirName string `json:"dirName,omitempty"`
+
+	// Args is an optional list of arguments to be passed to modprobe before the name of the kernel module.
+	// The resulting commands will be: `modprobe ${Args} module_name`.
 	// +optional
-	Build *Build `json:"build"`
+	Args *ModprobeArgs `json:"args,omitempty"`
 
+	// If RawArgs are specified, they are passed straight to the modprobe binary; all other properties in this
+	// object are ignored.
+	// The resulting commands will be: `modprobe ${RawArgs}`.
 	// +optional
-	// AdditionalVolumes is a list of volumes that will be attached to the DriverContainer / DevicePlugin pod,
-	// in addition to the default ones.
-	AdditionalVolumes []v1.Volume `json:"additionalVolumes"`
+	RawArgs *ModprobeArgs `json:"rawArgs,omitempty"`
+}
 
+type DriverContainerContainerSpec struct {
+	// Build contains build instructions.
 	// +optional
-	// DevicePlugin allows overriding some properties of the container that deploys the device plugin on the node.
-	// Name is ignored and is set automatically by the OOT Operator.
-	DevicePlugin *v1.Container `json:"devicePlugin"`
+	Build *Build `json:"build,omitempty"`
 
-	// DriverContainer allows overriding some properties of the container that deploys the driver on the node.
-	// Name and image are ignored and are set automatically by the OOT Operator.
-	DriverContainer v1.Container `json:"driverContainer"`
+	// ContainerImage is a top-level field
+	// +optional
+	ContainerImage string `json:"containerImage,omitempty"`
+
+	// Image pull policy.
+	// One of Always, Never, IfNotPresent.
+	// Defaults to Always if :latest tag is specified, or IfNotPresent otherwise.
+	// Cannot be updated.
+	// More info: https://kubernetes.io/docs/concepts/containers/images#updating-images
+	// +optional
+	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy,omitempty" protobuf:"bytes,14,opt,name=imagePullPolicy,casttype=PullPolicy"`
 
 	// KernelMappings is a list of kernel mappings.
 	// When a node's labels match Selector, then the OOT Operator will look for the first mapping that matches its
 	// kernel version, and use the corresponding container image to run the DriverContainer.
+	// +kubebuilder:validation:MinItems=1
 	KernelMappings []KernelMapping `json:"kernelMappings"`
 
-	// Selector describes on which nodes the Module should be loaded.
-	Selector map[string]string `json:"selector"`
+	// Modprobe is a set of properties to customize which module modprobe loads and with which properties.
+	Modprobe ModprobeSpec `json:"modprobe"`
+}
+
+type DriverContainerSpec struct {
+	// Container holds the properties for the driver container that runs modprobe.
+	Container DriverContainerContainerSpec `json:"container"`
+
+	// +optional
+	// ServiceAccountName is the name of the ServiceAccount to use to run this pod.
+	// More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+}
+
+type DevicePluginContainerSpec struct {
+	// Image is the name of the container image that the device plugin container will run.
+	Image string `json:"image"`
+
+	// VolumeMounts is a list of volume mounts that are appended to the default ones.
+	// +optional
+	VolumeMounts []v1.VolumeMount `json:"volumeMounts,omitempty"`
+}
+
+type DevicePluginSpec struct {
+	Container DevicePluginContainerSpec `json:"container"`
 
 	// +optional
 	// ServiceAccountName is the name of the ServiceAccount to use to run this pod.
 	// More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
+	Volumes []v1.Volume `json:"volumes,omitempty"`
+}
+
+// ModuleSpec describes how the OOT operator should deploy a Module on those nodes that need it.
+type ModuleSpec struct {
+	// DevicePlugin allows overriding some properties of the container that deploys the device plugin on the node.
+	// Name is ignored and is set automatically by the OOT Operator.
 	// +optional
-	// ImagePullSecret is the name of the single Secret to use for all container image registries that requires auth.
-	ImagePullSecret *v1.LocalObjectReference `json:"imagePullSecret,omitempty"`
+	DevicePlugin *DevicePluginSpec `json:"devicePlugin"`
+
+	// DriverContainer allows overriding some properties of the container that deploys the driver on the node.
+	// Name and image are ignored and are set automatically by the OOT Operator.
+	DriverContainer DriverContainerSpec `json:"driverContainer"`
+
+	// ImageRepoSecret is an optional secret that is used to pull both the driver container and the device plugin, and
+	// to push the resulting image from the driver container build, if enabled.
+	// +optional
+	ImageRepoSecret *v1.LocalObjectReference `json:"imageRepoSecret,omitempty"`
+
+	// Selector describes on which nodes the Module should be loaded and optionally built.
+	Selector map[string]string `json:"selector"`
 }
 
 // DaemonSetStatus contains the status for a daemonset deployed during

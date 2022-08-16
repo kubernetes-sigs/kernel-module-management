@@ -128,7 +128,7 @@ jobs:
 
       - name: Check that the node gets labeled with the module's name
         run: |
-          until kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("oot.node.kubernetes.io/ooto-ci.ready")'; do
+          until kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/ooto-ci.ready")'; do
             sleep 3
           done
         timeout-minutes: 1
@@ -145,7 +145,7 @@ jobs:
 
       - name: Check that the node gets unlabeled with the module's name
         run: |
-          until ! kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("oot.node.kubernetes.io/ooto-ci.ready")'; do
+          until ! kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/ooto-ci.ready")'; do
             sleep 3
           done
         timeout-minutes: 1
@@ -267,7 +267,7 @@ jobs:
       - name: Verify that the DaemonSet gets garbage collected
         run: |
           # Cannot use kubectl wait because it will fail if there is no initial match
-          until [ $(kubectl get daemonsets.apps -l oot.node.kubernetes.io/module.name=ooto-ci-b -o go-template='{{ len .items }}') -eq 0 ]; do
+          until [ $(kubectl get daemonsets.apps -l kmm.node.kubernetes.io/module.name=ooto-ci-b -o go-template='{{ len .items }}') -eq 0 ]; do
             sleep 3
           done
         timeout-minutes: 1
@@ -378,18 +378,18 @@ jobs:
 
       - name: Wait for the job to be created
         run: |
-          until kubectl get job -l oot.node.kubernetes.io/module.name | grep ooto; do
+          until kubectl get job -l kmm.node.kubernetes.io/module.name | grep ooto; do
             sleep 3
           done
         timeout-minutes: 1
 
       - name: Wait for Job completion
-        run: kubectl wait --for condition=complete job -l oot.node.kubernetes.io/module.name --timeout=-1s
+        run: kubectl wait --for condition=complete job -l kmm.node.kubernetes.io/module.name --timeout=-1s
         timeout-minutes: 2
 
       - name: Collect job logs
         run: |
-          JOB_NAME=$(kubectl get jobs.batch -l oot.node.kubernetes.io/module.name --template='{{ (index .items 0).metadata.name }}')
+          JOB_NAME=$(kubectl get jobs.batch -l kmm.node.kubernetes.io/module.name --template='{{ (index .items 0).metadata.name }}')
           kubectl logs jobs.batch/${JOB_NAME}
         if: ${{ always() }}
 
@@ -402,37 +402,36 @@ jobs:
 
       - name: Check that the DriverContainer prints the secret's value to the standard output
         run: |
-          function check_output {
-            out=$(kubectl logs -l oot.node.kubernetes.io/module.name)
-            if $? -ne 0; then
-              echo 'kubectl failed'
-              return 1;
-            fi
+          POD_NAME=$(kubectl get pod -l kmm.node.kubernetes.io/module.name --template='{{ (index .items 0).metadata.name }}')
 
-            if ! echo $out | grep super-secret-value; then
-              echo 'secret value not found'
-              return 1
-            fi
+          echo "::group::Looking for the build secret"
 
-            if ! echo $out | grep some-build-arg; then
-              echo 'build argument not found'
-              return 1
-            fi
-
-            if ! echo $out | grep $KERNEL_VERSION; then
-              echo 'kernel version not found'
-              return 1
-            fi
-
-            if ! echo $out | grep default-value; then
-              echo 'build argument with default value not found'
-              return 1
-            fi
-          }
-
-          until check_output; do
+          until kubectl exec $POD_NAME -- grep super-secret-value /ci-build-secret; do
             sleep 3
           done
+
+          echo "::endgroup::"
+          echo "::group::Looking for the build argument"
+
+          until kubectl exec $POD_NAME -- grep some-build-arg /build-arg; do
+            sleep 3
+          done
+
+          echo "::endgroup::"
+          echo "::group::Looking for the kernel version"
+
+          until kubectl exec $POD_NAME -- grep $KERNEL_VERSION /kernel-version; do
+            sleep 3
+          done
+
+          echo "::endgroup::"
+          echo "::group::Looking for the build argument with a default value"
+
+          until kubectl exec $POD_NAME -- grep default-value /default-value; do
+            sleep 3
+          done
+
+          echo "::endgroup::"
         timeout-minutes: 1
 
       - name: Remove the Module

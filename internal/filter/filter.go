@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
@@ -61,7 +61,7 @@ func (f *Filter) FindModulesForNode(node client.Object) []reconcile.Request {
 
 	logger.Info("Listing all modules")
 
-	mods := ootov1alpha1.ModuleList{}
+	mods := kmmv1beta1.ModuleList{}
 
 	if err := f.client.List(context.Background(), &mods); err != nil {
 		logger.Error(err, "could not list modules")

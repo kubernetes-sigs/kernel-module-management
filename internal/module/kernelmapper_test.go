@@ -3,7 +3,7 @@ package module
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -16,39 +16,39 @@ var _ = Describe("FindMappingForKernel", func() {
 	km := NewKernelMapper()
 
 	It("should work with one literal mapping", func() {
-		mapping := ootov1alpha1.KernelMapping{
+		mapping := kmmv1beta1.KernelMapping{
 			ContainerImage: selectedImage,
 			Literal:        "1.2.3",
 		}
 
-		m, err := km.FindMappingForKernel([]ootov1alpha1.KernelMapping{mapping}, kernelVersion)
+		m, err := km.FindMappingForKernel([]kmmv1beta1.KernelMapping{mapping}, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).To(Equal(&mapping))
 	})
 
 	It("should work with one regexp mapping", func() {
-		mapping := ootov1alpha1.KernelMapping{
+		mapping := kmmv1beta1.KernelMapping{
 			ContainerImage: selectedImage,
 			Regexp:         `1\..*`,
 		}
 
-		m, err := km.FindMappingForKernel([]ootov1alpha1.KernelMapping{mapping}, kernelVersion)
+		m, err := km.FindMappingForKernel([]kmmv1beta1.KernelMapping{mapping}, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).To(Equal(&mapping))
 	})
 
 	It("should return an error if a regex is invalid", func() {
-		mapping := ootov1alpha1.KernelMapping{
+		mapping := kmmv1beta1.KernelMapping{
 			ContainerImage: selectedImage,
 			Regexp:         "invalid)",
 		}
 
-		_, err := km.FindMappingForKernel([]ootov1alpha1.KernelMapping{mapping}, kernelVersion)
+		_, err := km.FindMappingForKernel([]kmmv1beta1.KernelMapping{mapping}, kernelVersion)
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("should return an error if no mapping work", func() {
-		mappings := []ootov1alpha1.KernelMapping{
+		mappings := []kmmv1beta1.KernelMapping{
 			{
 				ContainerImage: selectedImage,
 				Regexp:         `1.2.2`,
@@ -78,7 +78,7 @@ var _ = Describe("PrepareKernelMapping", func() {
 	}
 
 	It("error input", func() {
-		mapping := ootov1alpha1.KernelMapping{
+		mapping := kmmv1beta1.KernelMapping{
 			ContainerImage: "some image:${KERNEL_XYZ",
 			Literal:        "some literal",
 			Regexp:         "regexp",
@@ -94,24 +94,24 @@ var _ = Describe("PrepareKernelMapping", func() {
 			regexp     = "some regexp:${KERNEL_XYZ"
 		)
 
-		mapping := ootov1alpha1.KernelMapping{
+		mapping := kmmv1beta1.KernelMapping{
 			ContainerImage: "some image:${KERNEL_XYZ}",
 			Literal:        literal,
 			Regexp:         regexp,
-			Build: &ootov1alpha1.Build{
-				BuildArgs: []ootov1alpha1.BuildArg{
+			Build: &kmmv1beta1.Build{
+				BuildArgs: []kmmv1beta1.BuildArg{
 					{Name: "name1", Value: "value1"},
 					{Name: "kernel version", Value: "${KERNEL_FULL_VERSION}"},
 				},
 				Dockerfile: dockerfile,
 			},
 		}
-		expectMapping := ootov1alpha1.KernelMapping{
+		expectMapping := kmmv1beta1.KernelMapping{
 			ContainerImage: "some image:kernelMMP",
 			Literal:        literal,
 			Regexp:         regexp,
-			Build: &ootov1alpha1.Build{
-				BuildArgs: []ootov1alpha1.BuildArg{
+			Build: &kmmv1beta1.Build{
+				BuildArgs: []kmmv1beta1.BuildArg{
 					{Name: "name1", Value: "value1"},
 					{Name: "kernel version", Value: "${KERNEL_FULL_VERSION}"},
 				},

@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	"github.com/qbarrand/oot-operator/internal/build"
 	"github.com/qbarrand/oot-operator/internal/daemonset"
 	"github.com/qbarrand/oot-operator/internal/filter"
@@ -75,9 +75,9 @@ func NewModuleReconciler(
 	}
 }
 
-//+kubebuilder:rbac:groups=ooto.sigs.k8s.io,resources=modules,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=ooto.sigs.k8s.io,resources=modules/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=ooto.sigs.k8s.io,resources=modules/finalizers,verbs=update
+//+kubebuilder:rbac:groups=kmm.sigs.k8s.io,resources=modules,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=kmm.sigs.k8s.io,resources=modules/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kmm.sigs.k8s.io,resources=modules/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=create;delete;get;list;patch;watch
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
 //+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
@@ -162,10 +162,10 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context,
-	mod *ootov1alpha1.Module,
-	targetedNodes []v1.Node) (map[string]*ootov1alpha1.KernelMapping, []v1.Node, error) {
+	mod *kmmv1beta1.Module,
+	targetedNodes []v1.Node) (map[string]*kmmv1beta1.KernelMapping, []v1.Node, error) {
 
-	mappings := make(map[string]*ootov1alpha1.KernelMapping)
+	mappings := make(map[string]*kmmv1beta1.KernelMapping)
 	logger := log.FromContext(ctx)
 
 	nodes := make([]v1.Node, 0, len(targetedNodes))
@@ -185,7 +185,7 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 			continue
 		}
 
-		m, err := r.kernelAPI.FindMappingForKernel(mod.Spec.KernelMappings, kernelVersion)
+		m, err := r.kernelAPI.FindMappingForKernel(mod.Spec.DriverContainer.Container.KernelMappings, kernelVersion)
 		if err != nil {
 			nodeLogger.Info("no suitable container image found; skipping node")
 			continue
@@ -209,7 +209,7 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 	return mappings, nodes, nil
 }
 
-func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *ootov1alpha1.Module) ([]v1.Node, error) {
+func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error) {
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("Listing nodes", "selector", mod.Spec.Selector)
 
@@ -223,10 +223,10 @@ func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *ooto
 }
 
 func (r *ModuleReconciler) handleBuild(ctx context.Context,
-	mod *ootov1alpha1.Module,
-	km *ootov1alpha1.KernelMapping,
+	mod *kmmv1beta1.Module,
+	km *kmmv1beta1.KernelMapping,
 	kernelVersion string) (bool, error) {
-	if mod.Spec.Build == nil && km.Build == nil {
+	if mod.Spec.DriverContainer.Container.Build == nil && km.Build == nil {
 		return false, nil
 	}
 
@@ -250,8 +250,8 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 }
 
 func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
-	mod *ootov1alpha1.Module,
-	km *ootov1alpha1.KernelMapping,
+	mod *kmmv1beta1.Module,
+	km *kmmv1beta1.KernelMapping,
 	dsByKernelVersion map[string]*appsv1.DaemonSet,
 	kernelVersion string) error {
 	ds := &appsv1.DaemonSet{
@@ -281,7 +281,7 @@ func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
 	return err
 }
 
-func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *ootov1alpha1.Module) error {
+func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module) error {
 	if mod.Spec.DevicePlugin == nil {
 		return nil
 	}
@@ -314,7 +314,7 @@ func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *ootov1al
 func (r *ModuleReconciler) setKMMOMetrics(ctx context.Context) {
 	logger := log.FromContext(ctx)
 
-	mods := ootov1alpha1.ModuleList{}
+	mods := kmmv1beta1.ModuleList{}
 	err := r.Client.List(ctx, &mods)
 	if err != nil {
 		logger.V(1).Info("failed to list KMMomodules for metrics", "error", err)
@@ -323,8 +323,8 @@ func (r *ModuleReconciler) setKMMOMetrics(ctx context.Context) {
 	r.metricsAPI.SetExistingKMMOModules(len(mods.Items))
 }
 
-func (r *ModuleReconciler) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*ootov1alpha1.Module, error) {
-	mod := ootov1alpha1.Module{}
+func (r *ModuleReconciler) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error) {
+	mod := kmmv1beta1.Module{}
 
 	if err := r.Client.Get(ctx, namespacedName, &mod); err != nil {
 		return nil, fmt.Errorf("failed to get the kmmo module %s: %w", namespacedName, err)
@@ -335,7 +335,7 @@ func (r *ModuleReconciler) getRequestedModule(ctx context.Context, namespacedNam
 // SetupWithManager sets up the controller with the Manager.
 func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&ootov1alpha1.Module{}).
+		For(&kmmv1beta1.Module{}).
 		Owns(&appsv1.DaemonSet{}).
 		Owns(&batchv1.Job{}).
 		Watches(

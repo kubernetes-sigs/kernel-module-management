@@ -1,4 +1,4 @@
-apiVersion: ooto.sigs.k8s.io/v1alpha1
+apiVersion: kmm.sigs.k8s.io/v1beta1
 kind: Module
 metadata:
   name: module-sample

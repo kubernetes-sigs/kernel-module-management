@@ -13,7 +13,7 @@ spec:
     - description: Module is the Schema for the modules API
       displayName: Module
       kind: Module
-      name: modules.ooto.sigs.k8s.io
+      name: modules.kmm.sigs.k8s.io
       version: v1alpha1
   description: Kubernetes operator managing out of tree kernel modules
   displayName: OOT Operator

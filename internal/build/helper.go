@@ -1,17 +1,17 @@
 package build
 
 import (
-	"github.com/qbarrand/oot-operator/api/v1alpha1"
+	"github.com/qbarrand/oot-operator/api/v1beta1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 )
 
 //go:generate mockgen -source=helper.go -package=build -destination=mock_helper.go
 
 type Helper interface {
-	ApplyBuildArgOverrides(args []v1alpha1.BuildArg, overrides ...v1alpha1.BuildArg) []v1alpha1.BuildArg
-	GetRelevantBuild(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping) *ootov1alpha1.Build
+	ApplyBuildArgOverrides(args []v1beta1.BuildArg, overrides ...v1beta1.BuildArg) []v1beta1.BuildArg
+	GetRelevantBuild(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build
 }
 
 type helper struct{}
@@ -20,8 +20,8 @@ func NewHelper() Helper {
 	return &helper{}
 }
 
-func (m *helper) ApplyBuildArgOverrides(args []v1alpha1.BuildArg, overrides ...v1alpha1.BuildArg) []v1alpha1.BuildArg {
-	overridesMap := make(map[string]v1alpha1.BuildArg, len(overrides))
+func (m *helper) ApplyBuildArgOverrides(args []v1beta1.BuildArg, overrides ...v1beta1.BuildArg) []v1beta1.BuildArg {
+	overridesMap := make(map[string]v1beta1.BuildArg, len(overrides))
 
 	for _, o := range overrides {
 		overridesMap[o.Name] = o
@@ -45,17 +45,17 @@ func (m *helper) ApplyBuildArgOverrides(args []v1alpha1.BuildArg, overrides ...v
 	return args
 }
 
-func (m *helper) GetRelevantBuild(mod ootov1alpha1.Module, km ootov1alpha1.KernelMapping) *ootov1alpha1.Build {
-	if mod.Spec.Build == nil {
+func (m *helper) GetRelevantBuild(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build {
+	if mod.Spec.DriverContainer.Container.Build == nil {
 		// km.Build cannot be nil in case mod.Build is nil, checked above
 		return km.Build.DeepCopy()
 	}
 
 	if km.Build == nil {
-		return mod.Spec.Build.DeepCopy()
+		return mod.Spec.DriverContainer.Container.Build.DeepCopy()
 	}
 
-	buildConfig := mod.Spec.Build.DeepCopy()
+	buildConfig := mod.Spec.DriverContainer.Container.Build.DeepCopy()
 	if km.Build.Dockerfile != "" {
 		buildConfig.Dockerfile = km.Build.Dockerfile
 	}

@@ -7,7 +7,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	mockClient "github.com/qbarrand/oot-operator/internal/client"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -247,15 +247,15 @@ var _ = Describe("FindModulesForNode", func() {
 	})
 
 	It("should return nothing if the node labels match no module", func() {
-		mod := ootov1alpha1.Module{
-			Spec: ootov1alpha1.ModuleSpec{
+		mod := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{
 				Selector: map[string]string{"key": "value"},
 			},
 		}
 
 		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
-				list.Items = []ootov1alpha1.Module{mod}
+			func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+				list.Items = []kmmv1beta1.Module{mod}
 				return nil
 			},
 		)
@@ -278,20 +278,20 @@ var _ = Describe("FindModulesForNode", func() {
 
 		const mod1Name = "mod1"
 
-		mod1 := ootov1alpha1.Module{
+		mod1 := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: mod1Name},
-			Spec:       ootov1alpha1.ModuleSpec{Selector: nodeLabels},
+			Spec:       kmmv1beta1.ModuleSpec{Selector: nodeLabels},
 		}
 
-		mod2 := ootov1alpha1.Module{
+		mod2 := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "mod2"},
-			Spec: ootov1alpha1.ModuleSpec{
+			Spec: kmmv1beta1.ModuleSpec{
 				Selector: map[string]string{"other-key": "other-value"},
 			},
 		}
 		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ interface{}, list *ootov1alpha1.ModuleList, _ ...interface{}) error {
-				list.Items = []ootov1alpha1.Module{mod1, mod2}
+			func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+				list.Items = []kmmv1beta1.Module{mod1, mod2}
 				return nil
 			},
 		)

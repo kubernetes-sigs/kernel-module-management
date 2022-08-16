@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 )
 
 // MockHelper is a mock of Helper interface.
@@ -35,14 +35,14 @@ func (m *MockHelper) EXPECT() *MockHelperMockRecorder {
 }
 
 // ApplyBuildArgOverrides mocks base method.
-func (m *MockHelper) ApplyBuildArgOverrides(args []v1alpha1.BuildArg, overrides ...v1alpha1.BuildArg) []v1alpha1.BuildArg {
+func (m *MockHelper) ApplyBuildArgOverrides(args []v1beta1.BuildArg, overrides ...v1beta1.BuildArg) []v1beta1.BuildArg {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{args}
 	for _, a := range overrides {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ApplyBuildArgOverrides", varargs...)
-	ret0, _ := ret[0].([]v1alpha1.BuildArg)
+	ret0, _ := ret[0].([]v1beta1.BuildArg)
 	return ret0
 }
 
@@ -54,10 +54,10 @@ func (mr *MockHelperMockRecorder) ApplyBuildArgOverrides(args interface{}, overr
 }
 
 // GetRelevantBuild mocks base method.
-func (m *MockHelper) GetRelevantBuild(mod v1alpha1.Module, km v1alpha1.KernelMapping) *v1alpha1.Build {
+func (m *MockHelper) GetRelevantBuild(mod v1beta1.Module, km v1beta1.KernelMapping) *v1beta1.Build {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRelevantBuild", mod, km)
-	ret0, _ := ret[0].(*v1alpha1.Build)
+	ret0, _ := ret[0].(*v1beta1.Build)
 	return ret0
 }
 

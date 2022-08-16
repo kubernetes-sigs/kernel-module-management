@@ -3,7 +3,7 @@ package job
 import (
 	"fmt"
 
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	"github.com/qbarrand/oot-operator/internal/build"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -16,7 +16,7 @@ import (
 //go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
 
 type Maker interface {
-	MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build, targetKernel, containerImage string) (*batchv1.Job, error)
+	MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string) (*batchv1.Job, error)
 }
 
 type maker struct {
@@ -28,12 +28,12 @@ func NewMaker(helper build.Helper, scheme *runtime.Scheme) Maker {
 	return &maker{helper: helper, scheme: scheme}
 }
 
-func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build, targetKernel, containerImage string) (*batchv1.Job, error) {
+func (m *maker) MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string) (*batchv1.Job, error) {
 	args := []string{"--destination", containerImage}
 
 	buildArgs := m.helper.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
-		ootov1alpha1.BuildArg{Name: "KERNEL_VERSION", Value: targetKernel},
+		kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: targetKernel},
 	)
 
 	for _, ba := range buildArgs {
@@ -80,9 +80,9 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build
 
 	volumes := []v1.Volume{dockerFileVolume}
 	volumeMounts := []v1.VolumeMount{dockerFileVolumeMount}
-	if mod.Spec.ImagePullSecret != nil {
-		volumes = append(volumes, makeImagePullSecretVolume(mod.Spec.ImagePullSecret))
-		volumeMounts = append(volumeMounts, makeImagePullSecretVolumeMount(mod.Spec.ImagePullSecret))
+	if irs := mod.Spec.ImageRepoSecret; irs != nil {
+		volumes = append(volumes, makeImagePullSecretVolume(irs))
+		volumeMounts = append(volumeMounts, makeImagePullSecretVolumeMount(irs))
 	}
 	volumes = append(volumes, makeBuildSecretVolumes(buildConfig.Secrets)...)
 	volumeMounts = append(volumeMounts, makeBuildSecretVolumeMounts(buildConfig.Secrets)...)
@@ -108,6 +108,7 @@ func (m *maker) MakeJob(mod ootov1alpha1.Module, buildConfig *ootov1alpha1.Build
 							VolumeMounts: volumeMounts,
 						},
 					},
+					NodeSelector:  mod.Spec.Selector,
 					RestartPolicy: v1.RestartPolicyOnFailure,
 					Volumes:       volumes,
 				},

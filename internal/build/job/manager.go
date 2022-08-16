@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	ootov1alpha1 "github.com/qbarrand/oot-operator/api/v1alpha1"
+	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	"github.com/qbarrand/oot-operator/internal/auth"
 	"github.com/qbarrand/oot-operator/internal/build"
 	"github.com/qbarrand/oot-operator/internal/constants"
@@ -34,14 +34,14 @@ func NewBuildManager(client client.Client, registry registry.Registry, maker Mak
 	}
 }
 
-func labels(mod ootov1alpha1.Module, targetKernel string) map[string]string {
+func labels(mod kmmv1beta1.Module, targetKernel string) map[string]string {
 	return map[string]string{
 		constants.ModuleNameLabel:    mod.Name,
 		constants.TargetKernelTarget: targetKernel,
 	}
 }
 
-func (jbm *jobManager) getJob(ctx context.Context, mod ootov1alpha1.Module, targetKernel string) (*batchv1.Job, error) {
+func (jbm *jobManager) getJob(ctx context.Context, mod kmmv1beta1.Module, targetKernel string) (*batchv1.Job, error) {
 	jobList := batchv1.JobList{}
 
 	opts := []client.ListOption{
@@ -62,16 +62,16 @@ func (jbm *jobManager) getJob(ctx context.Context, mod ootov1alpha1.Module, targ
 	return &jobList.Items[0], nil
 }
 
-func (jbm *jobManager) Sync(ctx context.Context, mod ootov1alpha1.Module, m ootov1alpha1.KernelMapping, targetKernel string) (build.Result, error) {
+func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string) (build.Result, error) {
 	logger := log.FromContext(ctx)
 
 	buildConfig := jbm.helper.GetRelevantBuild(mod, m)
 
 	var registryAuthGetter auth.RegistryAuthGetter
 
-	if mod.Spec.ImagePullSecret != nil {
+	if irs := mod.Spec.ImageRepoSecret; irs != nil {
 		namespacedName := types.NamespacedName{
-			Name:      mod.Spec.ImagePullSecret.Name,
+			Name:      irs.Name,
 			Namespace: mod.Namespace,
 		}
 		registryAuthGetter = auth.NewRegistryAuthGetter(jbm.client, namespacedName)

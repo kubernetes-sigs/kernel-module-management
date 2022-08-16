@@ -12,8 +12,8 @@ resources:
     namespaced: true
   controller: true
   domain: sigs.k8s.io
-  group: ooto
+  group: kmm
   kind: Module
-  path: github.com/qbarrand/oot-operator/api/v1alpha1
-  version: v1alpha1
+  path: github.com/qbarrand/oot-operator/api/v1beta1
+  version: v1beta1
 version: "3"
