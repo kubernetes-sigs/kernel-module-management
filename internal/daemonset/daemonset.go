@@ -162,6 +162,7 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 				},
 				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:       nodeSelector,
+				PriorityClassName:  "system-node-critical",
 				ServiceAccountName: mod.Spec.DriverContainer.ServiceAccountName,
 				Volumes: []v1.Volume{
 					{
@@ -241,6 +242,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 						VolumeMounts:    append(mod.Spec.DevicePlugin.Container.VolumeMounts, containerVolumeMounts...),
 					},
 				},
+				PriorityClassName:  "system-node-critical",
 				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:       map[string]string{getDriverContainerNodeLabel(mod.Name): ""},
 				ServiceAccountName: mod.Spec.DevicePlugin.ServiceAccountName,

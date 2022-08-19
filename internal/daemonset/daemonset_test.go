@@ -191,6 +191,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 							"has-feature-x": "true",
 							kernelLabel:     kernelVersion,
 						},
+						PriorityClassName:  "system-node-critical",
 						ServiceAccountName: serviceAccountName,
 						Volumes: []v1.Volume{
 							{
@@ -448,6 +449,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 						NodeSelector: map[string]string{
 							getDriverContainerNodeLabel(mod.Name): "",
 						},
+						PriorityClassName:  "system-node-critical",
 						ServiceAccountName: serviceAccountName,
 						Volumes: []v1.Volume{
 							{
