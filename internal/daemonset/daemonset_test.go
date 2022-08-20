@@ -13,6 +13,7 @@ import (
 	"github.com/qbarrand/oot-operator/internal/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/pointer"
@@ -366,6 +367,29 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 
 		repoSecret := v1.LocalObjectReference{Name: "pull-secret-name"}
 
+		env := []v1.EnvVar{
+			{
+				Name:  "ENV_KEY",
+				Value: "ENV_VALUE",
+			},
+		}
+
+		resources := v1.ResourceRequirements{
+			Limits: map[v1.ResourceName]resource.Quantity{
+				v1.ResourceCPU:    resource.MustParse("200m"),
+				v1.ResourceMemory: resource.MustParse("4G"),
+			},
+			Requests: map[v1.ResourceName]resource.Quantity{
+				v1.ResourceCPU:    resource.MustParse("100m"),
+				v1.ResourceMemory: resource.MustParse("2G"),
+			},
+		}
+
+		args := []string{"some", "args"}
+		command := []string{"some", "command"}
+
+		const ipp = v1.PullIfNotPresent
+
 		mod := kmmv1beta1.Module{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: kmmv1beta1.GroupVersion.String(),
@@ -378,8 +402,13 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 			Spec: kmmv1beta1.ModuleSpec{
 				DevicePlugin: &kmmv1beta1.DevicePluginSpec{
 					Container: kmmv1beta1.DevicePluginContainerSpec{
-						Image:        devicePluginImage,
-						VolumeMounts: []v1.VolumeMount{dpVolMount},
+						Args:            args,
+						Command:         command,
+						Env:             env,
+						Image:           devicePluginImage,
+						ImagePullPolicy: ipp,
+						Resources:       resources,
+						VolumeMounts:    []v1.VolumeMount{dpVolMount},
 					},
 					ServiceAccountName: serviceAccountName,
 					Volumes:            []v1.Volume{dpVol},
@@ -431,17 +460,22 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{
 							{
-								Name:  "device-plugin",
-								Image: devicePluginImage,
+								Args:            args,
+								Command:         command,
+								Env:             env,
+								Image:           devicePluginImage,
+								ImagePullPolicy: ipp,
+								Name:            "device-plugin",
+								Resources:       resources,
+								SecurityContext: &v1.SecurityContext{
+									Privileged: pointer.Bool(true),
+								},
 								VolumeMounts: []v1.VolumeMount{
 									dpVolMount,
 									{
 										Name:      "kubelet-device-plugins",
 										MountPath: "/var/lib/kubelet/device-plugins",
 									},
-								},
-								SecurityContext: &v1.SecurityContext{
-									Privileged: pointer.Bool(true),
 								},
 							},
 						},

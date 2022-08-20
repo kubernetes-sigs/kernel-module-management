@@ -236,8 +236,13 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{
 					{
+						Args:            mod.Spec.DevicePlugin.Container.Args,
+						Command:         mod.Spec.DevicePlugin.Container.Command,
+						Env:             mod.Spec.DevicePlugin.Container.Env,
 						Name:            "device-plugin",
 						Image:           mod.Spec.DevicePlugin.Container.Image,
+						ImagePullPolicy: mod.Spec.DevicePlugin.Container.ImagePullPolicy,
+						Resources:       mod.Spec.DevicePlugin.Container.Resources,
 						SecurityContext: &v1.SecurityContext{Privileged: pointer.Bool(true)},
 						VolumeMounts:    append(mod.Spec.DevicePlugin.Container.VolumeMounts, containerVolumeMounts...),
 					},
