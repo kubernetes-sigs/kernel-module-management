@@ -33,13 +33,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: ModuleSpec describes how the OOT operator should deploy a
+            description: ModuleSpec describes how the KMM operator should deploy a
               Module on those nodes that need it.
             properties:
               devicePlugin:
                 description: DevicePlugin allows overriding some properties of the
                   container that deploys the device plugin on the node. Name is ignored
-                  and is set automatically by the OOT Operator.
+                  and is set automatically by the KMM Operator.
                 properties:
                   container:
                     properties:
@@ -1830,13 +1830,13 @@ spec:
                 - container
                 type: object
               driverContainer:
-                description: DriverContainer allows overriding some properties of
-                  the container that deploys the driver on the node. Name and image
-                  are ignored and are set automatically by the OOT Operator.
+                description: ModuleLoader allows overriding some properties of the
+                  container that loads the kernel module on the node. Name and image
+                  are ignored and are set automatically by the KMM Operator.
                 properties:
                   container:
-                    description: Container holds the properties for the driver container
-                      that runs modprobe.
+                    description: Container holds the properties for the module loader
+                      container that runs modprobe.
                     properties:
                       build:
                         description: Build contains build instructions.
@@ -1916,7 +1916,7 @@ spec:
                         type: string
                       kernelMappings:
                         description: KernelMappings is a list of kernel mappings.
-                          When a node's labels match Selector, then the OOT Operator
+                          When a node's labels match Selector, then the KMM Operator
                           will look for the first mapping that matches its kernel
                           version, and use the corresponding container image to run
                           the DriverContainer.
@@ -2139,7 +2139,7 @@ spec:
                 - nodesMatchingSelectorNumber
                 type: object
               driverContainer:
-                description: DriverContainer contains the status of the DriverContainer
+                description: ModuleLoader contains the status of the ModuleLoader
                   daemonset
                 properties:
                   availableNumber:

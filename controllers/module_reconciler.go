@@ -185,7 +185,7 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 			continue
 		}
 
-		m, err := r.kernelAPI.FindMappingForKernel(mod.Spec.DriverContainer.Container.KernelMappings, kernelVersion)
+		m, err := r.kernelAPI.FindMappingForKernel(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion)
 		if err != nil {
 			nodeLogger.Info("no suitable container image found; skipping node")
 			continue
@@ -226,7 +226,7 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	km *kmmv1beta1.KernelMapping,
 	kernelVersion string) (bool, error) {
-	if mod.Spec.DriverContainer.Container.Build == nil && km.Build == nil {
+	if mod.Spec.ModuleLoader.Container.Build == nil && km.Build == nil {
 		return false, nil
 	}
 
@@ -273,7 +273,7 @@ func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
 
 	if err == nil {
 		if opRes == controllerutil.OperationResultCreated {
-			r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.DriverContainerStage, false)
+			r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.ModuleLoaderStage, false)
 		}
 		logger.Info("Reconciled Driver Container", "name", ds.Name, "result", opRes)
 	}

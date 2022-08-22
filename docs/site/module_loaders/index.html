@@ -8,7 +8,7 @@
         
         
         <link rel="shortcut icon" href="../img/favicon.ico">
-        <title>How to build driver-containers to be used by KMMO - Out-Of-Tree operator</title>
+        <title>How to build module-loaders to be used by KMMO - Out-Of-Tree operator</title>
         <link href="../css/bootstrap.min.css" rel="stylesheet">
         <link href="../css/font-awesome.min.css" rel="stylesheet">
         <link href="../css/base.css" rel="stylesheet">
@@ -37,7 +37,7 @@
                                 <a href=".." class="nav-link">Home</a>
                             </li>
                             <li class="navitem active">
-                                <a href="./" class="nav-link">How to build driver-containers to be used by KMMO</a>
+                                <a href="./" class="nav-link">How to build module-loaders to be used by KMMO</a>
                             </li>
                             <li class="dropdown">
                                 <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">Developer <b class="caret"></b></a>
@@ -70,7 +70,7 @@
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a href="https://github.com/qbarrand/oot-operator/edit/main/docs/driver_containers.md" class="nav-link"><i class="fa fa-github"></i> Edit on GitHub</a>
+                                <a href="https://github.com/qbarrand/oot-operator/edit/main/docs/module_loaders.md" class="nav-link"><i class="fa fa-github"></i> Edit on GitHub</a>
                             </li>
                     </ul>
                 </div>
@@ -90,7 +90,7 @@
     <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
         <ul class="nav flex-column">
             
-            <li class="nav-item" data-level="1"><a href="#how-to-build-driver-containers-to-be-used-by-kmmo" class="nav-link">How to build driver-containers to be used by KMMO</a>
+            <li class="nav-item" data-level="1"><a href="#how-to-build-module-loaders-to-be-used-by-kmmo" class="nav-link">How to build module-loaders to be used by KMMO</a>
               <ul class="nav flex-column">
               </ul>
             </li>
@@ -99,13 +99,13 @@
 </div></div>
                     <div class="col-md-9" role="main">
 
-<h1 id="how-to-build-driver-containers-to-be-used-by-kmmo">How to build driver-containers to be used by KMMO</h1>
-<h3 id="pre-build-driver-containers">Pre-build driver-containers</h3>
-<p>When a <code>Module</code> CR is applied to the cluster, KMMO will create a DaemonSet to run the driver-container specified in it.</p>
-<p>In order for driver-containers that depend on in-tree kernel-modules to work, KMMO is mounting <code>/lib/modules/${KVER}</code> from the node to the container, which means that it will override all files located in <code>/lib/modules/${KVER}</code> inside the driver-container.</p>
-<p>Therefore, when building a driver-container that is going to be used by KMMO, there are few things that needs to be done in the driver-container:
+<h1 id="how-to-build-module-loaders-to-be-used-by-kmmo">How to build module-loaders to be used by KMMO</h1>
+<h3 id="pre-build-module-loaders">Pre-build module-loaders</h3>
+<p>When a <code>Module</code> CR is applied to the cluster, KMMO will create a DaemonSet to run the module-loader specified in it.</p>
+<p>In order for module-loaders that depend on in-tree kernel-modules to work, KMMO is mounting <code>/lib/modules/${KVER}</code> from the node to the container, which means that it will override all files located in <code>/lib/modules/${KVER}</code> inside the module-loader.</p>
+<p>Therefore, when building a module-loader that is going to be used by KMMO, there are few things that needs to be done in the module-loader:
 * Put the <code>*.ko</code> files in <code>/opt/lib/modules/${KVER}</code> instead of <code>/lib/modules/${KVER}</code>
-* Link <code>/lib/modules/${KVER}</code> inside <code>/opt/lib/modules/$(KVER)/system</code> in case the driver-container depend on in-tree kernel-modules
+* Link <code>/lib/modules/${KVER}</code> inside <code>/opt/lib/modules/$(KVER)/system</code> in case the module-loader depend on in-tree kernel-modules
 * Run <code>depmod -b /opt</code> in order to generate the dependency file correctly</p></div>
             </div>
         </div>

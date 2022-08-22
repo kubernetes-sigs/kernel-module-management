@@ -204,8 +204,8 @@ var _ = Describe("ModuleReconciler", func() {
 					Namespace: namespace,
 				},
 				Spec: kmmv1beta1.ModuleSpec{
-					DriverContainer: kmmv1beta1.DriverContainerSpec{
-						Container: kmmv1beta1.DriverContainerContainerSpec{
+					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+						Container: kmmv1beta1.ModuleLoaderContainerSpec{
 							KernelMappings: mappings,
 						},
 					},
@@ -265,7 +265,7 @@ var _ = Describe("ModuleReconciler", func() {
 				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
 				mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
 				clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
-				mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.DriverContainerStage, false),
+				mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.ModuleLoaderStage, false),
 				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
 				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
 			)
@@ -298,8 +298,8 @@ var _ = Describe("ModuleReconciler", func() {
 					Namespace: namespace,
 				},
 				Spec: kmmv1beta1.ModuleSpec{
-					DriverContainer: kmmv1beta1.DriverContainerSpec{
-						Container: kmmv1beta1.DriverContainerContainerSpec{
+					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+						Container: kmmv1beta1.ModuleLoaderContainerSpec{
 							KernelMappings: mappings,
 						},
 					},
@@ -400,8 +400,8 @@ var _ = Describe("ModuleReconciler", func() {
 				},
 				Spec: kmmv1beta1.ModuleSpec{
 					DevicePlugin: &kmmv1beta1.DevicePluginSpec{},
-					DriverContainer: kmmv1beta1.DriverContainerSpec{
-						Container: kmmv1beta1.DriverContainerContainerSpec{
+					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+						Container: kmmv1beta1.ModuleLoaderContainerSpec{
 							KernelMappings: mappings,
 						},
 					},

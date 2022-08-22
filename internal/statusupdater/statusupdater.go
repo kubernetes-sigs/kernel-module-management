@@ -72,9 +72,9 @@ func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
 			numAvailableKernelModule += ds.Status.NumberAvailable
 		}
 	}
-	mod.Status.DriverContainer.NodesMatchingSelectorNumber = nodesMatchingSelectorNumber
-	mod.Status.DriverContainer.DesiredNumber = numDesired
-	mod.Status.DriverContainer.AvailableNumber = numAvailableKernelModule
+	mod.Status.ModuleLoader.NodesMatchingSelectorNumber = nodesMatchingSelectorNumber
+	mod.Status.ModuleLoader.DesiredNumber = numDesired
+	mod.Status.ModuleLoader.AvailableNumber = numAvailableKernelModule
 	if mod.Spec.DevicePlugin != nil {
 		mod.Status.DevicePlugin.NodesMatchingSelectorNumber = nodesMatchingSelectorNumber
 		mod.Status.DevicePlugin.DesiredNumber = numDesired
@@ -114,7 +114,7 @@ func (p *preflightStatusUpdater) PreflightSetVerificationStage(ctx context.Conte
 
 func (m *moduleStatusUpdater) updateMetrics(ctx context.Context, mod *kmmv1beta1.Module, dsByKernelVersion map[string]*appsv1.DaemonSet) {
 	for kernelVersion, ds := range dsByKernelVersion {
-		stage := metrics.DriverContainerStage
+		stage := metrics.ModuleLoaderStage
 		if daemonset.IsDevicePluginKernelVersion(kernelVersion) {
 			stage = metrics.DevicePluginStage
 		}

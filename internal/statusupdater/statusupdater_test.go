@@ -67,7 +67,7 @@ var _ = Describe("module status update", func() {
 					mockMetrics.EXPECT().SetCompletedStage(name,
 						namespace,
 						kernelVersion,
-						metrics.DriverContainerStage,
+						metrics.ModuleLoaderStage,
 						ds.Status.NumberAvailable == ds.Status.DesiredNumberScheduled)
 				}
 			}
@@ -78,18 +78,18 @@ var _ = Describe("module status update", func() {
 			res := su.ModuleUpdateStatus(context.Background(), mod, mappingsNodes, targetedNodes, dsMap)
 
 			Expect(res).To(BeNil())
-			Expect(mod.Status.DriverContainer.NodesMatchingSelectorNumber).To(Equal(int32(len(targetedNodes))))
-			Expect(mod.Status.DriverContainer.DesiredNumber).To(Equal(int32(len(mappingsNodes))))
-			Expect(mod.Status.DriverContainer.AvailableNumber).To(Equal(driverContainerAvailable))
+			Expect(mod.Status.ModuleLoader.NodesMatchingSelectorNumber).To(Equal(int32(len(targetedNodes))))
+			Expect(mod.Status.ModuleLoader.DesiredNumber).To(Equal(int32(len(mappingsNodes))))
+			Expect(mod.Status.ModuleLoader.AvailableNumber).To(Equal(driverContainerAvailable))
 			Expect(mod.Status.DevicePlugin.AvailableNumber).To(Equal(devicePluginAvailable))
 		},
-		Entry("0 nodes, 0 driver-containers, 0 device plugins",
+		Entry("0 nodes, 0 module-loaders, 0 device plugins",
 			[]v1.Node{},
 			[]v1.Node{},
 			prepareDsByKernel([]daemonSetConfig{}),
 			false,
 		),
-		Entry("2 nodes, 2 driver-containers, 0 device plugins",
+		Entry("2 nodes, 2 module-loaders, 0 device plugins",
 			[]v1.Node{v1.Node{}, v1.Node{}},
 			[]v1.Node{v1.Node{}, v1.Node{}},
 			prepareDsByKernel([]daemonSetConfig{
@@ -98,7 +98,7 @@ var _ = Describe("module status update", func() {
 			}),
 			false,
 		),
-		Entry("2 nodes, 1 driver-containers, 1 device plugins",
+		Entry("2 nodes, 1 module-loaders, 1 device plugins",
 			[]v1.Node{v1.Node{}, v1.Node{}},
 			[]v1.Node{v1.Node{}, v1.Node{}},
 			prepareDsByKernel([]daemonSetConfig{
@@ -106,7 +106,7 @@ var _ = Describe("module status update", func() {
 			}),
 			true,
 		),
-		Entry("2 nodes, 3 targeted nodes, 1 driver-containers, 1 device plugins",
+		Entry("2 nodes, 3 targeted nodes, 1 module-loaders, 1 device plugins",
 			[]v1.Node{v1.Node{}, v1.Node{}},
 			[]v1.Node{v1.Node{}, v1.Node{}, v1.Node{}},
 			prepareDsByKernel([]daemonSetConfig{

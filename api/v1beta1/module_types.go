@@ -127,7 +127,7 @@ type ModprobeSpec struct {
 	RawArgs *ModprobeArgs `json:"rawArgs,omitempty"`
 }
 
-type DriverContainerContainerSpec struct {
+type ModuleLoaderContainerSpec struct {
 	// Build contains build instructions.
 	// +optional
 	Build *Build `json:"build,omitempty"`
@@ -145,7 +145,7 @@ type DriverContainerContainerSpec struct {
 	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy,omitempty" protobuf:"bytes,14,opt,name=imagePullPolicy,casttype=PullPolicy"`
 
 	// KernelMappings is a list of kernel mappings.
-	// When a node's labels match Selector, then the OOT Operator will look for the first mapping that matches its
+	// When a node's labels match Selector, then the KMM Operator will look for the first mapping that matches its
 	// kernel version, and use the corresponding container image to run the DriverContainer.
 	// +kubebuilder:validation:MinItems=1
 	KernelMappings []KernelMapping `json:"kernelMappings"`
@@ -154,9 +154,9 @@ type DriverContainerContainerSpec struct {
 	Modprobe ModprobeSpec `json:"modprobe"`
 }
 
-type DriverContainerSpec struct {
-	// Container holds the properties for the driver container that runs modprobe.
-	Container DriverContainerContainerSpec `json:"container"`
+type ModuleLoaderSpec struct {
+	// Container holds the properties for the module loader container that runs modprobe.
+	Container ModuleLoaderContainerSpec `json:"container"`
 
 	// +optional
 	// ServiceAccountName is the name of the ServiceAccount to use to run this pod.
@@ -227,16 +227,16 @@ type DevicePluginSpec struct {
 	Volumes []v1.Volume `json:"volumes,omitempty"`
 }
 
-// ModuleSpec describes how the OOT operator should deploy a Module on those nodes that need it.
+// ModuleSpec describes how the KMM operator should deploy a Module on those nodes that need it.
 type ModuleSpec struct {
 	// DevicePlugin allows overriding some properties of the container that deploys the device plugin on the node.
-	// Name is ignored and is set automatically by the OOT Operator.
+	// Name is ignored and is set automatically by the KMM Operator.
 	// +optional
 	DevicePlugin *DevicePluginSpec `json:"devicePlugin"`
 
-	// DriverContainer allows overriding some properties of the container that deploys the driver on the node.
-	// Name and image are ignored and are set automatically by the OOT Operator.
-	DriverContainer DriverContainerSpec `json:"driverContainer"`
+	// ModuleLoader allows overriding some properties of the container that loads the kernel module on the node.
+	// Name and image are ignored and are set automatically by the KMM Operator.
+	ModuleLoader ModuleLoaderSpec `json:"driverContainer"`
 
 	// ImageRepoSecret is an optional secret that is used to pull both the driver container and the device plugin, and
 	// to push the resulting image from the driver container build, if enabled.
@@ -263,8 +263,8 @@ type ModuleStatus struct {
 	// DevicePlugin contains the status of the Device Plugin daemonset
 	// if it was deployed during reconciliation
 	DevicePlugin DaemonSetStatus `json:"devicePlugin,omitempty"`
-	// DriverContainer contains the status of the DriverContainer daemonset
-	DriverContainer DaemonSetStatus `json:"driverContainer"`
+	// ModuleLoader contains the status of the ModuleLoader daemonset
+	ModuleLoader DaemonSetStatus `json:"driverContainer"`
 }
 
 //+kubebuilder:object:root=true

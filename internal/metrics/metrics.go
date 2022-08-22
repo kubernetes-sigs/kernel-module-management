@@ -10,7 +10,7 @@ const (
 	existingKMMOModulesQuery = "kmmo_module_total"
 	completedKMMOStageQuery  = "kmmo_completed_stage"
 	BuildStage               = "build"
-	DriverContainerStage     = "driver-container"
+	ModuleLoaderStage        = "module-loader"
 	DevicePluginStage        = "device-plugin"
 )
 
@@ -39,7 +39,7 @@ func New() Metrics {
 	completedStages := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: completedKMMOStageQuery,
-			Help: "For a given kmmo,namespace, kernel version, stage(device-plugin, driver-container, build), 1 if the stage is completed, 0 if it is not.",
+			Help: "For a given kmmo,namespace, kernel version, stage(device-plugin, module-loader, build), 1 if the stage is completed, 0 if it is not.",
 		},
 		[]string{"kmmo", "namespace", "kernel", "stage"},
 	)

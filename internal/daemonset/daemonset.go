@@ -126,18 +126,18 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 				Containers: []v1.Container{
 					{
 						Command:         []string{"sleep", "infinity"},
-						Name:            "driver-container",
+						Name:            "module-loader",
 						Image:           image,
-						ImagePullPolicy: mod.Spec.DriverContainer.Container.ImagePullPolicy,
+						ImagePullPolicy: mod.Spec.ModuleLoader.Container.ImagePullPolicy,
 						Lifecycle: &v1.Lifecycle{
 							PostStart: &v1.LifecycleHandler{
 								Exec: &v1.ExecAction{
-									Command: MakeLoadCommand(mod.Spec.DriverContainer.Container.Modprobe),
+									Command: MakeLoadCommand(mod.Spec.ModuleLoader.Container.Modprobe),
 								},
 							},
 							PreStop: &v1.LifecycleHandler{
 								Exec: &v1.ExecAction{
-									Command: MakeUnloadCommand(mod.Spec.DriverContainer.Container.Modprobe),
+									Command: MakeUnloadCommand(mod.Spec.ModuleLoader.Container.Modprobe),
 								},
 							},
 						},
@@ -163,7 +163,7 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:       nodeSelector,
 				PriorityClassName:  "system-node-critical",
-				ServiceAccountName: mod.Spec.DriverContainer.ServiceAccountName,
+				ServiceAccountName: mod.Spec.ModuleLoader.ServiceAccountName,
 				Volumes: []v1.Volume{
 					{
 						Name: nodeLibModulesVolumeName,

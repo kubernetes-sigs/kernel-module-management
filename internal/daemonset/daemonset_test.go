@@ -97,8 +97,8 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				Namespace: namespace,
 			},
 			Spec: kmmv1beta1.ModuleSpec{
-				DriverContainer: kmmv1beta1.DriverContainerSpec{
-					Container: kmmv1beta1.DriverContainerContainerSpec{
+				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						Modprobe: kmmv1beta1.ModprobeSpec{ModuleName: "some-kmod"},
 					},
 					ServiceAccountName: serviceAccountName,
@@ -151,17 +151,17 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{
 							{
-								Name:  "driver-container",
+								Name:  "module-loader",
 								Image: driverContainerImage,
 								Lifecycle: &v1.Lifecycle{
 									PostStart: &v1.LifecycleHandler{
 										Exec: &v1.ExecAction{
-											Command: MakeLoadCommand(mod.Spec.DriverContainer.Container.Modprobe),
+											Command: MakeLoadCommand(mod.Spec.ModuleLoader.Container.Modprobe),
 										},
 									},
 									PreStop: &v1.LifecycleHandler{
 										Exec: &v1.ExecAction{
-											Command: MakeUnloadCommand(mod.Spec.DriverContainer.Container.Modprobe),
+											Command: MakeUnloadCommand(mod.Spec.ModuleLoader.Container.Modprobe),
 										},
 									},
 								},

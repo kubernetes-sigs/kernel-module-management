@@ -46,16 +46,16 @@ func (m *helper) ApplyBuildArgOverrides(args []v1beta1.BuildArg, overrides ...v1
 }
 
 func (m *helper) GetRelevantBuild(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build {
-	if mod.Spec.DriverContainer.Container.Build == nil {
+	if mod.Spec.ModuleLoader.Container.Build == nil {
 		// km.Build cannot be nil in case mod.Build is nil, checked above
 		return km.Build.DeepCopy()
 	}
 
 	if km.Build == nil {
-		return mod.Spec.DriverContainer.Container.Build.DeepCopy()
+		return mod.Spec.ModuleLoader.Container.Build.DeepCopy()
 	}
 
-	buildConfig := mod.Spec.DriverContainer.Container.Build.DeepCopy()
+	buildConfig := mod.Spec.ModuleLoader.Container.Build.DeepCopy()
 	if km.Build.Dockerfile != "" {
 		buildConfig.Dockerfile = km.Build.Dockerfile
 	}
