@@ -67,14 +67,11 @@ var _ = Describe("FindMappingForKernel", func() {
 var _ = Describe("PrepareKernelMapping", func() {
 	km := NewKernelMapper()
 	osConfig := NodeOSConfig{
-		kernelFullVersion:  "kernelFullVersion",
-		kernelVersionMMP:   "kernelMMP",
-		kernelVersionMajor: "kernelMajor",
-		kernelVersionMinor: "kernelMinor",
-		kernelVersionPatch: "kernelPatch",
-		kernelRHELVersion:  "kernelVersion",
-		kernelRHELRelease:  "kernelRelease",
-		kernelRHELArch:     "kernelArch",
+		KernelFullVersion:  "kernelFullVersion",
+		KernelVersionMMP:   "kernelMMP",
+		KernelVersionMajor: "kernelMajor",
+		KernelVersionMinor: "kernelMinor",
+		KernelVersionPatch: "kernelPatch",
 	}
 
 	It("error input", func() {
@@ -139,14 +136,11 @@ var _ = Describe("GetNodeOSConfig", func() {
 		}
 
 		expectedOSConfig := NodeOSConfig{
-			kernelFullVersion:  "4.18.0-305.45.1.el8_4.x86_64",
-			kernelVersionMMP:   "4.18.0",
-			kernelVersionMajor: "4",
-			kernelVersionMinor: "18",
-			kernelVersionPatch: "0",
-			kernelRHELVersion:  "el8_4",
-			kernelRHELRelease:  "305.45.1.el8_4",
-			kernelRHELArch:     "x86_64",
+			KernelFullVersion:  "4.18.0-305.45.1.el8_4.x86_64",
+			KernelVersionMMP:   "4.18.0",
+			KernelVersionMajor: "4",
+			KernelVersionMinor: "18",
+			KernelVersionPatch: "0",
 		}
 
 		res := km.GetNodeOSConfig(&node)

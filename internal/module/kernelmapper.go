@@ -19,14 +19,11 @@ const (
 )
 
 type NodeOSConfig struct {
-	kernelFullVersion  string `subst:"KERNEL_FULL_VERSION"`
-	kernelVersionMMP   string `subst:"KERNEL_XYZ"`
-	kernelVersionMajor string `subst:"KERNEL_X"`
-	kernelVersionMinor string `subst:"KERNEL_Y"`
-	kernelVersionPatch string `subst:"KERNEL_Z"`
-	kernelRHELVersion  string `subst:"KERNEL_RHEL_VERSION"`
-	kernelRHELRelease  string `subst:"KERNEL_RHEL_RELEASE"`
-	kernelRHELArch     string `subst:"KERNEL_RHEL_ARCH"`
+	KernelFullVersion  string `subst:"KERNEL_FULL_VERSION"`
+	KernelVersionMMP   string `subst:"KERNEL_XYZ"`
+	KernelVersionMajor string `subst:"KERNEL_X"`
+	KernelVersionMinor string `subst:"KERNEL_Y"`
+	KernelVersionPatch string `subst:"KERNEL_Z"`
 }
 
 //go:generate mockgen -source=kernelmapper.go -package=module -destination=mock_kernelmapper.go
@@ -70,19 +67,12 @@ func (k *kernelMapper) GetNodeOSConfig(node *v1.Node) *NodeOSConfig {
 
 	osConfigFieldsList := regexp.MustCompile("[.,-]").Split(node.Status.NodeInfo.KernelVersion, -1)
 
-	osConfig.kernelFullVersion = node.Status.NodeInfo.KernelVersion
-	osConfig.kernelVersionMMP = strings.Join(osConfigFieldsList[:kernelVersionPatchIdx+1], ".")
-	osConfig.kernelVersionMajor = osConfigFieldsList[kernelVersionMajorIdx]
-	osConfig.kernelVersionMinor = osConfigFieldsList[kernelVersionMinorIdx]
-	osConfig.kernelVersionPatch = osConfigFieldsList[kernelVersionPatchIdx]
+	osConfig.KernelFullVersion = node.Status.NodeInfo.KernelVersion
+	osConfig.KernelVersionMMP = strings.Join(osConfigFieldsList[:kernelVersionPatchIdx+1], ".")
+	osConfig.KernelVersionMajor = osConfigFieldsList[kernelVersionMajorIdx]
+	osConfig.KernelVersionMinor = osConfigFieldsList[kernelVersionMinorIdx]
+	osConfig.KernelVersionPatch = osConfigFieldsList[kernelVersionPatchIdx]
 
-	// [TODO] - remove this code from upstream once we have it in downstream
-	if strings.Contains(node.Status.NodeInfo.OSImage, "Red Hat") {
-		osConfig.kernelRHELVersion = osConfigFieldsList[len(osConfigFieldsList)-2]
-		osConfig.kernelRHELRelease = strings.Join(osConfigFieldsList[kernelVersionPatchIdx+1:len(osConfigFieldsList)-1], ".")
-		osConfig.kernelRHELArch = osConfigFieldsList[len(osConfigFieldsList)-1]
-	}
-	// [TODO] - add debian and Ubuntu handling
 	return &osConfig
 }
 
