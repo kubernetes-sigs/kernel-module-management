@@ -121,6 +121,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 		podLabels := map[string]string{
 			constants.ModuleNameLabel: moduleName,
 			kernelLabel:               kernelVersion,
+			constants.DaemonSetRole:   "module-loader",
 		}
 
 		directory := v1.HostPathDirectory
@@ -430,6 +431,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 
 		podLabels := map[string]string{
 			constants.ModuleNameLabel: moduleName,
+			constants.DaemonSetRole:   "device-plugin",
 		}
 
 		directory := v1.HostPathDirectory

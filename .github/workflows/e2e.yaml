@@ -133,6 +133,13 @@ jobs:
           done
         timeout-minutes: 1
 
+      - name: Check that the daemon-set for device plugin is running
+        run: |
+          until kubectl get ds  -l 'kmm.node.kubernetes.io/module.name=ooto-ci,kmm.node.kubernetes.io/role=device-plugin' -ojson | jq -e '.items[] | select(.status.numberReady == 1)'; do 
+            sleep 3
+          done
+        timeout-minutes: 1
+
       - name: Remove the Module
         run: kubectl delete -f module-ooto-ci.yaml
 
@@ -267,7 +274,7 @@ jobs:
       - name: Verify that the DaemonSet gets garbage collected
         run: |
           # Cannot use kubectl wait because it will fail if there is no initial match
-          until [ $(kubectl get daemonsets.apps -l kmm.node.kubernetes.io/module.name=ooto-ci-b -o go-template='{{ len .items }}') -eq 0 ]; do
+          until [ $(kubectl get daemonsets.apps -l 'kmm.node.kubernetes.io/module.name=ooto-ci-b, kmm.node.kubernetes.io/role!=device-plugin' -o go-template='{{ len .items }}') -eq 0 ]; do
             sleep 3
           done
         timeout-minutes: 1

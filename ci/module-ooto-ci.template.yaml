@@ -12,5 +12,18 @@ spec:
       kernelMappings:
         - literal: KVER_CHANGEME
           containerImage: ooto-kmod:local
+  devicePlugin:
+    container:
+      image: squat/generic-device-plugin
+      args:
+        - --device
+        - '{"name": "simple-kmod", "groups": [{"paths": [{"path": "/proc/simple-procfs-kmod"}]}]}'
+      volumeMounts:
+        - name: proc
+          mountPath: /proc
+    volumes:
+      - name: proc
+        hostPath:
+          path: /proc
   selector:
     wants-oot-module: KMOD_CHANGEME

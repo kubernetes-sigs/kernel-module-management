@@ -105,6 +105,7 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 	standardLabels := map[string]string{
 		constants.ModuleNameLabel: mod.Name,
 		dc.kernelLabel:            kernelVersion,
+		constants.DaemonSetRole:   "module-loader",
 	}
 
 	ds.SetLabels(
@@ -220,7 +221,10 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 		},
 	}
 
-	standardLabels := map[string]string{constants.ModuleNameLabel: mod.Name}
+	standardLabels := map[string]string{
+		constants.ModuleNameLabel: mod.Name,
+		constants.DaemonSetRole:   "device-plugin",
+	}
 
 	ds.SetLabels(
 		OverrideLabels(ds.GetLabels(), standardLabels),
