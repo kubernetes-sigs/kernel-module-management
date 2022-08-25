@@ -4,7 +4,7 @@ kind: Module
 metadata:
   name: NAME_CHANGEME
 spec:
-  driverContainer:
+  moduleLoader:
     container:
       modprobe:
         moduleName: KMOD_CHANGEME

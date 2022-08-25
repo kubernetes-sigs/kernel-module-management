@@ -51,7 +51,7 @@ var _ = Describe("module status update", func() {
 			if devicePluginPresent {
 				mod.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{}
 			}
-			var driverContainerAvailable int32
+			var moduleLoaderAvailable int32
 			var devicePluginAvailable int32
 
 			for kernelVersion, ds := range dsMap {
@@ -63,7 +63,7 @@ var _ = Describe("module status update", func() {
 						metrics.DevicePluginStage,
 						ds.Status.NumberAvailable == ds.Status.DesiredNumberScheduled)
 				} else {
-					driverContainerAvailable += ds.Status.NumberAvailable
+					moduleLoaderAvailable += ds.Status.NumberAvailable
 					mockMetrics.EXPECT().SetCompletedStage(name,
 						namespace,
 						kernelVersion,
@@ -80,7 +80,7 @@ var _ = Describe("module status update", func() {
 			Expect(res).To(BeNil())
 			Expect(mod.Status.ModuleLoader.NodesMatchingSelectorNumber).To(Equal(int32(len(targetedNodes))))
 			Expect(mod.Status.ModuleLoader.DesiredNumber).To(Equal(int32(len(mappingsNodes))))
-			Expect(mod.Status.ModuleLoader.AvailableNumber).To(Equal(driverContainerAvailable))
+			Expect(mod.Status.ModuleLoader.AvailableNumber).To(Equal(moduleLoaderAvailable))
 			Expect(mod.Status.DevicePlugin.AvailableNumber).To(Equal(devicePluginAvailable))
 		},
 		Entry("0 nodes, 0 module-loaders, 0 device plugins",

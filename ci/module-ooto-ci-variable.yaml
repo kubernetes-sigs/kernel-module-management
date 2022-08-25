@@ -4,7 +4,7 @@ kind: Module
 metadata:
   name: ooto-ci
 spec:
-  driverContainer:
+  moduleLoader:
     container:
       modprobe:
         moduleName: ooto_ci_a

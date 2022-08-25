@@ -236,10 +236,10 @@ type ModuleSpec struct {
 
 	// ModuleLoader allows overriding some properties of the container that loads the kernel module on the node.
 	// Name and image are ignored and are set automatically by the KMM Operator.
-	ModuleLoader ModuleLoaderSpec `json:"driverContainer"`
+	ModuleLoader ModuleLoaderSpec `json:"moduleLoader"`
 
-	// ImageRepoSecret is an optional secret that is used to pull both the driver container and the device plugin, and
-	// to push the resulting image from the driver container build, if enabled.
+	// ImageRepoSecret is an optional secret that is used to pull both the module loader and the device plugin, and
+	// to push the resulting image from the module loader build, if enabled.
 	// +optional
 	ImageRepoSecret *v1.LocalObjectReference `json:"imageRepoSecret,omitempty"`
 
@@ -264,7 +264,7 @@ type ModuleStatus struct {
 	// if it was deployed during reconciliation
 	DevicePlugin DaemonSetStatus `json:"devicePlugin,omitempty"`
 	// ModuleLoader contains the status of the ModuleLoader daemonset
-	ModuleLoader DaemonSetStatus `json:"driverContainer"`
+	ModuleLoader DaemonSetStatus `json:"moduleLoader"`
 }
 
 //+kubebuilder:object:root=true

@@ -1829,7 +1829,17 @@ spec:
                 required:
                 - container
                 type: object
-              driverContainer:
+              imageRepoSecret:
+                description: ImageRepoSecret is an optional secret that is used to
+                  pull both the module loader and the device plugin, and to push the
+                  resulting image from the module loader build, if enabled.
+                properties:
+                  name:
+                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    type: string
+                type: object
+              moduleLoader:
                 description: ModuleLoader allows overriding some properties of the
                   container that loads the kernel module on the node. Name and image
                   are ignored and are set automatically by the KMM Operator.
@@ -2094,16 +2104,6 @@ spec:
                 required:
                 - container
                 type: object
-              imageRepoSecret:
-                description: ImageRepoSecret is an optional secret that is used to
-                  pull both the driver container and the device plugin, and to push
-                  the resulting image from the driver container build, if enabled.
-                properties:
-                  name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      TODO: Add other useful fields. apiVersion, kind, uid?'
-                    type: string
-                type: object
               selector:
                 additionalProperties:
                   type: string
@@ -2111,7 +2111,7 @@ spec:
                   loaded and optionally built.
                 type: object
             required:
-            - driverContainer
+            - moduleLoader
             - selector
             type: object
           status:
@@ -2138,7 +2138,7 @@ spec:
                 - desiredNumber
                 - nodesMatchingSelectorNumber
                 type: object
-              driverContainer:
+              moduleLoader:
                 description: ModuleLoader contains the status of the ModuleLoader
                   daemonset
                 properties:
@@ -2160,7 +2160,7 @@ spec:
                 - nodesMatchingSelectorNumber
                 type: object
             required:
-            - driverContainer
+            - moduleLoader
             type: object
         type: object
     served: true

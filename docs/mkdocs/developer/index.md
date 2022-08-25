@@ -22,7 +22,7 @@ spec:
   additionalVolumes:
     # All volumes here are available into the DriverContainer / DevicePlugin pod.
     # Users should mount those by adding corresponding volumeMounts under .spec.devicePlugin
-    # and .spec.driverContainer.
+    # and .spec.moduleLoader.
     - name: some-volume
       configMap:
         name: some-configmap
@@ -31,7 +31,7 @@ spec:
     # /var/lib/kubelet/device-plugins automatically.
     name: overwritten-anyway
     image: some-image
-  driverContainer: # is a Container spec
+  moduleLoader: # is a Container spec
     # This container will not be privileged by default.
     # It will mount /lib/modules and /usr/lib/modules automatically.
     name: overwritten-anyway

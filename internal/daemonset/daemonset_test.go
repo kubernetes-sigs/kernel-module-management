@@ -81,10 +81,10 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should work as expected", func() {
 		const (
-			driverContainerImage = "driver-image"
-			dsName               = "ds-name"
-			imageRepoSecretName  = "image-repo-secret"
-			serviceAccountName   = "driver-service-account"
+			moduleLoaderImage   = "driver-image"
+			dsName              = "ds-name"
+			imageRepoSecretName = "image-repo-secret"
+			serviceAccountName  = "driver-service-account"
 		)
 
 		mod := kmmv1beta1.Module{
@@ -115,7 +115,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			},
 		}
 
-		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, driverContainerImage, mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, moduleLoaderImage, mod, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 
 		podLabels := map[string]string{
@@ -153,7 +153,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 						Containers: []v1.Container{
 							{
 								Name:  "module-loader",
-								Image: driverContainerImage,
+								Image: moduleLoaderImage,
 								Lifecycle: &v1.Lifecycle{
 									PostStart: &v1.LifecycleHandler{
 										Exec: &v1.ExecAction{
