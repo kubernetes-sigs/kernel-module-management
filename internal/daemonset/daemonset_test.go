@@ -180,8 +180,13 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 									},
 								},
 								SecurityContext: &v1.SecurityContext{
+									AllowPrivilegeEscalation: pointer.Bool(false),
 									Capabilities: &v1.Capabilities{
 										Add: []v1.Capability{"SYS_MODULE"},
+									},
+									RunAsUser: pointer.Int64(0),
+									SELinuxOptions: &v1.SELinuxOptions{
+										Type: "spc_t",
 									},
 								},
 							},
