@@ -31,7 +31,6 @@ import (
 	"github.com/qbarrand/oot-operator/internal/module"
 	"github.com/qbarrand/oot-operator/internal/registry"
 	"github.com/qbarrand/oot-operator/internal/statusupdater"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2/klogr"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -49,17 +48,7 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
-const (
-	NFDKernelLabelingMethod  = "nfd"
-	OOTOKernelLabelingMethod = "ooto"
-
-	KernelLabelingMethodEnvVar = "KERNEL_LABELING_METHOD"
-)
-
-var (
-	scheme               = runtime.NewScheme()
-	validLabelingMethods = sets.NewString(OOTOKernelLabelingMethod, NFDKernelLabelingMethod)
-)
+var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -117,37 +106,16 @@ func main() {
 
 	client := mgr.GetClient()
 
-	var (
-		kernelLabel          string
-		kernelLabelingMethod = GetEnvWithDefault(KernelLabelingMethodEnvVar, OOTOKernelLabelingMethod)
-	)
-
-	setupLogger.V(1).Info("Determining kernel labeling method", KernelLabelingMethodEnvVar, kernelLabelingMethod)
-
 	filter := filter.New(client, mgr.GetLogger())
 
-	switch kernelLabelingMethod {
-	case OOTOKernelLabelingMethod:
-		kernelLabel = "kmm.node.kubernetes.io/kernel-version.full"
+	const kernelLabel = "kmm.node.kubernetes.io/kernel-version.full"
 
-		nodeKernelReconciler := controllers.NewNodeKernelReconciler(client, kernelLabel, filter)
+	nodeKernelReconciler := controllers.NewNodeKernelReconciler(client, kernelLabel, filter)
 
-		if err = nodeKernelReconciler.SetupWithManager(mgr); err != nil {
-			setupLogger.Error(err, "unable to create controller", "controller", "NodeKernel")
-			os.Exit(1)
-		}
-	case NFDKernelLabelingMethod:
-		kernelLabel = "feature.node.kubernetes.io/kernel-version.full"
-	default:
-		setupLogger.Error(
-			fmt.Errorf("%q is not in %v", kernelLabelingMethod, validLabelingMethods.List()),
-			"Invalid kernel labeling method",
-		)
-
+	if err = nodeKernelReconciler.SetupWithManager(mgr); err != nil {
+		setupLogger.Error(err, "unable to create controller", "controller", "NodeKernel")
 		os.Exit(1)
 	}
-
-	setupLogger.V(1).Info("Using kernel label", "label", kernelLabel)
 
 	metricsAPI := metrics.New()
 	metricsAPI.Register()
@@ -187,15 +155,6 @@ func main() {
 		setupLogger.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-}
-
-func GetEnvWithDefault(key, def string) string {
-	v, ok := os.LookupEnv(key)
-	if !ok {
-		v = def
-	}
-
-	return v
 }
 
 func gitCommit() (string, error) {

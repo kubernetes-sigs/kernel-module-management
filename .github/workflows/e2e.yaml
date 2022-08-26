@@ -32,15 +32,7 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        include:
-          - kustomize-config-default: ci/install-nfd-labeling
-            install-nfd: true
-          - kustomize-config-default: ci/install-ci
-            install-nfd: false
-
-    name: "Prebuilt kernel module (NFD: ${{ matrix.install-nfd }})"
+    name: Prebuilt kernel module
 
     needs: [build-operator-image]
 
@@ -50,10 +42,6 @@ jobs:
 
       - name: Create the minikube cluster
         uses: ./.github/actions/create-minikube-cluster
-
-      - name: Install NFD
-        run: kubectl apply -k https://github.com/kubernetes-sigs/node-feature-discovery/deployment/overlays/default?ref=v0.10.1
-        if: ${{ matrix.install-nfd }}
 
       - name: Label the node so that it gets the module
         run: kubectl label node minikube wants-oot-module=ooto_ci_a
@@ -91,7 +79,7 @@ jobs:
       - name: Deploy OOTO
         run: make deploy
         env:
-          KUSTOMIZE_CONFIG_DEFAULT: ${{ matrix.kustomize-config-default }}
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
       - name: Wait until the OOTO Deployment is Available
         run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
