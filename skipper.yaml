@@ -8,6 +8,8 @@ volumes:
     - $HOME/go/pkg:/go/pkg
     - $HOME/.cache/golangci-lint:$HOME/.cache/golangci-lint
     - $HOME/.docker:$HOME/.docker
+    - $HOME/.kube/:$HOME/.kube
+    - $HOME/.minikube/:$HOME/.minikube
 env_file:
   - skipper.env
 env:

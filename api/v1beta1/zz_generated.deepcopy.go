@@ -469,9 +469,17 @@ func (in *PreflightValidationStatus) DeepCopyInto(out *PreflightValidationStatus
 	*out = *in
 	if in.CRStatuses != nil {
 		in, out := &in.CRStatuses, &out.CRStatuses
-		*out = make([]CRStatus, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
+		*out = make(map[string]*CRStatus, len(*in))
+		for key, val := range *in {
+			var outVal *CRStatus
+			if val == nil {
+				(*out)[key] = nil
+			} else {
+				in, out := &val, &outVal
+				*out = new(CRStatus)
+				(*in).DeepCopyInto(*out)
+			}
+			(*out)[key] = outVal
 		}
 	}
 }

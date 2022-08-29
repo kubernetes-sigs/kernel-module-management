@@ -386,3 +386,47 @@ var _ = Describe("PodReadinessChangedPredicate", func() {
 		),
 	)
 })
+
+var _ = Describe("FindPreflightsForModule", func() {
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = mockClient.NewMockClient(ctrl)
+	})
+
+	It("no preflight exists", func() {
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any())
+
+		p := New(clnt, logr.Discard())
+
+		res := p.EnqueueAllPreflightValidations(&kmmv1beta1.Module{})
+		Expect(res).To(BeEmpty())
+	})
+
+	It("preflight exists", func() {
+		preflight := kmmv1beta1.PreflightValidation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "preflight",
+				Namespace: "preflightNamespace",
+			},
+		}
+
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *kmmv1beta1.PreflightValidationList, _ ...interface{}) error {
+				list.Items = []kmmv1beta1.PreflightValidation{preflight}
+				return nil
+			},
+		)
+
+		expectedRes := []reconcile.Request{
+			reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: preflight.Name, Namespace: preflight.Namespace},
+			},
+		}
+
+		p := New(clnt, logr.Discard())
+		res := p.EnqueueAllPreflightValidations(&kmmv1beta1.Module{})
+		Expect(res).To(Equal(expectedRes))
+	})
+
+})

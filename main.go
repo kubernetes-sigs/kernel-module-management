@@ -29,6 +29,7 @@ import (
 	"github.com/qbarrand/oot-operator/internal/filter"
 	"github.com/qbarrand/oot-operator/internal/metrics"
 	"github.com/qbarrand/oot-operator/internal/module"
+	"github.com/qbarrand/oot-operator/internal/preflight"
 	"github.com/qbarrand/oot-operator/internal/registry"
 	"github.com/qbarrand/oot-operator/internal/statusupdater"
 	"k8s.io/klog/v2/klogr"
@@ -126,6 +127,8 @@ func main() {
 	daemonAPI := daemonset.NewCreator(client, kernelLabel, scheme)
 	kernelAPI := module.NewKernelMapper()
 	moduleStatusUpdaterAPI := statusupdater.NewModuleStatusUpdater(client, daemonAPI, metricsAPI)
+	preflightStatusUpdaterAPI := statusupdater.NewPreflightStatusUpdater(client)
+	preflightAPI := preflight.NewPreflightAPI(client, registryAPI, kernelAPI)
 
 	mc := controllers.NewModuleReconciler(client, buildAPI, daemonAPI, kernelAPI, metricsAPI, filter, moduleStatusUpdaterAPI)
 
@@ -136,6 +139,11 @@ func main() {
 
 	if err = controllers.NewPodNodeModuleReconciler(client, daemonAPI).SetupWithManager(mgr); err != nil {
 		setupLogger.Error(err, "unable to create controller", "controller", "PodNodeModule")
+		os.Exit(1)
+	}
+
+	if err = controllers.NewPreflightValidationReconciler(client, filter, preflightStatusUpdaterAPI, preflightAPI).SetupWithManager(mgr); err != nil {
+		setupLogger.Error(err, "unable to create controller", "controller", "Preflight")
 		os.Exit(1)
 	}
 

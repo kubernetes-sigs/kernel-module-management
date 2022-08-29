@@ -12,6 +12,7 @@ import (
 	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	v1 "k8s.io/api/apps/v1"
 	v10 "k8s.io/api/core/v1"
+	sets "k8s.io/apimachinery/pkg/util/sets"
 )
 
 // MockModuleStatusUpdater is a mock of ModuleStatusUpdater interface.
@@ -74,44 +75,44 @@ func (m *MockPreflightStatusUpdater) EXPECT() *MockPreflightStatusUpdaterMockRec
 	return m.recorder
 }
 
-// PreflightPresetVerificationStatus mocks base method.
-func (m *MockPreflightStatusUpdater) PreflightPresetVerificationStatus(ctx context.Context, pv *v1beta1.PreflightValidation, status *v1beta1.CRStatus) error {
+// PreflightPresetStatuses mocks base method.
+func (m *MockPreflightStatusUpdater) PreflightPresetStatuses(ctx context.Context, pv *v1beta1.PreflightValidation, existingModules sets.String, newModules []string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PreflightPresetVerificationStatus", ctx, pv, status)
+	ret := m.ctrl.Call(m, "PreflightPresetStatuses", ctx, pv, existingModules, newModules)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// PreflightPresetVerificationStatus indicates an expected call of PreflightPresetVerificationStatus.
-func (mr *MockPreflightStatusUpdaterMockRecorder) PreflightPresetVerificationStatus(ctx, pv, status interface{}) *gomock.Call {
+// PreflightPresetStatuses indicates an expected call of PreflightPresetStatuses.
+func (mr *MockPreflightStatusUpdaterMockRecorder) PreflightPresetStatuses(ctx, pv, existingModules, newModules interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreflightPresetVerificationStatus", reflect.TypeOf((*MockPreflightStatusUpdater)(nil).PreflightPresetVerificationStatus), ctx, pv, status)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreflightPresetStatuses", reflect.TypeOf((*MockPreflightStatusUpdater)(nil).PreflightPresetStatuses), ctx, pv, existingModules, newModules)
 }
 
 // PreflightSetVerificationStage mocks base method.
-func (m *MockPreflightStatusUpdater) PreflightSetVerificationStage(ctx context.Context, preflight *v1beta1.PreflightValidation, status *v1beta1.CRStatus, stage string) error {
+func (m *MockPreflightStatusUpdater) PreflightSetVerificationStage(ctx context.Context, preflight *v1beta1.PreflightValidation, moduleName, stage string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PreflightSetVerificationStage", ctx, preflight, status, stage)
+	ret := m.ctrl.Call(m, "PreflightSetVerificationStage", ctx, preflight, moduleName, stage)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PreflightSetVerificationStage indicates an expected call of PreflightSetVerificationStage.
-func (mr *MockPreflightStatusUpdaterMockRecorder) PreflightSetVerificationStage(ctx, preflight, status, stage interface{}) *gomock.Call {
+func (mr *MockPreflightStatusUpdaterMockRecorder) PreflightSetVerificationStage(ctx, preflight, moduleName, stage interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreflightSetVerificationStage", reflect.TypeOf((*MockPreflightStatusUpdater)(nil).PreflightSetVerificationStage), ctx, preflight, status, stage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreflightSetVerificationStage", reflect.TypeOf((*MockPreflightStatusUpdater)(nil).PreflightSetVerificationStage), ctx, preflight, moduleName, stage)
 }
 
 // PreflightSetVerificationStatus mocks base method.
-func (m *MockPreflightStatusUpdater) PreflightSetVerificationStatus(ctx context.Context, preflight *v1beta1.PreflightValidation, status *v1beta1.CRStatus, verificationStatus, message string) error {
+func (m *MockPreflightStatusUpdater) PreflightSetVerificationStatus(ctx context.Context, preflight *v1beta1.PreflightValidation, moduleName, verificationStatus, message string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PreflightSetVerificationStatus", ctx, preflight, status, verificationStatus, message)
+	ret := m.ctrl.Call(m, "PreflightSetVerificationStatus", ctx, preflight, moduleName, verificationStatus, message)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PreflightSetVerificationStatus indicates an expected call of PreflightSetVerificationStatus.
-func (mr *MockPreflightStatusUpdaterMockRecorder) PreflightSetVerificationStatus(ctx, preflight, status, verificationStatus, message interface{}) *gomock.Call {
+func (mr *MockPreflightStatusUpdaterMockRecorder) PreflightSetVerificationStatus(ctx, preflight, moduleName, verificationStatus, message interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreflightSetVerificationStatus", reflect.TypeOf((*MockPreflightStatusUpdater)(nil).PreflightSetVerificationStatus), ctx, preflight, status, verificationStatus, message)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreflightSetVerificationStatus", reflect.TypeOf((*MockPreflightStatusUpdater)(nil).PreflightSetVerificationStatus), ctx, preflight, moduleName, verificationStatus, message)
 }

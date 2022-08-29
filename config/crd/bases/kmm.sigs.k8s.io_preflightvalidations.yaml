@@ -53,9 +53,7 @@ spec:
               is read-only. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status'
             properties:
               crStatuses:
-                description: CRStatuses contain observations about each SpecialResource's
-                  preflight upgradability validation
-                items:
+                additionalProperties:
                   properties:
                     lastTransitionTime:
                       description: LastTransitionTime is the last time the CR status
@@ -63,9 +61,6 @@ spec:
                         the underlying status changed.  If that is not known, then
                         using the time when the API field changed is acceptable.
                       format: date-time
-                      type: string
-                    name:
-                      description: Name of the Module CR being checked
                       type: string
                     statusReason:
                       description: StatusReason contains a string describing the status
@@ -88,11 +83,12 @@ spec:
                       type: string
                   required:
                   - lastTransitionTime
-                  - name
                   - verificationStage
                   - verificationStatus
                   type: object
-                type: array
+                description: CRStatuses contain observations about each SpecialResource's
+                  preflight upgradability validation
+                type: object
             type: object
         type: object
     served: true

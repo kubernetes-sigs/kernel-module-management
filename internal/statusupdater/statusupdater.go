@@ -2,6 +2,7 @@ package statusupdater
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
@@ -10,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -23,12 +25,12 @@ type ModuleStatusUpdater interface {
 //go:generate mockgen -source=statusupdater.go -package=statusupdater -destination=mock_statusupdater.go
 
 type PreflightStatusUpdater interface {
-	PreflightPresetVerificationStatus(ctx context.Context, pv *kmmv1beta1.PreflightValidation,
-		status *kmmv1beta1.CRStatus) error
-	PreflightSetVerificationStatus(ctx context.Context, preflight *kmmv1beta1.PreflightValidation, status *kmmv1beta1.CRStatus,
+	PreflightPresetStatuses(ctx context.Context, pv *kmmv1beta1.PreflightValidation,
+		existingModules sets.String, newModules []string) error
+	PreflightSetVerificationStatus(ctx context.Context, preflight *kmmv1beta1.PreflightValidation, moduleName string,
 		verificationStatus string, message string) error
 	PreflightSetVerificationStage(ctx context.Context, preflight *kmmv1beta1.PreflightValidation,
-		status *kmmv1beta1.CRStatus, stage string) error
+		moduleName string, stage string) error
 }
 
 type moduleStatusUpdater struct {
@@ -84,32 +86,44 @@ func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
 	return m.client.Status().Update(ctx, mod)
 }
 
-func (p *preflightStatusUpdater) PreflightPresetVerificationStatus(ctx context.Context,
-	pv *kmmv1beta1.PreflightValidation,
-	status *kmmv1beta1.CRStatus) error {
-	status.VerificationStatus = kmmv1beta1.VerificationFalse
-	status.VerificationStage = kmmv1beta1.VerificationStageImage
-	status.LastTransitionTime = metav1.NewTime(time.Now())
+func (p *preflightStatusUpdater) PreflightPresetStatuses(ctx context.Context,
+	pv *kmmv1beta1.PreflightValidation, existingModules sets.String, newModules []string) error {
+
+	modulesInStatus := sets.StringKeySet(pv.Status.CRStatuses)
+	modulesToDelete := modulesInStatus.Difference(existingModules).UnsortedList()
+	for _, moduleName := range modulesToDelete {
+		delete(pv.Status.CRStatuses, moduleName)
+	}
+
+	for _, moduleName := range newModules {
+		pv.Status.CRStatuses[moduleName] = &kmmv1beta1.CRStatus{
+			VerificationStatus: kmmv1beta1.VerificationFalse,
+			VerificationStage:  kmmv1beta1.VerificationStageImage,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+		}
+	}
 	return p.client.Status().Update(ctx, pv)
 }
 
-func (p *preflightStatusUpdater) PreflightSetVerificationStatus(ctx context.Context, pv *kmmv1beta1.PreflightValidation, status *kmmv1beta1.CRStatus,
+func (p *preflightStatusUpdater) PreflightSetVerificationStatus(ctx context.Context, pv *kmmv1beta1.PreflightValidation, moduleName string,
 	verificationStatus string, message string) error {
-	original := pv.DeepCopy()
-	status.VerificationStatus = verificationStatus
-	status.StatusReason = message
-	status.LastTransitionTime = metav1.NewTime(time.Now())
-	patch := client.MergeFrom(original)
-	return p.client.Status().Patch(ctx, pv, patch)
+	if _, ok := pv.Status.CRStatuses[moduleName]; !ok {
+		return fmt.Errorf("failed to find module status %s in preflight %s", moduleName, pv.Name)
+	}
+	pv.Status.CRStatuses[moduleName].VerificationStatus = verificationStatus
+	pv.Status.CRStatuses[moduleName].StatusReason = message
+	pv.Status.CRStatuses[moduleName].LastTransitionTime = metav1.NewTime(time.Now())
+	return p.client.Status().Update(ctx, pv)
 }
 
 func (p *preflightStatusUpdater) PreflightSetVerificationStage(ctx context.Context, pv *kmmv1beta1.PreflightValidation,
-	status *kmmv1beta1.CRStatus, stage string) error {
-	original := pv.DeepCopy()
-	status.VerificationStage = stage
-	status.LastTransitionTime = metav1.NewTime(time.Now())
-	patch := client.MergeFrom(original)
-	return p.client.Status().Patch(ctx, pv, patch)
+	moduleName string, stage string) error {
+	if _, ok := pv.Status.CRStatuses[moduleName]; !ok {
+		return fmt.Errorf("failed to find module status %s in preflight %s", moduleName, pv.Name)
+	}
+	pv.Status.CRStatuses[moduleName].VerificationStage = stage
+	pv.Status.CRStatuses[moduleName].LastTransitionTime = metav1.NewTime(time.Now())
+	return p.client.Status().Update(ctx, pv)
 }
 
 func (m *moduleStatusUpdater) updateMetrics(ctx context.Context, mod *kmmv1beta1.Module, dsByKernelVersion map[string]*appsv1.DaemonSet) {

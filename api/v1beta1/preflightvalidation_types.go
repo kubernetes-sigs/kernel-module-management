@@ -38,10 +38,6 @@ type PreflightValidationSpec struct {
 }
 
 type CRStatus struct {
-	// Name of the Module CR being checked
-	// +required
-	Name string `json:"name"`
-
 	// Status of Module CR verification: true (verified), false (verification failed),
 	// error (error during verification process), unknown (verification has not started yet)
 	// +required
@@ -77,7 +73,7 @@ type PreflightValidationStatus struct {
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +optional
-	CRStatuses []CRStatus `json:"crStatuses,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	CRStatuses map[string]*CRStatus `json:"crStatuses,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true

@@ -107,6 +107,28 @@ func (f *Filter) FindModulesForNode(node client.Object) []reconcile.Request {
 	return reqs
 }
 
+func (f *Filter) EnqueueAllPreflightValidations(mod client.Object) []reconcile.Request {
+	reqs := make([]reconcile.Request, 0)
+
+	logger := f.logger.WithValues("module", mod.GetName())
+	logger.Info("Listing all preflights")
+	preflights := kmmv1beta1.PreflightValidationList{}
+	if err := f.client.List(context.Background(), &preflights); err != nil {
+		logger.Error(err, "could not list preflights")
+		return reqs
+	}
+
+	for _, preflight := range preflights.Items {
+		// skip the preflight being deleted
+		if preflight.GetDeletionTimestamp() != nil {
+			continue
+		}
+		nsn := types.NamespacedName{Name: preflight.Name, Namespace: preflight.Namespace}
+		reqs = append(reqs, reconcile.Request{NamespacedName: nsn})
+	}
+	return reqs
+}
+
 // DeletingPredicate returns a predicate that returns true if the object is being deleted.
 func DeletingPredicate() predicate.Predicate {
 	return predicate.NewPredicateFuncs(func(object client.Object) bool {
@@ -143,4 +165,8 @@ func PodReadinessChangedPredicate(logger logr.Logger) predicate.Predicate {
 			return podutils.IsPodReady(oldPod) != podutils.IsPodReady(newPod)
 		},
 	}
+}
+
+func PreflightReconcilerModulePredicate() predicate.Predicate {
+	return predicate.GenerationChangedPredicate{}
 }

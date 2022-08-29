@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type daemonSetConfig struct {
@@ -120,15 +121,15 @@ var _ = Describe("module status update", func() {
 
 var _ = Describe("preflight status updates", func() {
 	const (
-		name      = "preflight-name"
-		namespace = "preflight-namespace"
+		name       = "preflight-name"
+		namespace  = "preflight-namespace"
+		moduleName = "moduleName"
 	)
 
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
 		pv   *kmmv1beta1.PreflightValidation
-		ps   *kmmv1beta1.CRStatus
 		su   PreflightStatusUpdater
 	)
 
@@ -136,40 +137,52 @@ var _ = Describe("preflight status updates", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		pv = &kmmv1beta1.PreflightValidation{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
-		ps = &kmmv1beta1.CRStatus{Name: "cr-name"}
+		pv.Status.CRStatuses = make(map[string]*kmmv1beta1.CRStatus, 1)
 		su = NewPreflightStatusUpdater(clnt)
 	})
 
-	It("preset preflight status", func() {
+	It("preset preflight statuses", func() {
+		pv.Status.CRStatuses["moduleName1"] = &kmmv1beta1.CRStatus{VerificationStage: kmmv1beta1.VerificationStageBuild}
+		pv.Status.CRStatuses["moduleName2"] = &kmmv1beta1.CRStatus{VerificationStage: kmmv1beta1.VerificationStageBuild}
+		pv.Status.CRStatuses["moduleName3"] = &kmmv1beta1.CRStatus{VerificationStage: kmmv1beta1.VerificationStageImage}
+		existingModules := sets.NewString("moduleName1", "moduleName2")
+		newModules := []string{"moduleName4"}
+
 		statusWrite := client.NewMockStatusWriter(ctrl)
 		clnt.EXPECT().Status().Return(statusWrite)
 		statusWrite.EXPECT().Update(context.Background(), pv).Return(nil)
 
-		res := su.PreflightPresetVerificationStatus(context.Background(), pv, ps)
+		res := su.PreflightPresetStatuses(context.Background(), pv, existingModules, newModules)
 		Expect(res).To(BeNil())
-		Expect(ps.VerificationStatus).To(Equal(kmmv1beta1.VerificationFalse))
-		Expect(ps.VerificationStage).To(Equal(kmmv1beta1.VerificationStageImage))
+		Expect(pv.Status.CRStatuses["moduleName1"].VerificationStage).To(Equal(kmmv1beta1.VerificationStageBuild))
+		Expect(pv.Status.CRStatuses["moduleName2"].VerificationStage).To(Equal(kmmv1beta1.VerificationStageBuild))
+		Expect(pv.Status.CRStatuses["moduleName4"].VerificationStage).To(Equal(kmmv1beta1.VerificationStageImage))
+		Expect(pv.Status.CRStatuses["moduleName4"].VerificationStatus).To(Equal(kmmv1beta1.VerificationFalse))
+		_, ok := pv.Status.CRStatuses["moduleName3"]
+		Expect(ok).To(BeFalse())
 	})
 
 	It("set preflight verification status", func() {
+		pv.Status.CRStatuses[moduleName] = &kmmv1beta1.CRStatus{}
 		statusWrite := client.NewMockStatusWriter(ctrl)
 		clnt.EXPECT().Status().Return(statusWrite)
-		statusWrite.EXPECT().Patch(context.Background(), pv, gomock.Any()).Return(nil)
+		statusWrite.EXPECT().Update(context.Background(), pv).Return(nil)
 
-		res := su.PreflightSetVerificationStatus(context.Background(), pv, ps, "verificationStatus", "verificationReason")
+		res := su.PreflightSetVerificationStatus(context.Background(), pv, moduleName, "verificationStatus", "verificationReason")
 		Expect(res).To(BeNil())
-		Expect(ps.VerificationStatus).To(Equal("verificationStatus"))
-		Expect(ps.StatusReason).To(Equal("verificationReason"))
+		Expect(pv.Status.CRStatuses[moduleName].VerificationStatus).To(Equal("verificationStatus"))
+		Expect(pv.Status.CRStatuses[moduleName].StatusReason).To(Equal("verificationReason"))
 	})
 
 	It("set preflight verification stage", func() {
+		pv.Status.CRStatuses[moduleName] = &kmmv1beta1.CRStatus{}
 		statusWrite := client.NewMockStatusWriter(ctrl)
 		clnt.EXPECT().Status().Return(statusWrite)
-		statusWrite.EXPECT().Patch(context.Background(), pv, gomock.Any()).Return(nil)
+		statusWrite.EXPECT().Update(context.Background(), pv).Return(nil)
 
-		res := su.PreflightSetVerificationStage(context.Background(), pv, ps, "verificationStage")
+		res := su.PreflightSetVerificationStage(context.Background(), pv, moduleName, "verificationStage")
 		Expect(res).To(BeNil())
-		Expect(ps.VerificationStage).To(Equal("verificationStage"))
+		Expect(pv.Status.CRStatuses[moduleName].VerificationStage).To(Equal("verificationStage"))
 	})
 })
 

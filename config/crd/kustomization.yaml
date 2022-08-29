@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/kmm.sigs.k8s.io_modules.yaml
+- bases/kmm.sigs.k8s.io_preflightvalidations.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
