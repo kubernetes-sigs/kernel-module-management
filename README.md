@@ -3,7 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/kubernetes-sigs/kernel-module-management)](https://goreportcard.com/report/github.com/kubernetes-sigs/kernel-module-management)
 [![Go Reference](https://pkg.go.dev/badge/github.com/kubernetes-sigs/kernel-module-management.svg)](https://pkg.go.dev/github.com/kubernetes-sigs/kernel-module-management)
 
-The Out-Of-Tree Operator manages out of tree kernel modules Kubernetes.
+The Kernel Module Management Operator manages out of tree kernel modules in Kubernetes.
 
 ## Getting started
 Install the bleeding edge Kernel Module Management Operator in one command:
