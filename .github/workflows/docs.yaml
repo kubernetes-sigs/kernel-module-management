@@ -21,7 +21,8 @@ jobs:
       - name: Install Java for PlantUML
         run: |
           sudo apt update
-          sudo apt install -y default-jre
+          sudo apt install -y --install-suggests default-jre fonts-noto
+          sudo fc-cache -fs
 
       - name: Build the docs site
         run: make docs
@@ -35,3 +36,10 @@ jobs:
             git diff docs/site ':!docs/site/index.html' ':!docs/site/sitemap.xml*'
             exit 1
           fi
+
+      - name: Upload the docs directory if changes were detected
+        uses: actions/upload-artifact@v3
+        with:
+          name: docs-site
+          path: docs/site
+        if: ${{ failure() }}
