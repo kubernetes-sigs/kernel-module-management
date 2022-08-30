@@ -1,0 +1,537 @@
+name: e2e
+
+on: [pull_request]
+
+env:
+  GO_VERSION: 1.18
+
+jobs:
+  build-operator-image:
+    runs-on: ubuntu-latest
+
+    name: Build the OOTO container image
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build the image
+        run: docker build -t ooto:local .
+
+      - name: Export the image
+        run: docker save -o ooto_local.tar ooto:local
+
+      - name: Upload the image
+        uses: actions/upload-artifact@v3
+        with:
+          name: ci-images
+          if-no-files-found: error
+          path: ooto_local.tar
+          retention-days: 1
+
+  e2e:
+    runs-on: ubuntu-latest
+
+    name: Prebuilt kernel module
+
+    needs: [build-operator-image]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
+
+      - name: Label the node so that it gets the module
+        run: kubectl label node minikube wants-oot-module=ooto_ci_a
+
+      - name: Download container images
+        uses: actions/download-artifact@v3
+        with:
+          name: ci-images
+
+      - name: Save the kernel version
+        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
+
+      - name: Build the DriverContainer image
+        uses: ./.github/actions/build-drivercontainer-image
+        with:
+          kernel-version: ${{ env.KERNEL_VERSION }}
+
+      - name: Import images into minikube
+        run: |
+          minikube image load ooto_local.tar
+          minikube image load ooto-kmod_local.tar
+
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
+
+      - name: Deploy OOTO
+        run: make deploy
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
+
+      - name: Wait until the OOTO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+        timeout-minutes: 1
+
+      - name: Describe the Deployment and get its YAML if that failed
+        run: |
+          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+        if: ${{ failure() }}
+
+      - name: Check that the ooto_ci_a module is not loaded on the node
+        run: |
+          if minikube ssh -- lsmod | grep ooto_ci_a; then
+            echo "Unexpected lsmod output - the module should not be loaded"
+            exit 1
+          fi
+
+      - name: Add an ooto-ci Module that contains a valid mapping
+        run: |
+          sed -e "s/KVER_CHANGEME/$(uname -r)/g" \
+            -e s/NAME_CHANGEME/ooto-ci/ \
+            -e s/KMOD_CHANGEME/ooto_ci_a/ \
+            ci/module-ooto-ci.template.yaml | tee module-ooto-ci.yaml
+
+          kubectl apply -f module-ooto-ci.yaml
+
+      - name: Check that the module gets loaded on the node
+        run: |
+          until minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Check that the node gets labeled with the module's name
+        run: |
+          until kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/ooto-ci.ready")'; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Check that the daemon-set for device plugin is running
+        run: |
+          until kubectl get ds  -l 'kmm.node.kubernetes.io/module.name=ooto-ci,kmm.node.kubernetes.io/role=device-plugin' -ojson | jq -e '.items[] | select(.status.numberReady == 1)'; do 
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Remove the Module
+        run: kubectl delete -f module-ooto-ci.yaml
+
+      - name: Check that the module gets unloaded from the node
+        run: |
+          until ! minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Check that the node gets unlabeled with the module's name
+        run: |
+          until ! kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/ooto-ci.ready")'; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
+        if: ${{ always() }}
+
+  e2e-two-nodes:
+    name: Prebuilt kernel module - two nodes
+
+    runs-on: ubuntu-latest
+
+    needs: [build-operator-image]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
+        with:
+          start-args: --nodes 2
+
+      - name: Download container images
+        uses: actions/download-artifact@v3
+        with:
+          name: ci-images
+
+      - name: Save the kernel version
+        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
+
+      - name: Build the DriverContainer image
+        uses: ./.github/actions/build-drivercontainer-image
+        with:
+          kernel-version: ${{ env.KERNEL_VERSION }}
+
+      - name: Import images into minikube
+        run: |
+          minikube image load ooto_local.tar
+          minikube image load ooto-kmod_local.tar
+
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
+
+      - name: Deploy OOTO
+        run: make deploy
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
+
+      - name: Wait until the OOTO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+        timeout-minutes: 1
+
+      - name: Describe the Deployment / pods and get their YAML if that failed
+        run: |
+          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+
+          kubectl describe pod -n oot-operator-system
+          kubectl get -o yaml pod -n oot-operator-system
+        if: ${{ failure() }}
+
+      - name: Create one Module for each node
+        run: |
+          # Node minikube gets module a
+          sed -e s/NAME_CHANGEME/ooto-ci-a/g \
+            -e s/KMOD_CHANGEME/ooto_ci_a/g \
+            -e "s/KVER_CHANGEME/${KERNEL_VERSION}/g" \
+            ci/module-ooto-ci.template.yaml | tee module-ooto-ci-a.yaml
+
+          # Node minikube-m02 gets module b
+          sed -e s/NAME_CHANGEME/ooto-ci-b/g \
+            -e s/KMOD_CHANGEME/ooto_ci_b/g \
+            -e "s/KVER_CHANGEME/${KERNEL_VERSION}/g" \
+            ci/module-ooto-ci.template.yaml | tee module-ooto-ci-b.yaml
+
+          kubectl apply -f module-ooto-ci-a.yaml -f module-ooto-ci-b.yaml
+
+      - name: Label the first node to have it receive module a
+        run: kubectl label node minikube wants-oot-module=ooto_ci_a
+
+      - name: Check that module a gets loaded on the first node
+        run: |
+          until minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Label the second node to have it receive module b
+        run: kubectl label node minikube-m02 wants-oot-module=ooto_ci_b
+
+      - name: Check that module b gets loaded on the second node
+        run: |
+          until minikube ssh -n minikube-m02 -- lsmod | grep ooto_ci_b; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Remove the wants-oot-module label on the second node
+        run: kubectl label node minikube-m02 wants-oot-module-
+
+      - name: Check that module b gets unloaded from the second node
+        run: |
+          until ! minikube ssh -n minikube-m02 -- lsmod | grep ooto_ci_b; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Verify that the DaemonSet gets garbage collected
+        run: |
+          # Cannot use kubectl wait because it will fail if there is no initial match
+          until [ $(kubectl get daemonsets.apps -l 'kmm.node.kubernetes.io/module.name=ooto-ci-b, kmm.node.kubernetes.io/role!=device-plugin' -o go-template='{{ len .items }}') -eq 0 ]; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
+        if: ${{ always() }}
+
+  in-cluster-build:
+    runs-on: ubuntu-latest
+
+    name: In-cluster build
+
+    needs: [build-operator-image]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
+        with:
+          start-args: --addons registry,registry-aliases
+
+      - name: Expose the registry outside the cluster
+        run: kubectl apply -f ci/registry-nodeport.yaml
+
+      - name: Install skopeo
+        run: |
+          sudo apt -y update
+          sudo apt -y install skopeo
+
+      - name: Download container images
+        uses: actions/download-artifact@v3
+        with:
+          name: ci-images
+
+      - name: Save the kernel version
+        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
+
+      - name: Build the DriverContainer image
+        uses: ./.github/actions/build-drivercontainer-image
+        with:
+          kernel-version: ${{ env.KERNEL_VERSION }}
+
+      - name: Import DriverContainer base into the internal-registry
+        run: |
+          MINIKUBE_REGISTRY_EXT="$(minikube service registry-nodeport -n kube-system --format '{{.IP}}:{{.Port}}' --url)"
+          skopeo copy --dest-tls-verify=false docker-archive:ooto-kmod_local.tar docker://${MINIKUBE_REGISTRY_EXT}/ooto-base:local
+
+      - name: Import the OOTO image into minikube
+        run: minikube image load ooto_local.tar
+
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
+
+      - name: Deploy OOTO
+        run: make deploy
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
+
+      - name: Wait until the OOTO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+        timeout-minutes: 1
+
+      - name: Describe the Deployment / pods and get their YAML if that failed
+        run: |
+          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+
+          kubectl describe pod -n oot-operator-system
+          kubectl get -o yaml pod -n oot-operator-system
+        if: ${{ failure() }}
+
+      - name: Create a build secret
+        run: kubectl create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
+
+      # The minikube registry-alias addon creates a Job that adds registry.minikube to the CoreDNS configuration.
+      # https://github.com/kubernetes/minikube/blob/master/deploy/addons/registry-aliases/patch-coredns-job.tmpl
+      # This job sometimes does not finish before the operator starts looking for the image in the registry, which
+      # results in failed DNS resolution.
+      # Add a job that tries to resolve registry.minikube, like the operator.
+      # Wait up to 6 minutes, which corresponds to our job's maximum lifetime including backoffs.
+      - name: Wait for the internal registry to be available in CoreDNS
+        run: |
+          kubectl apply -f ci/job-wait-minikube-registry-alias.yaml
+          kubectl wait --for=condition=Complete --timeout -1s job/wait-minikube-registry-alias
+        timeout-minutes: 6
+
+      - name: Check the status of components in the kube-system namespace
+        run: kubectl get all -n kube-system
+        if: ${{ failure() }}
+
+      - name: Add an ooto-ci Module that contains a valid mapping
+        run: |
+          sed -e "s/KVER_CHANGEME/$(uname -r)/g" ci/module-ooto-ci-build.template.yaml | tee module-ooto-ci.yaml
+
+          kubectl apply -f module-ooto-ci.yaml
+
+      - name: Wait for the job to be created
+        run: |
+          until kubectl get job -l kmm.node.kubernetes.io/module.name | grep ooto; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Wait for Job completion
+        run: kubectl wait --for condition=complete job -l kmm.node.kubernetes.io/module.name --timeout=-1s
+        timeout-minutes: 2
+
+      - name: Collect job logs
+        run: |
+          JOB_NAME=$(kubectl get jobs.batch -l kmm.node.kubernetes.io/module.name --template='{{ (index .items 0).metadata.name }}')
+          kubectl logs jobs.batch/${JOB_NAME}
+        if: ${{ always() }}
+
+      - name: Check that the module gets loaded on the node
+        run: |
+          until minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Check that the DriverContainer prints the secret's value to the standard output
+        run: |
+          POD_NAME=$(kubectl get pod -l kmm.node.kubernetes.io/module.name --template='{{ (index .items 0).metadata.name }}')
+
+          echo "::group::Looking for the build secret"
+
+          until kubectl exec $POD_NAME -- grep super-secret-value /ci-build-secret; do
+            sleep 3
+          done
+
+          echo "::endgroup::"
+          echo "::group::Looking for the build argument"
+
+          until kubectl exec $POD_NAME -- grep some-build-arg /build-arg; do
+            sleep 3
+          done
+
+          echo "::endgroup::"
+          echo "::group::Looking for the kernel version"
+
+          until kubectl exec $POD_NAME -- grep $KERNEL_VERSION /kernel-version; do
+            sleep 3
+          done
+
+          echo "::endgroup::"
+          echo "::group::Looking for the build argument with a default value"
+
+          until kubectl exec $POD_NAME -- grep default-value /default-value; do
+            sleep 3
+          done
+
+          echo "::endgroup::"
+        timeout-minutes: 1
+
+      - name: Remove the Module
+        run: kubectl delete -f module-ooto-ci.yaml
+
+      - name: Check that the module gets unloaded from the node
+        run: |
+          until ! minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
+        if: ${{ always() }}
+
+  e2e-crd-variable:
+    runs-on: ubuntu-latest
+
+    name: Container image CRD variable
+
+    needs: [build-operator-image]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
+
+      - name: Download container images
+        uses: actions/download-artifact@v3
+        with:
+          name: ci-images
+
+      - name: Save the kernel version
+        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
+
+      - name: Build the DriverContainer image
+        uses: ./.github/actions/build-drivercontainer-image
+        with:
+          kernel-version: ${{ env.KERNEL_VERSION }}
+
+      - name: Import images into minikube
+        run: |
+          minikube image load ooto_local.tar
+          minikube image load ooto-kmod_local.tar
+
+      - name: Tag the DriverContainer image with the kernel version
+        run: minikube image tag ooto-kmod:local ooto-kmod:${{ env.KERNEL_VERSION }}
+
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
+
+      - name: Deploy OOTO
+        run: make deploy
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
+
+      - name: Wait until the OOTO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+        timeout-minutes: 1
+
+      - name: Describe the Deployment and get its YAML if that failed
+        run: |
+          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+        if: ${{ failure() }}
+
+      - name: Check that the ooto_ci_a module is not loaded on the node
+        run: |
+          if minikube ssh -- lsmod | grep ooto_ci_a; then
+            echo "Unexpected lsmod output - the module should not be loaded"
+            exit 1
+          fi
+
+      - name: Add an ooto-ci Module that contains a valid mapping
+        run: kubectl apply -f ci/module-ooto-ci-variable.yaml
+
+      - name: Check that the module gets loaded on the node
+        run: |
+          until minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Remove the Module
+        run: kubectl delete -f ci/module-ooto-ci-variable.yaml
+
+      - name: Check that the module gets unloaded from the node
+        run: |
+          until ! minikube ssh -- lsmod | grep ooto_ci_a; do
+            sleep 3
+          done
+        timeout-minutes: 1
+
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
+        if: ${{ always() }}

@@ -8,9 +8,26 @@ _As contributors and maintainers of this project, and in the interest of fosteri
 
 We have full documentation on how to get started contributing here:
 
-<!---
-If your repo has certain guidelines for contribution, put them here ahead of the general k8s resources
--->
+### Commit messages
+Each PR should consist of a single commit with the following format:
+```
+Commit title no longer than 80 chars
+
+Commit message can be as long as you want. It needs to be complete but minimal,
+meaning it should contain all the information to understand the change but
+exclude redundant information. Please keep the lines in the commit message up
+to 80 chars as well.
+
+[Jira/GH-issue number]
+```
+
+The reason for requesting to squash your PR into a single **logical** commit is because our merge policy will squash all the commits anyway before merging. When squashed by Github it will list all the commit titles and messages as bullets, therefore, it will be more informative if correctly written to begin with.
+
+By using the `squash` merge policy on Github we ensure that each PR is treated as an "atomic" piece of code that can be easily monitored and reverted.
+
+It is recommended to add the tracking Jira/GH-issue if such exist at the end of the commit message.
+
+### Kubernetes resources
 
 - [Contributor License Agreement](https://git.k8s.io/community/CLA.md) Kubernetes projects require that you sign a Contributor License Agreement (CLA) before we can accept your pull requests
 - [Kubernetes Contributor Guide](https://git.k8s.io/community/contributors/guide) - Main contributor documentation, or you can just jump directly to the [contributing section](https://git.k8s.io/community/contributors/guide#contributing)
