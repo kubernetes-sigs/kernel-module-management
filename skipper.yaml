@@ -1,0 +1,16 @@
+registry: quay.io
+build-container-image: kmm-operator-build
+
+containers:
+  special-resource-operator-build: Dockerfile.kmm-operator-build
+volumes:
+    - $HOME/.cache/go-build:$HOME/.cache/go-build
+    - $HOME/go/pkg:/go/pkg
+    - $HOME/.cache/golangci-lint:$HOME/.cache/golangci-lint
+    - $HOME/.docker:$HOME/.docker
+    - $HOME/.kube/:$HOME/.kube
+    - $HOME/.minikube/:$HOME/.minikube
+env_file:
+  - skipper.env
+env:
+    GOCACHE: "/go/pkg/mod"

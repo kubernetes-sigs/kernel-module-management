@@ -1,0 +1,80 @@
+@startuml
+'https://plantuml.com/activity-diagram-beta
+
+skinparam ConditionEndStyle hline
+
+title ""Module"" Reconciliation
+
+'start
+
+split
+   -[hidden]->
+   :A ""Module"" changes;
+split again
+   -[hidden]->
+   :A managed ""DaemonSet"" changes;
+split again
+   -[hidden]->
+   :A managed build object changes;
+split again
+   -[hidden]->
+   :a ""Node"" tagged with its kernel version
+   has one of its labels changed;
+end split
+
+:List all nodes that match the ""Module""'s "".spec.selector"";
+
+partition "Create mappings" {
+  while (there are unprocessed nodes) is (next node)
+    note
+      We pick the first mapping in the ""Module""'s
+      "".spec.kernelMappings"" that matches the node's
+      kernel (either literal or regexp).
+    end note
+
+    if (do we have a mapping for this kernel?) then (yes)
+      :Add the mapping to ""mappings"";
+    else (no)
+    endif
+  endwhile (done)
+}
+
+:List all existing DaemonSets managed by this module;
+
+partition "Sync DaemonSets" {
+  while (there are unprocessed ""mappings"") is (next mapping);
+    partition "In-cluster build" {
+      if (is in-cluster build configured for this mapping?) then (no)
+      (yes) elseif (does the image already exist?) then (no)
+        if (are we already building that image?) then (no)
+          :Create the build;
+        else (yes)
+        endif
+
+        :Requeue a reconciliation
+        for this ""Module"";
+      endif
+    }
+
+    :Generate a DaemonSet spec for this mapping;
+    :Call ""CreateOrPatch()"" for this DaemonSet;
+  endwhile (done)
+}
+
+partition "Garbage collect obsolete DaemonSets" {
+  note
+    This deletes DaemonSets targeting a kernel
+    that no nodes are running anymore.
+  end note
+
+  while (there are unprocessed existing ""DaemonSets"") is (next ""DaemonSet"");
+    if (is this kernel in ""mappings""?) then (no)
+      :Delete the DaemonSet;
+    else (yes)
+    endif
+  endwhile (done)
+}
+
+stop
+
+@enduml

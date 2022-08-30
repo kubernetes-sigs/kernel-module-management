@@ -1,0 +1,36 @@
+---
+apiVersion: kmm.sigs.k8s.io/v1beta1
+kind: Module
+metadata:
+  name: kmm-ci-build
+spec:
+  moduleLoader:
+    container:
+      modprobe:
+        moduleName: kmm_ci_a
+      kernelMappings:
+        - literal: KVER_CHANGEME
+          containerImage: registry.minikube/kmm-kmod:local
+          build:
+            buildArgs:
+              - name: CI_BUILD_ARG
+                value: some-build-arg
+            pull:
+              insecure: true
+            push:
+              insecure: true
+            secrets:
+              - name: build-secret
+            dockerfile: |
+              FROM registry.minikube/kmm-base:local
+
+              ARG CI_BUILD_ARG
+              ARG KERNEL_VERSION
+              ARG WITH_DEFAULT_VALUE=default-value
+
+              RUN cat /run/secrets/build-secret/ci-build-secret > /ci-build-secret
+              RUN echo $CI_BUILD_ARG > /build-arg
+              RUN echo $KERNEL_VERSION > /kernel-version
+              RUN echo $WITH_DEFAULT_VALUE > /default-value
+  selector:
+    kubernetes.io/hostname: minikube

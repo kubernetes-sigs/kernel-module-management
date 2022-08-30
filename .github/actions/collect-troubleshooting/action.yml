@@ -1,0 +1,35 @@
+name: Collect troubleshooting data
+
+description: This action fetches some troubleshooting data for KMMO
+
+runs:
+  using: composite
+
+  steps:
+    - name: Get all resources in the kmm-operator-system namespace
+      run: kubectl get all -n kmm-operator-system
+      shell: bash
+
+    - name: Get all resources in the default namespace
+      run: kubectl get all
+      shell: bash
+
+    - name: Describe nodes
+      run: kubectl describe node
+      shell: bash
+
+    - name: Describe DaemonSets
+      run: kubectl describe daemonset -l kmm.node.kubernetes.io/module.name
+      shell: bash
+
+    - name: Describe Pods
+      run: kubectl describe pod -l kmm.node.kubernetes.io/module.name
+      shell: bash
+
+    - name: Collect dmesg
+      run: sudo dmesg
+      shell: bash
+
+    - name: Get all operator logs
+      run: kubectl logs deployment.apps/kmm-operator-controller-manager -n kmm-operator-system
+      shell: bash

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {
+    "mediaType": "application/vnd.oci.image.config.v1+json",
+    "size": 1690,
+    "digest": "sha256:7afbc2d95a4063860fedd3653ddfe0a29994ca98c0d946e8b698c48594d236e6"
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "size": 600,
+      "digest": "sha256:51a135b580ac3e28b20b3df03eebd1085e1d82796a7bb9d08acb3ee20221b04c"
+    }
+  ],
+  "annotations": {
+    "org.opencontainers.image.base.digest": "sha256:1ce0dfc0a939932dcdf1dda973dd13d75a6987e538998a8b962c969ff506db97",
+    "org.opencontainers.image.base.name": "docker.io/library/alpine:latest"
+  }
+}

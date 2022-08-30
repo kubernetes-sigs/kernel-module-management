@@ -1,0 +1,19 @@
+domain: sigs.k8s.io
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: kernel-module-management
+repo: github.com/kubernetes-sigs/kernel-module-management
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: sigs.k8s.io
+  group: kmm
+  kind: Module
+  path: github.com/kubernetes-sigs/kernel-module-management/api/v1beta1
+  version: v1beta1
+version: "3"

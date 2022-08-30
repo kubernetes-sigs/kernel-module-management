@@ -1,0 +1,29 @@
+---
+apiVersion: kmm.sigs.k8s.io/v1beta1
+kind: Module
+metadata:
+  name: NAME_CHANGEME
+spec:
+  moduleLoader:
+    container:
+      modprobe:
+        moduleName: KMOD_CHANGEME
+      imagePullPolicy: Never
+      kernelMappings:
+        - literal: KVER_CHANGEME
+          containerImage: kmm-kmod:local
+  devicePlugin:
+    container:
+      image: squat/generic-device-plugin
+      args:
+        - --device
+        - '{"name": "simple-kmod", "groups": [{"paths": [{"path": "/proc/simple-procfs-kmod"}]}]}'
+      volumeMounts:
+        - name: proc
+          mountPath: /proc
+    volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+  selector:
+    wants-module: KMOD_CHANGEME

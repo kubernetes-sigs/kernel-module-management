@@ -1,0 +1,16 @@
+---
+apiVersion: kmm.sigs.k8s.io/v1beta1
+kind: Module
+metadata:
+  name: kmm-ci
+spec:
+  moduleLoader:
+    container:
+      modprobe:
+        moduleName: kmm_ci_a
+      imagePullPolicy: Never
+      kernelMappings:
+        - regexp: '^.+$'
+          containerImage: kmm-kmod:$KERNEL_FULL_VERSION
+  selector:
+    kubernetes.io/hostname: minikube
