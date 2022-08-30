@@ -10,8 +10,8 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
-	auth "github.com/qbarrand/oot-operator/internal/auth"
+	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	auth "github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 )
 
 // MockRegistry is a mock of Registry interface.

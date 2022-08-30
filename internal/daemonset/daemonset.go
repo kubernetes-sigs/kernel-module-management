@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
-	"github.com/qbarrand/oot-operator/internal/constants"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

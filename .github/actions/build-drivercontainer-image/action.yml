@@ -13,13 +13,13 @@ runs:
   steps:
     - name: Build the kernel module
       run: make KERNEL_SRC_DIR="/usr/src/linux-headers-${{ inputs.kernel-version }}"
-      working-directory: ci/ooto-kmod
+      working-directory: ci/kmm-kmod
       shell: bash
 
     - name: Build the image
-      run: docker build -t ooto-kmod:local --build-arg=KERNEL_VERSION=${{ inputs.kernel-version }} ci/ooto-kmod
+      run: docker build -t kmm-kmod:local --build-arg=KERNEL_VERSION=${{ inputs.kernel-version }} ci/kmm-kmod
       shell: bash
 
     - name: Export the image
-      run: docker save -o ooto-kmod_local.tar ooto-kmod:local
+      run: docker save -o kmm-kmod_local.tar kmm-kmod:local
       shell: bash

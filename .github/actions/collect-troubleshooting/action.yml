@@ -1,13 +1,13 @@
 name: Collect troubleshooting data
 
-description: This action fetches some troubleshooting data for OOTO
+description: This action fetches some troubleshooting data for KMMO
 
 runs:
   using: composite
 
   steps:
-    - name: Get all resources in the oot-operator-system namespace
-      run: kubectl get all -n oot-operator-system
+    - name: Get all resources in the kmm-operator-system namespace
+      run: kubectl get all -n kmm-operator-system
       shell: bash
 
     - name: Get all resources in the default namespace
@@ -31,5 +31,5 @@ runs:
       shell: bash
 
     - name: Get all operator logs
-      run: kubectl logs deployment.apps/oot-operator-controller-manager -n oot-operator-system
+      run: kubectl logs deployment.apps/kmm-operator-controller-manager -n kmm-operator-system
       shell: bash

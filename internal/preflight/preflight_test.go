@@ -7,12 +7,12 @@ import (
 
 	"github.com/golang/mock/gomock"
 	v1stream "github.com/google/go-containerregistry/pkg/v1/stream"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
-	"github.com/qbarrand/oot-operator/internal/client"
-	"github.com/qbarrand/oot-operator/internal/module"
-	"github.com/qbarrand/oot-operator/internal/registry"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

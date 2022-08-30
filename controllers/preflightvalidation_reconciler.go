@@ -31,11 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
-	"github.com/qbarrand/oot-operator/internal/filter"
-	"github.com/qbarrand/oot-operator/internal/preflight"
-	"github.com/qbarrand/oot-operator/internal/statusupdater"
-	"github.com/qbarrand/oot-operator/internal/utils"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 const reconcileRequeueInSeconds = 60

@@ -9,24 +9,24 @@ jobs:
   build-operator-image:
     runs-on: ubuntu-latest
 
-    name: Build the OOTO container image
+    name: Build the KMMO container image
 
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
       - name: Build the image
-        run: docker build -t ooto:local .
+        run: docker build -t kmm:local .
 
       - name: Export the image
-        run: docker save -o ooto_local.tar ooto:local
+        run: docker save -o kmm_local.tar kmm:local
 
       - name: Upload the image
         uses: actions/upload-artifact@v3
         with:
           name: ci-images
           if-no-files-found: error
-          path: ooto_local.tar
+          path: kmm_local.tar
           retention-days: 1
 
   e2e:
@@ -44,7 +44,7 @@ jobs:
         uses: ./.github/actions/create-minikube-cluster
 
       - name: Label the node so that it gets the module
-        run: kubectl label node minikube wants-oot-module=ooto_ci_a
+        run: kubectl label node minikube wants-module=kmm_ci_a
 
       - name: Download container images
         uses: actions/download-artifact@v3
@@ -61,8 +61,8 @@ jobs:
 
       - name: Import images into minikube
         run: |
-          minikube image load ooto_local.tar
-          minikube image load ooto-kmod_local.tar
+          minikube image load kmm_local.tar
+          minikube image load kmm-kmod_local.tar
 
       - name: Cache binaries needed by Makefile
         id: cache-bin
@@ -76,71 +76,71 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
-      - name: Deploy OOTO
+      - name: Deploy KMMO
         run: make deploy
         env:
           KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
-      - name: Wait until the OOTO Deployment is Available
-        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+      - name: Wait until the KMMO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
         timeout-minutes: 1
 
       - name: Describe the Deployment and get its YAML if that failed
         run: |
-          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
-          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
         if: ${{ failure() }}
 
-      - name: Check that the ooto_ci_a module is not loaded on the node
+      - name: Check that the kmm_ci_a module is not loaded on the node
         run: |
-          if minikube ssh -- lsmod | grep ooto_ci_a; then
+          if minikube ssh -- lsmod | grep kmm_ci_a; then
             echo "Unexpected lsmod output - the module should not be loaded"
             exit 1
           fi
 
-      - name: Add an ooto-ci Module that contains a valid mapping
+      - name: Add an kmm-ci Module that contains a valid mapping
         run: |
           sed -e "s/KVER_CHANGEME/$(uname -r)/g" \
-            -e s/NAME_CHANGEME/ooto-ci/ \
-            -e s/KMOD_CHANGEME/ooto_ci_a/ \
-            ci/module-ooto-ci.template.yaml | tee module-ooto-ci.yaml
+            -e s/NAME_CHANGEME/kmm-ci/ \
+            -e s/KMOD_CHANGEME/kmm_ci_a/ \
+            ci/module-kmm-ci.template.yaml | tee module-kmm-ci.yaml
 
-          kubectl apply -f module-ooto-ci.yaml
+          kubectl apply -f module-kmm-ci.yaml
 
       - name: Check that the module gets loaded on the node
         run: |
-          until minikube ssh -- lsmod | grep ooto_ci_a; do
+          until minikube ssh -- lsmod | grep kmm_ci_a; do
             sleep 3
           done
         timeout-minutes: 1
 
       - name: Check that the node gets labeled with the module's name
         run: |
-          until kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/ooto-ci.ready")'; do
+          until kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/kmm-ci.ready")'; do
             sleep 3
           done
         timeout-minutes: 1
 
       - name: Check that the daemon-set for device plugin is running
         run: |
-          until kubectl get ds  -l 'kmm.node.kubernetes.io/module.name=ooto-ci,kmm.node.kubernetes.io/role=device-plugin' -ojson | jq -e '.items[] | select(.status.numberReady == 1)'; do 
+          until kubectl get ds  -l 'kmm.node.kubernetes.io/module.name=kmm-ci,kmm.node.kubernetes.io/role=device-plugin' -ojson | jq -e '.items[] | select(.status.numberReady == 1)'; do 
             sleep 3
           done
         timeout-minutes: 1
 
       - name: Remove the Module
-        run: kubectl delete -f module-ooto-ci.yaml
+        run: kubectl delete -f module-kmm-ci.yaml
 
       - name: Check that the module gets unloaded from the node
         run: |
-          until ! minikube ssh -- lsmod | grep ooto_ci_a; do
+          until ! minikube ssh -- lsmod | grep kmm_ci_a; do
             sleep 3
           done
         timeout-minutes: 1
 
       - name: Check that the node gets unlabeled with the module's name
         run: |
-          until ! kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/ooto-ci.ready")'; do
+          until ! kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/kmm-ci.ready")'; do
             sleep 3
           done
         timeout-minutes: 1
@@ -180,8 +180,8 @@ jobs:
 
       - name: Import images into minikube
         run: |
-          minikube image load ooto_local.tar
-          minikube image load ooto-kmod_local.tar
+          minikube image load kmm_local.tar
+          minikube image load kmm-kmod_local.tar
 
       - name: Cache binaries needed by Makefile
         id: cache-bin
@@ -195,66 +195,66 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
-      - name: Deploy OOTO
+      - name: Deploy KMMO
         run: make deploy
         env:
           KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
-      - name: Wait until the OOTO Deployment is Available
-        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+      - name: Wait until the KMMO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
         timeout-minutes: 1
 
       - name: Describe the Deployment / pods and get their YAML if that failed
         run: |
-          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
-          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
 
-          kubectl describe pod -n oot-operator-system
-          kubectl get -o yaml pod -n oot-operator-system
+          kubectl describe pod -n kmm-operator-system
+          kubectl get -o yaml pod -n kmm-operator-system
         if: ${{ failure() }}
 
       - name: Create one Module for each node
         run: |
           # Node minikube gets module a
-          sed -e s/NAME_CHANGEME/ooto-ci-a/g \
-            -e s/KMOD_CHANGEME/ooto_ci_a/g \
+          sed -e s/NAME_CHANGEME/kmm-ci-a/g \
+            -e s/KMOD_CHANGEME/kmm_ci_a/g \
             -e "s/KVER_CHANGEME/${KERNEL_VERSION}/g" \
-            ci/module-ooto-ci.template.yaml | tee module-ooto-ci-a.yaml
+            ci/module-kmm-ci.template.yaml | tee module-kmm-ci-a.yaml
 
           # Node minikube-m02 gets module b
-          sed -e s/NAME_CHANGEME/ooto-ci-b/g \
-            -e s/KMOD_CHANGEME/ooto_ci_b/g \
+          sed -e s/NAME_CHANGEME/kmm-ci-b/g \
+            -e s/KMOD_CHANGEME/kmm_ci_b/g \
             -e "s/KVER_CHANGEME/${KERNEL_VERSION}/g" \
-            ci/module-ooto-ci.template.yaml | tee module-ooto-ci-b.yaml
+            ci/module-kmm-ci.template.yaml | tee module-kmm-ci-b.yaml
 
-          kubectl apply -f module-ooto-ci-a.yaml -f module-ooto-ci-b.yaml
+          kubectl apply -f module-kmm-ci-a.yaml -f module-kmm-ci-b.yaml
 
       - name: Label the first node to have it receive module a
-        run: kubectl label node minikube wants-oot-module=ooto_ci_a
+        run: kubectl label node minikube wants-module=kmm_ci_a
 
       - name: Check that module a gets loaded on the first node
         run: |
-          until minikube ssh -- lsmod | grep ooto_ci_a; do
+          until minikube ssh -- lsmod | grep kmm_ci_a; do
             sleep 3
           done
         timeout-minutes: 1
 
       - name: Label the second node to have it receive module b
-        run: kubectl label node minikube-m02 wants-oot-module=ooto_ci_b
+        run: kubectl label node minikube-m02 wants-module=kmm_ci_b
 
       - name: Check that module b gets loaded on the second node
         run: |
-          until minikube ssh -n minikube-m02 -- lsmod | grep ooto_ci_b; do
+          until minikube ssh -n minikube-m02 -- lsmod | grep kmm_ci_b; do
             sleep 3
           done
         timeout-minutes: 1
 
-      - name: Remove the wants-oot-module label on the second node
-        run: kubectl label node minikube-m02 wants-oot-module-
+      - name: Remove the wants-module label on the second node
+        run: kubectl label node minikube-m02 wants-module-
 
       - name: Check that module b gets unloaded from the second node
         run: |
-          until ! minikube ssh -n minikube-m02 -- lsmod | grep ooto_ci_b; do
+          until ! minikube ssh -n minikube-m02 -- lsmod | grep kmm_ci_b; do
             sleep 3
           done
         timeout-minutes: 1
@@ -262,7 +262,7 @@ jobs:
       - name: Verify that the DaemonSet gets garbage collected
         run: |
           # Cannot use kubectl wait because it will fail if there is no initial match
-          until [ $(kubectl get daemonsets.apps -l 'kmm.node.kubernetes.io/module.name=ooto-ci-b, kmm.node.kubernetes.io/role!=device-plugin' -o go-template='{{ len .items }}') -eq 0 ]; do
+          until [ $(kubectl get daemonsets.apps -l 'kmm.node.kubernetes.io/module.name=kmm-ci-b, kmm.node.kubernetes.io/role!=device-plugin' -o go-template='{{ len .items }}') -eq 0 ]; do
             sleep 3
           done
         timeout-minutes: 1
@@ -311,10 +311,10 @@ jobs:
       - name: Import DriverContainer base into the internal-registry
         run: |
           MINIKUBE_REGISTRY_EXT="$(minikube service registry-nodeport -n kube-system --format '{{.IP}}:{{.Port}}' --url)"
-          skopeo copy --dest-tls-verify=false docker-archive:ooto-kmod_local.tar docker://${MINIKUBE_REGISTRY_EXT}/ooto-base:local
+          skopeo copy --dest-tls-verify=false docker-archive:kmm-kmod_local.tar docker://${MINIKUBE_REGISTRY_EXT}/kmm-base:local
 
-      - name: Import the OOTO image into minikube
-        run: minikube image load ooto_local.tar
+      - name: Import the KMMO image into minikube
+        run: minikube image load kmm_local.tar
 
       - name: Cache binaries needed by Makefile
         id: cache-bin
@@ -328,22 +328,22 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
-      - name: Deploy OOTO
+      - name: Deploy KMMO
         run: make deploy
         env:
           KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
-      - name: Wait until the OOTO Deployment is Available
-        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+      - name: Wait until the KMMO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
         timeout-minutes: 1
 
       - name: Describe the Deployment / pods and get their YAML if that failed
         run: |
-          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
-          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
 
-          kubectl describe pod -n oot-operator-system
-          kubectl get -o yaml pod -n oot-operator-system
+          kubectl describe pod -n kmm-operator-system
+          kubectl get -o yaml pod -n kmm-operator-system
         if: ${{ failure() }}
 
       - name: Create a build secret
@@ -365,15 +365,15 @@ jobs:
         run: kubectl get all -n kube-system
         if: ${{ failure() }}
 
-      - name: Add an ooto-ci Module that contains a valid mapping
+      - name: Add an kmm-ci Module that contains a valid mapping
         run: |
-          sed -e "s/KVER_CHANGEME/$(uname -r)/g" ci/module-ooto-ci-build.template.yaml | tee module-ooto-ci.yaml
+          sed -e "s/KVER_CHANGEME/$(uname -r)/g" ci/module-kmm-ci-build.template.yaml | tee module-kmm-ci.yaml
 
-          kubectl apply -f module-ooto-ci.yaml
+          kubectl apply -f module-kmm-ci.yaml
 
       - name: Wait for the job to be created
         run: |
-          until kubectl get job -l kmm.node.kubernetes.io/module.name | grep ooto; do
+          until kubectl get job -l kmm.node.kubernetes.io/module.name | grep kmm; do
             sleep 3
           done
         timeout-minutes: 1
@@ -390,7 +390,7 @@ jobs:
 
       - name: Check that the module gets loaded on the node
         run: |
-          until minikube ssh -- lsmod | grep ooto_ci_a; do
+          until minikube ssh -- lsmod | grep kmm_ci_a; do
             sleep 3
           done
         timeout-minutes: 1
@@ -430,11 +430,11 @@ jobs:
         timeout-minutes: 1
 
       - name: Remove the Module
-        run: kubectl delete -f module-ooto-ci.yaml
+        run: kubectl delete -f module-kmm-ci.yaml
 
       - name: Check that the module gets unloaded from the node
         run: |
-          until ! minikube ssh -- lsmod | grep ooto_ci_a; do
+          until ! minikube ssh -- lsmod | grep kmm_ci_a; do
             sleep 3
           done
         timeout-minutes: 1
@@ -472,11 +472,11 @@ jobs:
 
       - name: Import images into minikube
         run: |
-          minikube image load ooto_local.tar
-          minikube image load ooto-kmod_local.tar
+          minikube image load kmm_local.tar
+          minikube image load kmm-kmod_local.tar
 
       - name: Tag the DriverContainer image with the kernel version
-        run: minikube image tag ooto-kmod:local ooto-kmod:${{ env.KERNEL_VERSION }}
+        run: minikube image tag kmm-kmod:local kmm-kmod:${{ env.KERNEL_VERSION }}
 
       - name: Cache binaries needed by Makefile
         id: cache-bin
@@ -490,44 +490,44 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
-      - name: Deploy OOTO
+      - name: Deploy KMMO
         run: make deploy
         env:
           KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
-      - name: Wait until the OOTO Deployment is Available
-        run: kubectl wait --for condition=Available deployments.apps -n oot-operator-system oot-operator-controller-manager
+      - name: Wait until the KMMO Deployment is Available
+        run: kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
         timeout-minutes: 1
 
       - name: Describe the Deployment and get its YAML if that failed
         run: |
-          kubectl describe deployments.apps -n oot-operator-system oot-operator-controller-manager
-          kubectl get -o yaml deployments.apps -n oot-operator-system oot-operator-controller-manager
+          kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+          kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
         if: ${{ failure() }}
 
-      - name: Check that the ooto_ci_a module is not loaded on the node
+      - name: Check that the kmm_ci_a module is not loaded on the node
         run: |
-          if minikube ssh -- lsmod | grep ooto_ci_a; then
+          if minikube ssh -- lsmod | grep kmm_ci_a; then
             echo "Unexpected lsmod output - the module should not be loaded"
             exit 1
           fi
 
-      - name: Add an ooto-ci Module that contains a valid mapping
-        run: kubectl apply -f ci/module-ooto-ci-variable.yaml
+      - name: Add an kmm-ci Module that contains a valid mapping
+        run: kubectl apply -f ci/module-kmm-ci-variable.yaml
 
       - name: Check that the module gets loaded on the node
         run: |
-          until minikube ssh -- lsmod | grep ooto_ci_a; do
+          until minikube ssh -- lsmod | grep kmm_ci_a; do
             sleep 3
           done
         timeout-minutes: 1
 
       - name: Remove the Module
-        run: kubectl delete -f ci/module-ooto-ci-variable.yaml
+        run: kubectl delete -f ci/module-kmm-ci-variable.yaml
 
       - name: Check that the module gets unloaded from the node
         run: |
-          until ! minikube ssh -- lsmod | grep ooto_ci_a; do
+          until ! minikube ssh -- lsmod | grep kmm_ci_a; do
             sleep 3
           done
         timeout-minutes: 1

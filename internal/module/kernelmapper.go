@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/a8m/envsubst/parse"
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	v1 "k8s.io/api/core/v1"
 )
 

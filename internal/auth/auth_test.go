@@ -5,9 +5,9 @@ import (
 	"errors"
 
 	"github.com/golang/mock/gomock"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/qbarrand/oot-operator/internal/client"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )

@@ -5,8 +5,8 @@ resources:
   - ../../config/default
 
 images:
-  - name: ghcr.io/qbarrand/oot-operator
-    newName: ooto
+  - name: gcr.io/k8s-staging-kmm/kernel-module-management
+    newName: kmm
     newTag: local
 
 patchesStrategicMerge:

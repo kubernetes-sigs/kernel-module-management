@@ -1,14 +1,14 @@
 # Kernel Module Management
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/qbarrand/oot-operator)](https://goreportcard.com/report/github.com/qbarrand/oot-operator)
-[![Go Reference](https://pkg.go.dev/badge/github.com/qbarrand/oot-operator.svg)](https://pkg.go.dev/github.com/qbarrand/oot-operator)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kubernetes-sigs/kernel-module-management)](https://goreportcard.com/report/github.com/kubernetes-sigs/kernel-module-management)
+[![Go Reference](https://pkg.go.dev/badge/github.com/kubernetes-sigs/kernel-module-management.svg)](https://pkg.go.dev/github.com/kubernetes-sigs/kernel-module-management)
 
 The Out-Of-Tree Operator manages out of tree kernel modules Kubernetes.
 
 ## Getting started
-Install the bleeding edge OOT Operator in one command:
+Install the bleeding edge Kernel Module Management Operator in one command:
 ```shell
-kubectl apply -k https://github.com/qbarrand/oot-operator/config/default
+kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default
 ```
 
 ## Community, discussion, contribution, and support

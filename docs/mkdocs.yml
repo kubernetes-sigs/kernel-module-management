@@ -1,5 +1,5 @@
 site_name: Out-Of-Tree operator
-repo_url: https://github.com/qbarrand/oot-operator
+repo_url: https://github.com/kubernetes-sigs/kernel-module-management
 edit_uri: edit/main/docs/
 
 docs_dir: mkdocs

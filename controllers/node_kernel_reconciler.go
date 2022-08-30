@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/qbarrand/oot-operator/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"

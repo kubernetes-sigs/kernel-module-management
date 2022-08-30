@@ -1,7 +1,7 @@
 package test
 
 import (
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 )

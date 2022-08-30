@@ -2,15 +2,15 @@
 apiVersion: kmm.sigs.k8s.io/v1beta1
 kind: Module
 metadata:
-  name: ooto-ci-build
+  name: kmm-ci-build
 spec:
   moduleLoader:
     container:
       modprobe:
-        moduleName: ooto_ci_a
+        moduleName: kmm_ci_a
       kernelMappings:
         - literal: KVER_CHANGEME
-          containerImage: registry.minikube/ooto-kmod:local
+          containerImage: registry.minikube/kmm-kmod:local
           build:
             buildArgs:
               - name: CI_BUILD_ARG
@@ -22,7 +22,7 @@ spec:
             secrets:
               - name: build-secret
             dockerfile: |
-              FROM registry.minikube/ooto-base:local
+              FROM registry.minikube/kmm-base:local
 
               ARG CI_BUILD_ARG
               ARG KERNEL_VERSION

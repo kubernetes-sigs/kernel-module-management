@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 )
 
 // MockHelper is a mock of Helper interface.

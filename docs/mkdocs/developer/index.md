@@ -1,10 +1,10 @@
 # Design notes
 
-The OOT Operator brings a new `Module` CRD.
+Kernel Module Management brings a new `Module` CRD.
 `Module` represents an out-of-tree kernel module that must be inserted into the cluster nodes’ kernel through a
 DriverContainer scheduled by a `DaemonSet`.
 
-The OOTO optionally builds and runs DriverContainers on the cluster.
+KMM optionally builds and runs DriverContainers on the cluster.
 It picks the right DriverContainer image by leveraging kernel mappings in the `Module` CRD that describe which image
 should be used for which kernel.
 
@@ -74,7 +74,7 @@ Virtually any Kubernetes distribution ships with its own kernel.
 It is thus challenging for a kernel module vendor to make DriverContainer images available for all kernels available
 in all Kubernetes distributions out there (or even for a subset of them).
 
-The OOTO supports in-cluster builds of DriverContainer images when those are not made available by the vendor.
+KMM supports in-cluster builds of DriverContainer images when those are not made available by the vendor.
 The in-cluster build system is able to build an image from any Git repository that contains a `Dockerfile`.
 It can then push said image to a user-provided repository, optionally using authentication provided in a Kubernetes secret.
 
@@ -89,11 +89,11 @@ to their DriverContainer pod template to make sure that their module is unloaded
 ## Security
 
 ### DriverContainer privileges
-By default, the OOTO would only grant the [`CAP_SYS_MODULE`](https://man7.org/linux/man-pages/man7/capabilities.7.html)
+By default, the operator would only grant the [`CAP_SYS_MODULE`](https://man7.org/linux/man-pages/man7/capabilities.7.html)
 capability to DriverContainer `DaemonSets`.
 
 ### Kubernetes API privileges
-The OOTO would only be granted a limited set of Kubernetes API privileges:
+The KMM Operator would only be granted a limited set of Kubernetes API privileges:
 
 - Read, modify (for kernel version labeling) and watch `Nodes`;
 - Read and watch `Modules`, update their status;

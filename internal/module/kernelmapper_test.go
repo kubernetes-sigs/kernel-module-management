@@ -1,9 +1,9 @@
 package module
 
 import (
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
 	v1 "k8s.io/api/core/v1"
 )
 

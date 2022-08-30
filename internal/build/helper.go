@@ -1,10 +1,10 @@
 package build
 
 import (
-	"github.com/qbarrand/oot-operator/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 )
 
 //go:generate mockgen -source=helper.go -package=build -destination=mock_helper.go

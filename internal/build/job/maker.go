@@ -3,8 +3,8 @@ package job
 import (
 	"fmt"
 
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
-	"github.com/qbarrand/oot-operator/internal/build"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

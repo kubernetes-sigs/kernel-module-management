@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
-	"github.com/qbarrand/oot-operator/internal/auth"
-	"github.com/qbarrand/oot-operator/internal/module"
-	"github.com/qbarrand/oot-operator/internal/registry"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 
 	"k8s.io/apimachinery/pkg/types"
 	ctrlruntime "sigs.k8s.io/controller-runtime"

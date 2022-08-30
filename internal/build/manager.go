@@ -3,7 +3,7 @@ package build
 import (
 	"context"
 
-	kmmv1beta1 "github.com/qbarrand/oot-operator/api/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 )
 
 type Status string

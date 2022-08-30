@@ -37,12 +37,7 @@ It is recommended to add the tracking Jira/GH-issue if such exist at the end of 
 
 - [Mentoring Initiatives](https://git.k8s.io/community/mentoring) - We have a diverse set of mentorship programs available that are always looking for volunteers!
 
-<!---
-Custom Information - if you're copying this template for the first time you can add custom content here, for example:
-
 ## Contact Information
 
-- [Slack channel](https://kubernetes.slack.com/messages/kubernetes-users) - Replace `kubernetes-users` with your slack channel string, this will send users directly to your channel. 
-- [Mailing list](URL)
-
--->
+- [Slack channel](https://kubernetes.slack.com/messages/sig-node-kmm)
+- [Mailing list](https://groups.google.com/g/kubernetes-kmm)

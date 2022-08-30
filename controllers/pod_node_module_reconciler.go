@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/qbarrand/oot-operator/internal/constants"
-	"github.com/qbarrand/oot-operator/internal/daemonset"
-	"github.com/qbarrand/oot-operator/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
