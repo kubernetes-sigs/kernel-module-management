@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+pr_title=$(gh pr view ${PULL_NUMBER} -R ${REPO_OWNER}/${REPO_NAME} --json title --jq '.title')
+# Github UI adds '^M' (which is interpreted as '\r' by the 'sed' command) at the end of lines.
+pr_body=$(gh pr view ${PULL_NUMBER} -R ${REPO_OWNER}/${REPO_NAME} --json body --jq '.body' | sed 's/\r$//g')
+# We assume that there is a single commit per PR. It is validated in another job.
+commit_message_headline=$(gh pr view ${PULL_NUMBER} -R ${REPO_OWNER}/${REPO_NAME} --json commits --jq '.commits[0].messageHeadline')
+commit_message_body=$(gh pr view ${PULL_NUMBER} -R ${REPO_OWNER}/${REPO_NAME} --json commits --jq '.commits[0].messageBody')
+
+if [[ ${pr_title} != ${commit_message_headline} ]] ; then
+    echo "
+    Commit and PR are out of sync. Make sure the following are identical:
+        * PR title   <-->    commit message headline
+    "
+    exit 1
+fi
+
+if [[ ${pr_body} != ${commit_message_body} ]] ; then
+    echo "
+    Commit and PR are out of sync. Make sure the following are identical:
+        * PR body    <-->    commit message body
+    "
+    exit 1
+fi
