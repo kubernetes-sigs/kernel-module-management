@@ -3,6 +3,7 @@ package daemonset
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
@@ -77,6 +78,49 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
+	})
+
+	It("should add the volume and volume mount for firmware if FirmwarePath is set", func() {
+		hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
+		vol := v1.Volume{
+			Name: "node-var-lib-firmware",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/var/lib/firmware/module-name",
+					Type: &hostPathDirectoryOrCreate,
+				},
+			},
+		}
+
+		volm := v1.VolumeMount{
+			Name:      "node-var-lib-firmware",
+			MountPath: "/var/lib/firmware/module-name",
+		}
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: moduleName,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					Container: kmmv1beta1.ModuleLoaderContainerSpec{
+						Modprobe: kmmv1beta1.ModprobeSpec{
+							FirmwarePath: "/opt/lib/firmware/example",
+						},
+					},
+				},
+			},
+		}
+
+		ds := appsv1.DaemonSet{}
+
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+		Expect(ds.Spec.Template.Spec.Volumes[2]).To(Equal(vol))
+		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(3))
+		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts[2]).To(Equal(volm))
+
 	})
 
 	It("should work as expected", func() {
@@ -157,12 +201,12 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 								Lifecycle: &v1.Lifecycle{
 									PostStart: &v1.LifecycleHandler{
 										Exec: &v1.ExecAction{
-											Command: MakeLoadCommand(mod.Spec.ModuleLoader.Container.Modprobe),
+											Command: MakeLoadCommand(mod.Spec.ModuleLoader.Container.Modprobe, moduleName),
 										},
 									},
 									PreStop: &v1.LifecycleHandler{
 										Exec: &v1.ExecAction{
-											Command: MakeUnloadCommand(mod.Spec.ModuleLoader.Container.Modprobe),
+											Command: MakeUnloadCommand(mod.Spec.ModuleLoader.Container.Modprobe, moduleName),
 										},
 									},
 								},
@@ -787,20 +831,27 @@ var _ = Describe("GetNodeLabelFromPod", func() {
 })
 
 var _ = Describe("MakeLoadCommand", func() {
-	const moduleName = "some-kmod"
+	const (
+		kernelModuleName = "some-kmod"
+		moduleName       = "module-name"
+	)
 
 	It("should only use raw arguments if they are provided", func() {
 		spec := kmmv1beta1.ModprobeSpec{
-			ModuleName: moduleName,
+			ModuleName: kernelModuleName,
 			RawArgs: &kmmv1beta1.ModprobeArgs{
 				Load: []string{"load", "arguments"},
 			},
 		}
 
 		Expect(
-			MakeLoadCommand(spec),
+			MakeLoadCommand(spec, moduleName),
 		).To(
-			Equal([]string{"modprobe", "load", "arguments"}),
+			Equal([]string{
+				"/bin/sh",
+				"-c",
+				"modprobe load arguments",
+			}),
 		)
 	})
 
@@ -812,15 +863,19 @@ var _ = Describe("MakeLoadCommand", func() {
 		)
 
 		spec := kmmv1beta1.ModprobeSpec{
-			ModuleName: moduleName,
+			ModuleName: kernelModuleName,
 			Parameters: []string{arg1, arg2},
 			DirName:    dir,
 		}
 
 		Expect(
-			MakeLoadCommand(spec),
+			MakeLoadCommand(spec, moduleName),
 		).To(
-			Equal([]string{"modprobe", "-v", "-d", dir, moduleName, arg1, arg2}),
+			Equal([]string{
+				"/bin/sh",
+				"-c",
+				fmt.Sprintf("modprobe -v -d %s %s %s %s", dir, kernelModuleName, arg1, arg2),
+			}),
 		)
 	})
 
@@ -829,32 +884,60 @@ var _ = Describe("MakeLoadCommand", func() {
 			Args: &kmmv1beta1.ModprobeArgs{
 				Load: []string{"-z", "-k"},
 			},
-			ModuleName: moduleName,
+			ModuleName: kernelModuleName,
 		}
 
 		Expect(
-			MakeLoadCommand(spec),
+			MakeLoadCommand(spec, moduleName),
 		).To(
-			Equal([]string{"modprobe", "-z", "-k", moduleName}),
+			Equal([]string{
+				"/bin/sh",
+				"-c",
+				fmt.Sprintf("modprobe -z -k %s", kernelModuleName),
+			}),
+		)
+	})
+
+	It("should use the firmware path if provided", func() {
+		spec := kmmv1beta1.ModprobeSpec{
+			FirmwarePath: "/kmm/firmware/mymodule",
+			ModuleName:   kernelModuleName,
+		}
+
+		Expect(
+			MakeLoadCommand(spec, moduleName),
+		).To(
+			Equal([]string{
+				"/bin/sh",
+				"-c",
+				fmt.Sprintf("cp -r /kmm/firmware/mymodule /var/lib/firmware/module-name && modprobe -v %s", kernelModuleName),
+			}),
 		)
 	})
 })
 
 var _ = Describe("MakeUnloadCommand", func() {
-	const moduleName = "some-kmod"
+	const (
+		kernelModuleName = "some-kmod"
+		moduleName       = "module-name"
+	)
 
 	It("should only use raw arguments if they are provided", func() {
 		spec := kmmv1beta1.ModprobeSpec{
-			ModuleName: moduleName,
+			ModuleName: kernelModuleName,
 			RawArgs: &kmmv1beta1.ModprobeArgs{
 				Unload: []string{"unload", "arguments"},
 			},
 		}
 
 		Expect(
-			MakeUnloadCommand(spec),
+			MakeUnloadCommand(spec, moduleName),
 		).To(
-			Equal([]string{"modprobe", "unload", "arguments"}),
+			Equal([]string{
+				"/bin/sh",
+				"-c",
+				"modprobe unload arguments",
+			}),
 		)
 	})
 
@@ -862,14 +945,18 @@ var _ = Describe("MakeUnloadCommand", func() {
 		const dir = "/some-dir"
 
 		spec := kmmv1beta1.ModprobeSpec{
-			ModuleName: moduleName,
+			ModuleName: kernelModuleName,
 			DirName:    dir,
 		}
 
 		Expect(
-			MakeUnloadCommand(spec),
+			MakeUnloadCommand(spec, moduleName),
 		).To(
-			Equal([]string{"modprobe", "-rv", "-d", dir, moduleName}),
+			Equal([]string{
+				"/bin/sh",
+				"-c",
+				fmt.Sprintf("modprobe -rv -d %s %s", dir, kernelModuleName),
+			}),
 		)
 	})
 
@@ -878,13 +965,34 @@ var _ = Describe("MakeUnloadCommand", func() {
 			Args: &kmmv1beta1.ModprobeArgs{
 				Unload: []string{"-z", "-k"},
 			},
-			ModuleName: moduleName,
+			ModuleName: kernelModuleName,
 		}
 
 		Expect(
-			MakeUnloadCommand(spec),
+			MakeUnloadCommand(spec, moduleName),
 		).To(
-			Equal([]string{"modprobe", "-z", "-k", moduleName}),
+			Equal([]string{
+				"/bin/sh",
+				"-c",
+				fmt.Sprintf("modprobe -z -k %s", kernelModuleName),
+			}),
+		)
+	})
+
+	It("should use the firmware path if provided", func() {
+		spec := kmmv1beta1.ModprobeSpec{
+			FirmwarePath: "/kmm/firmware/mymodule",
+			ModuleName:   kernelModuleName,
+		}
+
+		Expect(
+			MakeUnloadCommand(spec, moduleName),
+		).To(
+			Equal([]string{
+				"/bin/sh",
+				"-c",
+				fmt.Sprintf("modprobe -rv %s && rm -rf /var/lib/firmware/module-name", kernelModuleName),
+			}),
 		)
 	})
 })
