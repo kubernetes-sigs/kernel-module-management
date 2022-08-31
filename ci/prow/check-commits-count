@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+number_of_commits=$(git rev-list --count HEAD ^main)
+if [[ ${number_of_commits} != 1 ]]; then
+    echo '
+    All PRs must contain a single commit.
+    Please refer to https://github.com/kubernetes-sigs/kernel-module-management/blob/main/CONTRIBUTING.md
+    '
+    exit 1
+fi
