@@ -71,7 +71,7 @@ jobs:
           path: ./bin
           key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
@@ -190,7 +190,7 @@ jobs:
           path: ./bin
           key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
@@ -323,7 +323,7 @@ jobs:
           path: ./bin
           key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
@@ -485,7 +485,7 @@ jobs:
           path: ./bin
           key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
