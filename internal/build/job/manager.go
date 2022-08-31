@@ -62,7 +62,7 @@ func (jbm *jobManager) getJob(ctx context.Context, mod kmmv1beta1.Module, target
 	return &jobList.Items[0], nil
 }
 
-func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string) (build.Result, error) {
+func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string, pushImage bool) (build.Result, error) {
 	logger := log.FromContext(ctx)
 
 	buildConfig := jbm.helper.GetRelevantBuild(mod, m)
@@ -95,7 +95,7 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 
 		logger.Info("Creating job")
 
-		job, err = jbm.maker.MakeJob(mod, buildConfig, targetKernel, m.ContainerImage)
+		job, err = jbm.maker.MakeJob(mod, buildConfig, targetKernel, m.ContainerImage, pushImage)
 		if err != nil {
 			return build.Result{}, fmt.Errorf("could not make Job: %v", err)
 		}

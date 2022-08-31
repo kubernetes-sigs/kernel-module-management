@@ -193,7 +193,7 @@ var _ = Describe("MakeJob", func() {
 		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override).Return(append(slices.Clone(buildArgs), override))
 
-		actual, err := m.MakeJob(*mod, km.Build, kernelVersion, km.ContainerImage)
+		actual, err := m.MakeJob(*mod, km.Build, kernelVersion, km.ContainerImage, true)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -224,7 +224,7 @@ var _ = Describe("MakeJob", func() {
 		),
 	)
 
-	DescribeTable("should set correct kaniko flags", func(b kmmv1beta1.Build, flag string) {
+	DescribeTable("should set correct kaniko flags", func(b kmmv1beta1.Build, kanikoFlag string, pushFlag bool) {
 
 		km := kmmv1beta1.KernelMapping{
 			Build: &kmmv1beta1.Build{
@@ -236,30 +236,39 @@ var _ = Describe("MakeJob", func() {
 
 		mh.EXPECT().ApplyBuildArgOverrides(nil, kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion})
 
-		actual, err := m.MakeJob(mod, &b, kernelVersion, km.ContainerImage)
+		actual, err := m.MakeJob(mod, &b, kernelVersion, km.ContainerImage, pushFlag)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(flag))
+		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
+		if pushFlag {
+			Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--destination"))
+		} else {
+			Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--no-push"))
+		}
 
 	},
 		Entry(
 			"PullOptions.Insecure",
 			kmmv1beta1.Build{Pull: kmmv1beta1.PullOptions{Insecure: true}},
 			"--insecure-pull",
+			true,
 		),
 		Entry(
 			"PullOptions.InsecureSkipTLSVerify",
 			kmmv1beta1.Build{Pull: kmmv1beta1.PullOptions{InsecureSkipTLSVerify: true}},
 			"--skip-tls-verify-pull",
+			false,
 		),
 		Entry(
 			"PushOptions.Insecure",
 			kmmv1beta1.Build{Push: kmmv1beta1.PushOptions{Insecure: true}},
 			"--insecure",
+			true,
 		),
 		Entry(
 			"PushOptions.InsecureSkipTLSVerify",
 			kmmv1beta1.Build{Push: kmmv1beta1.PushOptions{InsecureSkipTLSVerify: true}},
 			"--skip-tls-verify",
+			false,
 		),
 	)
 })
