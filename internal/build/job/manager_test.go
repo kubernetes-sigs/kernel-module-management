@@ -75,7 +75,7 @@ var _ = Describe("JobManager", func() {
 			)
 			mgr := NewBuildManager(nil, registry, maker, helper)
 
-			_, err := mgr.Sync(ctx, kmmv1beta1.Module{}, km, "")
+			_, err := mgr.Sync(ctx, kmmv1beta1.Module{}, km, "", true)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -90,7 +90,7 @@ var _ = Describe("JobManager", func() {
 			mgr := NewBuildManager(nil, registry, maker, helper)
 
 			Expect(
-				mgr.Sync(ctx, kmmv1beta1.Module{}, km, ""),
+				mgr.Sync(ctx, kmmv1beta1.Module{}, km, "", true),
 			).To(
 				Equal(build.Result{Status: build.StatusCompleted}),
 			)
@@ -130,7 +130,7 @@ var _ = Describe("JobManager", func() {
 
 				mgr := NewBuildManager(clnt, registry, maker, helper)
 
-				res, err := mgr.Sync(ctx, mod, km, kernelVersion)
+				res, err := mgr.Sync(ctx, mod, km, kernelVersion, true)
 
 				if expectsErr {
 					Expect(err).To(HaveOccurred())
@@ -150,14 +150,14 @@ var _ = Describe("JobManager", func() {
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
 				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()),
-				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(nil, errors.New("random error")),
+				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(nil, errors.New("random error")),
 			)
 			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any())
 
 			mgr := NewBuildManager(clnt, registry, maker, helper)
 
 			Expect(
-				mgr.Sync(ctx, mod, km, kernelVersion),
+				mgr.Sync(ctx, mod, km, kernelVersion, true),
 			).Error().To(
 				HaveOccurred(),
 			)
@@ -180,7 +180,7 @@ var _ = Describe("JobManager", func() {
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
 				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()),
-				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(&j, nil),
+				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
 			)
 
 			gomock.InOrder(
@@ -191,7 +191,7 @@ var _ = Describe("JobManager", func() {
 			mgr := NewBuildManager(clnt, registry, maker, helper)
 
 			Expect(
-				mgr.Sync(ctx, mod, km, kernelVersion),
+				mgr.Sync(ctx, mod, km, kernelVersion, true),
 			).To(
 				Equal(build.Result{Requeue: true, Status: build.StatusCreated}),
 			)
@@ -223,14 +223,14 @@ var _ = Describe("JobManager", func() {
 					},
 				),
 				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()),
-				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage).Return(&j, nil),
+				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
 				clnt.EXPECT().Create(ctx, &j),
 			)
 
 			mgr := NewBuildManager(clnt, registry, maker, helper)
 
 			Expect(
-				mgr.Sync(ctx, mod, km, kernelVersion),
+				mgr.Sync(ctx, mod, km, kernelVersion, true),
 			).To(
 				Equal(build.Result{Requeue: true, Status: build.StatusCreated}),
 			)

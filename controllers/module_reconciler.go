@@ -234,7 +234,7 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildRes, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion)
+	buildRes, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion, true)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}

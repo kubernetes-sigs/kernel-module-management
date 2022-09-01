@@ -36,16 +36,16 @@ func (m *MockManager) EXPECT() *MockManagerMockRecorder {
 }
 
 // Sync mocks base method.
-func (m_2 *MockManager) Sync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping, targetKernel string) (Result, error) {
+func (m_2 *MockManager) Sync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping, targetKernel string, pushImage bool) (Result, error) {
 	m_2.ctrl.T.Helper()
-	ret := m_2.ctrl.Call(m_2, "Sync", ctx, mod, m, targetKernel)
+	ret := m_2.ctrl.Call(m_2, "Sync", ctx, mod, m, targetKernel, pushImage)
 	ret0, _ := ret[0].(Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Sync indicates an expected call of Sync.
-func (mr *MockManagerMockRecorder) Sync(ctx, mod, m, targetKernel interface{}) *gomock.Call {
+func (mr *MockManagerMockRecorder) Sync(ctx, mod, m, targetKernel, pushImage interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManager)(nil).Sync), ctx, mod, m, targetKernel)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManager)(nil).Sync), ctx, mod, m, targetKernel, pushImage)
 }

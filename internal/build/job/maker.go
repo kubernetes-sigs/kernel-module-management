@@ -16,7 +16,7 @@ import (
 //go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
 
 type Maker interface {
-	MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string) (*batchv1.Job, error)
+	MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error)
 }
 
 type maker struct {
@@ -28,8 +28,13 @@ func NewMaker(helper build.Helper, scheme *runtime.Scheme) Maker {
 	return &maker{helper: helper, scheme: scheme}
 }
 
-func (m *maker) MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string) (*batchv1.Job, error) {
-	args := []string{"--destination", containerImage}
+func (m *maker) MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error) {
+	args := []string{}
+	if pushImage {
+		args = append(args, "--destination", containerImage)
+	} else {
+		args = append(args, "--no-push")
+	}
 
 	buildArgs := m.helper.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
