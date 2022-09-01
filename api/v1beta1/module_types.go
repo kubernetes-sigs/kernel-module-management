@@ -49,6 +49,12 @@ type PushOptions struct {
 	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 }
 
+type KanikoParams struct {
+	// +optional
+	// Kaniko image tag to use when creating the build Job
+	Tag string `json:"tag,omitempty"`
+}
+
 type Build struct {
 	// +optional
 	// BuildArgs is an array of build variables that are provided to the image building backend.
@@ -69,6 +75,10 @@ type Build struct {
 	// Those secrets should be used for private resources such as a private Github repo.
 	// For container registries auth use module.spec.imagePullSecret instead.
 	Secrets []v1.LocalObjectReference `json:"secrets"`
+
+	// +optional
+	// KanikoParams is used to customize the building process of the image.
+	KanikoParams *KanikoParams `json:"kanikoParams,omitempty"`
 }
 
 // KernelMapping pairs kernel versions with a DriverContainer image.

@@ -92,6 +92,11 @@ func (m *maker) MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, ta
 	volumes = append(volumes, makeBuildSecretVolumes(buildConfig.Secrets)...)
 	volumeMounts = append(volumeMounts, makeBuildSecretVolumeMounts(buildConfig.Secrets)...)
 
+	kanikoImageTag := "latest"
+	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
+		kanikoImageTag = buildConfig.KanikoParams.Tag
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mod.Name + "-build-",
@@ -109,7 +114,7 @@ func (m *maker) MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, ta
 						{
 							Args:         args,
 							Name:         "kaniko",
-							Image:        "gcr.io/kaniko-project/executor:latest",
+							Image:        "gcr.io/kaniko-project/executor:" + kanikoImageTag,
 							VolumeMounts: volumeMounts,
 						},
 					},

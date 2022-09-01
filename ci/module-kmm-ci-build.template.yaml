@@ -32,5 +32,9 @@ spec:
               RUN echo $CI_BUILD_ARG > /build-arg
               RUN echo $KERNEL_VERSION > /kernel-version
               RUN echo $WITH_DEFAULT_VALUE > /default-value
+
+            # Optional. If kanikoParams.tag is empty, the default value will be: 'latest'
+            kanikoParams:
+              tag: "debug"
   selector:
     kubernetes.io/hostname: minikube
