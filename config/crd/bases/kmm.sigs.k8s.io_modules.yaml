@@ -1869,6 +1869,15 @@ spec:
                             type: array
                           dockerfile:
                             type: string
+                          kanikoParams:
+                            description: KanikoParams is used to customize the building
+                              process of the image.
+                            properties:
+                              tag:
+                                description: Kaniko image tag to use when creating
+                                  the build Job
+                                type: string
+                            type: object
                           pull:
                             description: Pull contains settings determining how to
                               check if the DriverContainer image already exists.
@@ -1957,6 +1966,15 @@ spec:
                                   type: array
                                 dockerfile:
                                   type: string
+                                kanikoParams:
+                                  description: KanikoParams is used to customize the
+                                    building process of the image.
+                                  properties:
+                                    tag:
+                                      description: Kaniko image tag to use when creating
+                                        the build Job
+                                      type: string
+                                  type: object
                                 pull:
                                   description: Pull contains settings determining
                                     how to check if the DriverContainer image already

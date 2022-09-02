@@ -271,4 +271,26 @@ var _ = Describe("MakeJob", func() {
 			false,
 		),
 	)
+
+	Describe("should override kaniko image tag", func() {
+		It("use a custom given tag", func() {
+			const customTag = "some-tag"
+
+			km := kmmv1beta1.KernelMapping{
+				Build: &kmmv1beta1.Build{
+					BuildArgs:    buildArgs,
+					Dockerfile:   dockerfile,
+					KanikoParams: &kmmv1beta1.KanikoParams{Tag: customTag},
+				},
+				ContainerImage: containerImage,
+			}
+
+			override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
+			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override)
+
+			actual, err := m.MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(actual.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/kaniko-project/executor:" + customTag))
+		})
+	})
 })
