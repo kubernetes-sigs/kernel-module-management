@@ -60,10 +60,10 @@ var _ = Describe("JobManager", func() {
 			helper = build.NewMockHelper(ctrl)
 		})
 
-		po := kmmv1beta1.PullOptions{}
+		po := &kmmv1beta1.PullOptions{}
 
 		km := kmmv1beta1.KernelMapping{
-			Build:          &kmmv1beta1.Build{Pull: po},
+			Build:          &kmmv1beta1.Build{Pull: *po},
 			ContainerImage: imageName,
 		}
 
@@ -71,6 +71,7 @@ var _ = Describe("JobManager", func() {
 			ctx := context.Background()
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
+				helper.EXPECT().GetRelevantPullOptions(gomock.Any(), km).Return(po),
 				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()).Return(false, errors.New("random error")),
 			)
 			mgr := NewBuildManager(nil, registry, maker, helper)
@@ -84,6 +85,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(gomock.Any(), km).Return(km.Build),
+				helper.EXPECT().GetRelevantPullOptions(gomock.Any(), km).Return(po),
 				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()).Return(true, nil),
 			)
 
@@ -125,6 +127,7 @@ var _ = Describe("JobManager", func() {
 
 				gomock.InOrder(
 					helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
+					helper.EXPECT().GetRelevantPullOptions(gomock.Any(), km).Return(po),
 					registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()).Return(false, nil),
 				)
 
@@ -149,6 +152,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
+				helper.EXPECT().GetRelevantPullOptions(gomock.Any(), km).Return(po),
 				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(nil, errors.New("random error")),
 			)
@@ -179,6 +183,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
+				helper.EXPECT().GetRelevantPullOptions(gomock.Any(), km).Return(po),
 				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()),
 				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
 			)
@@ -216,6 +221,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
+				helper.EXPECT().GetRelevantPullOptions(gomock.Any(), km).Return(po),
 				registry.EXPECT().ImageExists(ctx, imageName, po, gomock.Any()).DoAndReturn(
 					func(_ interface{}, _ interface{}, _ interface{}, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
 						Expect(registryAuthGetter).ToNot(BeNil())

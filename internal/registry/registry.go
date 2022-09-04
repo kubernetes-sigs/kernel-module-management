@@ -40,7 +40,7 @@ type RepoPullConfig struct {
 //go:generate mockgen -source=registry.go -package=registry -destination=mock_registry_api.go
 
 type Registry interface {
-	ImageExists(ctx context.Context, image string, po kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error)
+	ImageExists(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error)
 	VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVersion, moduleFileName string) bool
 	GetLayersDigests(ctx context.Context, image string, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error)
 	GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error)
@@ -52,8 +52,8 @@ func NewRegistry() Registry {
 	return &registry{}
 }
 
-func (r *registry) ImageExists(ctx context.Context, image string, po kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
-	pullConfig, err := r.getPullOptions(ctx, image, &po, registryAuthGetter)
+func (r *registry) ImageExists(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
+	pullConfig, err := r.getPullOptions(ctx, image, po, registryAuthGetter)
 	if err != nil {
 		return false, fmt.Errorf("failed to get pull options for image %s: %w", image, err)
 	}
