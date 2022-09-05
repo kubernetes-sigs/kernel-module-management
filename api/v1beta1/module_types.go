@@ -63,7 +63,7 @@ type Build struct {
 	Dockerfile string `json:"dockerfile"`
 
 	// +optional
-	// Pull contains settings determining how to check if the DriverContainer image already exists.
+	// Pull contains settings determining how to pull the base images of the build process.
 	Pull PullOptions `json:"pull"`
 
 	// +optional
@@ -95,6 +95,11 @@ type KernelMapping struct {
 	// +optional
 	// Literal defines a literal target kernel version to be matched exactly against node kernels.
 	Literal string `json:"literal"`
+
+	// +optional
+	// Pull contains settings determining how to check if the ModuleLoader image already exists
+	// and allows overriding of the ModuleLoader's pull options
+	Pull *PullOptions `json:"pull"`
 
 	// +optional
 	// Regexp is a regular expression to be match against node kernels.
@@ -162,6 +167,10 @@ type ModuleLoaderContainerSpec struct {
 
 	// Modprobe is a set of properties to customize which module modprobe loads and with which properties.
 	Modprobe ModprobeSpec `json:"modprobe"`
+
+	// +optional
+	// Pull contains settings determining how to check if the ModuleLoader image already exists.
+	Pull *PullOptions `json:"pull"`
 }
 
 type ModuleLoaderSpec struct {

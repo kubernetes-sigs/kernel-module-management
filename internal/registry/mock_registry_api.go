@@ -69,7 +69,7 @@ func (mr *MockRegistryMockRecorder) GetLayersDigests(ctx, image, registryAuthGet
 }
 
 // ImageExists mocks base method.
-func (m *MockRegistry) ImageExists(ctx context.Context, image string, po v1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
+func (m *MockRegistry) ImageExists(ctx context.Context, image string, po *v1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ImageExists", ctx, image, po, registryAuthGetter)
 	ret0, _ := ret[0].(bool)

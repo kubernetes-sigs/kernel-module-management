@@ -66,6 +66,7 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 	logger := log.FromContext(ctx)
 
 	buildConfig := jbm.helper.GetRelevantBuild(mod, m)
+	imagePullOptions := jbm.helper.GetRelevantPullOptions(mod, m)
 
 	var registryAuthGetter auth.RegistryAuthGetter
 
@@ -76,7 +77,7 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 		}
 		registryAuthGetter = auth.NewRegistryAuthGetter(jbm.client, namespacedName)
 	}
-	imageAvailable, err := jbm.registry.ImageExists(ctx, m.ContainerImage, buildConfig.Pull, registryAuthGetter)
+	imageAvailable, err := jbm.registry.ImageExists(ctx, m.ContainerImage, imagePullOptions, registryAuthGetter)
 	if err != nil {
 		return build.Result{}, fmt.Errorf("could not check if the image is available: %v", err)
 	}
