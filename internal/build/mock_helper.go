@@ -66,17 +66,3 @@ func (mr *MockHelperMockRecorder) GetRelevantBuild(mod, km interface{}) *gomock.
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRelevantBuild", reflect.TypeOf((*MockHelper)(nil).GetRelevantBuild), mod, km)
 }
-
-// GetRelevantPullOptions mocks base method.
-func (m *MockHelper) GetRelevantPullOptions(mod v1beta1.Module, km v1beta1.KernelMapping) *v1beta1.PullOptions {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRelevantPullOptions", mod, km)
-	ret0, _ := ret[0].(*v1beta1.PullOptions)
-	return ret0
-}
-
-// GetRelevantPullOptions indicates an expected call of GetRelevantPullOptions.
-func (mr *MockHelperMockRecorder) GetRelevantPullOptions(mod, km interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRelevantPullOptions", reflect.TypeOf((*MockHelper)(nil).GetRelevantPullOptions), mod, km)
-}

@@ -12,7 +12,6 @@ import (
 type Helper interface {
 	ApplyBuildArgOverrides(args []v1beta1.BuildArg, overrides ...v1beta1.BuildArg) []v1beta1.BuildArg
 	GetRelevantBuild(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build
-	GetRelevantPullOptions(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.PullOptions
 }
 
 type helper struct{}
@@ -67,11 +66,4 @@ func (m *helper) GetRelevantBuild(mod kmmv1beta1.Module, km kmmv1beta1.KernelMap
 	// secret and how to use, and if we need to take care of repeated secrets names
 	buildConfig.Secrets = append(buildConfig.Secrets, km.Build.Secrets...)
 	return buildConfig
-}
-
-func (m *helper) GetRelevantPullOptions(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.PullOptions {
-	if km.Pull != nil {
-		return km.Pull
-	}
-	return mod.Spec.ModuleLoader.Container.Pull
 }

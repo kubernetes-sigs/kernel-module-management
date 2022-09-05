@@ -6,12 +6,9 @@ import (
 	"fmt"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	batchv1 "k8s.io/api/batch/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -19,18 +16,16 @@ import (
 var errNoMatchingBuild = errors.New("no matching build")
 
 type jobManager struct {
-	client   client.Client
-	registry registry.Registry
-	maker    Maker
-	helper   build.Helper
+	client client.Client
+	maker  Maker
+	helper build.Helper
 }
 
-func NewBuildManager(client client.Client, registry registry.Registry, maker Maker, helper build.Helper) *jobManager {
+func NewBuildManager(client client.Client, maker Maker, helper build.Helper) *jobManager {
 	return &jobManager{
-		client:   client,
-		registry: registry,
-		maker:    maker,
-		helper:   helper,
+		client: client,
+		maker:  maker,
+		helper: helper,
 	}
 }
 
@@ -65,29 +60,9 @@ func (jbm *jobManager) getJob(ctx context.Context, mod kmmv1beta1.Module, target
 func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string, pushImage bool) (build.Result, error) {
 	logger := log.FromContext(ctx)
 
+	logger.Info("Building in-cluster")
+
 	buildConfig := jbm.helper.GetRelevantBuild(mod, m)
-	imagePullOptions := jbm.helper.GetRelevantPullOptions(mod, m)
-
-	var registryAuthGetter auth.RegistryAuthGetter
-
-	if irs := mod.Spec.ImageRepoSecret; irs != nil {
-		namespacedName := types.NamespacedName{
-			Name:      irs.Name,
-			Namespace: mod.Namespace,
-		}
-		registryAuthGetter = auth.NewRegistryAuthGetter(jbm.client, namespacedName)
-	}
-	imageAvailable, err := jbm.registry.ImageExists(ctx, m.ContainerImage, imagePullOptions, registryAuthGetter)
-	if err != nil {
-		return build.Result{}, fmt.Errorf("could not check if the image is available: %v", err)
-	}
-
-	if imageAvailable {
-		return build.Result{Status: build.StatusCompleted, Requeue: false}, nil
-	}
-
-	logger.Info("Image not pull-able; building in-cluster")
-
 	job, err := jbm.getJob(ctx, mod, targetKernel)
 	if err != nil {
 		if !errors.Is(err, errNoMatchingBuild) {

@@ -5,11 +5,13 @@ import (
 
 	"github.com/golang/mock/gomock"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -27,430 +29,582 @@ const (
 	namespace = "namespace"
 )
 
-var _ = Describe("ModuleReconciler", func() {
-	Describe("Reconcile", func() {
-		var (
-			ctrl        *gomock.Controller
-			clnt        *client.MockClient
-			mockBM      *build.MockManager
-			mockDC      *daemonset.MockDaemonSetCreator
-			mockKM      *module.MockKernelMapper
-			mockMetrics *metrics.MockMetrics
-			mockSU      *statusupdater.MockModuleStatusUpdater
+var _ = Describe("ModuleReconciler_Reconcile", func() {
+	var (
+		ctrl         *gomock.Controller
+		clnt         *client.MockClient
+		mockBM       *build.MockManager
+		mockDC       *daemonset.MockDaemonSetCreator
+		mockKM       *module.MockKernelMapper
+		mockMetrics  *metrics.MockMetrics
+		mockSU       *statusupdater.MockModuleStatusUpdater
+		mockRegistry *registry.MockRegistry
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mockBM = build.NewMockManager(ctrl)
+		mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
+		mockKM = module.NewMockKernelMapper(ctrl)
+		mockMetrics = metrics.NewMockMetrics(ctrl)
+		mockSU = statusupdater.NewMockModuleStatusUpdater(ctrl)
+		mockRegistry = registry.NewMockRegistry(ctrl)
+	})
+
+	const moduleName = "test-module"
+
+	nsn := types.NamespacedName{
+		Name:      moduleName,
+		Namespace: namespace,
+	}
+
+	req := reconcile.Request{NamespacedName: nsn}
+
+	ctx := context.Background()
+
+	It("should do nothing if the Module is not available anymore", func() {
+		clnt.
+			EXPECT().
+			Get(ctx, nsn, &kmmv1beta1.Module{}).
+			Return(
+				apierrors.NewNotFound(schema.GroupResource{}, moduleName),
+			)
+
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		Expect(
+			mr.Reconcile(ctx, req),
+		).To(
+			Equal(reconcile.Result{}),
 		)
+	})
 
-		BeforeEach(func() {
-			ctrl = gomock.NewController(GinkgoT())
-			clnt = client.NewMockClient(ctrl)
-			mockBM = build.NewMockManager(ctrl)
-			mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
-			mockKM = module.NewMockKernelMapper(ctrl)
-			mockMetrics = metrics.NewMockMetrics(ctrl)
-			mockSU = statusupdater.NewMockModuleStatusUpdater(ctrl)
-		})
-
-		const moduleName = "test-module"
-
-		nsn := types.NamespacedName{
-			Name:      moduleName,
-			Namespace: namespace,
+	It("should do nothing when no nodes match the selector", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				Selector: map[string]string{"key": "value"},
+			},
 		}
 
-		req := reconcile.Request{NamespacedName: nsn}
-
-		ctx := context.Background()
-
-		It("should do nothing if the Module is not available anymore", func() {
-			clnt.
-				EXPECT().
-				Get(ctx, nsn, &kmmv1beta1.Module{}).
-				Return(
-					apierrors.NewNotFound(schema.GroupResource{}, moduleName),
-				)
-
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
-			Expect(
-				mr.Reconcile(ctx, req),
-			).To(
-				Equal(reconcile.Result{}),
-			)
-		})
-
-		It("should do nothing when no nodes match the selector", func() {
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      moduleName,
-					Namespace: namespace,
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+					m.ObjectMeta = mod.ObjectMeta
+					m.Spec = mod.Spec
+					return nil
 				},
-				Spec: kmmv1beta1.ModuleSpec{
-					Selector: map[string]string{"key": "value"},
+			),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.Module{mod}
+					return nil
 				},
-			}
-
-			gomock.InOrder(
-				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
-						m.ObjectMeta = mod.ObjectMeta
-						m.Spec = mod.Spec
-						return nil
-					},
-				),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
-						list.Items = []kmmv1beta1.Module{mod}
-						return nil
-					},
-				),
-				mockMetrics.EXPECT().SetExistingKMMOModules(1),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
-						list.Items = []v1.Node{}
-						return nil
-					},
-				),
-			)
-
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
-
-			dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
-
-			gomock.InOrder(
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
-				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
-			)
-
-			res, err := mr.Reconcile(context.Background(), req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(reconcile.Result{}))
-		})
-
-		It("should remove obsolete DaemonSets when no nodes match the selector", func() {
-			const kernelVersion = "1.2.3"
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      moduleName,
-					Namespace: namespace,
+			),
+			mockMetrics.EXPECT().SetExistingKMMOModules(1),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+					list.Items = []v1.Node{}
+					return nil
 				},
-				Spec: kmmv1beta1.ModuleSpec{
-					Selector: map[string]string{"key": "value"},
+			),
+		)
+
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+
+		dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
+
+		gomock.InOrder(
+			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
+		)
+
+		res, err := mr.Reconcile(context.Background(), req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(reconcile.Result{}))
+	})
+
+	It("should remove obsolete DaemonSets when no nodes match the selector", func() {
+		const kernelVersion = "1.2.3"
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				Selector: map[string]string{"key": "value"},
+			},
+		}
+
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "some-daemonset",
+				Namespace: namespace,
+			},
+		}
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+					m.ObjectMeta = mod.ObjectMeta
+					m.Spec = mod.Spec
+					return nil
 				},
-			}
-
-			ds := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-daemonset",
-					Namespace: namespace,
+			),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.Module{mod}
+					return nil
 				},
-			}
+			),
+			mockMetrics.EXPECT().SetExistingKMMOModules(1),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+					list.Items = []v1.Node{}
+					return nil
+				},
+			),
+		)
 
-			gomock.InOrder(
-				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
-						m.ObjectMeta = mod.ObjectMeta
-						m.Spec = mod.Spec
-						return nil
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+
+		dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
+
+		gomock.InOrder(
+			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
+		)
+
+		res, err := mr.Reconcile(context.Background(), req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(reconcile.Result{}))
+	})
+
+	It("should create a DaemonSet when a node matches the selector", func() {
+		const (
+			imageName     = "test-image"
+			kernelVersion = "1.2.3"
+		)
+
+		mappings := []kmmv1beta1.KernelMapping{
+			{
+				ContainerImage: imageName,
+				Literal:        kernelVersion,
+			},
+		}
+
+		osConfig := module.NodeOSConfig{}
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					Container: kmmv1beta1.ModuleLoaderContainerSpec{
+						KernelMappings: mappings,
 					},
-				),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
-						list.Items = []kmmv1beta1.Module{mod}
-						return nil
-					},
-				),
-				mockMetrics.EXPECT().SetExistingKMMOModules(1),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
-						list.Items = []v1.Node{}
-						return nil
-					},
-				),
-			)
+				},
+				Selector: map[string]string{"key": "value"},
+			},
+		}
 
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
-
-			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
-
-			gomock.InOrder(
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
-				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
-			)
-
-			res, err := mr.Reconcile(context.Background(), req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(reconcile.Result{}))
-		})
-
-		It("should create a DaemonSet when a node matches the selector", func() {
-			const (
-				imageName     = "test-image"
-				kernelVersion = "1.2.3"
-			)
-
-			mappings := []kmmv1beta1.KernelMapping{
+		nodeList := v1.NodeList{
+			Items: []v1.Node{
 				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			osConfig := module.NodeOSConfig{}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      moduleName,
-					Namespace: namespace,
-				},
-				Spec: kmmv1beta1.ModuleSpec{
-					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-						Container: kmmv1beta1.ModuleLoaderContainerSpec{
-							KernelMappings: mappings,
-						},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node1",
+						Labels: map[string]string{"key": "value"},
 					},
-					Selector: map[string]string{"key": "value"},
-				},
-			}
-
-			nodeList := v1.NodeList{
-				Items: []v1.Node{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "node1",
-							Labels: map[string]string{"key": "value"},
-						},
-						Status: v1.NodeStatus{
-							NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-						},
+					Status: v1.NodeStatus{
+						NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
 					},
 				},
-			}
+			},
+		}
 
-			dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
+		dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
 
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 
-			ds := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: moduleName + "-",
-					Namespace:    namespace,
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: moduleName + "-",
+				Namespace:    namespace,
+			},
+		}
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+					m.ObjectMeta = mod.ObjectMeta
+					m.Spec = mod.Spec
+					return nil
 				},
-			}
+			),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+					return nil
+				},
+			),
+			mockMetrics.EXPECT().SetExistingKMMOModules(0),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+					list.Items = nodeList.Items
+					return nil
+				},
+			),
+			mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
+			mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
+			mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
+			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
+			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
+			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
+			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.ModuleLoaderStage, false),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
+			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
+		)
 
-			gomock.InOrder(
-				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
-						m.ObjectMeta = mod.ObjectMeta
-						m.Spec = mod.Spec
-						return nil
+		res, err := mr.Reconcile(context.Background(), req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(reconcile.Result{}))
+	})
+
+	It("should patch the DaemonSet when it already exists", func() {
+		const (
+			imageName     = "test-image"
+			kernelVersion = "1.2.3"
+		)
+
+		osConfig := module.NodeOSConfig{}
+
+		mappings := []kmmv1beta1.KernelMapping{
+			{
+				ContainerImage: imageName,
+				Literal:        kernelVersion,
+			},
+		}
+
+		nodeLabels := map[string]string{"key": "value"}
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					Container: kmmv1beta1.ModuleLoaderContainerSpec{
+						KernelMappings: mappings,
 					},
-				),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
-						return nil
-					},
-				),
-				mockMetrics.EXPECT().SetExistingKMMOModules(0),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
-						list.Items = nodeList.Items
-						return nil
-					},
-				),
-				mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
-				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-				mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
-				clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
-				mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.ModuleLoaderStage, false),
-				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
-				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
-			)
+				},
+				Selector: nodeLabels,
+			},
+		}
 
-			res, err := mr.Reconcile(context.Background(), req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(reconcile.Result{}))
-		})
-
-		It("should patch the DaemonSet when it already exists", func() {
-			const (
-				imageName     = "test-image"
-				kernelVersion = "1.2.3"
-			)
-
-			osConfig := module.NodeOSConfig{}
-
-			mappings := []kmmv1beta1.KernelMapping{
+		nodeList := v1.NodeList{
+			Items: []v1.Node{
 				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			nodeLabels := map[string]string{"key": "value"}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      moduleName,
-					Namespace: namespace,
-				},
-				Spec: kmmv1beta1.ModuleSpec{
-					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-						Container: kmmv1beta1.ModuleLoaderContainerSpec{
-							KernelMappings: mappings,
-						},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node1",
+						Labels: nodeLabels,
 					},
-					Selector: nodeLabels,
-				},
-			}
-
-			nodeList := v1.NodeList{
-				Items: []v1.Node{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "node1",
-							Labels: nodeLabels,
-						},
-						Status: v1.NodeStatus{
-							NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-						},
+					Status: v1.NodeStatus{
+						NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
 					},
 				},
-			}
+			},
+		}
 
-			const (
-				dsName      = "some-daemonset"
-				dsNamespace = "test-namespace"
-			)
+		const (
+			dsName      = "some-daemonset"
+			dsNamespace = "test-namespace"
+		)
 
-			ds := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      dsName,
-					Namespace: dsNamespace,
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dsName,
+				Namespace: dsNamespace,
+			},
+		}
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+					m.ObjectMeta = mod.ObjectMeta
+					m.Spec = mod.Spec
+					return nil
 				},
-			}
-
-			gomock.InOrder(
-				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
-						m.ObjectMeta = mod.ObjectMeta
-						m.Spec = mod.Spec
-						return nil
-					},
-				),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
-						list.Items = []kmmv1beta1.Module{mod}
-						return nil
-					},
-				),
-				mockMetrics.EXPECT().SetExistingKMMOModules(1),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
-						list.Items = nodeList.Items
-						return nil
-					},
-				),
-				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()),
-				clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
-			)
-
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
-
-			dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
-
-			gomock.InOrder(
-				mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
-				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-				mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
-					func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ kmmv1beta1.Module, _ string) {
-						d.SetLabels(map[string]string{"test": "test"})
-					}),
-				mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
-				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
-			)
-
-			res, err := mr.Reconcile(context.Background(), req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(reconcile.Result{}))
-		})
-
-		It("should create a Device plugin if defined in the module", func() {
-			const (
-				imageName     = "test-image"
-				kernelVersion = "1.2.3"
-			)
-
-			mappings := []kmmv1beta1.KernelMapping{
-				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
+			),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.Module{mod}
+					return nil
 				},
-			}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      moduleName,
-					Namespace: namespace,
+			),
+			mockMetrics.EXPECT().SetExistingKMMOModules(1),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+					list.Items = nodeList.Items
+					return nil
 				},
-				Spec: kmmv1beta1.ModuleSpec{
-					DevicePlugin: &kmmv1beta1.DevicePluginSpec{},
-					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-						Container: kmmv1beta1.ModuleLoaderContainerSpec{
-							KernelMappings: mappings,
-						},
+			),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()),
+			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
+		)
+
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+
+		dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
+
+		gomock.InOrder(
+			mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
+			mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
+			mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
+			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
+			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
+				func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ kmmv1beta1.Module, _ string) {
+					d.SetLabels(map[string]string{"test": "test"})
+				}),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
+			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
+		)
+
+		res, err := mr.Reconcile(context.Background(), req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(reconcile.Result{}))
+	})
+
+	It("should create a Device plugin if defined in the module", func() {
+		const (
+			imageName     = "test-image"
+			kernelVersion = "1.2.3"
+		)
+
+		mappings := []kmmv1beta1.KernelMapping{
+			{
+				ContainerImage: imageName,
+				Literal:        kernelVersion,
+			},
+		}
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				DevicePlugin: &kmmv1beta1.DevicePluginSpec{},
+				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					Container: kmmv1beta1.ModuleLoaderContainerSpec{
+						KernelMappings: mappings,
 					},
-					Selector: map[string]string{"key": "value"},
 				},
-			}
+				Selector: map[string]string{"key": "value"},
+			},
+		}
 
-			mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 
-			ds := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      moduleName + "-device-plugin",
-					Namespace: namespace,
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName + "-device-plugin",
+				Namespace: namespace,
+			},
+		}
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+					m.ObjectMeta = mod.ObjectMeta
+					m.Spec = mod.Spec
+					return nil
 				},
-			}
+			),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+					return nil
+				},
+			),
+			mockMetrics.EXPECT().SetExistingKMMOModules(0),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+					list.Items = []v1.Node{}
+					return nil
+				},
+			),
+			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(nil, nil),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
+			mockDC.EXPECT().SetDevicePluginAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&mod)),
+			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
+			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, "", metrics.DevicePluginStage, false),
+			mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString()),
+			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, nil).Return(nil),
+		)
 
-			gomock.InOrder(
-				clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
-						m.ObjectMeta = mod.ObjectMeta
-						m.Spec = mod.Spec
-						return nil
-					},
-				),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
-						return nil
-					},
-				),
-				mockMetrics.EXPECT().SetExistingKMMOModules(0),
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
-						list.Items = []v1.Node{}
-						return nil
-					},
-				),
-				mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(nil, nil),
-				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-				clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-				mockDC.EXPECT().SetDevicePluginAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&mod)),
-				clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
-				mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, "", metrics.DevicePluginStage, false),
-				mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString()),
-				mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, nil).Return(nil),
-			)
+		res, err := mr.Reconcile(context.Background(), req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(reconcile.Result{}))
+	})
+})
 
-			res, err := mr.Reconcile(context.Background(), req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(reconcile.Result{}))
-		})
+var _ = Describe("ModuleReconciler_handleBuild", func() {
+	var (
+		ctrl         *gomock.Controller
+		clnt         *client.MockClient
+		mockBM       *build.MockManager
+		mockDC       *daemonset.MockDaemonSetCreator
+		mockKM       *module.MockKernelMapper
+		mockMetrics  *metrics.MockMetrics
+		mockSU       *statusupdater.MockModuleStatusUpdater
+		mockRegistry *registry.MockRegistry
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mockBM = build.NewMockManager(ctrl)
+		mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
+		mockKM = module.NewMockKernelMapper(ctrl)
+		mockMetrics = metrics.NewMockMetrics(ctrl)
+		mockSU = statusupdater.NewMockModuleStatusUpdater(ctrl)
+		mockRegistry = registry.NewMockRegistry(ctrl)
+	})
+
+	const (
+		moduleName    = "test-module"
+		kernelVersion = "1.2.3"
+		imageName     = "test-image"
+	)
+
+	It("Build missing in module and in kernel mapping", func() {
+		km := &kmmv1beta1.KernelMapping{
+			ContainerImage: imageName,
+			Literal:        kernelVersion,
+		}
+
+		mod := &kmmv1beta1.Module{}
+
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+
+		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(BeFalse())
+	})
+
+	It("Build present, image exists", func() {
+		km := &kmmv1beta1.KernelMapping{
+			ContainerImage: imageName,
+			Literal:        kernelVersion,
+			Build:          &kmmv1beta1.Build{},
+		}
+		mod := &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				ImageRepoSecret: &v1.LocalObjectReference{Name: "pull-push-secret"},
+			},
+		}
+
+		mockRegistry.EXPECT().ImageExists(context.Background(), imageName, nil, gomock.Any()).DoAndReturn(
+			func(_ interface{}, _ interface{}, _ interface{}, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
+				Expect(registryAuthGetter).ToNot(BeNil())
+				return true, nil
+			},
+		)
+
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(BeFalse())
+	})
+
+	It("Build present, image does not exist, job created", func() {
+		km := &kmmv1beta1.KernelMapping{
+			ContainerImage: imageName,
+			Literal:        kernelVersion,
+			Build:          &kmmv1beta1.Build{},
+		}
+		mod := &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{},
+		}
+		buildRes := build.Result{Requeue: true, Status: build.StatusCreated}
+		gomock.InOrder(
+			mockRegistry.EXPECT().ImageExists(context.Background(), imageName, nil, gomock.Any()).Return(false, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), *mod, *km, gomock.Any(), true).Return(buildRes, nil),
+			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, false),
+		)
+
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(BeTrue())
+	})
+
+	It("Build present, image does not exist, job created", func() {
+		km := &kmmv1beta1.KernelMapping{
+			ContainerImage: imageName,
+			Literal:        kernelVersion,
+			Build:          &kmmv1beta1.Build{},
+		}
+		mod := &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{},
+		}
+		buildRes := build.Result{Requeue: true, Status: build.StatusCreated}
+		gomock.InOrder(
+			mockRegistry.EXPECT().ImageExists(context.Background(), imageName, nil, gomock.Any()).Return(false, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), *mod, *km, gomock.Any(), true).Return(buildRes, nil),
+			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, false),
+		)
+
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(BeTrue())
+	})
+
+	It("Build present, image does not exist, job completed", func() {
+		km := &kmmv1beta1.KernelMapping{
+			ContainerImage: imageName,
+			Literal:        kernelVersion,
+			Build:          &kmmv1beta1.Build{},
+		}
+		mod := &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{},
+		}
+		buildRes := build.Result{Requeue: false, Status: build.StatusCompleted}
+		gomock.InOrder(
+			mockRegistry.EXPECT().ImageExists(context.Background(), imageName, nil, gomock.Any()).Return(false, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), *mod, *km, gomock.Any(), true).Return(buildRes, nil),
+			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, true),
+		)
+
+		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(BeFalse())
 	})
 })
