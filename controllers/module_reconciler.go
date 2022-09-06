@@ -21,11 +21,13 @@ import (
 	"fmt"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -52,6 +54,7 @@ type ModuleReconciler struct {
 	daemonAPI        daemonset.DaemonSetCreator
 	kernelAPI        module.KernelMapper
 	metricsAPI       metrics.Metrics
+	registry         registry.Registry
 	filter           *filter.Filter
 	statusUpdaterAPI statusupdater.ModuleStatusUpdater
 }
@@ -63,6 +66,7 @@ func NewModuleReconciler(
 	kernelAPI module.KernelMapper,
 	metricsAPI metrics.Metrics,
 	filter *filter.Filter,
+	registry registry.Registry,
 	statusUpdaterAPI statusupdater.ModuleStatusUpdater) *ModuleReconciler {
 	return &ModuleReconciler{
 		Client:           client,
@@ -71,6 +75,7 @@ func NewModuleReconciler(
 		kernelAPI:        kernelAPI,
 		metricsAPI:       metricsAPI,
 		filter:           filter,
+		registry:         registry,
 		statusUpdaterAPI: statusUpdaterAPI,
 	}
 }
@@ -229,8 +234,14 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	if mod.Spec.ModuleLoader.Container.Build == nil && km.Build == nil {
 		return false, nil
 	}
+	exists, err := r.checkImageExists(ctx, mod, km)
+	if err != nil {
+		return false, fmt.Errorf("failed to check image existence for kernel %s: %w", kernelVersion, err)
+	}
+	if exists {
+		return false, nil
+	}
 
-	// [TODO] check access to the image - execute build only if needed (image is inaccessible)
 	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
@@ -247,6 +258,23 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	}
 
 	return buildRes.Requeue, nil
+}
+
+func (r *ModuleReconciler) checkImageExists(ctx context.Context, mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping) (bool, error) {
+	var registryAuthGetter auth.RegistryAuthGetter
+	if irs := mod.Spec.ImageRepoSecret; irs != nil {
+		namespacedName := types.NamespacedName{
+			Name:      irs.Name,
+			Namespace: mod.Namespace,
+		}
+		registryAuthGetter = auth.NewRegistryAuthGetter(r.Client, namespacedName)
+	}
+	pullOptions := module.GetRelevantPullOptions(mod, km)
+	imageAvailable, err := r.registry.ImageExists(ctx, km.ContainerImage, pullOptions, registryAuthGetter)
+	if err != nil {
+		return false, fmt.Errorf("could not check if the image is available: %v", err)
+	}
+	return imageAvailable, nil
 }
 
 func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
