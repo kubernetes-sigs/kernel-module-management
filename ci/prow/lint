@@ -2,4 +2,14 @@
 
 set -euxo pipefail
 
+# Generate code and compare with the current source.
+# Fail with a diff if some files are outdated.
+go install github.com/golang/mock/mockgen@v1.6.0
+PATH="${PATH}:${GOPATH}/bin" make generate
+
+if ! git diff --exit-code; then
+    echo "Changes detected"
+    exit 1
+fi
+
 make lint
