@@ -261,14 +261,7 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 }
 
 func (r *ModuleReconciler) checkImageExists(ctx context.Context, mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping) (bool, error) {
-	var registryAuthGetter auth.RegistryAuthGetter
-	if irs := mod.Spec.ImageRepoSecret; irs != nil {
-		namespacedName := types.NamespacedName{
-			Name:      irs.Name,
-			Namespace: mod.Namespace,
-		}
-		registryAuthGetter = auth.NewRegistryAuthGetter(r.Client, namespacedName)
-	}
+	registryAuthGetter := auth.NewRegistryAuthGetterFrom(r.Client, mod)
 	pullOptions := module.GetRelevantPullOptions(mod, km)
 	imageAvailable, err := r.registry.ImageExists(ctx, km.ContainerImage, pullOptions, registryAuthGetter)
 	if err != nil {
