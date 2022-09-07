@@ -140,6 +140,11 @@ type ModprobeSpec struct {
 	// The resulting commands will be: `modprobe ${RawArgs}`.
 	// +optional
 	RawArgs *ModprobeArgs `json:"rawArgs,omitempty"`
+
+	// FirmwarePath is the path of the firmware(s).
+	// The firmware(s) will be copied to the host for the kernel to find them.
+	// +optional
+	FirmwarePath string `json:"firmwarePath,omitempty"`
 }
 
 type ModuleLoaderContainerSpec struct {

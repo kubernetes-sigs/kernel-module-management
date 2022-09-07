@@ -2087,6 +2087,11 @@ spec:
                             description: DirName is the root directory for modules.
                               It adds `-d ${DirName}` to the modprobe command-line.
                             type: string
+                          firmwarePath:
+                            description: FirmwarePath is the path of the firmware(s).
+                              The firmware(s) will be copied to the host for the kernel
+                              to find them.
+                            type: string
                           moduleName:
                             description: ModuleName is the name of the Module to be
                               loaded.
