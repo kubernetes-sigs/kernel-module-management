@@ -46,18 +46,15 @@ type Registry interface {
 	GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error)
 }
 
-type registry struct{}
+type registry struct {
+}
 
 func NewRegistry() Registry {
 	return &registry{}
 }
 
 func (r *registry) ImageExists(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
-	pullConfig, err := r.getPullOptions(ctx, image, po, registryAuthGetter)
-	if err != nil {
-		return false, fmt.Errorf("failed to get pull options for image %s: %w", image, err)
-	}
-	_, err = r.getImageManifest(ctx, image, pullConfig)
+	_, _, err := r.getImageManifest(ctx, image, po, registryAuthGetter)
 	if err != nil {
 		te := &transport.Error{}
 		if errors.As(err, &te) && te.StatusCode == http.StatusNotFound {
@@ -69,11 +66,7 @@ func (r *registry) ImageExists(ctx context.Context, image string, po *kmmv1beta1
 }
 
 func (r *registry) GetLayersDigests(ctx context.Context, image string, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error) {
-	pullConfig, err := r.getPullOptions(ctx, image, nil, registryAuthGetter)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get pull options for image %s: %w", image, err)
-	}
-	manifest, err := r.getImageManifest(ctx, image, pullConfig)
+	manifest, pullConfig, err := r.getImageManifest(ctx, image, nil, registryAuthGetter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get manifest from image %s: %w", image, err)
 	}
@@ -142,13 +135,17 @@ func (r *registry) getPullOptions(ctx context.Context, image string, po *kmmv1be
 	return &RepoPullConfig{repo: repo, authOptions: options}, nil
 }
 
-func (r *registry) getImageManifest(ctx context.Context, image string, pullConfig *RepoPullConfig) ([]byte, error) {
+func (r *registry) getImageManifest(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) ([]byte, *RepoPullConfig, error) {
+	pullConfig, err := r.getPullOptions(ctx, image, po, registryAuthGetter)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get pull options for image %s: %w", image, err)
+	}
 	manifest, err := r.getManifestStreamFromImage(image, pullConfig.repo, pullConfig.authOptions)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get manifest stream from image %s: %w", image, err)
+		return nil, nil, fmt.Errorf("failed to get manifest stream from image %s: %w", image, err)
 	}
 
-	return manifest, nil
+	return manifest, pullConfig, nil
 }
 
 func (r *registry) getManifestStreamFromImage(image, repo string, options []crane.Option) ([]byte, error) {
