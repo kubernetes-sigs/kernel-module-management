@@ -77,7 +77,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(1))
 	})
 
 	It("should add the volume and volume mount for firmware if FirmwarePath is set", func() {
@@ -116,10 +116,10 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
-		Expect(ds.Spec.Template.Spec.Volumes[2]).To(Equal(vol))
-		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(3))
-		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts[2]).To(Equal(volm))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		Expect(ds.Spec.Template.Spec.Volumes[1]).To(Equal(vol))
+		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
+		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts[1]).To(Equal(volm))
 
 	})
 
@@ -130,7 +130,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			imageRepoSecretName = "image-repo-secret"
 			serviceAccountName  = "driver-service-account"
 		)
-
+		fullModulesPath := "/lib/modules/" + kernelVersion
 		mod := kmmv1beta1.Module{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: kmmv1beta1.GroupVersion.String(),
@@ -215,12 +215,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 									{
 										Name:      "node-lib-modules",
 										ReadOnly:  true,
-										MountPath: "/lib/modules",
-									},
-									{
-										Name:      "node-usr-lib-modules",
-										ReadOnly:  true,
-										MountPath: "/usr/lib/modules",
+										MountPath: fullModulesPath,
 									},
 								},
 								SecurityContext: &v1.SecurityContext{
@@ -249,16 +244,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 								Name: "node-lib-modules",
 								VolumeSource: v1.VolumeSource{
 									HostPath: &v1.HostPathVolumeSource{
-										Path: "/lib/modules",
-										Type: &directory,
-									},
-								},
-							},
-							{
-								Name: "node-usr-lib-modules",
-								VolumeSource: v1.VolumeSource{
-									HostPath: &v1.HostPathVolumeSource{
-										Path: "/usr/lib/modules",
+										Path: fullModulesPath,
 										Type: &directory,
 									},
 								},

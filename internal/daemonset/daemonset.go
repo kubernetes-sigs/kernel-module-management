@@ -21,10 +21,7 @@ import (
 const (
 	kubeletDevicePluginsVolumeName = "kubelet-device-plugins"
 	kubeletDevicePluginsPath       = "/var/lib/kubelet/device-plugins"
-	nodeLibModulesPath             = "/lib/modules"
 	nodeLibModulesVolumeName       = "node-lib-modules"
-	nodeUsrLibModulesPath          = "/usr/lib/modules"
-	nodeUsrLibModulesVolumeName    = "node-usr-lib-modules"
 	nodeVarLibFirmwarePath         = "/var/lib/firmware"
 	nodeVarLibFirmwareVolumeName   = "node-var-lib-firmware"
 	devicePluginKernelVersion      = ""
@@ -118,6 +115,8 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 	nodeSelector := CopyMapStringString(mod.Spec.Selector)
 	nodeSelector[dc.kernelLabel] = kernelVersion
 
+	nodeLibModulesPath := "/lib/modules/" + kernelVersion
+
 	hostPathDirectory := v1.HostPathDirectory
 	hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
 
@@ -154,11 +153,6 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 				ReadOnly:  true,
 				MountPath: nodeLibModulesPath,
 			},
-			{
-				Name:      nodeUsrLibModulesVolumeName,
-				ReadOnly:  true,
-				MountPath: nodeUsrLibModulesPath,
-			},
 		},
 	}
 
@@ -168,15 +162,6 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{
 					Path: nodeLibModulesPath,
-					Type: &hostPathDirectory,
-				},
-			},
-		},
-		{
-			Name: nodeUsrLibModulesVolumeName,
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
-					Path: nodeUsrLibModulesPath,
 					Type: &hostPathDirectory,
 				},
 			},
