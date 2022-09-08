@@ -1,0 +1,29 @@
+name: Test and upload to Codecov
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test-build:
+    name: Test and upload to Codecov
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions/setup-go@v3
+      with:
+        go-version: 1.18
+
+    - name: Generate code
+      run: make generate
+
+    - name: Run tests
+      run: make unit-test
+
+    - name: Upload the coverage to Codecov
+      uses: codecov/codecov-action@v3
