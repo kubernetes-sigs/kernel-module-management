@@ -258,7 +258,7 @@ var _ = Describe("GetLayersDigests", func() {
 			u := mustParseURL(server.URL)
 
 			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-			_, _, err = reg.GetLayersDigests(ctx, image, nil)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to get crane manifest from image"))
@@ -273,7 +273,7 @@ var _ = Describe("GetLayersDigests", func() {
 			u := mustParseURL(server.URL)
 
 			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-			_, _, err = reg.GetLayersDigests(ctx, image, nil)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to unmarshal crane manifest"))
@@ -299,7 +299,7 @@ var _ = Describe("GetLayersDigests", func() {
 			u := mustParseURL(server.URL)
 
 			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-			_, _, err = reg.GetLayersDigests(ctx, image, nil)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("mediaType is missing from the image"))
@@ -324,9 +324,9 @@ var _ = Describe("GetLayersDigests", func() {
 		var err error
 		image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
 		if withRegistryAuthGetter {
-			_, _, err = reg.GetLayersDigests(ctx, image, mockRegistryAuthGetter)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, mockRegistryAuthGetter)
 		} else {
-			_, _, err = reg.GetLayersDigests(ctx, image, nil)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, nil)
 		}
 		Expect(err).ToNot(HaveOccurred())
 	},
