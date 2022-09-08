@@ -53,9 +53,9 @@ func (mr *MockRegistryMockRecorder) GetLayerByDigest(digest, pullConfig interfac
 }
 
 // GetLayersDigests mocks base method.
-func (m *MockRegistry) GetLayersDigests(ctx context.Context, image string, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error) {
+func (m *MockRegistry) GetLayersDigests(ctx context.Context, image string, po *v1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLayersDigests", ctx, image, registryAuthGetter)
+	ret := m.ctrl.Call(m, "GetLayersDigests", ctx, image, po, registryAuthGetter)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(*RepoPullConfig)
 	ret2, _ := ret[2].(error)
@@ -63,9 +63,9 @@ func (m *MockRegistry) GetLayersDigests(ctx context.Context, image string, regis
 }
 
 // GetLayersDigests indicates an expected call of GetLayersDigests.
-func (mr *MockRegistryMockRecorder) GetLayersDigests(ctx, image, registryAuthGetter interface{}) *gomock.Call {
+func (mr *MockRegistryMockRecorder) GetLayersDigests(ctx, image, po, registryAuthGetter interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLayersDigests", reflect.TypeOf((*MockRegistry)(nil).GetLayersDigests), ctx, image, registryAuthGetter)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLayersDigests", reflect.TypeOf((*MockRegistry)(nil).GetLayersDigests), ctx, image, po, registryAuthGetter)
 }
 
 // ImageExists mocks base method.

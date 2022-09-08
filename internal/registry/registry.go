@@ -42,7 +42,7 @@ type RepoPullConfig struct {
 type Registry interface {
 	ImageExists(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error)
 	VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVersion, moduleFileName string) bool
-	GetLayersDigests(ctx context.Context, image string, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error)
+	GetLayersDigests(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error)
 	GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error)
 }
 
@@ -65,8 +65,8 @@ func (r *registry) ImageExists(ctx context.Context, image string, po *kmmv1beta1
 	return true, nil
 }
 
-func (r *registry) GetLayersDigests(ctx context.Context, image string, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error) {
-	manifest, pullConfig, err := r.getImageManifest(ctx, image, nil, registryAuthGetter)
+func (r *registry) GetLayersDigests(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error) {
+	manifest, pullConfig, err := r.getImageManifest(ctx, image, po, registryAuthGetter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get manifest from image %s: %w", image, err)
 	}
