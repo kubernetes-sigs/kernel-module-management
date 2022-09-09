@@ -39,8 +39,8 @@ Add one `Describe` section per method or function that you are unit testing:
 - `Describe` names for methods should be `MyType_MyMethod`;
 - `Describe` names for functions should be `MyFunction`.
 
-Within a `Describe`, use one `If` section per test case.
-If several `If` sections are similar, consider refactoring them in a `DescribeTable` construct with varying inputs.
+Within a `Describe`, use one `It` section per test case.
+If several `It` sections are similar, consider refactoring them in a `DescribeTable` construct with varying inputs.
 
 ### Kubernetes resources
 
