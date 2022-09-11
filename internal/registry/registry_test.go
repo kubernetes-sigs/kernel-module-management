@@ -339,7 +339,7 @@ var _ = Describe("VerifyModuleExists", func() {
 	reg := NewRegistry()
 
 	It("file is not present", func() {
-		const fileName = "/etc/fileName"
+		const fileName = "etc/fileName"
 		layer, err := prepareLayer(fileName, []byte("some data"))
 		Expect(err).ToNot(HaveOccurred())
 
@@ -348,7 +348,7 @@ var _ = Describe("VerifyModuleExists", func() {
 	})
 
 	It("file is present", func() {
-		const fileName = "/opt/lib/modules/somekernel/module_name.ko"
+		const fileName = "opt/lib/modules/somekernel/module_name.ko"
 		layer, err := prepareLayer(fileName, []byte("some data"))
 		Expect(err).ToNot(HaveOccurred())
 

@@ -72,6 +72,8 @@ spec:
                       enum:
                       - Image
                       - Build
+                      - Requeued
+                      - Done
                       type: string
                     verificationStatus:
                       description: 'Status of Module CR verification: true (verified),
