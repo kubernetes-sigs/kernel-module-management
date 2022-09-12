@@ -358,34 +358,45 @@ func MakeLoadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 		"-c",
 	}
 
-	loadCommand := "modprobe"
-
-	if ra := spec.RawArgs; ra != nil && len(ra.Load) > 0 {
-		loadCommand = fmt.Sprintf("%s %s", loadCommand, strings.Join(ra.Load, " "))
-		return append(loadCommandShell, loadCommand)
-	}
+	var loadCommand strings.Builder
 
 	if fw := spec.FirmwarePath; fw != "" {
-		loadCommand = fmt.Sprintf("cp -r %s %s/%s && %s", fw, nodeVarLibFirmwarePath, modName, loadCommand)
+		fmt.Fprintf(&loadCommand, "cp -r %s %s/%s && ", fw, nodeVarLibFirmwarePath, modName)
 	}
 
-	if a := spec.Args; a != nil && len(a.Load) > 0 {
-		loadCommand = fmt.Sprintf("%s %s", loadCommand, strings.Join(a.Load, " "))
+	loadCommand.WriteString("modprobe")
+
+	if rawArgs := spec.RawArgs; rawArgs != nil && len(rawArgs.Load) > 0 {
+		for _, arg := range rawArgs.Load {
+			loadCommand.WriteRune(' ')
+			loadCommand.WriteString(arg)
+		}
+		return append(loadCommandShell, loadCommand.String())
+	}
+
+	if args := spec.Args; args != nil && len(args.Load) > 0 {
+		for _, arg := range args.Load {
+			loadCommand.WriteRune(' ')
+			loadCommand.WriteString(arg)
+		}
 	} else {
-		loadCommand = fmt.Sprintf("%s -v", loadCommand)
+		loadCommand.WriteString(" -v")
 	}
 
 	if dirName := spec.DirName; dirName != "" {
-		loadCommand = fmt.Sprintf("%s -d %s", loadCommand, dirName)
+		loadCommand.WriteString(" -d " + dirName)
 	}
 
-	loadCommand = fmt.Sprintf("%s %s", loadCommand, spec.ModuleName)
+	loadCommand.WriteString(" " + spec.ModuleName)
 
-	if p := spec.Parameters; len(p) > 0 {
-		loadCommand = fmt.Sprintf("%s %s", loadCommand, strings.Join(spec.Parameters, " "))
+	if params := spec.Parameters; len(params) > 0 {
+		for _, param := range params {
+			loadCommand.WriteRune(' ')
+			loadCommand.WriteString(param)
+		}
 	}
 
-	return append(loadCommandShell, loadCommand)
+	return append(loadCommandShell, loadCommand.String())
 }
 
 func MakeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
@@ -394,28 +405,39 @@ func MakeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 		"-c",
 	}
 
-	unloadCommand := "modprobe"
+	var unloadCommand strings.Builder
+	unloadCommand.WriteString("modprobe")
 
-	if ra := spec.RawArgs; ra != nil && len(ra.Unload) > 0 {
-		unloadCommand = fmt.Sprintf("%s %s", unloadCommand, strings.Join(ra.Unload, " "))
-		return append(unloadCommandShell, unloadCommand)
+	fwUnloadCommand := ""
+	if fw := spec.FirmwarePath; fw != "" {
+		fwUnloadCommand = fmt.Sprintf(" && rm -rf %s/%s", nodeVarLibFirmwarePath, modName)
 	}
 
-	if a := spec.Args; a != nil && len(a.Unload) > 0 {
-		unloadCommand = fmt.Sprintf("%s %s", unloadCommand, strings.Join(a.Unload, " "))
+	if rawArgs := spec.RawArgs; rawArgs != nil && len(rawArgs.Unload) > 0 {
+		for _, arg := range rawArgs.Unload {
+			unloadCommand.WriteRune(' ')
+			unloadCommand.WriteString(arg)
+			unloadCommand.WriteString(fwUnloadCommand)
+		}
+
+		return append(unloadCommandShell, unloadCommand.String())
+	}
+
+	if args := spec.Args; args != nil && len(args.Unload) > 0 {
+		for _, arg := range args.Unload {
+			unloadCommand.WriteRune(' ')
+			unloadCommand.WriteString(arg)
+		}
 	} else {
-		unloadCommand = fmt.Sprintf("%s -rv", unloadCommand)
+		unloadCommand.WriteString(" -rv")
 	}
 
 	if dirName := spec.DirName; dirName != "" {
-		unloadCommand = fmt.Sprintf("%s -d %s", unloadCommand, dirName)
+		unloadCommand.WriteString(" -d " + dirName)
 	}
 
-	unloadCommand = fmt.Sprintf("%s %s", unloadCommand, spec.ModuleName)
+	unloadCommand.WriteString(" " + spec.ModuleName)
+	unloadCommand.WriteString(fwUnloadCommand)
 
-	if fw := spec.FirmwarePath; fw != "" {
-		unloadCommand = fmt.Sprintf("%s && rm -rf %s/%s", unloadCommand, nodeVarLibFirmwarePath, modName)
-	}
-
-	return append(unloadCommandShell, unloadCommand)
+	return append(unloadCommandShell, unloadCommand.String())
 }
