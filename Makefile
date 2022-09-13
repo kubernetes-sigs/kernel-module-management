@@ -28,7 +28,7 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# sigs.k8s.io/oot-operator-bundle:$VERSION and sigs.k8s.io/oot-operator-catalog:$VERSION.
+# gcr.io/k8s-staging-kmm/kernel-module-management-bundle:$VERSION and gcr.io/k8s-staging-kmm/kernel-module-management-catalog:$VERSION.
 IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
