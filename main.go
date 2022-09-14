@@ -128,7 +128,7 @@ func main() {
 	kernelAPI := module.NewKernelMapper()
 	moduleStatusUpdaterAPI := statusupdater.NewModuleStatusUpdater(client, daemonAPI, metricsAPI)
 	preflightStatusUpdaterAPI := statusupdater.NewPreflightStatusUpdater(client)
-	preflightAPI := preflight.NewPreflightAPI(client, registryAPI, kernelAPI)
+	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
 
 	mc := controllers.NewModuleReconciler(client, buildAPI, daemonAPI, kernelAPI, metricsAPI, filter, registryAPI, moduleStatusUpdaterAPI)
 

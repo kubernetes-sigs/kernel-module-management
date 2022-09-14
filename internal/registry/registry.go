@@ -84,7 +84,8 @@ func (r *registry) GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (
 }
 
 func (r *registry) VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVersion, moduleFileName string) bool {
-	fullPath := filepath.Join(pathPrefix, modulesLocationPath, kernelVersion, moduleFileName)
+	// in layers headers, there is no root prefix
+	fullPath := filepath.Join(strings.TrimPrefix(pathPrefix, "/"), modulesLocationPath, kernelVersion, moduleFileName)
 	_, err := r.getHeaderStreamFromLayer(layer, fullPath)
 	return err == nil
 }

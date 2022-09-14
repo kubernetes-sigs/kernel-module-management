@@ -120,7 +120,7 @@ func (r *PreflightValidationReconciler) runPreflightValidation(ctx context.Conte
 	for _, module := range modulesToCheck {
 		log.Info("start module preflight validation", "name", module.Name)
 
-		verified, message := r.preflight.PreflightUpgradeCheck(ctx, &module, pv.Spec.KernelVersion)
+		verified, message := r.preflight.PreflightUpgradeCheck(ctx, pv, &module, pv.Spec.KernelVersion)
 
 		log.Info("module preflight validation result", "name", module.Name, "verified", verified)
 
@@ -160,12 +160,19 @@ func (r *PreflightValidationReconciler) getModulesToCheck(ctx context.Context, p
 func (r *PreflightValidationReconciler) updatePreflightStatus(ctx context.Context, pv *kmmv1beta1.PreflightValidation, moduleName, message string, verified bool) {
 	log := ctrl.LoggerFrom(ctx)
 	verificationStatus := kmmv1beta1.VerificationFalse
+	verificationStage := kmmv1beta1.VerificationStageRequeued
 	if verified {
 		verificationStatus = kmmv1beta1.VerificationTrue
+		verificationStage = kmmv1beta1.VerificationStageDone
 	}
 	err := r.statusUpdater.PreflightSetVerificationStatus(ctx, pv, moduleName, verificationStatus, message)
 	if err != nil {
 		log.Info(utils.WarnString("failed to update the status of Module CR in preflight"), "module", moduleName, "error", err)
+	}
+
+	err = r.statusUpdater.PreflightSetVerificationStage(ctx, pv, moduleName, verificationStage)
+	if err != nil {
+		log.Info(utils.WarnString("failed to update the stage of Module CR in preflight"), "module", moduleName, "error", err)
 	}
 }
 

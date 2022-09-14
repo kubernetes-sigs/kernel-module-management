@@ -24,7 +24,7 @@ const (
 	preflightName = "test-preflight"
 )
 
-var _ = Describe("Reconcile", func() {
+var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 	var (
 		ctrl          *gomock.Controller
 		clnt          *client.MockClient
@@ -102,8 +102,9 @@ var _ = Describe("Reconcile", func() {
 				},
 			),
 			mockSU.EXPECT().PreflightPresetStatuses(ctx, &pv, sets.NewString(mod.Name), []string{}).Return(nil),
-			mockPreflight.EXPECT().PreflightUpgradeCheck(ctx, &mod, "some kernel version").Return(true, "some message"),
+			mockPreflight.EXPECT().PreflightUpgradeCheck(ctx, &pv, &mod, "some kernel version").Return(true, "some message"),
 			mockSU.EXPECT().PreflightSetVerificationStatus(ctx, &pv, mod.Name, kmmv1beta1.VerificationTrue, "some message").Return(nil),
+			mockSU.EXPECT().PreflightSetVerificationStage(ctx, &pv, mod.Name, kmmv1beta1.VerificationStageDone).Return(nil),
 			clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
 				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
 					m.Status.CRStatuses = map[string]*kmmv1beta1.CRStatus{mod.Name: &kmmv1beta1.CRStatus{VerificationStatus: "True"}}
@@ -152,8 +153,9 @@ var _ = Describe("Reconcile", func() {
 				},
 			),
 			mockSU.EXPECT().PreflightPresetStatuses(ctx, &pv, sets.NewString(mod.Name), []string{}).Return(nil),
-			mockPreflight.EXPECT().PreflightUpgradeCheck(ctx, &mod, "some kernel version").Return(true, "some message"),
+			mockPreflight.EXPECT().PreflightUpgradeCheck(ctx, &pv, &mod, "some kernel version").Return(true, "some message"),
 			mockSU.EXPECT().PreflightSetVerificationStatus(ctx, &pv, mod.Name, kmmv1beta1.VerificationTrue, "some message").Return(nil),
+			mockSU.EXPECT().PreflightSetVerificationStage(ctx, &pv, mod.Name, kmmv1beta1.VerificationStageDone).Return(nil),
 			clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
 				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
 					m.Status.CRStatuses = map[string]*kmmv1beta1.CRStatus{mod.Name: &kmmv1beta1.CRStatus{VerificationStatus: "False"}}
@@ -170,7 +172,7 @@ var _ = Describe("Reconcile", func() {
 
 })
 
-var _ = Describe("getModulesCheck", func() {
+var _ = Describe("PreflightValidationReconciler_getModulesCheck", func() {
 	var (
 		ctrl          *gomock.Controller
 		clnt          *client.MockClient
@@ -326,5 +328,122 @@ var _ = Describe("getModulesCheck", func() {
 
 		Expect(err).To(BeNil())
 		Expect(modulesToCheck).To(Equal([]kmmv1beta1.Module{mod1, mod2}))
+	})
+})
+
+var _ = Describe("PreflightValidationReconciler_updatePreflightStatus", func() {
+	var (
+		ctrl          *gomock.Controller
+		clnt          *client.MockClient
+		mockSU        *statusupdater.MockPreflightStatusUpdater
+		mockPreflight *preflight.MockPreflightAPI
+		ctx           context.Context
+		pr            *PreflightValidationReconciler
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mockSU = statusupdater.NewMockPreflightStatusUpdater(ctrl)
+		mockPreflight = preflight.NewMockPreflightAPI(ctrl)
+		ctx = context.Background()
+		pr = NewPreflightValidationReconciler(clnt, nil, mockSU, mockPreflight)
+	})
+
+	It("status verified", func() {
+		pv := kmmv1beta1.PreflightValidation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      preflightName,
+				Namespace: namespace,
+			},
+		}
+
+		gomock.InOrder(
+			mockSU.EXPECT().PreflightSetVerificationStatus(ctx, &pv, "moduleName", kmmv1beta1.VerificationTrue, "some message").Return(nil),
+			mockSU.EXPECT().PreflightSetVerificationStage(ctx, &pv, "moduleName", kmmv1beta1.VerificationStageDone).Return(nil),
+		)
+		pr.updatePreflightStatus(context.Background(), &pv, "moduleName", "some message", true)
+	})
+
+	It("status not verified", func() {
+		pv := kmmv1beta1.PreflightValidation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      preflightName,
+				Namespace: namespace,
+			},
+		}
+
+		gomock.InOrder(
+			mockSU.EXPECT().PreflightSetVerificationStatus(ctx, &pv, "moduleName", kmmv1beta1.VerificationFalse, "some message").Return(nil),
+			mockSU.EXPECT().PreflightSetVerificationStage(ctx, &pv, "moduleName", kmmv1beta1.VerificationStageRequeued).Return(nil),
+		)
+		pr.updatePreflightStatus(context.Background(), &pv, "moduleName", "some message", false)
+	})
+})
+
+var _ = Describe("PreflightValidationReconciler_checkPreflightCompletion", func() {
+	var (
+		ctrl          *gomock.Controller
+		clnt          *client.MockClient
+		mockSU        *statusupdater.MockPreflightStatusUpdater
+		mockPreflight *preflight.MockPreflightAPI
+		pr            *PreflightValidationReconciler
+		nsn           types.NamespacedName
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mockSU = statusupdater.NewMockPreflightStatusUpdater(ctrl)
+		mockPreflight = preflight.NewMockPreflightAPI(ctrl)
+		nsn = types.NamespacedName{
+			Name:      preflightName,
+			Namespace: namespace,
+		}
+		pr = NewPreflightValidationReconciler(clnt, nil, mockSU, mockPreflight)
+	})
+
+	It("Get preflight failed", func() {
+		clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).Return(fmt.Errorf("some error"))
+
+		res, err := pr.checkPreflightCompletion(context.Background(), nsn.Name, nsn.Namespace)
+		Expect(err).To(HaveOccurred())
+		Expect(res).To(BeFalse())
+	})
+
+	It("All modules have been verified", func() {
+		crStatuses := map[string]*kmmv1beta1.CRStatus{
+			"module1": &kmmv1beta1.CRStatus{VerificationStatus: "True"},
+			"module2": &kmmv1beta1.CRStatus{VerificationStatus: "True"},
+		}
+
+		clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
+			func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
+				m.Status.CRStatuses = crStatuses
+				return nil
+			},
+		)
+		res, err := pr.checkPreflightCompletion(context.Background(), nsn.Name, nsn.Namespace)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(BeTrue())
+
+	})
+
+	It("Some modules have not been verified", func() {
+		crStatuses := map[string]*kmmv1beta1.CRStatus{
+			"module1": &kmmv1beta1.CRStatus{VerificationStatus: "True"},
+			"module2": &kmmv1beta1.CRStatus{VerificationStatus: "False"},
+		}
+
+		clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
+			func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
+				m.Status.CRStatuses = crStatuses
+				return nil
+			},
+		)
+		res, err := pr.checkPreflightCompletion(context.Background(), nsn.Name, nsn.Namespace)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(BeFalse())
+
 	})
 })
