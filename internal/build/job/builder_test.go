@@ -15,6 +15,96 @@ import (
 	"k8s.io/utils/pointer"
 )
 
+var _ = Describe("shouldRun", func() {
+	var (
+		ctrl *gomock.Controller
+		m    Maker
+		mh   *build.MockHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		mh = build.NewMockHelper(ctrl)
+		m = NewBuilder(mh, scheme)
+	})
+
+	AfterEach(func() {
+		ctrl.Finish()
+	})
+
+	DescribeTable("should return true if Dockerfile defined", func(mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping, output bool) {
+		shouldrun := m.ShouldRun(mod, km)
+
+		Expect(shouldrun).To(Equal(output))
+	},
+
+		Entry(
+			"both fields set correctly",
+			&kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+						Container: kmmv1beta1.ModuleLoaderContainerSpec{
+							Build: &kmmv1beta1.Build{
+								Dockerfile: "",
+							},
+						},
+					},
+				},
+			},
+			&kmmv1beta1.KernelMapping{
+				Build: &kmmv1beta1.Build{
+					Dockerfile: "dockerfile",
+				},
+			},
+			true,
+		),
+		Entry(
+			"mapping set correctly",
+			&kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+						Container: kmmv1beta1.ModuleLoaderContainerSpec{},
+					},
+				},
+			},
+			&kmmv1beta1.KernelMapping{
+				Build: &kmmv1beta1.Build{
+					Dockerfile: "dockerfile",
+				},
+			},
+			true,
+		),
+		Entry(
+			"Module set correctly",
+			&kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+						Container: kmmv1beta1.ModuleLoaderContainerSpec{
+							Build: &kmmv1beta1.Build{
+								Dockerfile: "dockerfile",
+							},
+						},
+					},
+				},
+			},
+			&kmmv1beta1.KernelMapping{},
+			true,
+		),
+		Entry(
+			"neither set correctly",
+			&kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+						Container: kmmv1beta1.ModuleLoaderContainerSpec{},
+					},
+				},
+			},
+			&kmmv1beta1.KernelMapping{},
+			false,
+		),
+	)
+})
+
 var _ = Describe("MakeJob", func() {
 
 	const (
@@ -34,7 +124,7 @@ var _ = Describe("MakeJob", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mh = build.NewMockHelper(ctrl)
-		m = NewMaker(mh, scheme)
+		m = NewBuilder(mh, scheme)
 	})
 
 	AfterEach(func() {
@@ -70,6 +160,7 @@ var _ = Describe("MakeJob", func() {
 				Labels: map[string]string{
 					constants.ModuleNameLabel:    moduleName,
 					constants.TargetKernelTarget: kernelVersion,
+					constants.BuildStage:         "build",
 				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
@@ -193,7 +284,7 @@ var _ = Describe("MakeJob", func() {
 		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override).Return(append(slices.Clone(buildArgs), override))
 
-		actual, err := m.MakeJob(*mod, km.Build, kernelVersion, km.ContainerImage, true)
+		actual, err := m.MakeJob(*mod, km.Build, kernelVersion, "", km.ContainerImage, true)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -236,7 +327,7 @@ var _ = Describe("MakeJob", func() {
 
 		mh.EXPECT().ApplyBuildArgOverrides(nil, kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion})
 
-		actual, err := m.MakeJob(mod, &b, kernelVersion, km.ContainerImage, pushFlag)
+		actual, err := m.MakeJob(mod, &b, kernelVersion, "", km.ContainerImage, pushFlag)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
 		if pushFlag {
@@ -288,7 +379,7 @@ var _ = Describe("MakeJob", func() {
 			override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override)
 
-			actual, err := m.MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, false)
+			actual, err := m.MakeJob(mod, km.Build, kernelVersion, "", km.ContainerImage, false)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(actual.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/kaniko-project/executor:" + customTag))
 		})

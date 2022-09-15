@@ -35,17 +35,45 @@ func (m *MockMaker) EXPECT() *MockMakerMockRecorder {
 	return m.recorder
 }
 
-// MakeJob mocks base method.
-func (m *MockMaker) MakeJob(mod v1beta1.Module, buildConfig *v1beta1.Build, targetKernel, containerImage string, pushImage bool) (*v1.Job, error) {
+// GetName mocks base method.
+func (m *MockMaker) GetName() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MakeJob", mod, buildConfig, targetKernel, containerImage, pushImage)
+	ret := m.ctrl.Call(m, "GetName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetName indicates an expected call of GetName.
+func (mr *MockMakerMockRecorder) GetName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockMaker)(nil).GetName))
+}
+
+// MakeJob mocks base method.
+func (m *MockMaker) MakeJob(mod v1beta1.Module, buildConfig *v1beta1.Build, targetKernel, previousImage, containerImage string, pushImage bool) (*v1.Job, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MakeJob", mod, buildConfig, targetKernel, previousImage, containerImage, pushImage)
 	ret0, _ := ret[0].(*v1.Job)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // MakeJob indicates an expected call of MakeJob.
-func (mr *MockMakerMockRecorder) MakeJob(mod, buildConfig, targetKernel, containerImage, pushImage interface{}) *gomock.Call {
+func (mr *MockMakerMockRecorder) MakeJob(mod, buildConfig, targetKernel, previousImage, containerImage, pushImage interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeJob", reflect.TypeOf((*MockMaker)(nil).MakeJob), mod, buildConfig, targetKernel, containerImage, pushImage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeJob", reflect.TypeOf((*MockMaker)(nil).MakeJob), mod, buildConfig, targetKernel, previousImage, containerImage, pushImage)
+}
+
+// ShouldRun mocks base method.
+func (m *MockMaker) ShouldRun(mod *v1beta1.Module, km *v1beta1.KernelMapping) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ShouldRun", mod, km)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ShouldRun indicates an expected call of ShouldRun.
+func (mr *MockMakerMockRecorder) ShouldRun(mod, km interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldRun", reflect.TypeOf((*MockMaker)(nil).ShouldRun), mod, km)
 }

@@ -20,16 +20,34 @@ var _ = Describe("Labels", func() {
 		const (
 			moduleName   = "module-name"
 			targetKernel = "1.2.3"
+			buildStage   = "test"
 		)
 
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName},
 		}
 
-		labels := labels(mod, targetKernel)
+		labels := labels(mod, targetKernel, buildStage)
 
 		Expect(labels).To(HaveKeyWithValue(constants.ModuleNameLabel, moduleName))
 		Expect(labels).To(HaveKeyWithValue(constants.TargetKernelTarget, targetKernel))
+		Expect(labels).To(HaveKeyWithValue(constants.BuildStage, buildStage))
+	})
+})
+
+var _ = Describe("addTag", func() {
+	It("should work as expected", func() {
+		const (
+			shortimagename = "mycontainer"
+			longimagename  = "mycontainer:tagged"
+			tag            = "tag"
+		)
+
+		fullname := addTag(shortimagename, tag)
+		Expect(fullname).To(Equal(shortimagename + ":" + tag))
+
+		fullname = addTag(longimagename, tag)
+		Expect(fullname).To(Equal(longimagename + tag))
 	})
 })
 
@@ -44,8 +62,9 @@ var _ = Describe("JobManager", func() {
 		)
 
 		const (
-			imageName = "image-name"
-			namespace = "some-namespace"
+			imageName  = "image-name"
+			namespace  = "some-namespace"
+			buildStage = "test"
 		)
 
 		BeforeEach(func() {
@@ -76,7 +95,7 @@ var _ = Describe("JobManager", func() {
 			func(s batchv1.JobStatus, r build.Result, expectsErr bool) {
 				j := batchv1.Job{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels:    labels(mod, kernelVersion),
+						Labels:    labels(mod, kernelVersion, buildStage),
 						Namespace: namespace,
 					},
 					Status: s,
@@ -85,6 +104,8 @@ var _ = Describe("JobManager", func() {
 
 				gomock.InOrder(
 					helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
+					maker.EXPECT().ShouldRun(&mod, &km).Return(true),
+					maker.EXPECT().GetName().Return("build"),
 					clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 						func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
 							list.Items = []batchv1.Job{j}
@@ -93,7 +114,7 @@ var _ = Describe("JobManager", func() {
 					),
 				)
 
-				mgr := NewBuildManager(clnt, maker, helper)
+				mgr := NewBuildManager(clnt, helper, maker)
 
 				res, err := mgr.Sync(ctx, mod, km, kernelVersion, true)
 
@@ -114,11 +135,13 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(nil, errors.New("random error")),
+				maker.EXPECT().ShouldRun(&mod, &km).Return(true),
+				maker.EXPECT().GetName().Return("build"),
+				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, "", km.ContainerImage, true).Return(nil, errors.New("random error")),
 			)
 			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any())
 
-			mgr := NewBuildManager(clnt, maker, helper)
+			mgr := NewBuildManager(clnt, helper, maker)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion, true),
@@ -143,7 +166,9 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
+				maker.EXPECT().ShouldRun(&mod, &km).Return(true),
+				maker.EXPECT().GetName().Return("build"),
+				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, "", km.ContainerImage, true).Return(&j, nil),
 			)
 
 			gomock.InOrder(
@@ -151,7 +176,7 @@ var _ = Describe("JobManager", func() {
 				clnt.EXPECT().Create(ctx, &j),
 			)
 
-			mgr := NewBuildManager(clnt, maker, helper)
+			mgr := NewBuildManager(clnt, helper, maker)
 
 			Expect(
 				mgr.Sync(ctx, mod, km, kernelVersion, true),

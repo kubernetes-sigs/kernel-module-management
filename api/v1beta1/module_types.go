@@ -55,11 +55,28 @@ type KanikoParams struct {
 	Tag string `json:"tag,omitempty"`
 }
 
+type Sign struct {
+	// +optional
+	// Image to sign, ignored if a Dockerfile is present
+	UnsignedImage string `json:"unsignedImage,omitempty"`
+
+	// a secret containing the private key used to sign kernel modules for secureboot
+	KeySecret *v1.LocalObjectReference `json:"keySecret"`
+
+	// a secret containing the public key used to sign kernel modules for secureboot
+	CertSecret *v1.LocalObjectReference `json:"certSecret"`
+
+	// +optional
+	// paths inside the image for the kernel modules to sign (if ommited all kmods are signed)
+	FileList []string `json:"filesToSign,omitempty"`
+}
+
 type Build struct {
 	// +optional
 	// BuildArgs is an array of build variables that are provided to the image building backend.
 	BuildArgs []BuildArg `json:"buildArgs"`
 
+	// +optional
 	Dockerfile string `json:"dockerfile"`
 
 	// +optional
@@ -79,6 +96,10 @@ type Build struct {
 	// +optional
 	// KanikoParams is used to customize the building process of the image.
 	KanikoParams *KanikoParams `json:"kanikoParams,omitempty"`
+
+	// +optional
+	// Sign enables in-cluster signing for this mapping
+	Sign *Sign `json:"sign"`
 }
 
 // KernelMapping pairs kernel versions with a DriverContainer image.

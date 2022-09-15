@@ -122,8 +122,11 @@ func main() {
 	metricsAPI.Register()
 	registryAPI := registry.NewRegistry()
 	helperAPI := build.NewHelper()
-	makerAPI := job.NewMaker(helperAPI, scheme)
-	buildAPI := job.NewBuildManager(client, makerAPI, helperAPI)
+
+	makerAPI := job.NewBuilder(helperAPI, scheme)
+	signerAPI := job.NewSigner(scheme)
+	buildAPI := job.NewBuildManager(client, helperAPI, makerAPI, signerAPI)
+
 	daemonAPI := daemonset.NewCreator(client, kernelLabel, scheme)
 	kernelAPI := module.NewKernelMapper()
 	moduleStatusUpdaterAPI := statusupdater.NewModuleStatusUpdater(client, daemonAPI, metricsAPI)
