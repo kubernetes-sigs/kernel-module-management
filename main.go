@@ -17,11 +17,14 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build/job"
@@ -159,7 +162,7 @@ func main() {
 	}
 
 	setupLogger.Info("starting manager")
-	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = mgr.Start(setupSignalHandler(nodeKernelReconciler)); err != nil {
 		setupLogger.Error(err, "problem running manager")
 		os.Exit(1)
 	}
@@ -180,4 +183,21 @@ func gitCommit() (string, error) {
 	}
 
 	return "", fmt.Errorf("%s not found in build info settings", vcsRevisionKey)
+}
+
+func setupSignalHandler(ndr *controllers.NodeKernelReconciler) context.Context {
+	shutdownSignals := []os.Signal{os.Interrupt, syscall.SIGTERM}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, shutdownSignals...)
+	go func() {
+		<-c
+		ndr.ClearNodes(ctx)
+		cancel()
+		<-c
+		os.Exit(1) // second signal. Exit directly.
+	}()
+
+	return ctx
 }

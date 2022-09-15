@@ -44,19 +44,40 @@ func (r *NodeKernelReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		"old kernel", node.Labels[r.labelName],
 		"new kernel", kernelVersion)
 
-	p := client.MergeFrom(node.DeepCopy())
-
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
-
-	node.Labels[r.labelName] = kernelVersion
-
-	if err := r.client.Patch(ctx, &node, p); err != nil {
+	if err := r.addLabel(ctx, &node, r.labelName, kernelVersion); err != nil {
 		return ctrl.Result{}, fmt.Errorf("could not patch the node: %v", err)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *NodeKernelReconciler) ClearNodes(ctx context.Context) {
+	nodes := v1.NodeList{}
+	err := r.client.List(ctx, &nodes)
+	if err != nil {
+		return
+	}
+	for _, node := range nodes.Items {
+		_ = r.deleteLabel(ctx, &node, r.labelName)
+	}
+}
+
+func (r *NodeKernelReconciler) addLabel(ctx context.Context, node *v1.Node, labelName, labelValue string) error {
+	p := client.MergeFrom(node.DeepCopy())
+	if node.Labels == nil {
+		node.Labels = make(map[string]string)
+	}
+	node.Labels[labelName] = labelValue
+
+	return r.client.Patch(ctx, node, p)
+}
+
+func (r *NodeKernelReconciler) deleteLabel(ctx context.Context, node *v1.Node, labelName string) error {
+	p := client.MergeFrom(node.DeepCopy())
+
+	delete(node.Labels, labelName)
+
+	return r.client.Patch(ctx, node, p)
 }
 
 // SetupWithManager sets up the controller with the Manager.
