@@ -1,0 +1,47 @@
+apiVersion: kmm.sigs.k8s.io/v1beta1
+kind: Module
+metadata:
+  name: kmm-ci-a
+spec:
+  driverContainer:
+    container:
+      modprobe:
+        moduleName: kmm-ci-a 
+
+      kernelMappings:
+        - literal: 5.15.0-43-generic
+          containerImage: myimage.registry/kmmo-lab:1.0 
+          build:
+            dockerfile: |
+              FROM ubuntu as builder
+              ARG KERNEL_VERSION=''
+              RUN apt-get update && apt-get install -y bc \
+                  bison \
+                  flex \
+                  libelf-dev \
+                  gnupg \
+                  wget \
+                  git \
+                  make \
+                  bc \
+                  gcc \
+                  linux-headers-${KERNEL_VERSION}
+
+              WORKDIR /usr/src
+              RUN git clone https://github.com/kubernetes-sigs/kernel-module-management.git
+
+
+              WORKDIR /usr/src/kernel-module-management/ci/kmm-kmod
+              RUN make 
+
+              ARG KERNEL_VERSION 
+              FROM ubuntu 
+              RUN apt-get update && apt-get install -y kmod
+              COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_a.ko /opt/lib/modules/${KERNEL_VERSION}/
+              COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_b.ko /opt/lib/modules/${KERNEL_VERSION}/
+              RUN depmod -b /opt
+
+    imageRepoSecret: 
+      name: my-repo-secret   
+  selector:  
+    kubernetes.io/hostname: worker2
