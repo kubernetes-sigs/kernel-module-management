@@ -102,7 +102,7 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 				},
 			),
 			mockSU.EXPECT().PreflightPresetStatuses(ctx, &pv, sets.NewString(mod.Name), []string{}).Return(nil),
-			mockPreflight.EXPECT().PreflightUpgradeCheck(ctx, &pv, &mod, "some kernel version").Return(true, "some message"),
+			mockPreflight.EXPECT().PreflightUpgradeCheck(ctx, &pv, &mod).Return(true, "some message"),
 			mockSU.EXPECT().PreflightSetVerificationStatus(ctx, &pv, mod.Name, kmmv1beta1.VerificationTrue, "some message").Return(nil),
 			mockSU.EXPECT().PreflightSetVerificationStage(ctx, &pv, mod.Name, kmmv1beta1.VerificationStageDone).Return(nil),
 			clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
@@ -153,7 +153,7 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 				},
 			),
 			mockSU.EXPECT().PreflightPresetStatuses(ctx, &pv, sets.NewString(mod.Name), []string{}).Return(nil),
-			mockPreflight.EXPECT().PreflightUpgradeCheck(ctx, &pv, &mod, "some kernel version").Return(true, "some message"),
+			mockPreflight.EXPECT().PreflightUpgradeCheck(ctx, &pv, &mod).Return(true, "some message"),
 			mockSU.EXPECT().PreflightSetVerificationStatus(ctx, &pv, mod.Name, kmmv1beta1.VerificationTrue, "some message").Return(nil),
 			mockSU.EXPECT().PreflightSetVerificationStage(ctx, &pv, mod.Name, kmmv1beta1.VerificationStageDone).Return(nil),
 			clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(

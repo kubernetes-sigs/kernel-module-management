@@ -3,7 +3,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     api-approved.kubernetes.io: unapproved, testing-only
-    controller-gen.kubebuilder.io/version: v0.8.0
+    controller-gen.kubebuilder.io/version: v0.9.2
   creationTimestamp: null
   name: preflightvalidations.kmm.sigs.k8s.io
 spec:
@@ -44,6 +44,10 @@ spec:
                 description: KernelImage describes the kernel image that all Modules
                   need to be checked against.
                 type: string
+              pushBuiltImage:
+                description: Boolean flag that determines whether images build during
+                  preflight must also be pushed to a defined repository
+                type: boolean
             required:
             - kernelVersion
             type: object
@@ -97,9 +101,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
