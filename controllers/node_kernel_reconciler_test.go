@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/golang/mock/gomock"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	clienttest "github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -17,11 +17,11 @@ import (
 var _ = Describe("NodeKernelReconciler_Reconcile", func() {
 	var (
 		gCtrl *gomock.Controller
-		clnt  *client.MockClient
+		clnt  *clienttest.MockClient
 	)
 	BeforeEach(func() {
 		gCtrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(gCtrl)
+		clnt = clienttest.NewMockClient(gCtrl)
 	})
 	const (
 		kernelVersion = "1.2.3"
@@ -42,66 +42,44 @@ var _ = Describe("NodeKernelReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should set the label if it does not exist", func() {
-		node := v1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: nodeName},
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-			},
-		}
-
-		ctx := context.Background()
-		gomock.InOrder(
-			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ interface{}, _ interface{}, n *v1.Node) error {
-					n.ObjectMeta = node.ObjectMeta
-					n.Status = node.Status
-					return nil
+	DescribeTable(
+		"should set the label",
+		func(kv, expected string, alreadyLabeled bool) {
+			node := v1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+				Status: v1.NodeStatus{
+					NodeInfo: v1.NodeSystemInfo{KernelVersion: kv},
 				},
-			),
-			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
-		)
+			}
 
-		nkr := NewNodeKernelReconciler(clnt, labelName, nil)
-		req := runtimectrl.Request{
-			NamespacedName: types.NamespacedName{Name: nodeName},
-		}
+			if alreadyLabeled {
+				node.SetLabels(map[string]string{labelName: "some-value"})
+			}
 
-		res, err := nkr.Reconcile(ctx, req)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(res).To(Equal(res))
-	})
+			node.SetLabels(map[string]string{labelName: kernelVersion})
+			nsn := types.NamespacedName{Name: nodeName}
 
-	It("should set the label if it already exists", func() {
-		node := v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   nodeName,
-				Labels: map[string]string{kernelVersion: "4.5.6"},
-			},
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-			},
-		}
+			ctx := context.Background()
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, nsn, &v1.Node{}).DoAndReturn(
+					func(_ interface{}, _ interface{}, n *v1.Node) error {
+						n.ObjectMeta = node.ObjectMeta
+						n.Status = node.Status
+						return nil
+					},
+				),
+				clnt.EXPECT().Patch(ctx, &node, gomock.Any()),
+			)
 
-		ctx := context.Background()
-		gomock.InOrder(
-			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ interface{}, _ interface{}, n *v1.Node) error {
-					n.ObjectMeta = node.ObjectMeta
-					n.Status = node.Status
-					return nil
-				},
-			),
-			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
-		)
+			nkr := NewNodeKernelReconciler(clnt, labelName, nil)
+			req := runtimectrl.Request{NamespacedName: nsn}
 
-		nkr := NewNodeKernelReconciler(clnt, labelName, nil)
-		req := runtimectrl.Request{
-			NamespacedName: types.NamespacedName{Name: nodeName},
-		}
-
-		res, err := nkr.Reconcile(ctx, req)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(res).To(Equal(res))
-	})
+			res, err := nkr.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res.Requeue).To(BeFalse())
+		},
+		Entry(nil, kernelVersion, kernelVersion, false),
+		Entry(nil, kernelVersion, kernelVersion, true),
+		Entry(nil, kernelVersion+"+", kernelVersion, true),
+	)
 })

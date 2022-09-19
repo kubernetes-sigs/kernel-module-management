@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	v1 "k8s.io/api/core/v1"
@@ -37,7 +38,7 @@ func (r *NodeKernelReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, fmt.Errorf("could not get node: %v", err)
 	}
 
-	kernelVersion := node.Status.NodeInfo.KernelVersion
+	kernelVersion := strings.TrimSuffix(node.Status.NodeInfo.KernelVersion, "+")
 
 	logger.Info(
 		"Patching node label",
