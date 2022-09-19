@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
@@ -177,7 +178,7 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 
 	for _, node := range targetedNodes {
 		osConfig := r.kernelAPI.GetNodeOSConfig(&node)
-		kernelVersion := node.Status.NodeInfo.KernelVersion
+		kernelVersion := strings.TrimSuffix(node.Status.NodeInfo.KernelVersion, "+")
 
 		nodeLogger := logger.WithValues(
 			"node", node.Name,
