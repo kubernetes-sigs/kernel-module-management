@@ -133,11 +133,11 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build
 docker-build: unit-test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build -t $(IMG) .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+	docker push $(IMG)
 
 ##@ Deployment
 
@@ -145,24 +145,26 @@ ifndef ignore-not-found
   ignore-not-found = false
 endif
 
+KUSTOMIZE_CONFIG_CRD ?= config/crd
+
 .PHONY: install
-install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+install: manifests ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+	kubectl apply -k $(KUSTOMIZE_CONFIG_CRD)
 
 .PHONY: uninstall
-uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
+uninstall: manifests ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+	kubectl delete -k $(KUSTOMIZE_CONFIG_CRD) --ignore-not-found=$(ignore-not-found)
 
 KUSTOMIZE_CONFIG_DEFAULT ?= config/default
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build $(KUSTOMIZE_CONFIG_DEFAULT) | kubectl apply -f -
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	kubectl apply -k $(KUSTOMIZE_CONFIG_DEFAULT)
 
 .PHONY: undeploy
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build $(KUSTOMIZE_CONFIG_DEFAULT) | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
+	kubectl delete -k $(KUSTOMIZE_CONFIG_DEFAULT) --ignore-not-found=$(ignore-not-found)
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 .PHONY: controller-gen
@@ -202,7 +204,7 @@ endef
 bundle: manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
 	operator-sdk generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle $(BUNDLE_GEN_FLAGS)
+	kubectl kustomize config/manifests | operator-sdk generate bundle $(BUNDLE_GEN_FLAGS)
 	operator-sdk bundle validate ./bundle
 
 .PHONY: bundle-build
