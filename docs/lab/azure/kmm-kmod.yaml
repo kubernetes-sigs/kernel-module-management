@@ -1,0 +1,48 @@
+apiVersion: kmm.sigs.k8s.io/v1beta1
+kind: Module
+metadata:
+  name: kmm-ci-a
+spec:
+  moduleLoader:
+    container:
+      modprobe:
+        moduleName: kmm-ci-a 
+
+      kernelMappings:
+        - literal: 5.4.0-1089-azure 
+          containerImage: myrepo/myproject/kmmo:2.2.1-azure
+          build:
+            dockerfile: |
+              ARG KERNEL_VERSION=''
+              FROM ubuntu:18.04 as builder
+              RUN apt-get update && \
+                  apt-get install -y bc \
+                  bison \
+                  flex \
+                  libelf-dev \
+                  gnupg \
+                  wget \
+                  git \
+                  make \
+                  bc \
+                  gcc \
+                  linux-headers-${KERNEL_VERSION}
+
+              WORKDIR /usr/src
+              RUN git clone https://github.com/kubernetes-sigs/kernel-module-management.git
+              RUN mv kernel-module-management/ci/kmm-kmod kmm-kmod
+
+              WORKDIR /usr/src/kmm-kmod
+              RUN make 
+   
+              ARG KERNEL_VERSION
+              FROM ubuntu:18.04 
+              RUN apt-get update && apt-get install -y kmod
+              COPY --from=builder /usr/src/kmm-kmod/kmm_ci_a.ko /opt/lib/modules/${KERNEL_VERSION}/
+              COPY --from=builder /usr/src/kmm-kmod/kmm_ci_b.ko /opt/lib/modules/${KERNEL_VERSION}/
+              RUN depmod -b /opt
+
+  imageRepoSecret: 
+      name: azure-repo-secret
+  selector:  
+    kubernetes.io/hostname: aks-agentpool-23492437-vmss000000
