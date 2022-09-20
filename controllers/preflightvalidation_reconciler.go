@@ -63,11 +63,11 @@ func NewPreflightValidationReconciler(
 func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("preflightvalidation").
-		For(&kmmv1beta1.PreflightValidation{}).
+		For(&kmmv1beta1.PreflightValidation{}, builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate())).
 		Watches(
 			&source.Kind{Type: &kmmv1beta1.Module{}},
 			handler.EnqueueRequestsFromMapFunc(r.filter.EnqueueAllPreflightValidations),
-			builder.WithPredicates(filter.PreflightReconcilerModulePredicate()),
+			builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate()),
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
@@ -120,7 +120,7 @@ func (r *PreflightValidationReconciler) runPreflightValidation(ctx context.Conte
 	for _, module := range modulesToCheck {
 		log.Info("start module preflight validation", "name", module.Name)
 
-		verified, message := r.preflight.PreflightUpgradeCheck(ctx, pv, &module, pv.Spec.KernelVersion)
+		verified, message := r.preflight.PreflightUpgradeCheck(ctx, pv, &module)
 
 		log.Info("module preflight validation result", "name", module.Name, "verified", verified)
 

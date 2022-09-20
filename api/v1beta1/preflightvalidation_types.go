@@ -37,6 +37,11 @@ type PreflightValidationSpec struct {
 	// KernelImage describes the kernel image that all Modules need to be checked against.
 	// +kubebuilder:validation:Required
 	KernelVersion string `json:"kernelVersion"`
+
+	// Boolean flag that determines whether images build during preflight must also
+	// be pushed to a defined repository
+	// +optional
+	PushBuiltImage bool `json:"pushBuiltImage"`
 }
 
 type CRStatus struct {

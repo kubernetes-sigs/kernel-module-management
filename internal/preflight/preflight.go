@@ -26,7 +26,7 @@ const (
 //go:generate mockgen -source=preflight.go -package=preflight -destination=mock_preflight_api.go PreflightAPI, preflightHelperAPI
 
 type PreflightAPI interface {
-	PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mod *kmmv1beta1.Module, kernelVersion string) (bool, string)
+	PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mod *kmmv1beta1.Module) (bool, string)
 }
 
 func NewPreflightAPI(
@@ -49,8 +49,9 @@ type preflight struct {
 	helper        preflightHelperAPI
 }
 
-func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mod *kmmv1beta1.Module, kernelVersion string) (bool, string) {
+func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mod *kmmv1beta1.Module) (bool, string) {
 	log := ctrlruntime.LoggerFrom(ctx)
+	kernelVersion := pv.Spec.KernelVersion
 	mapping, err := p.kernelAPI.FindMappingForKernel(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion)
 	if err != nil {
 		return false, fmt.Sprintf("Failed to find kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)
@@ -77,12 +78,12 @@ func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.Pr
 		log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to build stage"), "module", mod.Name, "error", err)
 	}
 
-	return p.helper.verifyBuild(ctx, mapping, mod, kernelVersion)
+	return p.helper.verifyBuild(ctx, pv, mapping, mod)
 }
 
 type preflightHelperAPI interface {
 	verifyImage(ctx context.Context, mapping *kmmv1beta1.KernelMapping, mod *kmmv1beta1.Module, kernelVersion string) (bool, string)
-	verifyBuild(ctx context.Context, mapping *kmmv1beta1.KernelMapping, mod *kmmv1beta1.Module, kernelVersion string) (bool, string)
+	verifyBuild(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mapping *kmmv1beta1.KernelMapping, mod *kmmv1beta1.Module) (bool, string)
 }
 
 type preflightHelper struct {
@@ -131,15 +132,22 @@ func (p *preflightHelper) verifyImage(ctx context.Context, mapping *kmmv1beta1.K
 	return false, fmt.Sprintf("image %s does not contain kernel module for kernel %s on any layer", image, kernelVersion)
 }
 
-func (p *preflightHelper) verifyBuild(ctx context.Context, mapping *kmmv1beta1.KernelMapping, mod *kmmv1beta1.Module, kernelVersion string) (bool, string) {
+func (p *preflightHelper) verifyBuild(ctx context.Context,
+	pv *kmmv1beta1.PreflightValidation,
+	mapping *kmmv1beta1.KernelMapping,
+	mod *kmmv1beta1.Module) (bool, string) {
 	// at this stage we know that eiher mapping Build or Container build are defined
-	buildRes, err := p.buildAPI.Sync(ctx, *mod, *mapping, kernelVersion, false)
+	buildRes, err := p.buildAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, pv.Spec.PushBuiltImage)
 	if err != nil {
-		return false, fmt.Sprintf("Failed to verify build for module %s, kernel version %s, error %s", mod.Name, kernelVersion, err)
+		return false, fmt.Sprintf("Failed to verify build for module %s, kernel version %s, error %s", mod.Name, pv.Spec.KernelVersion, err)
 	}
 
 	if buildRes.Status == build.StatusCompleted {
-		return true, fmt.Sprintf(VerificationStatusReasonVerified, "build compiles")
+		msg := "build compiles"
+		if pv.Spec.PushBuiltImage {
+			msg += " and image pushed"
+		}
+		return true, fmt.Sprintf(VerificationStatusReasonVerified, msg)
 	}
 	return false, "Waiting for build verification"
 }

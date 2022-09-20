@@ -39,7 +39,7 @@ func TestPreflight(t *testing.T) {
 				Namespace: "preflight-namespace",
 			},
 			Spec: kmmv1beta1.PreflightValidationSpec{
-				KernelVersion: "some kernel version",
+				KernelVersion: kernelVersion,
 			},
 		}
 		mod = &kmmv1beta1.Module{
@@ -92,7 +92,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 		mod.Spec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{}
 		mockKernelAPI.EXPECT().FindMappingForKernel(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(nil, fmt.Errorf("some error"))
 
-		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod, kernelVersion)
+		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
 		Expect(res).To(BeFalse())
 		Expect(message).To(Equal(fmt.Sprintf("Failed to find kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)))
@@ -107,7 +107,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 			mockKernelAPI.EXPECT().PrepareKernelMapping(&mapping, gomock.Any()).Return(nil, fmt.Errorf("some error")),
 		)
 
-		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod, kernelVersion)
+		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
 		Expect(res).To(BeFalse())
 		Expect(message).To(Equal(fmt.Sprintf("Failed to substitute template in kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)))
@@ -124,7 +124,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 			preflightHelper.EXPECT().verifyImage(context.Background(), &mapping, mod, kernelVersion).Return(true, "some message"),
 		)
 
-		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod, kernelVersion)
+		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
 		Expect(res).To(BeTrue())
 		Expect(message).To(Equal("some message"))
@@ -141,7 +141,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 			preflightHelper.EXPECT().verifyImage(context.Background(), &mapping, mod, kernelVersion).Return(false, "some error message"),
 		)
 
-		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod, kernelVersion)
+		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
 		Expect(res).To(BeFalse())
 		Expect(message).To(Equal("some error message"))
@@ -157,10 +157,10 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 			mockStatusUpdater.EXPECT().PreflightSetVerificationStage(context.Background(), pv, mod.Name, kmmv1beta1.VerificationStageImage),
 			preflightHelper.EXPECT().verifyImage(context.Background(), &mapping, mod, kernelVersion).Return(false, "some error message"),
 			mockStatusUpdater.EXPECT().PreflightSetVerificationStage(context.Background(), pv, mod.Name, kmmv1beta1.VerificationStageBuild),
-			preflightHelper.EXPECT().verifyBuild(context.Background(), &mapping, mod, kernelVersion).Return(true, "some message"),
+			preflightHelper.EXPECT().verifyBuild(context.Background(), pv, &mapping, mod).Return(true, "some message"),
 		)
 
-		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod, kernelVersion)
+		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
 		Expect(res).To(BeTrue())
 		Expect(message).To(Equal("some message"))
@@ -176,10 +176,10 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 			mockStatusUpdater.EXPECT().PreflightSetVerificationStage(context.Background(), pv, mod.Name, kmmv1beta1.VerificationStageImage),
 			preflightHelper.EXPECT().verifyImage(context.Background(), &mapping, mod, kernelVersion).Return(false, "some error message"),
 			mockStatusUpdater.EXPECT().PreflightSetVerificationStage(context.Background(), pv, mod.Name, kmmv1beta1.VerificationStageBuild),
-			preflightHelper.EXPECT().verifyBuild(context.Background(), &mapping, mod, kernelVersion).Return(false, "some error message"),
+			preflightHelper.EXPECT().verifyBuild(context.Background(), pv, &mapping, mod).Return(false, "some error message"),
 		)
 
-		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod, kernelVersion)
+		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
 		Expect(res).To(BeFalse())
 		Expect(message).To(Equal("some error message"))
@@ -298,7 +298,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
 		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, false).Return(build.Result{}, fmt.Errorf("some error"))
 
-		res, msg := ph.verifyBuild(context.Background(), &mapping, mod, kernelVersion)
+		res, msg := ph.verifyBuild(context.Background(), pv, &mapping, mod)
 		Expect(res).To(BeFalse())
 		Expect(msg).To(Equal(fmt.Sprintf("Failed to verify build for module %s, kernel version %s, error %s", mod.Name, kernelVersion, fmt.Errorf("some error"))))
 
@@ -309,7 +309,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
 		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, false).Return(build.Result{Status: build.StatusCompleted}, nil)
 
-		res, msg := ph.verifyBuild(context.Background(), &mapping, mod, kernelVersion)
+		res, msg := ph.verifyBuild(context.Background(), pv, &mapping, mod)
 		Expect(res).To(BeTrue())
 		Expect(msg).To(Equal(fmt.Sprintf(VerificationStatusReasonVerified, "build compiles")))
 
@@ -320,7 +320,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
 		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, false).Return(build.Result{Status: build.StatusInProgress}, nil)
 
-		res, msg := ph.verifyBuild(context.Background(), &mapping, mod, kernelVersion)
+		res, msg := ph.verifyBuild(context.Background(), pv, &mapping, mod)
 		Expect(res).To(BeFalse())
 		Expect(msg).To(Equal("Waiting for build verification"))
 

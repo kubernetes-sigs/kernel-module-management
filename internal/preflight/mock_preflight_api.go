@@ -36,18 +36,18 @@ func (m *MockPreflightAPI) EXPECT() *MockPreflightAPIMockRecorder {
 }
 
 // PreflightUpgradeCheck mocks base method.
-func (m *MockPreflightAPI) PreflightUpgradeCheck(ctx context.Context, pv *v1beta1.PreflightValidation, mod *v1beta1.Module, kernelVersion string) (bool, string) {
+func (m *MockPreflightAPI) PreflightUpgradeCheck(ctx context.Context, pv *v1beta1.PreflightValidation, mod *v1beta1.Module) (bool, string) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PreflightUpgradeCheck", ctx, pv, mod, kernelVersion)
+	ret := m.ctrl.Call(m, "PreflightUpgradeCheck", ctx, pv, mod)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(string)
 	return ret0, ret1
 }
 
 // PreflightUpgradeCheck indicates an expected call of PreflightUpgradeCheck.
-func (mr *MockPreflightAPIMockRecorder) PreflightUpgradeCheck(ctx, pv, mod, kernelVersion interface{}) *gomock.Call {
+func (mr *MockPreflightAPIMockRecorder) PreflightUpgradeCheck(ctx, pv, mod interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreflightUpgradeCheck", reflect.TypeOf((*MockPreflightAPI)(nil).PreflightUpgradeCheck), ctx, pv, mod, kernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreflightUpgradeCheck", reflect.TypeOf((*MockPreflightAPI)(nil).PreflightUpgradeCheck), ctx, pv, mod)
 }
 
 // MockpreflightHelperAPI is a mock of preflightHelperAPI interface.
@@ -74,18 +74,18 @@ func (m *MockpreflightHelperAPI) EXPECT() *MockpreflightHelperAPIMockRecorder {
 }
 
 // verifyBuild mocks base method.
-func (m *MockpreflightHelperAPI) verifyBuild(ctx context.Context, mapping *v1beta1.KernelMapping, mod *v1beta1.Module, kernelVersion string) (bool, string) {
+func (m *MockpreflightHelperAPI) verifyBuild(ctx context.Context, pv *v1beta1.PreflightValidation, mapping *v1beta1.KernelMapping, mod *v1beta1.Module) (bool, string) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "verifyBuild", ctx, mapping, mod, kernelVersion)
+	ret := m.ctrl.Call(m, "verifyBuild", ctx, pv, mapping, mod)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(string)
 	return ret0, ret1
 }
 
 // verifyBuild indicates an expected call of verifyBuild.
-func (mr *MockpreflightHelperAPIMockRecorder) verifyBuild(ctx, mapping, mod, kernelVersion interface{}) *gomock.Call {
+func (mr *MockpreflightHelperAPIMockRecorder) verifyBuild(ctx, pv, mapping, mod interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyBuild", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifyBuild), ctx, mapping, mod, kernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyBuild", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifyBuild), ctx, pv, mapping, mod)
 }
 
 // verifyImage mocks base method.
