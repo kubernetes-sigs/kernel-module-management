@@ -1,0 +1,14 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+    - build
+    - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG
+    - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator:latest
+    - .
+# this prevents errors if you don't use both _GIT_TAG and _PULL_BASE_REF,
+# or any new substitutions added in the future.
+options:
+  substitution_option: ALLOW_LOOSE
+images:
+  - gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG
+  - gcr.io/$PROJECT_ID/kernel-module-management-operator:latest
