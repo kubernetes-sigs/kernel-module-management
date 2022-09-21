@@ -5,7 +5,7 @@ resources:
   - ../../config/default
 
 images:
-  - name: gcr.io/k8s-staging-kmm/kernel-module-management
+  - name: gcr.io/k8s-staging-kmm/kernel-module-management-operator
     newName: kmm
     newTag: local
 
