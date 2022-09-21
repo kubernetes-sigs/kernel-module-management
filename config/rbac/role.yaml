@@ -22,6 +22,7 @@ rules:
   - jobs
   verbs:
   - create
+  - delete
   - list
   - watch
 - apiGroups:
