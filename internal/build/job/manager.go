@@ -8,11 +8,11 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	batchv1 "k8s.io/api/batch/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 const jobHashAnnotation = "kmm.node.kubernetes.io/last-hash"
@@ -95,7 +95,10 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 
 	if changed {
 		logger.Info("The module's build spec has been changed, deleting the current job so a new one can be created", "name", job.Name)
-		err = jbm.client.Delete(ctx, job)
+		opts := []client.DeleteOption{
+			client.PropagationPolicy(metav1.DeletePropagationBackground),
+		}
+		err = jbm.client.Delete(ctx, job, opts...)
 		if err != nil {
 			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete build job %s: %v", job.Name, err)))
 		}

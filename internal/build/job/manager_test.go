@@ -226,7 +226,7 @@ var _ = Describe("JobManager", func() {
 						return nil
 					},
 				),
-				clnt.EXPECT().Delete(ctx, &j).Return(nil),
+				clnt.EXPECT().Delete(ctx, &j, gomock.Any()).Return(nil),
 			)
 
 			mgr := NewBuildManager(clnt, maker, helper)
