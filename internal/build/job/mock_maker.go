@@ -37,16 +37,16 @@ func (m *MockMaker) EXPECT() *MockMakerMockRecorder {
 }
 
 // MakeJobTemplate mocks base method.
-func (m *MockMaker) MakeJobTemplate(ctx context.Context, mod v1beta1.Module, buildConfig *v1beta1.Build, targetKernel, containerImage string, pushImage bool) (*v1.Job, error) {
+func (m *MockMaker) MakeJobTemplate(ctx context.Context, mod v1beta1.Module, buildConfig *v1beta1.Build, targetKernel, containerImage string, pushImage bool, registryTLS *v1beta1.TLSOptions) (*v1.Job, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MakeJobTemplate", ctx, mod, buildConfig, targetKernel, containerImage, pushImage)
+	ret := m.ctrl.Call(m, "MakeJobTemplate", ctx, mod, buildConfig, targetKernel, containerImage, pushImage, registryTLS)
 	ret0, _ := ret[0].(*v1.Job)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // MakeJobTemplate indicates an expected call of MakeJobTemplate.
-func (mr *MockMakerMockRecorder) MakeJobTemplate(ctx, mod, buildConfig, targetKernel, containerImage, pushImage interface{}) *gomock.Call {
+func (mr *MockMakerMockRecorder) MakeJobTemplate(ctx, mod, buildConfig, targetKernel, containerImage, pushImage, registryTLS interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeJobTemplate", reflect.TypeOf((*MockMaker)(nil).MakeJobTemplate), ctx, mod, buildConfig, targetKernel, containerImage, pushImage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeJobTemplate", reflect.TypeOf((*MockMaker)(nil).MakeJobTemplate), ctx, mod, buildConfig, targetKernel, containerImage, pushImage, registryTLS)
 }

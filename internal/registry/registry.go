@@ -49,9 +49,9 @@ type RepoPullConfig struct {
 //go:generate mockgen -source=registry.go -package=registry -destination=mock_registry_api.go
 
 type Registry interface {
-	ImageExists(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error)
+	ImageExists(ctx context.Context, image string, tlsOptions *kmmv1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error)
 	VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVersion, moduleFileName string) bool
-	GetLayersDigests(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error)
+	GetLayersDigests(ctx context.Context, image string, tlsOptions *kmmv1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error)
 	GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error)
 	WriteImageByName(imageName string, image v1.Image, auth authn.Authenticator) error
 	WalkFilesInImage(image v1.Image, fn func(filename string, header *tar.Header, tarreader io.Reader, data []interface{}) error, data ...interface{}) error
@@ -70,8 +70,8 @@ func NewRegistry() Registry {
 	return &registry{}
 }
 
-func (r *registry) ImageExists(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
-	_, _, err := r.getImageManifest(ctx, image, po, registryAuthGetter)
+func (r *registry) ImageExists(ctx context.Context, image string, tlsOptions *kmmv1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) (bool, error) {
+	_, _, err := r.getImageManifest(ctx, image, tlsOptions, registryAuthGetter)
 	if err != nil {
 		te := &transport.Error{}
 		if errors.As(err, &te) && te.StatusCode == http.StatusNotFound {
@@ -82,8 +82,8 @@ func (r *registry) ImageExists(ctx context.Context, image string, po *kmmv1beta1
 	return true, nil
 }
 
-func (r *registry) GetLayersDigests(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error) {
-	manifest, pullConfig, err := r.getImageManifest(ctx, image, po, registryAuthGetter)
+func (r *registry) GetLayersDigests(ctx context.Context, image string, tlsOptions *kmmv1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error) {
+	manifest, pullConfig, err := r.getImageManifest(ctx, image, tlsOptions, registryAuthGetter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get manifest from image %s: %w", image, err)
 	}
@@ -107,7 +107,7 @@ func (r *registry) VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVersion,
 	return err == nil
 }
 
-func (r *registry) getPullOptions(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) (*RepoPullConfig, error) {
+func (r *registry) getPullOptions(ctx context.Context, image string, tlsOptions *kmmv1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) (*RepoPullConfig, error) {
 	var repo string
 	if hash := strings.Split(image, "@"); len(hash) > 1 {
 		repo = hash[0]
@@ -123,12 +123,12 @@ func (r *registry) getPullOptions(ctx context.Context, image string, po *kmmv1be
 		crane.WithContext(ctx),
 	}
 
-	if po != nil {
-		if po.Insecure {
+	if tlsOptions != nil {
+		if tlsOptions.Insecure {
 			options = append(options, crane.Insecure)
 		}
 
-		if po.InsecureSkipTLSVerify {
+		if tlsOptions.InsecureSkipTLSVerify {
 			rt := http.DefaultTransport.(*http.Transport).Clone()
 			rt.TLSClientConfig.InsecureSkipVerify = true
 
@@ -153,8 +153,8 @@ func (r *registry) getPullOptions(ctx context.Context, image string, po *kmmv1be
 	return &RepoPullConfig{repo: repo, authOptions: options}, nil
 }
 
-func (r *registry) getImageManifest(ctx context.Context, image string, po *kmmv1beta1.PullOptions, registryAuthGetter auth.RegistryAuthGetter) ([]byte, *RepoPullConfig, error) {
-	pullConfig, err := r.getPullOptions(ctx, image, po, registryAuthGetter)
+func (r *registry) getImageManifest(ctx context.Context, image string, tlsOptions *kmmv1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) ([]byte, *RepoPullConfig, error) {
+	pullConfig, err := r.getPullOptions(ctx, image, tlsOptions, registryAuthGetter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get pull options for image %s: %w", image, err)
 	}

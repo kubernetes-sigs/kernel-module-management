@@ -58,7 +58,7 @@ var _ = Describe("ImageExists", func() {
 
 		It("should fail if the image name isn't valid", func() {
 
-			_, err = reg.ImageExists(ctx, invalidImage, &kmmv1beta1.PullOptions{}, nil)
+			_, err = reg.ImageExists(ctx, invalidImage, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("does not contain hash or tag"))
@@ -68,7 +68,7 @@ var _ = Describe("ImageExists", func() {
 
 			mockRegistryAuthGetter.EXPECT().GetKeyChain(ctx).Return(nil, errors.New("some error"))
 
-			_, err = reg.ImageExists(ctx, validImage, &kmmv1beta1.PullOptions{}, mockRegistryAuthGetter)
+			_, err = reg.ImageExists(ctx, validImage, &kmmv1beta1.TLSOptions{}, mockRegistryAuthGetter)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("cannot get keychain from the registry auth getter"))
@@ -93,7 +93,7 @@ var _ = Describe("ImageExists", func() {
 			u := mustParseURL(server.URL)
 
 			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.PullOptions{}, nil)
+			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to get crane manifest from image"))
@@ -108,7 +108,7 @@ var _ = Describe("ImageExists", func() {
 			u := mustParseURL(server.URL)
 
 			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.PullOptions{}, nil)
+			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to unmarshal crane manifest"))
@@ -134,7 +134,7 @@ var _ = Describe("ImageExists", func() {
 			u := mustParseURL(server.URL)
 
 			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.PullOptions{}, nil)
+			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("mediaType is missing from the image"))
@@ -150,7 +150,7 @@ var _ = Describe("ImageExists", func() {
 		u := mustParseURL(server.URL)
 
 		image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-		_, err := reg.ImageExists(ctx, image, &kmmv1beta1.PullOptions{}, nil)
+		_, err := reg.ImageExists(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
 
 		Expect(err).ToNot(HaveOccurred())
 	})
@@ -173,9 +173,9 @@ var _ = Describe("ImageExists", func() {
 		var err error
 		image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
 		if withRegistryAuthGetter {
-			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.PullOptions{}, mockRegistryAuthGetter)
+			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.TLSOptions{}, mockRegistryAuthGetter)
 		} else {
-			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.PullOptions{}, nil)
+			_, err = reg.ImageExists(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
 		}
 		Expect(err).ToNot(HaveOccurred())
 	},
@@ -223,7 +223,7 @@ var _ = Describe("GetLayersDigests", func() {
 
 		It("should fail if the image name isn't valid", func() {
 
-			_, err = reg.ImageExists(ctx, invalidImage, &kmmv1beta1.PullOptions{}, nil)
+			_, err = reg.ImageExists(ctx, invalidImage, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("does not contain hash or tag"))
@@ -233,7 +233,7 @@ var _ = Describe("GetLayersDigests", func() {
 
 			mockRegistryAuthGetter.EXPECT().GetKeyChain(ctx).Return(nil, errors.New("some error"))
 
-			_, err = reg.ImageExists(ctx, validImage, &kmmv1beta1.PullOptions{}, mockRegistryAuthGetter)
+			_, err = reg.ImageExists(ctx, validImage, &kmmv1beta1.TLSOptions{}, mockRegistryAuthGetter)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("cannot get keychain from the registry auth getter"))
@@ -258,7 +258,7 @@ var _ = Describe("GetLayersDigests", func() {
 			u := mustParseURL(server.URL)
 
 			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, nil)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to get crane manifest from image"))
@@ -273,7 +273,7 @@ var _ = Describe("GetLayersDigests", func() {
 			u := mustParseURL(server.URL)
 
 			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, nil)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to unmarshal crane manifest"))
@@ -299,7 +299,7 @@ var _ = Describe("GetLayersDigests", func() {
 			u := mustParseURL(server.URL)
 
 			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
-			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, nil)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("mediaType is missing from the image"))
@@ -324,9 +324,9 @@ var _ = Describe("GetLayersDigests", func() {
 		var err error
 		image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
 		if withRegistryAuthGetter {
-			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, mockRegistryAuthGetter)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.TLSOptions{}, mockRegistryAuthGetter)
 		} else {
-			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.PullOptions{}, nil)
+			_, _, err = reg.GetLayersDigests(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
 		}
 		Expect(err).ToNot(HaveOccurred())
 	},

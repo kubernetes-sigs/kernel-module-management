@@ -62,7 +62,7 @@ var _ = Describe("GetRelevantBuild", func() {
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						Build: &kmmv1beta1.Build{
 							DockerfileConfigMap: &v1.LocalObjectReference{Name: "some load module build name"},
-							Pull: kmmv1beta1.PullOptions{
+							BaseImageRegistryTLS: kmmv1beta1.TLSOptions{
 								Insecure:              true,
 								InsecureSkipTLSVerify: true,
 							},
@@ -79,7 +79,7 @@ var _ = Describe("GetRelevantBuild", func() {
 
 		res := nh.GetRelevantBuild(mod, km)
 		Expect(res.DockerfileConfigMap).To(Equal(km.Build.DockerfileConfigMap))
-		Expect(res.Pull).To(Equal(mod.Spec.ModuleLoader.Container.Build.Pull))
+		Expect(res.BaseImageRegistryTLS).To(Equal(mod.Spec.ModuleLoader.Container.Build.BaseImageRegistryTLS))
 	})
 })
 

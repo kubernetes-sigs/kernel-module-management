@@ -42,10 +42,8 @@ var _ = Describe("JobManager", func() {
 			jobhelper = utils.NewMockJobHelper(ctrl)
 		})
 
-		po := &kmmv1beta1.PullOptions{}
-
 		km := kmmv1beta1.KernelMapping{
-			Build:          &kmmv1beta1.Build{Pull: *po},
+			Build:          &kmmv1beta1.Build{},
 			ContainerImage: imageName,
 		}
 		labels := map[string]string{"kmm.node.kubernetes.io/job-type": "sign",

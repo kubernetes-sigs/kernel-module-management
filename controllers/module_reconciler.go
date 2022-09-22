@@ -381,8 +381,8 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context,
 
 func (r *ModuleReconciler) checkImageExists(ctx context.Context, mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping, imageName string) (bool, error) {
 	registryAuthGetter := auth.NewRegistryAuthGetterFrom(r.Client, mod)
-	pullOptions := module.GetRelevantPullOptions(mod, km)
-	imageAvailable, err := r.registry.ImageExists(ctx, imageName, pullOptions, registryAuthGetter)
+	tlsOptions := module.GetRelevantTLSOptions(mod, km)
+	imageAvailable, err := r.registry.ImageExists(ctx, imageName, tlsOptions, registryAuthGetter)
 	if err != nil {
 		return false, fmt.Errorf("could not check if the image is available: %v", err)
 	}

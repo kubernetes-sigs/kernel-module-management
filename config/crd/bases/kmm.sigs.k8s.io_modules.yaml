@@ -1874,6 +1874,21 @@ spec:
                       build:
                         description: Build contains build instructions.
                         properties:
+                          baseImageRegistryTLS:
+                            description: BaseImageRegistryTLS contains settings determining
+                              how to access registries of the base images in the build-process'
+                              Dockerfile.
+                            properties:
+                              insecure:
+                                description: If Insecure is true, the operator will
+                                  be able to access a registry in an insecure (plain
+                                  HTTP) protocol.
+                                type: boolean
+                              insecureSkipTLSVerify:
+                                description: If InsecureSkipTLSVerify, the operator
+                                  will accept any certificate provided by the registry.
+                                type: boolean
+                            type: object
                           buildArgs:
                             description: BuildArgs is an array of build variables
                               that are provided to the image building backend.
@@ -1908,32 +1923,6 @@ spec:
                                 description: Kaniko image tag to use when creating
                                   the build Job
                                 type: string
-                            type: object
-                          pull:
-                            description: Pull contains settings determining how to
-                              pull the base images of the build process.
-                            properties:
-                              insecure:
-                                description: If Insecure is true, images can be pulled
-                                  from an insecure (plain HTTP) registry.
-                                type: boolean
-                              insecureSkipTLSVerify:
-                                description: If InsecureSkipTLSVerify, the operator
-                                  will accept any certificate provided by the registry.
-                                type: boolean
-                            type: object
-                          push:
-                            description: Push contains settings determining how to
-                              push a built DriverContainer image.
-                            properties:
-                              insecure:
-                                description: If Insecure is true, built images can
-                                  be pushed to an insecure (plain HTTP) registry.
-                                type: boolean
-                              insecureSkipTLSVerify:
-                                description: If InsecureSkipTLSVerify, the operator
-                                  will accept any certificate provided by the registry.
-                                type: boolean
                             type: object
                           secrets:
                             description: Secrets is an optional list of secrets to
@@ -1980,6 +1969,22 @@ spec:
                               description: Build enables in-cluster builds for this
                                 mapping and allows overriding the Module's build settings.
                               properties:
+                                baseImageRegistryTLS:
+                                  description: BaseImageRegistryTLS contains settings
+                                    determining how to access registries of the base
+                                    images in the build-process' Dockerfile.
+                                  properties:
+                                    insecure:
+                                      description: If Insecure is true, the operator
+                                        will be able to access a registry in an insecure
+                                        (plain HTTP) protocol.
+                                      type: boolean
+                                    insecureSkipTLSVerify:
+                                      description: If InsecureSkipTLSVerify, the operator
+                                        will accept any certificate provided by the
+                                        registry.
+                                      type: boolean
+                                  type: object
                                 buildArgs:
                                   description: BuildArgs is an array of build variables
                                     that are provided to the image building backend.
@@ -2016,35 +2021,6 @@ spec:
                                         the build Job
                                       type: string
                                   type: object
-                                pull:
-                                  description: Pull contains settings determining
-                                    how to pull the base images of the build process.
-                                  properties:
-                                    insecure:
-                                      description: If Insecure is true, images can
-                                        be pulled from an insecure (plain HTTP) registry.
-                                      type: boolean
-                                    insecureSkipTLSVerify:
-                                      description: If InsecureSkipTLSVerify, the operator
-                                        will accept any certificate provided by the
-                                        registry.
-                                      type: boolean
-                                  type: object
-                                push:
-                                  description: Push contains settings determining
-                                    how to push a built DriverContainer image.
-                                  properties:
-                                    insecure:
-                                      description: If Insecure is true, built images
-                                        can be pushed to an insecure (plain HTTP)
-                                        registry.
-                                      type: boolean
-                                    insecureSkipTLSVerify:
-                                      description: If InsecureSkipTLSVerify, the operator
-                                        will accept any certificate provided by the
-                                        registry.
-                                      type: boolean
-                                  type: object
                                 secrets:
                                   description: Secrets is an optional list of secrets
                                     to be made available to the build system. Those
@@ -2076,24 +2052,24 @@ spec:
                               description: Literal defines a literal target kernel
                                 version to be matched exactly against node kernels.
                               type: string
-                            pull:
-                              description: Pull contains settings determining how
-                                to check if the ModuleLoader image already exists
-                                and allows overriding of the ModuleLoader's pull options
+                            regexp:
+                              description: Regexp is a regular expression to be match
+                                against node kernels.
+                              type: string
+                            registryTLS:
+                              description: RegistryTLS set the TLS configs for accessing
+                                the registry of the module-loader's image.
                               properties:
                                 insecure:
-                                  description: If Insecure is true, images can be
-                                    pulled from an insecure (plain HTTP) registry.
+                                  description: If Insecure is true, the operator will
+                                    be able to access a registry in an insecure (plain
+                                    HTTP) protocol.
                                   type: boolean
                                 insecureSkipTLSVerify:
                                   description: If InsecureSkipTLSVerify, the operator
                                     will accept any certificate provided by the registry.
                                   type: boolean
                               type: object
-                            regexp:
-                              description: Regexp is a regular expression to be match
-                                against node kernels.
-                              type: string
                             sign:
                               description: Sign enables in-cluster signing for this
                                 mapping
@@ -2213,13 +2189,14 @@ spec:
                         required:
                         - moduleName
                         type: object
-                      pull:
-                        description: Pull contains settings determining how to check
-                          if the ModuleLoader image already exists.
+                      registryTLS:
+                        description: RegistryTLS set the TLS configs for accessing
+                          the registry of the module-loader's image.
                         properties:
                           insecure:
-                            description: If Insecure is true, images can be pulled
-                              from an insecure (plain HTTP) registry.
+                            description: If Insecure is true, the operator will be
+                              able to access a registry in an insecure (plain HTTP)
+                              protocol.
                             type: boolean
                           insecureSkipTLSVerify:
                             description: If InsecureSkipTLSVerify, the operator will
