@@ -1,11 +1,14 @@
 package job
 
 import (
+	"fmt"
+
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/mitchellh/hashstructure"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"golang.org/x/exp/slices"
@@ -15,7 +18,7 @@ import (
 	"k8s.io/utils/pointer"
 )
 
-var _ = Describe("MakeJob", func() {
+var _ = Describe("MakeJobTemplate", func() {
 
 	const (
 		containerImage = "my.registry/my/image"
@@ -186,6 +189,10 @@ var _ = Describe("MakeJob", func() {
 					},
 				)
 		}
+		hash, err := hashstructure.Hash(expected.Spec.Template, nil)
+		Expect(err).NotTo(HaveOccurred())
+		annotations := map[string]string{jobHashAnnotation: fmt.Sprintf("%d", hash)}
+		expected.SetAnnotations(annotations)
 
 		mod := mod.DeepCopy()
 		mod.Spec.Selector = nodeSelector
@@ -193,7 +200,7 @@ var _ = Describe("MakeJob", func() {
 		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override).Return(append(slices.Clone(buildArgs), override))
 
-		actual, err := m.MakeJob(*mod, km.Build, kernelVersion, km.ContainerImage, true)
+		actual, err := m.MakeJobTemplate(*mod, km.Build, kernelVersion, km.ContainerImage, true)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -236,7 +243,7 @@ var _ = Describe("MakeJob", func() {
 
 		mh.EXPECT().ApplyBuildArgOverrides(nil, kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion})
 
-		actual, err := m.MakeJob(mod, &b, kernelVersion, km.ContainerImage, pushFlag)
+		actual, err := m.MakeJobTemplate(mod, &b, kernelVersion, km.ContainerImage, pushFlag)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
 		if pushFlag {
@@ -288,7 +295,7 @@ var _ = Describe("MakeJob", func() {
 			override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override)
 
-			actual, err := m.MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, false)
+			actual, err := m.MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, false)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(actual.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/kaniko-project/executor:" + customTag))
 		})

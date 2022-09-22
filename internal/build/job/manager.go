@@ -11,7 +11,11 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
+
+const jobHashAnnotation = "kmm.node.kubernetes.io/last-hash"
 
 var errNoMatchingBuild = errors.New("no matching build")
 
@@ -63,6 +67,12 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 	logger.Info("Building in-cluster")
 
 	buildConfig := jbm.helper.GetRelevantBuild(mod, m)
+
+	jobTemplate, err := jbm.maker.MakeJobTemplate(mod, buildConfig, targetKernel, m.ContainerImage, pushImage)
+	if err != nil {
+		return build.Result{}, fmt.Errorf("could not make Job template: %v", err)
+	}
+
 	job, err := jbm.getJob(ctx, mod, targetKernel)
 	if err != nil {
 		if !errors.Is(err, errNoMatchingBuild) {
@@ -71,16 +81,25 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 
 		logger.Info("Creating job")
 
-		job, err = jbm.maker.MakeJob(mod, buildConfig, targetKernel, m.ContainerImage, pushImage)
-		if err != nil {
-			return build.Result{}, fmt.Errorf("could not make Job: %v", err)
-		}
-
-		if err = jbm.client.Create(ctx, job); err != nil {
+		if err = jbm.client.Create(ctx, jobTemplate); err != nil {
 			return build.Result{}, fmt.Errorf("could not create Job: %v", err)
 		}
 
 		return build.Result{Status: build.StatusCreated, Requeue: true}, nil
+	}
+
+	changed, err := jbm.isJobChanged(job, jobTemplate)
+	if err != nil {
+		return build.Result{}, fmt.Errorf("could not determine if job has changed: %v", err)
+	}
+
+	if changed {
+		logger.Info("The module's build spec has been changed, deleting the current job so a new one can be created", "name", job.Name)
+		err = jbm.client.Delete(ctx, job)
+		if err != nil {
+			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete build job %s: %v", job.Name, err)))
+		}
+		return build.Result{Status: build.StatusInProgress, Requeue: true}, nil
 	}
 
 	logger.Info("Returning job status", "name", job.Name, "namespace", job.Namespace)
@@ -95,4 +114,16 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 	default:
 		return build.Result{}, fmt.Errorf("unknown status: %v", job.Status)
 	}
+}
+
+func (jbm *jobManager) isJobChanged(existingJob *batchv1.Job, newJob *batchv1.Job) (bool, error) {
+	existingAnnotations := existingJob.GetAnnotations()
+	newAnnotations := newJob.GetAnnotations()
+	if existingAnnotations == nil {
+		return false, fmt.Errorf("annotations are not present in the existing job %s", existingJob.Name)
+	}
+	if existingAnnotations[jobHashAnnotation] == newAnnotations[jobHashAnnotation] {
+		return false, nil
+	}
+	return true, nil
 }

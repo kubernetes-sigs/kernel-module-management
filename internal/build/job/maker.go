@@ -5,6 +5,7 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
+	"github.com/mitchellh/hashstructure"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +17,7 @@ import (
 //go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
 
 type Maker interface {
-	MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error)
+	MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error)
 }
 
 type maker struct {
@@ -28,7 +29,7 @@ func NewMaker(helper build.Helper, scheme *runtime.Scheme) Maker {
 	return &maker{helper: helper, scheme: scheme}
 }
 
-func (m *maker) MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error) {
+func (m *maker) MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error) {
 	args := []string{}
 	if pushImage {
 		args = append(args, "--destination", containerImage)
@@ -97,32 +98,39 @@ func (m *maker) MakeJob(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, ta
 		kanikoImageTag = buildConfig.KanikoParams.Tag
 	}
 
+	specTemplate := v1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{"Dockerfile": buildConfig.Dockerfile},
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Args:         args,
+					Name:         "kaniko",
+					Image:        "gcr.io/kaniko-project/executor:" + kanikoImageTag,
+					VolumeMounts: volumeMounts,
+				},
+			},
+			NodeSelector:  mod.Spec.Selector,
+			RestartPolicy: v1.RestartPolicyOnFailure,
+			Volumes:       volumes,
+		},
+	}
+	specTemplateHash, err := hashstructure.Hash(specTemplate, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not hash job's spec template: %v", err)
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mod.Name + "-build-",
 			Namespace:    mod.Namespace,
 			Labels:       labels(mod, targetKernel),
+			Annotations:  map[string]string{jobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
 		},
 		Spec: batchv1.JobSpec{
 			Completions: pointer.Int32(1),
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{"Dockerfile": buildConfig.Dockerfile},
-				},
-				Spec: v1.PodSpec{
-					Containers: []v1.Container{
-						{
-							Args:         args,
-							Name:         "kaniko",
-							Image:        "gcr.io/kaniko-project/executor:" + kanikoImageTag,
-							VolumeMounts: volumeMounts,
-						},
-					},
-					NodeSelector:  mod.Spec.Selector,
-					RestartPolicy: v1.RestartPolicyOnFailure,
-					Volumes:       volumes,
-				},
-			},
+			Template:    specTemplate,
 		},
 	}
 

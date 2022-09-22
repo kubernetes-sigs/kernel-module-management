@@ -76,8 +76,9 @@ var _ = Describe("JobManager", func() {
 			func(s batchv1.JobStatus, r build.Result, expectsErr bool) {
 				j := batchv1.Job{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels:    labels(mod, kernelVersion),
-						Namespace: namespace,
+						Labels:      labels(mod, kernelVersion),
+						Namespace:   namespace,
+						Annotations: map[string]string{jobHashAnnotation: "some hash"},
 					},
 					Status: s,
 				}
@@ -85,6 +86,7 @@ var _ = Describe("JobManager", func() {
 
 				gomock.InOrder(
 					helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
+					maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
 					clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 						func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
 							list.Items = []batchv1.Job{j}
@@ -109,14 +111,42 @@ var _ = Describe("JobManager", func() {
 			Entry("failed", batchv1.JobStatus{Failed: 1}, build.Result{}, true),
 		)
 
-		It("should return an error if there was an error creating the job", func() {
+		It("should return an error if there was an error creating the job template", func() {
 			ctx := context.Background()
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(nil, errors.New("random error")),
+				maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(nil, errors.New("random error")),
 			)
-			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any())
+
+			mgr := NewBuildManager(clnt, maker, helper)
+
+			Expect(
+				mgr.Sync(ctx, mod, km, kernelVersion, true),
+			).Error().To(
+				HaveOccurred(),
+			)
+		})
+
+		It("should return an error if there was an error creating the job", func() {
+			ctx := context.Background()
+			j := batchv1.Job{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "batch/v1",
+					Kind:       "Job",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      jobName,
+					Namespace: namespace,
+				},
+			}
+
+			gomock.InOrder(
+				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
+				maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()),
+				clnt.EXPECT().Create(ctx, &j).Return(errors.New("some error")),
+			)
 
 			mgr := NewBuildManager(clnt, maker, helper)
 
@@ -143,7 +173,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				maker.EXPECT().MakeJob(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
+				maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
 			)
 
 			gomock.InOrder(
@@ -157,6 +187,54 @@ var _ = Describe("JobManager", func() {
 				mgr.Sync(ctx, mod, km, kernelVersion, true),
 			).To(
 				Equal(build.Result{Requeue: true, Status: build.StatusCreated}),
+			)
+		})
+
+		It("should delete the job is it was edited", func() {
+			ctx := context.Background()
+
+			j := batchv1.Job{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "batch/v1",
+					Kind:       "Job",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        jobName,
+					Namespace:   namespace,
+					Annotations: map[string]string{jobHashAnnotation: "some hash"},
+				},
+			}
+
+			newJob := batchv1.Job{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "batch/v1",
+					Kind:       "Job",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        jobName,
+					Namespace:   namespace,
+					Annotations: map[string]string{jobHashAnnotation: "new hash"},
+				},
+			}
+
+			gomock.InOrder(
+				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
+				maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&newJob, nil),
+				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
+						list.Items = []batchv1.Job{j}
+						return nil
+					},
+				),
+				clnt.EXPECT().Delete(ctx, &j).Return(nil),
+			)
+
+			mgr := NewBuildManager(clnt, maker, helper)
+
+			Expect(
+				mgr.Sync(ctx, mod, km, kernelVersion, true),
+			).To(
+				Equal(build.Result{Requeue: true, Status: build.StatusInProgress}),
 			)
 		})
 	})
