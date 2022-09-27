@@ -141,7 +141,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	for kernelVersion, m := range mappings {
-		requeue, err := r.handleBuild(ctx, mod, m, kernelVersion)
+		requeue, err := r.handleBuild(ctx, mod, m, kernelVersion, m.ContainerImage)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle build for kernel version %s: %w", kernelVersion, err)
 		}
@@ -247,22 +247,23 @@ func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *kmmv
 func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	km *kmmv1beta1.KernelMapping,
-	kernelVersion string) (bool, error) {
+	kernelVersion string,
+	containerImage string) (bool, error) {
 	if mod.Spec.ModuleLoader.Container.Build == nil && km.Build == nil {
 		return false, nil
 	}
-	exists, err := r.checkImageExists(ctx, mod, km)
+	exists, err := r.checkImageExists(ctx, mod, km, containerImage)
 	if err != nil {
-		return false, fmt.Errorf("failed to check image existence for kernel %s: %w", kernelVersion, err)
+		return false, fmt.Errorf("failed to check existence of image %s for kernel %s: %w", containerImage, kernelVersion, err)
 	}
 	if exists {
 		return false, nil
 	}
 
-	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
+	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", containerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildRes, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion, true)
+	buildRes, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion, containerImage, true)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
@@ -277,10 +278,10 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	return buildRes.Requeue, nil
 }
 
-func (r *ModuleReconciler) checkImageExists(ctx context.Context, mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping) (bool, error) {
+func (r *ModuleReconciler) checkImageExists(ctx context.Context, mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping, imageName string) (bool, error) {
 	registryAuthGetter := auth.NewRegistryAuthGetterFrom(r.Client, mod)
 	pullOptions := module.GetRelevantPullOptions(mod, km)
-	imageAvailable, err := r.registry.ImageExists(ctx, km.ContainerImage, pullOptions, registryAuthGetter)
+	imageAvailable, err := r.registry.ImageExists(ctx, imageName, pullOptions, registryAuthGetter)
 	if err != nil {
 		return false, fmt.Errorf("could not check if the image is available: %v", err)
 	}

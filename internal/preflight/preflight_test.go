@@ -296,7 +296,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 	It("sync failed", func() {
 		mod.Spec.ModuleLoader.Container.Build = &kmmv1beta1.Build{}
 		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
-		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, false).Return(build.Result{}, fmt.Errorf("some error"))
+		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, mapping.ContainerImage, false).Return(build.Result{}, fmt.Errorf("some error"))
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mapping, mod)
 		Expect(res).To(BeFalse())
@@ -307,7 +307,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 	It("sync completed", func() {
 		mod.Spec.ModuleLoader.Container.Build = &kmmv1beta1.Build{}
 		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
-		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, false).Return(build.Result{Status: build.StatusCompleted}, nil)
+		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, mapping.ContainerImage, false).Return(build.Result{Status: build.StatusCompleted}, nil)
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mapping, mod)
 		Expect(res).To(BeTrue())
@@ -318,7 +318,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 	It("sync not completed yet", func() {
 		mod.Spec.ModuleLoader.Container.Build = &kmmv1beta1.Build{}
 		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
-		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, false).Return(build.Result{Status: build.StatusInProgress}, nil)
+		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, mapping.ContainerImage, false).Return(build.Result{Status: build.StatusInProgress}, nil)
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mapping, mod)
 		Expect(res).To(BeFalse())
