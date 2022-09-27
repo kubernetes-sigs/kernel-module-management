@@ -30,6 +30,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/rbac"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"k8s.io/klog/v2/klogr"
@@ -124,13 +125,14 @@ func main() {
 	helperAPI := build.NewHelper()
 	makerAPI := job.NewMaker(helperAPI, scheme)
 	buildAPI := job.NewBuildManager(client, makerAPI, helperAPI)
+	rbacAPI := rbac.NewCreator(client, scheme)
 	daemonAPI := daemonset.NewCreator(client, kernelLabel, scheme)
 	kernelAPI := module.NewKernelMapper()
 	moduleStatusUpdaterAPI := statusupdater.NewModuleStatusUpdater(client, daemonAPI, metricsAPI)
 	preflightStatusUpdaterAPI := statusupdater.NewPreflightStatusUpdater(client)
 	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
 
-	mc := controllers.NewModuleReconciler(client, buildAPI, daemonAPI, kernelAPI, metricsAPI, filter, registryAPI, moduleStatusUpdaterAPI)
+	mc := controllers.NewModuleReconciler(client, buildAPI, rbacAPI, daemonAPI, kernelAPI, metricsAPI, filter, registryAPI, moduleStatusUpdaterAPI)
 
 	if err = mc.SetupWithManager(mgr, kernelLabel); err != nil {
 		setupLogger.Error(err, "unable to create controller", "controller", "Module")
