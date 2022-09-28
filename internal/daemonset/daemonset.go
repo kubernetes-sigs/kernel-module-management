@@ -8,6 +8,7 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/rbac"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -190,6 +191,11 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 		container.VolumeMounts = append(container.VolumeMounts, firmwareVolumeMount)
 	}
 
+	serviceAccountName := mod.Spec.ModuleLoader.ServiceAccountName
+	if serviceAccountName == "" {
+		serviceAccountName = rbac.GenerateModuleLoaderServiceAccountName(mod)
+	}
+
 	ds.Spec = appsv1.DaemonSetSpec{
 		Template: v1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
@@ -201,7 +207,7 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:       nodeSelector,
 				PriorityClassName:  "system-node-critical",
-				ServiceAccountName: mod.Spec.ModuleLoader.ServiceAccountName,
+				ServiceAccountName: serviceAccountName,
 				Volumes:            volumes,
 			},
 		},
@@ -248,6 +254,11 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 		OverrideLabels(ds.GetLabels(), standardLabels),
 	)
 
+	serviceAccountName := mod.Spec.DevicePlugin.ServiceAccountName
+	if serviceAccountName == "" {
+		serviceAccountName = rbac.GenerateDevicePluginServiceAccountName(*mod)
+	}
+
 	ds.Spec = appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{MatchLabels: standardLabels},
 		Template: v1.PodTemplateSpec{
@@ -272,7 +283,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(ctx context.Context, ds *
 				PriorityClassName:  "system-node-critical",
 				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:       map[string]string{getDriverContainerNodeLabel(mod.Name): ""},
-				ServiceAccountName: mod.Spec.DevicePlugin.ServiceAccountName,
+				ServiceAccountName: serviceAccountName,
 				Volumes:            append([]v1.Volume{devicePluginVolume}, mod.Spec.DevicePlugin.Volumes...),
 			},
 		},

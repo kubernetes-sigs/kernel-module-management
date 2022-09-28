@@ -11,6 +11,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/rbac"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	. "github.com/onsi/ginkgo/v2"
@@ -34,6 +35,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		ctrl         *gomock.Controller
 		clnt         *client.MockClient
 		mockBM       *build.MockManager
+		mockRC       *rbac.MockRBACCreator
 		mockDC       *daemonset.MockDaemonSetCreator
 		mockKM       *module.MockKernelMapper
 		mockMetrics  *metrics.MockMetrics
@@ -45,6 +47,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mockBM = build.NewMockManager(ctrl)
+		mockRC = rbac.NewMockRBACCreator(ctrl)
 		mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 		mockKM = module.NewMockKernelMapper(ctrl)
 		mockMetrics = metrics.NewMockMetrics(ctrl)
@@ -71,7 +74,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 				apierrors.NewNotFound(schema.GroupResource{}, moduleName),
 			)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 		Expect(
 			mr.Reconcile(ctx, req),
 		).To(
@@ -79,7 +82,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		)
 	})
 
-	It("should do nothing when no nodes match the selector", func() {
+	It("should add the module loader and device plugin ServiceAccounts if they are not set", func() {
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      moduleName,
@@ -87,6 +90,79 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			},
 			Spec: kmmv1beta1.ModuleSpec{
 				Selector: map[string]string{"key": "value"},
+				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					ServiceAccountName: "",
+				},
+				DevicePlugin: &kmmv1beta1.DevicePluginSpec{
+					ServiceAccountName: "",
+				},
+			},
+		}
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName + "-device-plugin",
+				Namespace: namespace,
+			},
+		}
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+					m.ObjectMeta = mod.ObjectMeta
+					m.Spec = mod.Spec
+					return nil
+				},
+			),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.Module{mod}
+					return nil
+				},
+			),
+			mockMetrics.EXPECT().SetExistingKMMOModules(1),
+			mockRC.EXPECT().CreateModuleLoaderServiceAccount(ctx, gomock.Any()).Return(nil),
+			mockRC.EXPECT().CreateDevicePluginServiceAccount(ctx, gomock.Any()).Return(nil),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+					list.Items = []v1.Node{}
+					return nil
+				},
+			),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
+			mockDC.EXPECT().SetDevicePluginAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&mod)),
+			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
+			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, "", metrics.DevicePluginStage, false),
+		)
+
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+
+		dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
+
+		gomock.InOrder(
+			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
+		)
+
+		res, err := mr.Reconcile(context.Background(), req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(reconcile.Result{}))
+	})
+
+	It("should do nothing when no nodes match the selector", func() {
+		const serviceAccountName = "module-loader-service-account"
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				Selector: map[string]string{"key": "value"},
+				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					ServiceAccountName: serviceAccountName,
+				},
 			},
 		}
 
@@ -113,7 +189,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 
 		dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
 
@@ -129,7 +205,10 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 	})
 
 	It("should remove obsolete DaemonSets when no nodes match the selector", func() {
-		const kernelVersion = "1.2.3"
+		const (
+			kernelVersion      = "1.2.3"
+			serviceAccountName = "module-loader-service-account"
+		)
 
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{
@@ -138,6 +217,9 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			},
 			Spec: kmmv1beta1.ModuleSpec{
 				Selector: map[string]string{"key": "value"},
+				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					ServiceAccountName: serviceAccountName,
+				},
 			},
 		}
 
@@ -171,7 +253,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 
 		dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
@@ -188,8 +270,9 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 	It("should create a DaemonSet when a node matches the selector", func() {
 		const (
-			imageName     = "test-image"
-			kernelVersion = "1.2.3"
+			imageName          = "test-image"
+			kernelVersion      = "1.2.3"
+			serviceAccountName = "module-loader-service-account"
 		)
 
 		mappings := []kmmv1beta1.KernelMapping{
@@ -208,6 +291,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			},
 			Spec: kmmv1beta1.ModuleSpec{
 				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					ServiceAccountName: serviceAccountName,
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						KernelMappings: mappings,
 					},
@@ -232,7 +316,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 
 		ds := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -280,8 +364,9 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 	It("should patch the DaemonSet when it already exists", func() {
 		const (
-			imageName     = "test-image"
-			kernelVersion = "1.2.3"
+			imageName          = "test-image"
+			kernelVersion      = "1.2.3"
+			serviceAccountName = "module-loader-service-account"
 		)
 
 		osConfig := module.NodeOSConfig{}
@@ -302,6 +387,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			},
 			Spec: kmmv1beta1.ModuleSpec{
 				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					ServiceAccountName: serviceAccountName,
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						KernelMappings: mappings,
 					},
@@ -361,7 +447,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 
 		dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
@@ -387,6 +473,9 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		const (
 			imageName     = "test-image"
 			kernelVersion = "1.2.3"
+
+			moduleLoaderServiceAccountName = "module-loader-service-account"
+			devicePluginServiceAccountName = "device-plugin-service-account"
 		)
 
 		mappings := []kmmv1beta1.KernelMapping{
@@ -402,8 +491,11 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 				Namespace: namespace,
 			},
 			Spec: kmmv1beta1.ModuleSpec{
-				DevicePlugin: &kmmv1beta1.DevicePluginSpec{},
+				DevicePlugin: &kmmv1beta1.DevicePluginSpec{
+					ServiceAccountName: devicePluginServiceAccountName,
+				},
 				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					ServiceAccountName: moduleLoaderServiceAccountName,
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						KernelMappings: mappings,
 					},
@@ -412,7 +504,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			},
 		}
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 
 		ds := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -462,6 +554,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 		ctrl         *gomock.Controller
 		clnt         *client.MockClient
 		mockBM       *build.MockManager
+		mockRC       *rbac.MockRBACCreator
 		mockDC       *daemonset.MockDaemonSetCreator
 		mockKM       *module.MockKernelMapper
 		mockMetrics  *metrics.MockMetrics
@@ -473,6 +566,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mockBM = build.NewMockManager(ctrl)
+		mockRC = rbac.NewMockRBACCreator(ctrl)
 		mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 		mockKM = module.NewMockKernelMapper(ctrl)
 		mockMetrics = metrics.NewMockMetrics(ctrl)
@@ -494,7 +588,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 
 		mod := &kmmv1beta1.Module{}
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 
 		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
@@ -524,7 +618,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 			},
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res).To(BeFalse())
@@ -550,7 +644,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, false),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res).To(BeTrue())
@@ -576,7 +670,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, false),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res).To(BeTrue())
@@ -602,7 +696,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, true),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockRC, mockDC, mockKM, mockMetrics, nil, mockRegistry, mockSU)
 		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res).To(BeFalse())

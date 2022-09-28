@@ -120,7 +120,20 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 		Expect(ds.Spec.Template.Spec.Volumes[1]).To(Equal(vol))
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts[1]).To(Equal(volm))
+	})
 
+	It("should add the default ServiceAccount to the module loader if it is not set in the spec", func() {
+		mod := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{
+				Selector: map[string]string{"has-feature-x": "true"},
+			},
+		}
+
+		ds := appsv1.DaemonSet{}
+
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal(mod.Name + "-module-loader"))
 	})
 
 	It("should work as expected", func() {
@@ -383,6 +396,21 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		Expect(ds.Spec.Template.Spec.Volumes[1]).To(Equal(vol))
+	})
+
+	It("should add the default ServiceAccount to the device plugin if it is not set in the spec", func() {
+		mod := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{
+				Selector:     map[string]string{"has-feature-x": "true"},
+				DevicePlugin: &kmmv1beta1.DevicePluginSpec{},
+			},
+		}
+
+		ds := appsv1.DaemonSet{}
+
+		err := dg.SetDevicePluginAsDesired(context.Background(), &ds, &mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal(mod.Name + "-device-plugin"))
 	})
 
 	It("should work as expected", func() {
