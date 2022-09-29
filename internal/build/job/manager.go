@@ -61,14 +61,14 @@ func (jbm *jobManager) getJob(ctx context.Context, mod kmmv1beta1.Module, target
 	return &jobList.Items[0], nil
 }
 
-func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string, pushImage bool) (build.Result, error) {
+func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string, targetImage string, pushImage bool) (build.Result, error) {
 	logger := log.FromContext(ctx)
 
 	logger.Info("Building in-cluster")
 
 	buildConfig := jbm.helper.GetRelevantBuild(mod, m)
 
-	jobTemplate, err := jbm.maker.MakeJobTemplate(mod, buildConfig, targetKernel, m.ContainerImage, pushImage)
+	jobTemplate, err := jbm.maker.MakeJobTemplate(mod, buildConfig, targetKernel, targetImage, pushImage)
 	if err != nil {
 		return build.Result{}, fmt.Errorf("could not make Job template: %v", err)
 	}

@@ -97,7 +97,7 @@ var _ = Describe("JobManager", func() {
 
 				mgr := NewBuildManager(clnt, maker, helper)
 
-				res, err := mgr.Sync(ctx, mod, km, kernelVersion, true)
+				res, err := mgr.Sync(ctx, mod, km, kernelVersion, km.ContainerImage, true)
 
 				if expectsErr {
 					Expect(err).To(HaveOccurred())
@@ -122,7 +122,7 @@ var _ = Describe("JobManager", func() {
 			mgr := NewBuildManager(clnt, maker, helper)
 
 			Expect(
-				mgr.Sync(ctx, mod, km, kernelVersion, true),
+				mgr.Sync(ctx, mod, km, kernelVersion, km.ContainerImage, true),
 			).Error().To(
 				HaveOccurred(),
 			)
@@ -151,7 +151,7 @@ var _ = Describe("JobManager", func() {
 			mgr := NewBuildManager(clnt, maker, helper)
 
 			Expect(
-				mgr.Sync(ctx, mod, km, kernelVersion, true),
+				mgr.Sync(ctx, mod, km, kernelVersion, km.ContainerImage, true),
 			).Error().To(
 				HaveOccurred(),
 			)
@@ -184,7 +184,7 @@ var _ = Describe("JobManager", func() {
 			mgr := NewBuildManager(clnt, maker, helper)
 
 			Expect(
-				mgr.Sync(ctx, mod, km, kernelVersion, true),
+				mgr.Sync(ctx, mod, km, kernelVersion, km.ContainerImage, true),
 			).To(
 				Equal(build.Result{Requeue: true, Status: build.StatusCreated}),
 			)
@@ -232,7 +232,7 @@ var _ = Describe("JobManager", func() {
 			mgr := NewBuildManager(clnt, maker, helper)
 
 			Expect(
-				mgr.Sync(ctx, mod, km, kernelVersion, true),
+				mgr.Sync(ctx, mod, km, kernelVersion, km.ContainerImage, true),
 			).To(
 				Equal(build.Result{Requeue: true, Status: build.StatusInProgress}),
 			)

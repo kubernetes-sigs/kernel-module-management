@@ -137,7 +137,7 @@ func (p *preflightHelper) verifyBuild(ctx context.Context,
 	mapping *kmmv1beta1.KernelMapping,
 	mod *kmmv1beta1.Module) (bool, string) {
 	// at this stage we know that eiher mapping Build or Container build are defined
-	buildRes, err := p.buildAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, pv.Spec.PushBuiltImage)
+	buildRes, err := p.buildAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, mapping.ContainerImage, pv.Spec.PushBuiltImage)
 	if err != nil {
 		return false, fmt.Sprintf("Failed to verify build for module %s, kernel version %s, error %s", mod.Name, pv.Spec.KernelVersion, err)
 	}

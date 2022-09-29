@@ -22,5 +22,5 @@ type Result struct {
 //go:generate mockgen -source=manager.go -package=build -destination=mock_manager.go
 
 type Manager interface {
-	Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string, pushImage bool) (Result, error)
+	Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string, targetImage string, pushImage bool) (Result, error)
 }
