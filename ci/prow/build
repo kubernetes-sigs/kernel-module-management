@@ -2,4 +2,6 @@
 
 set -euxo pipefail
 
+ls -la
+
 make manager
