@@ -15,6 +15,7 @@ go install sigs.k8s.io/kubetest2/kubetest2-gce@latest
 go install sigs.k8s.io/kubetest2/kubetest2-tester-exec@latest
 kubetest2 gce -v 2 \
     --repo-root /go/src/k8s.io/kubernetes \
+    --legacy-mode \
     --build \
     --up \
     --down \
