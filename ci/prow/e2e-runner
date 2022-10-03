@@ -2,14 +2,6 @@
 
 set -euxo pipefail
 
-#FIXME: move to the CI infra?
-export BAZEL_VERSION=5.3.0
-
-#FIXME: remove
-pwd
-find / -name kubernetes
-echo ${GOPATH}
-
 repo_root=$(git rev-parse --show-toplevel);
 cd;
 /workspace/test-infra/images/kubekins-e2e/install-bazel.sh
@@ -18,7 +10,6 @@ go install sigs.k8s.io/kubetest2/kubetest2-gce@latest
 go install sigs.k8s.io/kubetest2/kubetest2-tester-exec@latest
 kubetest2 gce -v 2 \
     --repo-root /go/src/k8s.io/kubernetes \
-    --legacy-mode \
     --build \
     --up \
     --down \
