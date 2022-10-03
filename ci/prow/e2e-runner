@@ -2,6 +2,10 @@
 
 set -euxo pipefail
 
+#FIXME: remove
+pwd
+find / -name kubernetes
+
 repo_root=$(git rev-parse --show-toplevel);
 cd;
 /workspace/test-infra/images/kubekins-e2e/install-bazel.sh
