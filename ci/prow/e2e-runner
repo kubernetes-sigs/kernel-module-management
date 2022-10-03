@@ -7,9 +7,8 @@ go install sigs.k8s.io/kubetest2@latest
 go install sigs.k8s.io/kubetest2/kubetest2-gce@latest
 go install sigs.k8s.io/kubetest2/kubetest2-tester-exec@latest
 
-#FIXME: move the BAZEL_VERSION to the infra job ENVs
 # I think --legacy-mode is required to get a vanila k8s instead of a google k8s
-BAZEL_VERSION=5.3.0 kubetest2 gce -v 2 \
+kubetest2 gce -v 2 \
     --repo-root /go/src/k8s.io/kubernetes \
     --legacy-mode \
     --build \
