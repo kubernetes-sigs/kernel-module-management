@@ -37,6 +37,7 @@ func labels(mod kmmv1beta1.Module, targetKernel string) map[string]string {
 	return map[string]string{
 		constants.ModuleNameLabel:    mod.Name,
 		constants.TargetKernelTarget: targetKernel,
+		constants.JobType:            "build",
 	}
 }
 
