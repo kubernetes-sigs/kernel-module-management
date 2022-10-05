@@ -31,6 +31,14 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # gcr.io/k8s-staging-kmm/kernel-module-management-bundle:$VERSION and gcr.io/k8s-staging-kmm/kernel-module-management-catalog:$VERSION.
 IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-operator
 
+# SIGNER_IMAGE_TAG_BASE and SIGNER_IMAGE_TAG together define SIGNER_IMG
+# SIGNER_IMG is the name given to the signer job image that is used to sign kernel modules
+# to implement the escureboot signing functionality
+PODMAN=podman
+SIGNER_IMAGE_TAG_BASE ?= quay.io/chrisp262/kmod-signer
+SIGNER_IMAGE_TAG ?= $(shell  git log --format="%H" -n 1)
+SIGNER_IMG ?= $(SIGNER_IMAGE_TAG_BASE):$(SIGNER_IMAGE_TAG)
+
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
@@ -256,4 +264,13 @@ catalog-build: opm ## Build a catalog image.
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
+.PHONY: signimage
+signimage: ## Build manager binary.
+	go build -o cmd/signimage/signimage cmd/signimage/signimage.go
+
+.PHONY: signimage-build 
+signimage-build: ## Build docker image with the manager.
+	$(PODMAN) build -f Dockerfile.signimage -t $(SIGNER_IMG)
+
 include docs.mk
+

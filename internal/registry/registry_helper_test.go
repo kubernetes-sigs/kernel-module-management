@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
-	"io/ioutil"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/partial"
@@ -24,7 +23,7 @@ func (ul *uncompressedLayer) DiffID() (v1.Hash, error) {
 }
 
 func (ul *uncompressedLayer) Uncompressed() (io.ReadCloser, error) {
-	return ioutil.NopCloser(bytes.NewBuffer(ul.content)), nil
+	return io.NopCloser(bytes.NewBuffer(ul.content)), nil
 }
 
 func (ul *uncompressedLayer) MediaType() (types.MediaType, error) {
