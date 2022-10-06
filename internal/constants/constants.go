@@ -5,4 +5,5 @@ const (
 	NodeLabelerFinalizer = "kmm.node.kubernetes.io/node-labeler"
 	TargetKernelTarget   = "kmm.node.kubernetes.io/target-kernel"
 	DaemonSetRole        = "kmm.node.kubernetes.io/role"
+	JobType              = "kmm.node.kubernetes.io/job-type"
 )

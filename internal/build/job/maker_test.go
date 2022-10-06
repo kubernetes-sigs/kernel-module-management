@@ -73,6 +73,7 @@ var _ = Describe("MakeJobTemplate", func() {
 				Labels: map[string]string{
 					constants.ModuleNameLabel:    moduleName,
 					constants.TargetKernelTarget: kernelVersion,
+					constants.JobType:            "build",
 				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
