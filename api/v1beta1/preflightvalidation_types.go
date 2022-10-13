@@ -76,7 +76,7 @@ type CRStatus struct {
 // It is populated by the system and is read-only.
 // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 type PreflightValidationStatus struct {
-	// CRStatuses contain observations about each SpecialResource's preflight upgradability validation
+	// CRStatuses contain observations about each Module's preflight upgradability validation
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +optional
@@ -86,7 +86,7 @@ type PreflightValidationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// PreflightValidation initiates a preflight validations for all SpecialResources on the current Kuberentes cluster.
+// PreflightValidation initiates a preflight validations for all Modules on the current Kubernetes cluster.
 // +kubebuilder:resource:path=preflightvalidations,scope=Cluster
 // +kubebuilder:resource:path=preflightvalidations,scope=Cluster,shortName=pv
 type PreflightValidation struct {
