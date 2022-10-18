@@ -16,7 +16,7 @@ const (
 
 //go:generate mockgen -source=metrics.go -package=metrics -destination=mock_metrics_api.go
 
-// Metrics is an interface representing a prometheus client for the Special Resource Operator
+// Metrics is an interface representing a prometheus client for the Kernel Module Management Operator
 type Metrics interface {
 	Register()
 	SetExistingKMMOModules(value int)

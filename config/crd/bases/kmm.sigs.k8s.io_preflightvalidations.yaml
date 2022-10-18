@@ -21,7 +21,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: PreflightValidation initiates a preflight validations for all
-          SpecialResources on the current Kuberentes cluster.
+          Modules on the current Kubernetes cluster.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -92,7 +92,7 @@ spec:
                   - verificationStage
                   - verificationStatus
                   type: object
-                description: CRStatuses contain observations about each SpecialResource's
+                description: CRStatuses contain observations about each Module's
                   preflight upgradability validation
                 type: object
             type: object
