@@ -2,4 +2,5 @@
 
 set -euxo pipefail
 
+#FIXME: add the real e2e test here instead
 kubectl get ns
