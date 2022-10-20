@@ -21,13 +21,7 @@ kubetest2 gce -v 2 \
     --gcp-project assisted-installer \
     --repo-root /go/src/k8s.io/kubernetes \
     --legacy-mode \
+    --build \
     --up \
     --down \
     --test=exec -- ${TEST}
-#kubetest2 gce -v 2 \
-#    --repo-root /go/src/k8s.io/kubernetes \
-#    --legacy-mode \
-#    --build \
-#    --up \
-#    --down \
-#    --test=exec -- ${TEST}
