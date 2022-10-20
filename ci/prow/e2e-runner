@@ -13,10 +13,13 @@ set -euxo pipefail
 #FIXME: use /usr/local/bin/kubetest2 instead
 # I think --legacy-mode is required to get a vanila k8s instead of a google k8s
 #kubetest2 gce -v 2 \
-/usr/local/bin/kubetest2 gce -v 2 \
-    --repo-root /go/src/k8s.io/kubernetes \
-    --legacy-mode \
-    --build \
-    --up \
-    --down \
-    --test=exec -- ${TEST}
+
+find / -name kubetest2
+find / -name kubernetes
+#/usr/local/bin/kubetest2 gce -v 2 \
+#    --repo-root /go/src/k8s.io/kubernetes \
+#    --legacy-mode \
+#    --build \
+#    --up \
+#    --down \
+#    --test=exec -- ${TEST}
