@@ -17,11 +17,16 @@ git clone https://github.com/kubernetes/kubernetes.git /go/src/k8s.io/kubernetes
 
 #FIXME: do we need to --build?
 # I think --legacy-mode is required to get a vanila k8s instead of a google k8s
-#kubetest2 gce -v 2 \
 kubetest2 gce -v 2 \
     --repo-root /go/src/k8s.io/kubernetes \
     --legacy-mode \
-    --build \
     --up \
     --down \
     --test=exec -- ${TEST}
+#kubetest2 gce -v 2 \
+#    --repo-root /go/src/k8s.io/kubernetes \
+#    --legacy-mode \
+#    --build \
+#    --up \
+#    --down \
+#    --test=exec -- ${TEST}
