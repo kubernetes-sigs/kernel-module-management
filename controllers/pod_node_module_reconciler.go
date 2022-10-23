@@ -59,7 +59,13 @@ func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		"label name", labelName,
 	)
 
-	if !podutils.IsPodReady(&pod) {
+	// when Daemonset/ReplicaSet controller deletes pod, the pods state stays Ready,
+	// but its deletion timestamp is set. We use deletion timestamp to delete the label,
+	// and not wait a probable TerminationGracePeriod, since Pre-Stop hooks is run
+	// at the beginning. IsodReady condition should still be checked, in case pod state
+	// has changed not due to Daemonset termination, but due to internal state of Daemonset on
+	// cluster
+	if !podutils.IsPodReady(&pod) || !pod.DeletionTimestamp.IsZero() {
 		logger.Info("Unlabeling node")
 
 		if err := pnmr.deleteLabel(ctx, nodeName, labelName); err != nil {

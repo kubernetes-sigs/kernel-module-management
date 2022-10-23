@@ -92,8 +92,8 @@ spec:
                   - verificationStage
                   - verificationStatus
                   type: object
-                description: CRStatuses contain observations about each Module's
-                  preflight upgradability validation
+                description: CRStatuses contain observations about each Module's preflight
+                  upgradability validation
                 type: object
             type: object
         type: object
