@@ -2077,6 +2077,48 @@ spec:
                               description: Regexp is a regular expression to be match
                                 against node kernels.
                               type: string
+                            sign:
+                              description: Sign enables in-cluster signing for this
+                                mapping
+                              properties:
+                                certSecret:
+                                  description: a secret containing the public key
+                                    used to sign kernel modules for secureboot
+                                  properties:
+                                    name:
+                                      description: 'Name of the referent. More info:
+                                        https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        TODO: Add other useful fields. apiVersion,
+                                        kind, uid?'
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                filesToSign:
+                                  description: paths inside the image for the kernel
+                                    modules to sign (if ommited all kmods are signed)
+                                  items:
+                                    type: string
+                                  type: array
+                                keySecret:
+                                  description: a secret containing the private key
+                                    used to sign kernel modules for secureboot
+                                  properties:
+                                    name:
+                                      description: 'Name of the referent. More info:
+                                        https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        TODO: Add other useful fields. apiVersion,
+                                        kind, uid?'
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                unsignedImage:
+                                  description: Image to sign, ignored if a Build is
+                                    present, required otherwise
+                                  type: string
+                              required:
+                              - certSecret
+                              - keySecret
+                              type: object
                           required:
                           - containerImage
                           type: object
@@ -2166,6 +2208,45 @@ spec:
                             description: If InsecureSkipTLSVerify, the operator will
                               accept any certificate provided by the registry.
                             type: boolean
+                        type: object
+                      sign:
+                        description: Sign provides default kmod signing settings
+                        properties:
+                          certSecret:
+                            description: a secret containing the public key used to
+                              sign kernel modules for secureboot
+                            properties:
+                              name:
+                                description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  TODO: Add other useful fields. apiVersion, kind,
+                                  uid?'
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          filesToSign:
+                            description: paths inside the image for the kernel modules
+                              to sign (if ommited all kmods are signed)
+                            items:
+                              type: string
+                            type: array
+                          keySecret:
+                            description: a secret containing the private key used
+                              to sign kernel modules for secureboot
+                            properties:
+                              name:
+                                description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  TODO: Add other useful fields. apiVersion, kind,
+                                  uid?'
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          unsignedImage:
+                            description: Image to sign, ignored if a Build is present,
+                              required otherwise
+                            type: string
+                        required:
+                        - certSecret
+                        - keySecret
                         type: object
                     required:
                     - kernelMappings
