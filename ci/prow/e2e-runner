@@ -16,7 +16,7 @@ git clone https://github.com/kubernetes/kubernetes.git /go/src/k8s.io/kubernetes
 #FIXME: use /usr/local/bin/kubetest2 instead
 
 #FIXME: do we need to --build?
-# I think --legacy-mode is required to get a vanila k8s instead of a google k8s
+# --legacy-mode indicate that we are using kubernetes/kubernetes as opposed to kubernetes/cloud-provider-gcp
 kubetest2 gce -v 2 \
     --repo-root /go/src/k8s.io/kubernetes \
     --legacy-mode \
