@@ -702,3 +702,70 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 		Expect(res).To(BeFalse())
 	})
 })
+
+var _ = Describe("ModuleReconciler_getNodesListBySelector", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+	})
+
+	ctx := context.Background()
+	mod := kmmv1beta1.Module{
+		Spec: kmmv1beta1.ModuleSpec{
+			Selector: map[string]string{"key": "value"},
+		},
+	}
+
+	It("no nodes with matching labels", func() {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+				list.Items = []v1.Node{}
+				return nil
+			},
+		)
+		mr := NewModuleReconciler(clnt, nil, nil, nil, nil, nil, nil, nil, nil)
+		nodeList, err := mr.getNodesListBySelector(context.Background(), &mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(nodeList)).To(Equal(0))
+	})
+
+	It("2 nodes with matching labels, all schedulable", func() {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+				list.Items = []v1.Node{v1.Node{}, v1.Node{}}
+				return nil
+			},
+		)
+		mr := NewModuleReconciler(clnt, nil, nil, nil, nil, nil, nil, nil, nil)
+		nodeList, err := mr.getNodesListBySelector(context.Background(), &mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(nodeList)).To(Equal(2))
+	})
+
+	It("2 nodes with matching labels, 1 not schedulable", func() {
+		notSchedulableNode := v1.Node{
+			Spec: v1.NodeSpec{
+				Taints: []v1.Taint{
+					{
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				},
+			},
+		}
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+				list.Items = []v1.Node{notSchedulableNode, v1.Node{}}
+				return nil
+			},
+		)
+		mr := NewModuleReconciler(clnt, nil, nil, nil, nil, nil, nil, nil, nil)
+		nodeList, err := mr.getNodesListBySelector(context.Background(), &mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(nodeList)).To(Equal(1))
+	})
+})

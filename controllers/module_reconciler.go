@@ -235,13 +235,20 @@ func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *kmmv
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("Listing nodes", "selector", mod.Spec.Selector)
 
-	nodes := v1.NodeList{}
+	selectedNodes := v1.NodeList{}
 	opt := client.MatchingLabels(mod.Spec.Selector)
-	if err := r.Client.List(ctx, &nodes, opt); err != nil {
+	if err := r.Client.List(ctx, &selectedNodes, opt); err != nil {
 		logger.Error(err, "Could not list nodes")
 		return nil, fmt.Errorf("could not list nodes: %v", err)
 	}
-	return nodes.Items, nil
+	nodes := make([]v1.Node, 0, len(selectedNodes.Items))
+
+	for _, node := range selectedNodes.Items {
+		if isNodeSchedulable(&node) {
+			nodes = append(nodes, node)
+		}
+	}
+	return nodes, nil
 }
 
 func (r *ModuleReconciler) handleBuild(ctx context.Context,
@@ -387,4 +394,13 @@ func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string
 		).
 		Named("module").
 		Complete(r)
+}
+
+func isNodeSchedulable(node *v1.Node) bool {
+	for _, taint := range node.Spec.Taints {
+		if taint.Effect == v1.TaintEffectNoSchedule {
+			return false
+		}
+	}
+	return true
 }
