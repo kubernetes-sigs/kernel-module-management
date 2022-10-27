@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -88,7 +89,7 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 		}
 		gomock.InOrder(
 			clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation, _ ...ctrlclient.GetOption) error {
 					m.ObjectMeta = pv.ObjectMeta
 					m.Spec.KernelVersion = pv.Spec.KernelVersion
 					m.Status = pv.Status
@@ -106,7 +107,7 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 			mockSU.EXPECT().PreflightSetVerificationStatus(ctx, &pv, mod.Name, kmmv1beta1.VerificationTrue, "some message").Return(nil),
 			mockSU.EXPECT().PreflightSetVerificationStage(ctx, &pv, mod.Name, kmmv1beta1.VerificationStageDone).Return(nil),
 			clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation, _ ...ctrlclient.GetOption) error {
 					m.Status.CRStatuses = map[string]*kmmv1beta1.CRStatus{mod.Name: &kmmv1beta1.CRStatus{VerificationStatus: "True"}}
 					return nil
 				},
@@ -139,7 +140,7 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 		}
 		gomock.InOrder(
 			clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation, _ ...ctrlclient.GetOption) error {
 					m.ObjectMeta = pv.ObjectMeta
 					m.Spec.KernelVersion = pv.Spec.KernelVersion
 					m.Status = pv.Status
@@ -157,7 +158,7 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 			mockSU.EXPECT().PreflightSetVerificationStatus(ctx, &pv, mod.Name, kmmv1beta1.VerificationTrue, "some message").Return(nil),
 			mockSU.EXPECT().PreflightSetVerificationStage(ctx, &pv, mod.Name, kmmv1beta1.VerificationStageDone).Return(nil),
 			clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation, _ ...ctrlclient.GetOption) error {
 					m.Status.CRStatuses = map[string]*kmmv1beta1.CRStatus{mod.Name: &kmmv1beta1.CRStatus{VerificationStatus: "False"}}
 					return nil
 				},
@@ -418,7 +419,7 @@ var _ = Describe("PreflightValidationReconciler_checkPreflightCompletion", func(
 		}
 
 		clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
-			func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
+			func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation, _ ...ctrlclient.GetOption) error {
 				m.Status.CRStatuses = crStatuses
 				return nil
 			},
@@ -436,7 +437,7 @@ var _ = Describe("PreflightValidationReconciler_checkPreflightCompletion", func(
 		}
 
 		clnt.EXPECT().Get(context.Background(), nsn, &kmmv1beta1.PreflightValidation{}).DoAndReturn(
-			func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation) error {
+			func(_ interface{}, _ interface{}, m *kmmv1beta1.PreflightValidation, _ ...ctrlclient.GetOption) error {
 				m.Status.CRStatuses = crStatuses
 				return nil
 			},

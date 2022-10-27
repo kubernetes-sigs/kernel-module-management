@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("GetKeyChain", func() {
@@ -53,7 +54,7 @@ var _ = Describe("GetKeyChain", func() {
 	It("should fail if the secret doesn't contains auth data", func() {
 
 		mockClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ interface{}, _ interface{}, s *v1.Secret) error {
+			func(_ interface{}, _ interface{}, s *v1.Secret, _ ...ctrlclient.GetOption) error {
 				s.Type = v1.SecretTypeDockerConfigJson
 				s.Data = map[string][]byte{
 					v1.DockerConfigJsonKey: []byte("some data"),

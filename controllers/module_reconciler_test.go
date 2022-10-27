@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -107,7 +108,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module, _ ...ctrlclient.GetOption) error {
 					m.ObjectMeta = mod.ObjectMeta
 					m.Spec = mod.Spec
 					return nil
@@ -168,7 +169,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module, _ ...ctrlclient.GetOption) error {
 					m.ObjectMeta = mod.ObjectMeta
 					m.Spec = mod.Spec
 					return nil
@@ -232,7 +233,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module, _ ...ctrlclient.GetOption) error {
 					m.ObjectMeta = mod.ObjectMeta
 					m.Spec = mod.Spec
 					return nil
@@ -327,7 +328,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module, _ ...ctrlclient.GetOption) error {
 					m.ObjectMeta = mod.ObjectMeta
 					m.Spec = mod.Spec
 					return nil
@@ -424,7 +425,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module, _ ...ctrlclient.GetOption) error {
 					m.ObjectMeta = mod.ObjectMeta
 					m.Spec = mod.Spec
 					return nil
@@ -515,7 +516,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module) error {
+				func(_ interface{}, _ interface{}, m *kmmv1beta1.Module, _ ...ctrlclient.GetOption) error {
 					m.ObjectMeta = mod.ObjectMeta
 					m.Spec = mod.Spec
 					return nil
