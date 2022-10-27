@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	runtimectrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("NodeKernelReconciler_Reconcile", func() {
@@ -62,7 +63,7 @@ var _ = Describe("NodeKernelReconciler_Reconcile", func() {
 			ctx := context.Background()
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, nsn, &v1.Node{}).DoAndReturn(
-					func(_ interface{}, _ interface{}, n *v1.Node) error {
+					func(_ interface{}, _ interface{}, n *v1.Node, _ ...client.GetOption) error {
 						n.ObjectMeta = node.ObjectMeta
 						n.Status = node.Status
 						return nil

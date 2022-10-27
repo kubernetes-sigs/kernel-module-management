@@ -70,7 +70,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 				kubeClient.
 					EXPECT().
 					Get(ctx, nn, &pod).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object) {
+					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
 						o.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
 						o.(*v1.Pod).Spec.NodeName = nodeName
 					}),
@@ -78,7 +78,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 				kubeClient.
 					EXPECT().
 					Get(ctx, types.NamespacedName{Name: nodeName}, &node).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object) {
+					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
 						o.SetLabels(map[string]string{nodeLabel: ""})
 					}),
 				kubeClient.
@@ -121,7 +121,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 				kubeClient.
 					EXPECT().
 					Get(ctx, nn, &pod).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object) {
+					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
 						o.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
 						o.(*v1.Pod).Spec.NodeName = nodeName
 						o.(*v1.Pod).Status.Conditions = []v1.PodCondition{
@@ -180,7 +180,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 				kubeClient.
 					EXPECT().
 					Get(ctx, nn, &pod).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object) {
+					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
 						o.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
 						o.(*v1.Pod).Spec.NodeName = nodeName
 						o.SetDeletionTimestamp(&now)
@@ -190,7 +190,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 				kubeClient.
 					EXPECT().
 					Get(ctx, types.NamespacedName{Name: nodeName}, &node).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object) {
+					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
 						o.SetLabels(map[string]string{nodeLabel: ""})
 					}),
 				kubeClient.
