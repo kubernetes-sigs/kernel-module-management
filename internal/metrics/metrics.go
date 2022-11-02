@@ -10,6 +10,7 @@ const (
 	existingKMMOModulesQuery = "kmmo_module_total"
 	completedKMMOStageQuery  = "kmmo_completed_stage"
 	BuildStage               = "build"
+	SignStage                = "sign"
 	ModuleLoaderStage        = "module-loader"
 	DevicePluginStage        = "device-plugin"
 )

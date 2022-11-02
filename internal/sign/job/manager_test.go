@@ -179,7 +179,7 @@ var _ = Describe("JobManager", func() {
 				helper.EXPECT().GetRelevantSign(mod, km).Return(km.Sign),
 				jobhelper.EXPECT().JobLabels(mod, kernelVersion, "sign").Return(labels),
 				maker.EXPECT().MakeJobTemplate(mod, km.Sign, kernelVersion, previousImageName, km.ContainerImage, labels, true).Return(&j, nil),
-				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeSign).Return(nil, nil),
+				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeSign).Return(nil, utils.ErrNoMatchingJob),
 				jobhelper.EXPECT().CreateJob(ctx, &j).Return(errors.New("unable to create job")),
 			)
 
@@ -210,7 +210,7 @@ var _ = Describe("JobManager", func() {
 				helper.EXPECT().GetRelevantSign(mod, km).Return(km.Sign),
 				jobhelper.EXPECT().JobLabels(mod, kernelVersion, "sign").Return(labels),
 				maker.EXPECT().MakeJobTemplate(mod, km.Sign, kernelVersion, previousImageName, km.ContainerImage, labels, true).Return(&j, nil),
-				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeSign).Return(nil, nil),
+				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeSign).Return(nil, utils.ErrNoMatchingJob),
 				jobhelper.EXPECT().CreateJob(ctx, &j).Return(nil),
 			)
 
