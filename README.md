@@ -11,6 +11,9 @@ Install the bleeding edge Kernel Module Management Operator in one command:
 kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default
 ```
 
+## Examples
+You can find examples on different use cases in [labs](docs/labs).
+
 ## Community, discussion, contribution, and support
 
 Learn how to engage with the Kubernetes community on the [community page](http://kubernetes.io/community/).
