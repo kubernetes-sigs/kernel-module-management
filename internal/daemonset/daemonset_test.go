@@ -86,7 +86,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			Name: "node-var-lib-firmware",
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{
-					Path: "/var/lib/firmware/module-name",
+					Path: "/var/lib/firmware",
 					Type: &hostPathDirectoryOrCreate,
 				},
 			},
@@ -94,7 +94,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 		volm := v1.VolumeMount{
 			Name:      "node-var-lib-firmware",
-			MountPath: "/var/lib/firmware/module-name",
+			MountPath: "/var/lib/firmware",
 		}
 
 		mod := kmmv1beta1.Module{
@@ -924,7 +924,7 @@ var _ = Describe("MakeLoadCommand", func() {
 			Equal([]string{
 				"/bin/sh",
 				"-c",
-				fmt.Sprintf("cp -r /kmm/firmware/mymodule /var/lib/firmware/module-name && modprobe -v %s", kernelModuleName),
+				fmt.Sprintf("cp -r /kmm/firmware/mymodule /var/lib/firmware && modprobe -v %s", kernelModuleName),
 			}),
 		)
 	})
@@ -1005,7 +1005,7 @@ var _ = Describe("MakeUnloadCommand", func() {
 			Equal([]string{
 				"/bin/sh",
 				"-c",
-				fmt.Sprintf("modprobe -rv %s && rm -rf /var/lib/firmware/module-name", kernelModuleName),
+				fmt.Sprintf("modprobe -rv %s && cd /kmm/firmware/mymodule && find |sort -r |xargs -I{} rm -d /var/lib/firmware/$(basename /kmm/firmware/mymodule)/{}", kernelModuleName),
 			}),
 		)
 	})
