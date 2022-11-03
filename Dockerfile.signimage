@@ -1,0 +1,24 @@
+FROM registry.fedoraproject.org/fedora as ksource
+RUN yum install -y kernel-devel
+
+FROM golang:1.19 as builder
+
+WORKDIR /workspace
+
+COPY cmd cmd
+COPY api api
+COPY internal internal
+COPY Makefile Makefile
+COPY docs.mk docs.mk
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+# Build
+RUN make signimage
+
+FROM registry.fedoraproject.org/fedora
+
+COPY --from=builder /workspace/cmd/signimage/signimage /
+COPY --from=ksource /usr/src/kernels/*/scripts/sign-file /sign-file
+
+ENTRYPOINT ["/signimage"]
