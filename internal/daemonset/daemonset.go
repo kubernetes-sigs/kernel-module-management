@@ -170,13 +170,11 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 	}
 
 	if fw := mod.Spec.ModuleLoader.Container.Modprobe.FirmwarePath; fw != "" {
-		moduleFirmwarePath := fmt.Sprintf("%s/%s", nodeVarLibFirmwarePath, mod.Name)
-
 		firmwareVolume := v1.Volume{
 			Name: nodeVarLibFirmwareVolumeName,
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{
-					Path: moduleFirmwarePath,
+					Path: nodeVarLibFirmwarePath,
 					Type: &hostPathDirectoryOrCreate,
 				},
 			},
@@ -185,7 +183,7 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 
 		firmwareVolumeMount := v1.VolumeMount{
 			Name:      nodeVarLibFirmwareVolumeName,
-			MountPath: moduleFirmwarePath,
+			MountPath: nodeVarLibFirmwarePath,
 		}
 
 		container.VolumeMounts = append(container.VolumeMounts, firmwareVolumeMount)
@@ -372,7 +370,7 @@ func MakeLoadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 	var loadCommand strings.Builder
 
 	if fw := spec.FirmwarePath; fw != "" {
-		fmt.Fprintf(&loadCommand, "cp -r %s %s/%s && ", fw, nodeVarLibFirmwarePath, modName)
+		fmt.Fprintf(&loadCommand, "cp -r %s %s && ", fw, nodeVarLibFirmwarePath)
 	}
 
 	loadCommand.WriteString("modprobe")
@@ -421,7 +419,7 @@ func MakeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 
 	fwUnloadCommand := ""
 	if fw := spec.FirmwarePath; fw != "" {
-		fwUnloadCommand = fmt.Sprintf(" && rm -rf %s/%s", nodeVarLibFirmwarePath, modName)
+		fwUnloadCommand = fmt.Sprintf(" && cd %s && find |sort -r |xargs -I{} rm -d %s/$(basename %s)/{}", fw, nodeVarLibFirmwarePath, fw)
 	}
 
 	if rawArgs := spec.RawArgs; rawArgs != nil && len(rawArgs.Unload) > 0 {
