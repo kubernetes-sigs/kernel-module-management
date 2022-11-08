@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+make generate manifests
+
+
+if [[ $(git diff) ]]; then
+   echo 'Please run `make generate manifests` and repush'
+   echo 'The following differences were found:'
+   echo $(git diff)
+   exit 1
+fi
