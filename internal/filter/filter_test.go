@@ -230,6 +230,38 @@ var _ = Describe("NodeKernelReconcilerPredicate", func() {
 	})
 })
 
+var _ = Describe("NodeUpdateKernelChangedPredicate", func() {
+	updateFunc := NodeUpdateKernelChangedPredicate().Update
+
+	node1 := v1.Node{
+		Status: v1.NodeStatus{
+			NodeInfo: v1.NodeSystemInfo{KernelVersion: "v1"},
+		},
+	}
+
+	node2 := v1.Node{
+		Status: v1.NodeStatus{
+			NodeInfo: v1.NodeSystemInfo{KernelVersion: "v2"},
+		},
+	}
+
+	DescribeTable(
+		"should work as expected",
+		func(updateEvent event.UpdateEvent, expectedResult bool) {
+			Expect(
+				updateFunc(updateEvent),
+			).To(
+				Equal(expectedResult),
+			)
+		},
+		Entry(nil, event.UpdateEvent{ObjectOld: &v1.Pod{}, ObjectNew: &v1.Node{}}, false),
+		Entry(nil, event.UpdateEvent{ObjectOld: &v1.Node{}, ObjectNew: &v1.Pod{}}, false),
+		Entry(nil, event.UpdateEvent{ObjectOld: &v1.Node{}, ObjectNew: &v1.Pod{}}, false),
+		Entry(nil, event.UpdateEvent{ObjectOld: &node1, ObjectNew: &node1}, false),
+		Entry(nil, event.UpdateEvent{ObjectOld: &node1, ObjectNew: &node2}, true),
+	)
+})
+
 var _ = Describe("FindModulesForNode", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
