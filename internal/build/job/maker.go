@@ -5,6 +5,8 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/mitchellh/hashstructure"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -21,12 +23,17 @@ type Maker interface {
 }
 
 type maker struct {
-	helper build.Helper
-	scheme *runtime.Scheme
+	helper    build.Helper
+	jobHelper utils.JobHelper
+	scheme    *runtime.Scheme
 }
 
-func NewMaker(helper build.Helper, scheme *runtime.Scheme) Maker {
-	return &maker{helper: helper, scheme: scheme}
+func NewMaker(helper build.Helper, jobHelper utils.JobHelper, scheme *runtime.Scheme) Maker {
+	return &maker{
+		helper:    helper,
+		jobHelper: jobHelper,
+		scheme:    scheme,
+	}
 }
 
 func (m *maker) MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error) {
@@ -125,8 +132,8 @@ func (m *maker) MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.B
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mod.Name + "-build-",
 			Namespace:    mod.Namespace,
-			Labels:       labels(mod, targetKernel),
-			Annotations:  map[string]string{jobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
+			Labels:       m.jobHelper.JobLabels(mod, targetKernel, utils.JobTypeBuild),
+			Annotations:  map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
 		},
 		Spec: batchv1.JobSpec{
 			Completions: pointer.Int32(1),

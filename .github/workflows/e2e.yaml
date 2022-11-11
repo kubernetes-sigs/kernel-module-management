@@ -378,16 +378,6 @@ jobs:
           done
         timeout-minutes: 1
 
-      - name: Wait for Job completion
-        run: kubectl wait --for condition=complete job -l kmm.node.kubernetes.io/module.name --timeout=-1s
-        timeout-minutes: 2
-
-      - name: Collect job logs
-        run: |
-          JOB_NAME=$(kubectl get jobs.batch -l kmm.node.kubernetes.io/module.name --template='{{ (index .items 0).metadata.name }}')
-          kubectl logs jobs.batch/${JOB_NAME}
-        if: ${{ always() }}
-
       - name: Check that the module gets loaded on the node
         run: |
           until minikube ssh -- lsmod | grep kmm_ci_a; do

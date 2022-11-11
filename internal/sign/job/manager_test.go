@@ -6,7 +6,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	//"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
@@ -30,10 +30,9 @@ var _ = Describe("JobManager", func() {
 			previousImageName = "previous-image"
 			namespace         = "some-namespace"
 
-			moduleName        = "module-name"
-			kernelVersion     = "1.2.3"
-			jobName           = "some-job"
-			jobHashAnnotation = "kmm.node.kubernetes.io/last-hash"
+			moduleName    = "module-name"
+			kernelVersion = "1.2.3"
+			jobName       = "some-job"
 		)
 
 		BeforeEach(func() {
@@ -67,7 +66,7 @@ var _ = Describe("JobManager", func() {
 							"kmm.node.kubernetes.io/target-kernel": kernelVersion,
 						},
 						Namespace:   namespace,
-						Annotations: map[string]string{jobHashAnnotation: "some hash"},
+						Annotations: map[string]string{constants.JobHashAnnotation: "some hash"},
 					},
 					Status: s,
 				}
@@ -78,7 +77,7 @@ var _ = Describe("JobManager", func() {
 							"kmm.node.kubernetes.io/target-kernel": kernelVersion,
 						},
 						Namespace:   namespace,
-						Annotations: map[string]string{jobHashAnnotation: "some hash"},
+						Annotations: map[string]string{constants.JobHashAnnotation: "some hash"},
 					},
 					Status: s,
 				}
@@ -94,7 +93,7 @@ var _ = Describe("JobManager", func() {
 
 					jobhelper.EXPECT().JobLabels(mod, kernelVersion, "sign").Return(labels),
 					maker.EXPECT().MakeJobTemplate(mod, km.Sign, kernelVersion, previousImageName, km.ContainerImage, labels, true).Return(&j, nil),
-					jobhelper.EXPECT().GetJob(ctx, "", "sign", labels).Return(&newJob, nil),
+					jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeSign).Return(&newJob, nil),
 					jobhelper.EXPECT().IsJobChanged(&j, &newJob).Return(false, nil),
 					jobhelper.EXPECT().GetJobStatus(&newJob).Return(r.Status, r.Requeue, joberr),
 				)
@@ -151,7 +150,7 @@ var _ = Describe("JobManager", func() {
 				helper.EXPECT().GetRelevantSign(mod, km).Return(km.Sign),
 				jobhelper.EXPECT().JobLabels(mod, kernelVersion, "sign").Return(labels),
 				maker.EXPECT().MakeJobTemplate(mod, km.Sign, kernelVersion, previousImageName, km.ContainerImage, labels, true).Return(&j, nil),
-				jobhelper.EXPECT().GetJob(ctx, "", "sign", labels).Return(nil, errors.New("random error")),
+				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeSign).Return(nil, errors.New("random error")),
 			)
 
 			mgr := NewSignJobManager(maker, helper, jobhelper)
@@ -180,7 +179,7 @@ var _ = Describe("JobManager", func() {
 				helper.EXPECT().GetRelevantSign(mod, km).Return(km.Sign),
 				jobhelper.EXPECT().JobLabels(mod, kernelVersion, "sign").Return(labels),
 				maker.EXPECT().MakeJobTemplate(mod, km.Sign, kernelVersion, previousImageName, km.ContainerImage, labels, true).Return(&j, nil),
-				jobhelper.EXPECT().GetJob(ctx, "", "sign", labels).Return(nil, nil),
+				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeSign).Return(nil, nil),
 				jobhelper.EXPECT().CreateJob(ctx, &j).Return(errors.New("unable to create job")),
 			)
 
@@ -211,7 +210,7 @@ var _ = Describe("JobManager", func() {
 				helper.EXPECT().GetRelevantSign(mod, km).Return(km.Sign),
 				jobhelper.EXPECT().JobLabels(mod, kernelVersion, "sign").Return(labels),
 				maker.EXPECT().MakeJobTemplate(mod, km.Sign, kernelVersion, previousImageName, km.ContainerImage, labels, true).Return(&j, nil),
-				jobhelper.EXPECT().GetJob(ctx, "", "sign", labels).Return(nil, nil),
+				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeSign).Return(nil, nil),
 				jobhelper.EXPECT().CreateJob(ctx, &j).Return(nil),
 			)
 
@@ -235,7 +234,7 @@ var _ = Describe("JobManager", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        jobName,
 					Namespace:   namespace,
-					Annotations: map[string]string{jobHashAnnotation: "new hash"},
+					Annotations: map[string]string{constants.JobHashAnnotation: "new hash"},
 				},
 			}
 
@@ -243,7 +242,7 @@ var _ = Describe("JobManager", func() {
 				helper.EXPECT().GetRelevantSign(mod, km).Return(km.Sign),
 				jobhelper.EXPECT().JobLabels(mod, kernelVersion, "sign").Return(labels),
 				maker.EXPECT().MakeJobTemplate(mod, km.Sign, kernelVersion, previousImageName, km.ContainerImage, labels, true).Return(&newJob, nil),
-				jobhelper.EXPECT().GetJob(ctx, "", "sign", labels).Return(&newJob, nil),
+				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeSign).Return(&newJob, nil),
 				jobhelper.EXPECT().IsJobChanged(&newJob, &newJob).Return(true, nil),
 				jobhelper.EXPECT().DeleteJob(ctx, &newJob).Return(nil),
 			)

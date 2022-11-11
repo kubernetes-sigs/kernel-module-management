@@ -33,6 +33,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/rbac"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"k8s.io/klog/v2/klogr"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -123,8 +124,9 @@ func main() {
 	metricsAPI.Register()
 	registryAPI := registry.NewRegistry()
 	helperAPI := build.NewHelper()
-	makerAPI := job.NewMaker(helperAPI, scheme)
-	buildAPI := job.NewBuildManager(client, makerAPI, helperAPI)
+	jobHelperAPI := utils.NewJobHelper(client)
+	makerAPI := job.NewMaker(helperAPI, jobHelperAPI, scheme)
+	buildAPI := job.NewBuildManager(client, makerAPI, helperAPI, jobHelperAPI)
 	rbacAPI := rbac.NewCreator(client, scheme)
 	daemonAPI := daemonset.NewCreator(client, kernelLabel, scheme)
 	kernelAPI := module.NewKernelMapper()
