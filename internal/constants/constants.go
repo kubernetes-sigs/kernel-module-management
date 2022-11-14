@@ -7,4 +7,6 @@ const (
 	DaemonSetRole        = "kmm.node.kubernetes.io/role"
 	JobType              = "kmm.node.kubernetes.io/job-type"
 	JobHashAnnotation    = "kmm.node.kubernetes.io/last-hash"
+
+	ManagedClusterModuleNameLabel = "kmm.node.kubernetes.io/managedclustermodule.name"
 )
