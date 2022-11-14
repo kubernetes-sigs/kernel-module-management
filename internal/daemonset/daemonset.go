@@ -23,6 +23,7 @@ const (
 	kubeletDevicePluginsVolumeName = "kubelet-device-plugins"
 	kubeletDevicePluginsPath       = "/var/lib/kubelet/device-plugins"
 	nodeLibModulesVolumeName       = "node-lib-modules"
+        nodeLibModulesPath             = "/lib/modules/"
 	nodeVarLibFirmwarePath         = "/var/lib/firmware"
 	nodeVarLibFirmwareVolumeName   = "node-var-lib-firmware"
 	devicePluginKernelVersion      = ""
@@ -116,7 +117,6 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(ctx context.Context, d
 	nodeSelector := CopyMapStringString(mod.Spec.Selector)
 	nodeSelector[dc.kernelLabel] = kernelVersion
 
-	nodeLibModulesPath := "/lib/modules/" + kernelVersion
 
 	hostPathDirectory := v1.HostPathDirectory
 	hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate

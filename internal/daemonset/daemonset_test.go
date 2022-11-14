@@ -26,6 +26,7 @@ const (
 	namespace         = "namespace"
 	kernelLabel       = "kernel-label"
 	devicePluginImage = "device-plugin-image"
+        fullModulesPath = "/lib/modules/"
 )
 
 var (
@@ -143,7 +144,6 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			imageRepoSecretName = "image-repo-secret"
 			serviceAccountName  = "driver-service-account"
 		)
-		fullModulesPath := "/lib/modules/" + kernelVersion
 		mod := kmmv1beta1.Module{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: kmmv1beta1.GroupVersion.String(),
