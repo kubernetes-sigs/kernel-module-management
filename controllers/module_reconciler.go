@@ -163,14 +163,10 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("could handle device plugin: %w", err)
 	}
 
-	logger.Info("Garbage-collecting DaemonSets")
-
-	// Garbage collect old DaemonSets for which there are no nodes.
-	validKernels := sets.StringKeySet(mappings)
-
-	deleted, err := r.daemonAPI.GarbageCollect(ctx, dsByKernelVersion, validKernels)
+	logger.Info("Run garbage collection")
+	err = r.garbageCollect(ctx, mod, mappings, dsByKernelVersion)
 	if err != nil {
-		return res, fmt.Errorf("could not garbage collect DaemonSets: %v", err)
+		return res, fmt.Errorf("failed to run garbage collection: %v", err)
 	}
 
 	err = r.statusUpdaterAPI.ModuleUpdateStatus(ctx, mod, nodesWithMapping, targetedNodes, dsByKernelVersion)
@@ -178,7 +174,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("failed to update status of the module: %w", err)
 	}
 
-	logger.Info("Garbage-collected DaemonSets", "names", deleted)
+	logger.Info("Reconcile loop finished successfully")
 
 	return res, nil
 }
@@ -355,6 +351,32 @@ func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *kmmv1bet
 	}
 
 	return err
+}
+
+func (r *ModuleReconciler) garbageCollect(ctx context.Context,
+	mod *kmmv1beta1.Module,
+	mappings map[string]*kmmv1beta1.KernelMapping,
+	existingDS map[string]*appsv1.DaemonSet) error {
+	logger := log.FromContext(ctx)
+	// Garbage collect old DaemonSets for which there are no nodes.
+	validKernels := sets.StringKeySet(mappings)
+
+	deleted, err := r.daemonAPI.GarbageCollect(ctx, existingDS, validKernels)
+	if err != nil {
+		return fmt.Errorf("could not garbage collect DaemonSets: %v", err)
+	}
+
+	logger.Info("Garbage-collected DaemonSets", "names", deleted)
+
+	// Garbage collect for successfully finished build jobs
+	deleted, err = r.buildAPI.GarbageCollect(ctx, *mod)
+	if err != nil {
+		return fmt.Errorf("could not garbage collect build objects: %v", err)
+	}
+
+	logger.Info("Garbage-collected Build objects", "names", deleted)
+
+	return nil
 }
 
 func (r *ModuleReconciler) setKMMOMetrics(ctx context.Context) {

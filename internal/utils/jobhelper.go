@@ -4,6 +4,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -16,13 +17,16 @@ import (
 type Status string
 
 const (
-	jobHashAnnotation = "kmm.node.kubernetes.io/last-hash"
+	JobTypeBuild = "build"
+	JobTypeSign  = "sign"
 
 	StatusCompleted  = "completed"
 	StatusCreated    = "created"
 	StatusInProgress = "in progress"
-	StatusFailed     = "Failed"
+	StatusFailed     = "failed"
 )
+
+var ErrNoMatchingJob = errors.New("no matching job")
 
 type Result struct {
 	Requeue bool
@@ -32,7 +36,8 @@ type Result struct {
 type JobHelper interface {
 	IsJobChanged(existingJob *batchv1.Job, newJob *batchv1.Job) (bool, error)
 	JobLabels(mod kmmv1beta1.Module, targetKernel string, jobType string) map[string]string
-	GetJob(ctx context.Context, namespace string, jobType string, labels map[string]string) (*batchv1.Job, error)
+	GetModuleJobByKernel(ctx context.Context, mod kmmv1beta1.Module, targetKernel, jobType string) (*batchv1.Job, error)
+	GetModuleJobs(ctx context.Context, mod kmmv1beta1.Module, jobType string) ([]batchv1.Job, error)
 	DeleteJob(ctx context.Context, job *batchv1.Job) error
 	CreateJob(ctx context.Context, jobTemplate *batchv1.Job) error
 	GetJobStatus(job *batchv1.Job) (Status, bool, error)
@@ -54,39 +59,36 @@ func (jh *jobHelper) IsJobChanged(existingJob *batchv1.Job, newJob *batchv1.Job)
 	if existingAnnotations == nil {
 		return false, fmt.Errorf("annotations are not present in the existing job %s", existingJob.Name)
 	}
-	if existingAnnotations[jobHashAnnotation] == newAnnotations[jobHashAnnotation] {
+	if existingAnnotations[constants.JobHashAnnotation] == newAnnotations[constants.JobHashAnnotation] {
 		return false, nil
 	}
 	return true, nil
 }
 
 func (jh *jobHelper) JobLabels(mod kmmv1beta1.Module, targetKernel string, jobType string) map[string]string {
-	return map[string]string{
-		constants.ModuleNameLabel:    mod.Name,
-		constants.TargetKernelTarget: targetKernel,
-		constants.JobType:            jobType,
-	}
+	return moduleKernelLabels(mod.Name, targetKernel, jobType)
 }
 
-func (jh *jobHelper) GetJob(ctx context.Context, namespace string, jobType string, labels map[string]string) (*batchv1.Job, error) {
-	jobList := batchv1.JobList{}
-
-	opts := []client.ListOption{
-		client.MatchingLabels(labels),
-		client.InNamespace(namespace),
+func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, mod kmmv1beta1.Module, targetKernel, jobType string) (*batchv1.Job, error) {
+	matchLabels := moduleKernelLabels(mod.Name, targetKernel, jobType)
+	jobs, err := jh.getJobs(ctx, mod.Namespace, matchLabels)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get module %s, jobs by kernel %s: %v", mod.Name, targetKernel, err)
 	}
 
-	if err := jh.client.List(ctx, &jobList, opts...); err != nil {
-		return nil, fmt.Errorf("could not list jobs: %v", err)
+	numFoundJobs := len(jobs)
+	if numFoundJobs == 0 {
+		return nil, ErrNoMatchingJob
+	} else if numFoundJobs > 1 {
+		return nil, fmt.Errorf("expected 0 or 1 %s job, got %d", jobType, numFoundJobs)
 	}
 
-	if n := len(jobList.Items); n == 0 {
-		return nil, nil
-	} else if n > 1 {
-		return nil, fmt.Errorf("expected 0 or 1 %s job, got %d", jobType, n)
-	}
+	return &jobs[0], nil
+}
 
-	return &jobList.Items[0], nil
+func (jh *jobHelper) GetModuleJobs(ctx context.Context, mod kmmv1beta1.Module, jobType string) ([]batchv1.Job, error) {
+	matchLabels := moduleLabels(mod.Name, jobType)
+	return jh.getJobs(ctx, mod.Namespace, matchLabels)
 }
 
 func (jh *jobHelper) DeleteJob(ctx context.Context, job *batchv1.Job) error {
@@ -125,5 +127,31 @@ func (jh *jobHelper) GetJobStatus(job *batchv1.Job) (Status, bool, error) {
 		return StatusFailed, false, fmt.Errorf("job failed")
 	default:
 		return StatusFailed, false, fmt.Errorf("unknown status: %v", job.Status)
+	}
+}
+
+func (jh *jobHelper) getJobs(ctx context.Context, namespace string, labels map[string]string) ([]batchv1.Job, error) {
+	jobList := batchv1.JobList{}
+	opts := []client.ListOption{
+		client.MatchingLabels(labels),
+		client.InNamespace(namespace),
+	}
+	if err := jh.client.List(ctx, &jobList, opts...); err != nil {
+		return nil, fmt.Errorf("could not list jobs: %v", err)
+	}
+
+	return jobList.Items, nil
+}
+
+func moduleKernelLabels(moduleName, targetKernel, jobType string) map[string]string {
+	labels := moduleLabels(moduleName, jobType)
+	labels[constants.TargetKernelTarget] = targetKernel
+	return labels
+}
+
+func moduleLabels(moduleName, jobType string) map[string]string {
+	return map[string]string{
+		constants.ModuleNameLabel: moduleName,
+		constants.JobType:         jobType,
 	}
 }

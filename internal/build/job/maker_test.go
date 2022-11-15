@@ -8,6 +8,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/mitchellh/hashstructure"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,15 +30,17 @@ var _ = Describe("MakeJobTemplate", func() {
 	)
 
 	var (
-		ctrl *gomock.Controller
-		m    Maker
-		mh   *build.MockHelper
+		ctrl      *gomock.Controller
+		m         Maker
+		mh        *build.MockHelper
+		jobhelper *utils.MockJobHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mh = build.NewMockHelper(ctrl)
-		m = NewMaker(mh, scheme)
+		jobhelper = utils.NewMockJobHelper(ctrl)
+		m = NewMaker(mh, jobhelper, scheme)
 	})
 
 	AfterEach(func() {
@@ -66,15 +69,17 @@ var _ = Describe("MakeJobTemplate", func() {
 			ContainerImage: containerImage,
 		}
 
+		labels := map[string]string{
+			constants.ModuleNameLabel:    moduleName,
+			constants.TargetKernelTarget: kernelVersion,
+			constants.JobType:            "build",
+		}
+
 		expected := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: mod.Name + "-build-",
 				Namespace:    namespace,
-				Labels: map[string]string{
-					constants.ModuleNameLabel:    moduleName,
-					constants.TargetKernelTarget: kernelVersion,
-					constants.JobType:            "build",
-				},
+				Labels:       labels,
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						APIVersion:         "kmm.sigs.k8s.io/v1beta1",
@@ -192,7 +197,7 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 		hash, err := hashstructure.Hash(expected.Spec.Template, nil)
 		Expect(err).NotTo(HaveOccurred())
-		annotations := map[string]string{jobHashAnnotation: fmt.Sprintf("%d", hash)}
+		annotations := map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", hash)}
 		expected.SetAnnotations(annotations)
 
 		mod := mod.DeepCopy()
@@ -200,6 +205,7 @@ var _ = Describe("MakeJobTemplate", func() {
 
 		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override).Return(append(slices.Clone(buildArgs), override))
+		jobhelper.EXPECT().JobLabels(*mod, kernelVersion, utils.JobTypeBuild).Return(labels)
 
 		actual, err := m.MakeJobTemplate(*mod, km.Build, kernelVersion, km.ContainerImage, true)
 		Expect(err).NotTo(HaveOccurred())
@@ -243,6 +249,7 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 
 		mh.EXPECT().ApplyBuildArgOverrides(nil, kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion})
+		jobhelper.EXPECT().JobLabels(mod, kernelVersion, utils.JobTypeBuild).Return(map[string]string{})
 
 		actual, err := m.MakeJobTemplate(mod, &b, kernelVersion, km.ContainerImage, pushFlag)
 		Expect(err).NotTo(HaveOccurred())
@@ -295,6 +302,7 @@ var _ = Describe("MakeJobTemplate", func() {
 
 			override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override)
+			jobhelper.EXPECT().JobLabels(mod, kernelVersion, utils.JobTypeBuild).Return(map[string]string{})
 
 			actual, err := m.MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, false)
 			Expect(err).NotTo(HaveOccurred())

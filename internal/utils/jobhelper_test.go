@@ -16,159 +16,328 @@ import (
 	sigclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("Labels", func() {
+var _ = Describe("JobLabels", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
 	)
 
-	const (
-		moduleName   = "module-name"
-		targetKernel = "1.2.3"
-		jobType      = "sign"
-		namespace    = "mynamespace"
-	)
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 	})
 
-	It("should set labels correctly", func() {
+	It("get job labels", func() {
 		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName"},
 		}
-
 		mgr := NewJobHelper(clnt)
-		labels := mgr.JobLabels(mod, targetKernel, jobType)
+		labels := mgr.JobLabels(mod, "targetKernel", "jobType")
 
-		Expect(labels).To(HaveKeyWithValue(constants.ModuleNameLabel, moduleName))
-		Expect(labels).To(HaveKeyWithValue(constants.TargetKernelTarget, targetKernel))
-		Expect(labels).To(HaveKeyWithValue(constants.JobType, jobType))
+		Expect(labels).To(HaveKeyWithValue(constants.ModuleNameLabel, "moduleName"))
+		Expect(labels).To(HaveKeyWithValue(constants.TargetKernelTarget, "targetKernel"))
+		Expect(labels).To(HaveKeyWithValue(constants.JobType, "jobType"))
+	})
+})
+
+var _ = Describe("GetModuleJobByKernel", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		jh   JobHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		jh = NewJobHelper(clnt)
 	})
 
-	It("GetJob should return something if it finds a job", func() {
+	It("should return only one job", func() {
 		ctx := context.Background()
 
-		mgr := NewJobHelper(clnt)
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
+		}
+		j := batchv1.Job{}
 
 		labels := map[string]string{
-			constants.ModuleNameLabel:    moduleName,
-			constants.TargetKernelTarget: targetKernel,
-			constants.JobType:            jobType,
+			constants.ModuleNameLabel:    "moduleName",
+			constants.TargetKernelTarget: "targetKernel",
+			constants.JobType:            "jobType",
 		}
 
 		opts := []sigclient.ListOption{
 			sigclient.MatchingLabels(labels),
-			sigclient.InNamespace(namespace),
+			sigclient.InNamespace("moduleNamespace"),
 		}
-		jobList := batchv1.JobList{}
 
-		gomock.InOrder(
-			clnt.EXPECT().List(ctx, &jobList, opts).Return(nil),
+		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
+			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
+				list.Items = []batchv1.Job{j}
+				return nil
+			},
 		)
 
-		job, err := mgr.GetJob(ctx, namespace, jobType, labels)
+		job, err := jh.GetModuleJobByKernel(ctx, mod, "targetKernel", "jobType")
 
-		Expect(job).NotTo(Equal(nil))
+		Expect(job).To(Equal(&j))
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("GetJob return an error if list does", func() {
+	It("failure to fetch jobs", func() {
 		ctx := context.Background()
-
-		mgr := NewJobHelper(clnt)
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
+		}
 
 		labels := map[string]string{
-			constants.ModuleNameLabel:    moduleName,
-			constants.TargetKernelTarget: targetKernel,
-			constants.JobType:            jobType,
+			constants.ModuleNameLabel:    "moduleName",
+			constants.TargetKernelTarget: "targetKernel",
+			constants.JobType:            "jobType",
 		}
 
 		opts := []sigclient.ListOption{
 			sigclient.MatchingLabels(labels),
-			sigclient.InNamespace(namespace),
+			sigclient.InNamespace("moduleNamespace"),
 		}
 		jobList := batchv1.JobList{}
 
-		gomock.InOrder(
-			clnt.EXPECT().List(ctx, &jobList, opts).Return(errors.New("random error")),
-		)
+		clnt.EXPECT().List(ctx, &jobList, opts).Return(errors.New("random error"))
 
-		_, err := mgr.GetJob(ctx, namespace, jobType, labels)
+		_, err := jh.GetModuleJobByKernel(ctx, mod, "targetKernel", "jobType")
 
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should delete jobs", func() {
+	It("should fails if more then 1 job exists", func() {
+		ctx := context.Background()
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
+		}
+
+		labels := map[string]string{
+			constants.ModuleNameLabel:    "moduleName",
+			constants.TargetKernelTarget: "targetKernel",
+			constants.JobType:            "jobType",
+		}
+
+		opts := []sigclient.ListOption{
+			sigclient.MatchingLabels(labels),
+			sigclient.InNamespace("moduleNamespace"),
+		}
+
+		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
+			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
+				list.Items = []batchv1.Job{batchv1.Job{}, batchv1.Job{}}
+				return nil
+			},
+		)
+
+		_, err := jh.GetModuleJobByKernel(ctx, mod, "targetKernel", "jobType")
+
+		Expect(err).To(HaveOccurred())
+	})
+})
+
+var _ = Describe("GetModuleJobs", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		jh   JobHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		jh = NewJobHelper(clnt)
+	})
+
+	It("return all found jobs", func() {
+		ctx := context.Background()
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
+		}
+
+		labels := map[string]string{
+			constants.ModuleNameLabel: "moduleName",
+			constants.JobType:         "jobType",
+		}
+
+		opts := []sigclient.ListOption{
+			sigclient.MatchingLabels(labels),
+			sigclient.InNamespace("moduleNamespace"),
+		}
+
+		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
+			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
+				list.Items = []batchv1.Job{batchv1.Job{}, batchv1.Job{}}
+				return nil
+			},
+		)
+
+		jobs, err := jh.GetModuleJobs(ctx, mod, "jobType")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(jobs)).To(Equal(2))
+	})
+
+	It("error flow", func() {
+		ctx := context.Background()
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
+		}
+
+		labels := map[string]string{
+			constants.ModuleNameLabel: "moduleName",
+			constants.JobType:         "jobType",
+		}
+
+		opts := []sigclient.ListOption{
+			sigclient.MatchingLabels(labels),
+			sigclient.InNamespace("moduleNamespace"),
+		}
+
+		clnt.EXPECT().List(ctx, gomock.Any(), opts).Return(fmt.Errorf("some error"))
+
+		_, err := jh.GetModuleJobs(ctx, mod, "jobType")
+
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("zero jobs found", func() {
+		ctx := context.Background()
+
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
+		}
+
+		labels := map[string]string{
+			constants.ModuleNameLabel: "moduleName",
+			constants.JobType:         "jobType",
+		}
+
+		opts := []sigclient.ListOption{
+			sigclient.MatchingLabels(labels),
+			sigclient.InNamespace("moduleNamespace"),
+		}
+
+		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
+			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
+				list.Items = []batchv1.Job{}
+				return nil
+			},
+		)
+
+		jobs, err := jh.GetModuleJobs(ctx, mod, "jobType")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(jobs)).To(Equal(0))
+	})
+})
+
+var _ = Describe("DeleteJob", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		jh   JobHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		jh = NewJobHelper(clnt)
+	})
+
+	It("good flow", func() {
 		ctx := context.Background()
 
 		j := batchv1.Job{}
 		opts := []sigclient.DeleteOption{
 			sigclient.PropagationPolicy(metav1.DeletePropagationBackground),
 		}
-		gomock.InOrder(
-			clnt.EXPECT().Delete(ctx, &j, opts).Return(nil),
-		)
+		clnt.EXPECT().Delete(ctx, &j, opts).Return(nil)
 
-		mgr := NewJobHelper(clnt)
-		err := mgr.DeleteJob(ctx, &j)
+		err := jh.DeleteJob(ctx, &j)
 
 		Expect(err).NotTo(HaveOccurred())
 
 	})
 
-	It("delete should pass errors through", func() {
+	It("error flow", func() {
 		ctx := context.Background()
 
 		j := batchv1.Job{}
 		opts := []sigclient.DeleteOption{
 			sigclient.PropagationPolicy(metav1.DeletePropagationBackground),
 		}
-		gomock.InOrder(
-			clnt.EXPECT().Delete(ctx, &j, opts).Return(errors.New("random error")),
-		)
+		clnt.EXPECT().Delete(ctx, &j, opts).Return(errors.New("random error"))
 
-		mgr := NewJobHelper(clnt)
-		err := mgr.DeleteJob(ctx, &j)
+		err := jh.DeleteJob(ctx, &j)
 
 		Expect(err).To(HaveOccurred())
 
 	})
+})
 
-	It("should create jobs", func() {
+var _ = Describe("CreateJob", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		jh   JobHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		jh = NewJobHelper(clnt)
+	})
+
+	It("good flow", func() {
 		ctx := context.Background()
 
 		j := batchv1.Job{}
-		gomock.InOrder(
-			clnt.EXPECT().Create(ctx, &j).Return(nil),
-		)
+		clnt.EXPECT().Create(ctx, &j).Return(nil)
 
-		mgr := NewJobHelper(clnt)
-		err := mgr.CreateJob(ctx, &j)
+		err := jh.CreateJob(ctx, &j)
 
 		Expect(err).NotTo(HaveOccurred())
 
 	})
 
-	It("create should pass errors though", func() {
+	It("error flow", func() {
 		ctx := context.Background()
 
 		j := batchv1.Job{}
-		gomock.InOrder(
-			clnt.EXPECT().Create(ctx, &j).Return(errors.New("random error")),
-		)
-		mgr := NewJobHelper(clnt)
-		err := mgr.CreateJob(ctx, &j)
+		clnt.EXPECT().Create(ctx, &j).Return(errors.New("random error"))
+
+		err := jh.CreateJob(ctx, &j)
 
 		Expect(err).To(HaveOccurred())
 
+	})
+})
+
+var _ = Describe("JobStatus", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		jh   JobHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		jh = NewJobHelper(clnt)
 	})
 
 	DescribeTable("should return the correct status depending on the job status",
 		func(s *batchv1.Job, r string, expectinprogress bool, expectsErr bool) {
 
-			mgr := NewJobHelper(clnt)
-			res, inprogress, err := mgr.GetJobStatus(s)
+			res, inprogress, err := jh.GetJobStatus(s)
 			if expectsErr {
 				Expect(err).To(HaveOccurred())
 				return
@@ -182,25 +351,38 @@ var _ = Describe("Labels", func() {
 		Entry("Failed", &batchv1.Job{Status: batchv1.JobStatus{Failed: 1}}, StatusFailed, false, true),
 		Entry("unknown", &batchv1.Job{Status: batchv1.JobStatus{Failed: 2}}, StatusFailed, false, true),
 	)
+})
+
+var _ = Describe("IsJobChnaged", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		jh   JobHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		jh = NewJobHelper(clnt)
+	})
 
 	DescribeTable("should detect if a job has changed",
 		func(annotation map[string]string, expectchanged bool, expectsErr bool) {
 			existingJob := batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace:   namespace,
+					//Namespace:   namespace,
 					Annotations: annotation,
 				},
 			}
 			newJob := batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace:   namespace,
-					Annotations: map[string]string{jobHashAnnotation: "some hash"},
+					//Namespace:   namespace,
+					Annotations: map[string]string{constants.JobHashAnnotation: "some hash"},
 				},
 			}
 			fmt.Println(existingJob.GetAnnotations())
 
-			mgr := NewJobHelper(clnt)
-			changed, err := mgr.IsJobChanged(&existingJob, &newJob)
+			changed, err := jh.IsJobChanged(&existingJob, &newJob)
 
 			if expectsErr {
 				Expect(err).To(HaveOccurred())
@@ -210,7 +392,7 @@ var _ = Describe("Labels", func() {
 		},
 
 		Entry("should error if job has no annotations", nil, false, true),
-		Entry("should return true if job has changed", map[string]string{jobHashAnnotation: "some other hash"}, true, false),
-		Entry("should return false is job has not changed ", map[string]string{jobHashAnnotation: "some hash"}, false, false),
+		Entry("should return true if job has changed", map[string]string{constants.JobHashAnnotation: "some other hash"}, true, false),
+		Entry("should return false is job has not changed ", map[string]string{constants.JobHashAnnotation: "some hash"}, false, false),
 	)
 })

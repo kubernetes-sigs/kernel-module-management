@@ -7,59 +7,44 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
-	batchv1 "k8s.io/api/batch/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const jobHashAnnotation = "kmm.node.kubernetes.io/last-hash"
-
-var errNoMatchingBuild = errors.New("no matching build")
-
 type jobManager struct {
-	client client.Client
-	maker  Maker
-	helper build.Helper
+	client    client.Client
+	maker     Maker
+	helper    build.Helper
+	jobHelper utils.JobHelper
 }
 
-func NewBuildManager(client client.Client, maker Maker, helper build.Helper) *jobManager {
+func NewBuildManager(client client.Client, maker Maker, helper build.Helper, jobHelper utils.JobHelper) *jobManager {
 	return &jobManager{
-		client: client,
-		maker:  maker,
-		helper: helper,
+		client:    client,
+		maker:     maker,
+		helper:    helper,
+		jobHelper: jobHelper,
 	}
 }
 
-func labels(mod kmmv1beta1.Module, targetKernel string) map[string]string {
-	return map[string]string{
-		constants.ModuleNameLabel:    mod.Name,
-		constants.TargetKernelTarget: targetKernel,
-		constants.JobType:            "build",
-	}
-}
-
-func (jbm *jobManager) getJob(ctx context.Context, mod kmmv1beta1.Module, targetKernel string) (*batchv1.Job, error) {
-	jobList := batchv1.JobList{}
-
-	opts := []client.ListOption{
-		client.MatchingLabels(labels(mod, targetKernel)),
-		client.InNamespace(mod.Namespace),
+func (jbm *jobManager) GarbageCollect(ctx context.Context, mod kmmv1beta1.Module) ([]string, error) {
+	jobs, err := jbm.jobHelper.GetModuleJobs(ctx, mod, utils.JobTypeBuild)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get build jobs for module %s: %v", mod.Name, err)
 	}
 
-	if err := jbm.client.List(ctx, &jobList, opts...); err != nil {
-		return nil, fmt.Errorf("could not list jobs: %v", err)
+	deleteNames := make([]string, 0, len(jobs))
+	for _, job := range jobs {
+		if job.Status.Succeeded == 1 {
+			err = jbm.jobHelper.DeleteJob(ctx, &job)
+			if err != nil {
+				return nil, fmt.Errorf("failed to delete build job %s: %v", job.Name, err)
+			}
+			deleteNames = append(deleteNames, job.Name)
+		}
 	}
-
-	if n := len(jobList.Items); n == 0 {
-		return nil, errNoMatchingBuild
-	} else if n > 1 {
-		return nil, fmt.Errorf("expected 0 or 1 job, got %d", n)
-	}
-
-	return &jobList.Items[0], nil
+	return deleteNames, nil
 }
 
 func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string, targetImage string, pushImage bool) (build.Result, error) {
@@ -74,32 +59,29 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 		return build.Result{}, fmt.Errorf("could not make Job template: %v", err)
 	}
 
-	job, err := jbm.getJob(ctx, mod, targetKernel)
+	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod, targetKernel, utils.JobTypeBuild)
 	if err != nil {
-		if !errors.Is(err, errNoMatchingBuild) {
+		if !errors.Is(err, utils.ErrNoMatchingJob) {
 			return build.Result{}, fmt.Errorf("error getting the build: %v", err)
 		}
 
 		logger.Info("Creating job")
-
-		if err = jbm.client.Create(ctx, jobTemplate); err != nil {
+		err = jbm.jobHelper.CreateJob(ctx, jobTemplate)
+		if err != nil {
 			return build.Result{}, fmt.Errorf("could not create Job: %v", err)
 		}
 
 		return build.Result{Status: build.StatusCreated, Requeue: true}, nil
 	}
 
-	changed, err := jbm.isJobChanged(job, jobTemplate)
+	changed, err := jbm.jobHelper.IsJobChanged(job, jobTemplate)
 	if err != nil {
 		return build.Result{}, fmt.Errorf("could not determine if job has changed: %v", err)
 	}
 
 	if changed {
 		logger.Info("The module's build spec has been changed, deleting the current job so a new one can be created", "name", job.Name)
-		opts := []client.DeleteOption{
-			client.PropagationPolicy(metav1.DeletePropagationBackground),
-		}
-		err = jbm.client.Delete(ctx, job, opts...)
+		err = jbm.jobHelper.DeleteJob(ctx, job)
 		if err != nil {
 			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete build job %s: %v", job.Name, err)))
 		}
@@ -118,16 +100,4 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 	default:
 		return build.Result{}, fmt.Errorf("unknown status: %v", job.Status)
 	}
-}
-
-func (jbm *jobManager) isJobChanged(existingJob *batchv1.Job, newJob *batchv1.Job) (bool, error) {
-	existingAnnotations := existingJob.GetAnnotations()
-	newAnnotations := newJob.GetAnnotations()
-	if existingAnnotations == nil {
-		return false, fmt.Errorf("annotations are not present in the existing job %s", existingJob.Name)
-	}
-	if existingAnnotations[jobHashAnnotation] == newAnnotations[jobHashAnnotation] {
-		return false, nil
-	}
-	return true, nil
 }

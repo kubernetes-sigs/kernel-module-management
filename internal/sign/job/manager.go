@@ -37,7 +37,7 @@ func (jbm *signJobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m km
 		return utils.Result{}, fmt.Errorf("could not make Job template: %v", err)
 	}
 
-	job, err := jbm.jobHelper.GetJob(ctx, mod.Namespace, "sign", jobLabels)
+	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod, targetKernel, utils.JobTypeSign)
 	// if theres an error getting jobs explode
 	if err != nil {
 		return utils.Result{}, fmt.Errorf("error getting the signing job: %v", err)
