@@ -67,19 +67,11 @@ rules:
   resources:
   - modules
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
   - update
   - watch
-- apiGroups:
-  - kmm.sigs.k8s.io
-  resources:
-  - modules/finalizers
-  verbs:
-  - update
 - apiGroups:
   - kmm.sigs.k8s.io
   resources:
