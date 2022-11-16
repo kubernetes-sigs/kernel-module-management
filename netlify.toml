@@ -1,0 +1,4 @@
+# netlify.toml
+[build]
+  command = "make docs"
+  publish = "docs/site/"
