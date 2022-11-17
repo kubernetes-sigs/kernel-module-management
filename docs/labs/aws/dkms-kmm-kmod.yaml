@@ -3,26 +3,26 @@ kind: Module
 metadata:
   name: kmm-ci-a
 spec:
-  driverContainer:
+  moduleLoader:
     container:
       modprobe:
         moduleName: kmm-ci-a 
 
       kernelMappings:
         - literal: 5.4.196-108.356.amzn2.x86_64
-          containerImage: 804517629211.dkr.ecr.eu-west-3.amazonaws.com/kmm-kmod:1.0-dkms
+          containerImage: <your_aws_account>.dkr.ecr.<your_aws_region>.amazonaws.com/kmmo-lab:1.1-dkms
           build:
             buildArgs:
               - name: CI_BUILD_ARG
                 value: some-build-arg
             dockerfile: |
-              ARG KERNEL_VERSION=''
               FROM amazonlinux as builder
+              ARG KERNEL_VERSION=''
               RUN amazon-linux-extras install kernel-5.4 -y
               RUN yum -y install dkms \ 
-                  kernel-headers-5.4.196-108.356.amzn2.x86_64 \
-                  kernel-5.4.196-108.356.amzn2.x86_64 \
-                  kernel-devel-5.4.196-108.356.amzn2.x86_64 \
+                  kernel-headers-${KERNEL_VERSION} \
+                  kernel-${KERNEL_VERSION} \
+                  kernel-devel-${KERNEL_VERSION} \
                   python3 \
                   git \
                   make \
@@ -34,7 +34,7 @@ spec:
                   openssl-devel \
                   xz \
                   yum-utils \
-                  bc && \
+                  bc &&\
                   yum clean all
 
               WORKDIR /usr/src
@@ -44,13 +44,13 @@ spec:
                   dkms build kmm-kmod/0.0.1 && \
                   dkms install kmm-kmod/0.0.1
     
-              ARG KERNEL_VERSION
               FROM amazonlinux
+              ARG KERNEL_VERSION
               RUN yum -y install kmod && yum clean all
-              COPY --from=builder /lib/modules/5.4.196-108.356.amzn2.x86_64/kernel/drivers/other/kmm/ /opt/lib/modules/${KERNEL_VERSION}/
+              COPY --from=builder /lib/modules/${KERNEL_VERSION}/kernel/drivers/other/kmm_ci_a/ /opt/lib/modules/${KERNEL_VERSION}/
               RUN depmod -b /opt
-    imageRepoSecret: 
-      name: aws-repo-secret  
+  imageRepoSecret: 
+    name: aws-repo-secret  
   selector:  
     kubernetes.io/hostname: ip-192-168-13-20.eu-west-3.compute.internal
 
