@@ -2,6 +2,7 @@ package signjob
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -38,16 +39,15 @@ func (jbm *signJobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m km
 	}
 
 	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod, targetKernel, utils.JobTypeSign)
-	// if theres an error getting jobs explode
 	if err != nil {
-		return utils.Result{}, fmt.Errorf("error getting the signing job: %v", err)
-	}
-	// if there are no errors getting jobs, but there are no jobs either, we need to create it
-	if job == nil {
-		logger.Info("Creating job")
+		if !errors.Is(err, utils.ErrNoMatchingJob) {
+			return utils.Result{}, fmt.Errorf("error getting the signing job: %v", err)
+		}
 
-		if err = jbm.jobHelper.CreateJob(ctx, jobTemplate); err != nil {
-			return utils.Result{}, fmt.Errorf("could not create Job: %v", err)
+		logger.Info("Creating job")
+		err = jbm.jobHelper.CreateJob(ctx, jobTemplate)
+		if err != nil {
+			return utils.Result{}, fmt.Errorf("could not create Signing Job: %v", err)
 		}
 
 		return utils.Result{Status: utils.StatusCreated, Requeue: true}, nil

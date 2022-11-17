@@ -30,7 +30,9 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/rbac"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -53,6 +55,7 @@ type ModuleReconciler struct {
 	client.Client
 
 	buildAPI         build.Manager
+	signAPI          sign.SignManager
 	rbacAPI          rbac.RBACCreator
 	daemonAPI        daemonset.DaemonSetCreator
 	kernelAPI        module.KernelMapper
@@ -65,6 +68,7 @@ type ModuleReconciler struct {
 func NewModuleReconciler(
 	client client.Client,
 	buildAPI build.Manager,
+	signAPI sign.SignManager,
 	rbacAPI rbac.RBACCreator,
 	daemonAPI daemonset.DaemonSetCreator,
 	kernelAPI module.KernelMapper,
@@ -75,6 +79,7 @@ func NewModuleReconciler(
 	return &ModuleReconciler{
 		Client:           client,
 		buildAPI:         buildAPI,
+		signAPI:          signAPI,
 		rbacAPI:          rbacAPI,
 		daemonAPI:        daemonAPI,
 		kernelAPI:        kernelAPI,
@@ -146,6 +151,16 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 		if requeue {
 			logger.Info("Build requires a requeue; skipping handling driver container for now", "kernelVersion", kernelVersion, "image", m)
+			res.Requeue = true
+			continue
+		}
+
+		signrequeue, err := r.handleSigning(ctx, mod, m, kernelVersion, m.ContainerImage)
+		if err != nil {
+			return res, fmt.Errorf("failed to handle signing for kernel version %s: %v", kernelVersion, err)
+		}
+		if signrequeue {
+			logger.Info("Signing requires a requeue; skipping handling driver container for now", "kernelVersion", kernelVersion, "image", m)
 			res.Requeue = true
 			continue
 		}
@@ -251,9 +266,19 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	km *kmmv1beta1.KernelMapping,
 	kernelVersion string,
 	containerImage string) (bool, error) {
-	if mod.Spec.ModuleLoader.Container.Build == nil && km.Build == nil {
+
+	//if theres no build specified skip this section
+	if !r.willBuild(mod, km) {
 		return false, nil
 	}
+	//if build is specified AND sign is specified then we want to build an intermediate image
+	// and let sign produce the one specified in containerImage
+	if r.willSign(mod, km) {
+		containerImage = r.appendToTag(containerImage, mod.Namespace+"_"+mod.Name+"_kmm_unsigned")
+	}
+
+	// build is specified and containerImage is either the final image, or the intermediate image tag depending on if sign is defined
+	// either way if containerImage exists we can skip building it
 	exists, err := r.checkImageExists(ctx, mod, km, containerImage)
 	if err != nil {
 		return false, fmt.Errorf("failed to check existence of image %s for kernel %s: %w", containerImage, kernelVersion, err)
@@ -278,6 +303,79 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	}
 
 	return buildRes.Requeue, nil
+}
+
+// is sign defined in the CR
+func (r *ModuleReconciler) willSign(mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping) bool {
+	if mod.Spec.ModuleLoader.Container.Sign == nil && km.Sign == nil {
+		return false
+	}
+	return true
+}
+
+// is build defined in the CR
+func (r *ModuleReconciler) willBuild(mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping) bool {
+	if mod.Spec.ModuleLoader.Container.Build == nil && km.Build == nil {
+		return false
+	}
+	return true
+}
+
+// append tag to the image name cleanly, avoiding messing up the name or getting "name:-tag"
+func (r *ModuleReconciler) appendToTag(name string, tag string) string {
+	if strings.Contains(name, ":") {
+		return name + "_" + tag
+	} else {
+		return name + ":" + tag
+	}
+
+}
+
+func (r *ModuleReconciler) handleSigning(ctx context.Context,
+	mod *kmmv1beta1.Module,
+	km *kmmv1beta1.KernelMapping,
+	kernelVersion string,
+	containerImage string) (bool, error) {
+
+	// if sign is not specified skip
+	if !r.willSign(mod, km) {
+		return false, nil
+	}
+
+	// if its already built, skip
+	exists, err := r.checkImageExists(ctx, mod, km, containerImage)
+	if err != nil {
+		return false, fmt.Errorf("failed to check existence of image %s for kernel %s: %w", containerImage, kernelVersion, err)
+	}
+	if exists {
+		return false, nil
+	}
+
+	// if we need to sign AND we've built, then we must have built the intermediate image so must figure out its name
+	previousImage := ""
+	if r.willBuild(mod, km) {
+		previousImage = r.appendToTag(containerImage, mod.Namespace+"_"+mod.Name+"_kmm_unsigned")
+		if err != nil {
+			return false, err
+		}
+	}
+
+	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", containerImage)
+	signCtx := log.IntoContext(ctx, logger)
+
+	signRes, err := r.signAPI.Sync(signCtx, *mod, *km, kernelVersion, previousImage, containerImage, true)
+	if err != nil {
+		return false, fmt.Errorf("could not synchronize the signing: %w", err)
+	}
+
+	switch signRes.Status {
+	case utils.StatusCreated:
+		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, false)
+	case utils.StatusCompleted:
+		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, true)
+	}
+
+	return signRes.Requeue, nil
 }
 
 func (r *ModuleReconciler) checkImageExists(ctx context.Context, mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping, imageName string) (bool, error) {
