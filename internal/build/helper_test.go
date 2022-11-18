@@ -31,7 +31,7 @@ var _ = Describe("GetRelevantBuild", func() {
 			},
 		}
 
-		res := nh.GetRelevantBuild(mod, km)
+		res := nh.GetRelevantBuild(mod.Spec, km)
 		Expect(res).To(Equal(km.Build))
 	})
 
@@ -51,7 +51,7 @@ var _ = Describe("GetRelevantBuild", func() {
 			Build: nil,
 		}
 
-		res := nh.GetRelevantBuild(mod, km)
+		res := nh.GetRelevantBuild(mod.Spec, km)
 		Expect(res).To(Equal(mod.Spec.ModuleLoader.Container.Build))
 	})
 
@@ -77,7 +77,7 @@ var _ = Describe("GetRelevantBuild", func() {
 			},
 		}
 
-		res := nh.GetRelevantBuild(mod, km)
+		res := nh.GetRelevantBuild(mod.Spec, km)
 		Expect(res.DockerfileConfigMap).To(Equal(km.Build.DockerfileConfigMap))
 		Expect(res.BaseImageRegistryTLS).To(Equal(mod.Spec.ModuleLoader.Container.Build.BaseImageRegistryTLS))
 	})

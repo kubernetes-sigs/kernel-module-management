@@ -1,17 +1,15 @@
 package utils
 
-//go:generate mockgen -source=jobhelper.go -package=utils -destination=mock_jobhelper.go
-
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 )
 
 type Status string
@@ -33,11 +31,13 @@ type Result struct {
 	Status  Status
 }
 
+//go:generate mockgen -source=jobhelper.go -package=utils -destination=mock_jobhelper.go
+
 type JobHelper interface {
 	IsJobChanged(existingJob *batchv1.Job, newJob *batchv1.Job) (bool, error)
-	JobLabels(mod kmmv1beta1.Module, targetKernel string, jobType string) map[string]string
-	GetModuleJobByKernel(ctx context.Context, mod kmmv1beta1.Module, targetKernel, jobType string) (*batchv1.Job, error)
-	GetModuleJobs(ctx context.Context, mod kmmv1beta1.Module, jobType string) ([]batchv1.Job, error)
+	JobLabels(modName string, targetKernel string, jobType string) map[string]string
+	GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel, jobType string) (*batchv1.Job, error)
+	GetModuleJobs(ctx context.Context, modName, namespace, jobType string) ([]batchv1.Job, error)
 	DeleteJob(ctx context.Context, job *batchv1.Job) error
 	CreateJob(ctx context.Context, jobTemplate *batchv1.Job) error
 	GetJobStatus(job *batchv1.Job) (Status, bool, error)
@@ -65,15 +65,15 @@ func (jh *jobHelper) IsJobChanged(existingJob *batchv1.Job, newJob *batchv1.Job)
 	return true, nil
 }
 
-func (jh *jobHelper) JobLabels(mod kmmv1beta1.Module, targetKernel string, jobType string) map[string]string {
-	return moduleKernelLabels(mod.Name, targetKernel, jobType)
+func (jh *jobHelper) JobLabels(modName string, targetKernel string, jobType string) map[string]string {
+	return moduleKernelLabels(modName, targetKernel, jobType)
 }
 
-func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, mod kmmv1beta1.Module, targetKernel, jobType string) (*batchv1.Job, error) {
-	matchLabels := moduleKernelLabels(mod.Name, targetKernel, jobType)
-	jobs, err := jh.getJobs(ctx, mod.Namespace, matchLabels)
+func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel, jobType string) (*batchv1.Job, error) {
+	matchLabels := moduleKernelLabels(modName, targetKernel, jobType)
+	jobs, err := jh.getJobs(ctx, namespace, matchLabels)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get module %s, jobs by kernel %s: %v", mod.Name, targetKernel, err)
+		return nil, fmt.Errorf("failed to get module %s, jobs by kernel %s: %v", modName, targetKernel, err)
 	}
 
 	numFoundJobs := len(jobs)
@@ -86,13 +86,12 @@ func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, mod kmmv1beta1.Mo
 	return &jobs[0], nil
 }
 
-func (jh *jobHelper) GetModuleJobs(ctx context.Context, mod kmmv1beta1.Module, jobType string) ([]batchv1.Job, error) {
-	matchLabels := moduleLabels(mod.Name, jobType)
-	return jh.getJobs(ctx, mod.Namespace, matchLabels)
+func (jh *jobHelper) GetModuleJobs(ctx context.Context, modName, namespace, jobType string) ([]batchv1.Job, error) {
+	matchLabels := moduleLabels(modName, jobType)
+	return jh.getJobs(ctx, namespace, matchLabels)
 }
 
 func (jh *jobHelper) DeleteJob(ctx context.Context, job *batchv1.Job) error {
-
 	opts := []client.DeleteOption{
 		client.PropagationPolicy(metav1.DeletePropagationBackground),
 	}
@@ -111,12 +110,8 @@ func (jh *jobHelper) CreateJob(ctx context.Context, jobTemplate *batchv1.Job) er
 	return nil
 }
 
-/* get the status of a job
-** returns:
-**	status - string representation of the status
-**	inprogress - bool, is the job still in progress?
-**	error - an error reporting failure state
- */
+// GetJobStatus returns the status of a Job, whether the latter is in progress or not and
+// whether there was an error or not
 func (jh *jobHelper) GetJobStatus(job *batchv1.Job) (Status, bool, error) {
 	switch {
 	case job.Status.Succeeded == 1:

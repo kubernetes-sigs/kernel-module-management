@@ -1,12 +1,13 @@
 package sign
 
 import (
+	"strings"
+
 	"github.com/google/go-cmp/cmp"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
-	"strings"
 )
 
 var _ = Describe("GetRelevantSign", func() {
@@ -35,7 +36,7 @@ var _ = Describe("GetRelevantSign", func() {
 
 	DescribeTable("should set fields correctly", func(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) {
 
-		actual := h.GetRelevantSign(mod, km)
+		actual := h.GetRelevantSign(mod.Spec, km)
 		Expect(
 			cmp.Diff(expected, actual),
 		).To(

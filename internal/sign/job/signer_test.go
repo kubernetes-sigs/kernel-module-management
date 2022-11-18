@@ -3,20 +3,23 @@ package signjob
 import (
 	"strings"
 
-	"github.com/golang/mock/gomock"
-	"github.com/google/go-cmp/cmp"
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/golang/mock/gomock"
+	"github.com/google/go-cmp/cmp"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
+
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 var _ = Describe("MakeJobTemplate", func() {
-
 	const (
 		unsignedImage = "my.registry/my/image"
 		signedImage   = "my.registry/my/image-signed"
@@ -28,14 +31,18 @@ var _ = Describe("MakeJobTemplate", func() {
 	)
 
 	var (
-		ctrl *gomock.Controller
-		m    Signer
-		mod  kmmv1beta1.Module
+		ctrl      *gomock.Controller
+		m         Signer
+		mod       kmmv1beta1.Module
+		helper    *sign.MockHelper
+		jobhelper *utils.MockJobHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		m = NewSigner(scheme)
+		helper = sign.NewMockHelper(ctrl)
+		jobhelper = utils.NewMockJobHelper(ctrl)
+		m = NewSigner(scheme, helper, jobhelper)
 		mod = kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      moduleName,
@@ -186,7 +193,11 @@ var _ = Describe("MakeJobTemplate", func() {
 		mod := mod.DeepCopy()
 		mod.Spec.Selector = nodeSelector
 
-		actual, err := m.MakeJobTemplate(*mod, km.Sign, kernelVersion, unsignedImage, signedImage, labels, true)
+		gomock.InOrder(
+			helper.EXPECT().GetRelevantSign(mod.Spec, km).Return(km.Sign),
+		)
+
+		actual, err := m.MakeJobTemplate(*mod, km, kernelVersion, labels, unsignedImage, true, mod)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -205,21 +216,30 @@ var _ = Describe("MakeJobTemplate", func() {
 		),
 	)
 
-	DescribeTable("should set correct kmod-signer flags", func(filelist []string, pushFlag bool) {
+	DescribeTable("should set correct kmod-signer flags", func(filelist []string, pushImage bool) {
 
-		signConfig := &kmmv1beta1.Sign{
-			UnsignedImage: signedImage,
-			KeySecret:     &v1.LocalObjectReference{Name: "securebootkey"},
-			CertSecret:    &v1.LocalObjectReference{Name: "securebootcert"},
-			FilesToSign:   filelist,
+		km := kmmv1beta1.KernelMapping{
+			Sign: &kmmv1beta1.Sign{
+				UnsignedImage: signedImage,
+				KeySecret:     &v1.LocalObjectReference{Name: "securebootkey"},
+				CertSecret:    &v1.LocalObjectReference{Name: "securebootcert"},
+				FilesToSign:   filelist,
+			},
+			ContainerImage: unsignedImage,
 		}
 
-		actual, err := m.MakeJobTemplate(mod, signConfig, kernelVersion, "", signedImage, labels, pushFlag)
+		gomock.InOrder(
+			helper.EXPECT().GetRelevantSign(mod.Spec, km).Return(km.Sign),
+		)
+
+		actual, err := m.MakeJobTemplate(mod, km, kernelVersion, labels, "", pushImage, &mod)
+
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("-unsignedimage"))
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("-key"))
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("-cert"))
-		if pushFlag {
+
+		if pushImage {
 			Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("-signedimage"))
 		} else {
 			Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("-no-push"))

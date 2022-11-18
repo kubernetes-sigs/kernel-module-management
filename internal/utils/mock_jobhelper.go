@@ -9,7 +9,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	v1 "k8s.io/api/batch/v1"
 )
 
@@ -81,33 +80,33 @@ func (mr *MockJobHelperMockRecorder) GetJobStatus(job interface{}) *gomock.Call 
 }
 
 // GetModuleJobByKernel mocks base method.
-func (m *MockJobHelper) GetModuleJobByKernel(ctx context.Context, mod v1beta1.Module, targetKernel, jobType string) (*v1.Job, error) {
+func (m *MockJobHelper) GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel, jobType string) (*v1.Job, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetModuleJobByKernel", ctx, mod, targetKernel, jobType)
+	ret := m.ctrl.Call(m, "GetModuleJobByKernel", ctx, modName, namespace, targetKernel, jobType)
 	ret0, _ := ret[0].(*v1.Job)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetModuleJobByKernel indicates an expected call of GetModuleJobByKernel.
-func (mr *MockJobHelperMockRecorder) GetModuleJobByKernel(ctx, mod, targetKernel, jobType interface{}) *gomock.Call {
+func (mr *MockJobHelperMockRecorder) GetModuleJobByKernel(ctx, modName, namespace, targetKernel, jobType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleJobByKernel", reflect.TypeOf((*MockJobHelper)(nil).GetModuleJobByKernel), ctx, mod, targetKernel, jobType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleJobByKernel", reflect.TypeOf((*MockJobHelper)(nil).GetModuleJobByKernel), ctx, modName, namespace, targetKernel, jobType)
 }
 
 // GetModuleJobs mocks base method.
-func (m *MockJobHelper) GetModuleJobs(ctx context.Context, mod v1beta1.Module, jobType string) ([]v1.Job, error) {
+func (m *MockJobHelper) GetModuleJobs(ctx context.Context, modName, namespace, jobType string) ([]v1.Job, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetModuleJobs", ctx, mod, jobType)
+	ret := m.ctrl.Call(m, "GetModuleJobs", ctx, modName, namespace, jobType)
 	ret0, _ := ret[0].([]v1.Job)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetModuleJobs indicates an expected call of GetModuleJobs.
-func (mr *MockJobHelperMockRecorder) GetModuleJobs(ctx, mod, jobType interface{}) *gomock.Call {
+func (mr *MockJobHelperMockRecorder) GetModuleJobs(ctx, modName, namespace, jobType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleJobs", reflect.TypeOf((*MockJobHelper)(nil).GetModuleJobs), ctx, mod, jobType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleJobs", reflect.TypeOf((*MockJobHelper)(nil).GetModuleJobs), ctx, modName, namespace, jobType)
 }
 
 // IsJobChanged mocks base method.
@@ -126,15 +125,15 @@ func (mr *MockJobHelperMockRecorder) IsJobChanged(existingJob, newJob interface{
 }
 
 // JobLabels mocks base method.
-func (m *MockJobHelper) JobLabels(mod v1beta1.Module, targetKernel, jobType string) map[string]string {
+func (m *MockJobHelper) JobLabels(modName, targetKernel, jobType string) map[string]string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "JobLabels", mod, targetKernel, jobType)
+	ret := m.ctrl.Call(m, "JobLabels", modName, targetKernel, jobType)
 	ret0, _ := ret[0].(map[string]string)
 	return ret0
 }
 
 // JobLabels indicates an expected call of JobLabels.
-func (mr *MockJobHelperMockRecorder) JobLabels(mod, targetKernel, jobType interface{}) *gomock.Call {
+func (mr *MockJobHelperMockRecorder) JobLabels(modName, targetKernel, jobType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "JobLabels", reflect.TypeOf((*MockJobHelper)(nil).JobLabels), mod, targetKernel, jobType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "JobLabels", reflect.TypeOf((*MockJobHelper)(nil).JobLabels), modName, targetKernel, jobType)
 }

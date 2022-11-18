@@ -4,10 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/mitchellh/hashstructure"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,13 +14,28 @@ import (
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+)
+
+const (
+	dockerfileVolumeName = "dockerfile"
 )
 
 //go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
 
 type Maker interface {
-	MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel,
-		containerImage string, pushImage bool, registryTLS *kmmv1beta1.TLSOptions) (*batchv1.Job, error)
+	MakeJobTemplate(
+		ctx context.Context,
+		mod kmmv1beta1.Module,
+		km kmmv1beta1.KernelMapping,
+		targetKernel string,
+		owner metav1.Object,
+		pushImage bool) (*batchv1.Job, error)
 }
 
 type maker struct {
@@ -39,7 +50,11 @@ type hashData struct {
 	PodTemplate *v1.PodTemplateSpec
 }
 
-func NewMaker(client client.Client, helper build.Helper, jobHelper utils.JobHelper, scheme *runtime.Scheme) Maker {
+func NewMaker(
+	client client.Client,
+	helper build.Helper,
+	jobHelper utils.JobHelper,
+	scheme *runtime.Scheme) Maker {
 	return &maker{
 		client:    client,
 		helper:    helper,
@@ -48,8 +63,93 @@ func NewMaker(client client.Client, helper build.Helper, jobHelper utils.JobHelp
 	}
 }
 
-func (m *maker) MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel,
-	containerImage string, pushImage bool, registryTLS *kmmv1beta1.TLSOptions) (*batchv1.Job, error) {
+func (m *maker) MakeJobTemplate(
+	ctx context.Context,
+	mod kmmv1beta1.Module,
+	km kmmv1beta1.KernelMapping,
+	targetKernel string,
+	owner metav1.Object,
+	pushImage bool) (*batchv1.Job, error) {
+
+	buildConfig := m.helper.GetRelevantBuild(mod.Spec, km)
+
+	containerImage := km.ContainerImage
+
+	// if build AND sign are specified, then we will build an intermediate image
+	// and let sign produce the one specified in its targetImage
+	if module.ShouldBeSigned(mod.Spec, km) {
+		containerImage = module.IntermediateImageName(mod.Name, mod.Namespace, containerImage)
+	}
+
+	specTemplate := m.specTemplate(
+		mod.Spec,
+		buildConfig,
+		targetKernel,
+		containerImage,
+		km.RegistryTLS,
+		pushImage)
+
+	specTemplateHash, err := m.getHashAnnotationValue(ctx, buildConfig.DockerfileConfigMap.Name, mod.Namespace, &specTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("could not hash job's definitions: %v", err)
+	}
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: mod.Name + "-build-",
+			Namespace:    mod.Namespace,
+			Labels:       m.jobHelper.JobLabels(mod.Name, targetKernel, utils.JobTypeBuild),
+			Annotations:  map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
+		},
+		Spec: batchv1.JobSpec{
+			Completions: pointer.Int32(1),
+			Template:    specTemplate,
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(owner, job, m.scheme); err != nil {
+		return nil, fmt.Errorf("could not set the owner reference: %v", err)
+	}
+
+	return job, nil
+}
+
+func (m *maker) specTemplate(
+	modSpec kmmv1beta1.ModuleSpec,
+	buildConfig *kmmv1beta1.Build,
+	targetKernel string,
+	containerImage string,
+	registryTLS *kmmv1beta1.TLSOptions,
+	pushImage bool) v1.PodTemplateSpec {
+
+	kanikoImageTag := "latest"
+	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
+		kanikoImageTag = buildConfig.KanikoParams.Tag
+	}
+
+	return v1.PodTemplateSpec{
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Args:         m.containerArgs(buildConfig, targetKernel, containerImage, registryTLS, pushImage),
+					Name:         "kaniko",
+					Image:        "gcr.io/kaniko-project/executor:" + kanikoImageTag,
+					VolumeMounts: volumeMounts(modSpec, buildConfig),
+				},
+			},
+			NodeSelector:  modSpec.Selector,
+			RestartPolicy: v1.RestartPolicyOnFailure,
+			Volumes:       volumes(modSpec, buildConfig),
+		},
+	}
+}
+
+func (m *maker) containerArgs(
+	buildConfig *kmmv1beta1.Build,
+	targetKernel string,
+	containerImage string,
+	registryTLS *kmmv1beta1.TLSOptions,
+	pushImage bool) []string {
 
 	args := []string{}
 	if pushImage {
@@ -85,13 +185,47 @@ func (m *maker) MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buil
 		}
 	}
 
-	const dockerfileVolumeName = "dockerfile"
+	return args
+}
 
-	dockerFileVolume := v1.Volume{
-		Name: dockerfileVolumeName,
+func (m *maker) getHashAnnotationValue(ctx context.Context, configMapName, namespace string, podTemplate *v1.PodTemplateSpec) (uint64, error) {
+	dockerfileCM := &corev1.ConfigMap{}
+	namespacedName := types.NamespacedName{Name: configMapName, Namespace: namespace}
+	if err := m.client.Get(ctx, namespacedName, dockerfileCM); err != nil {
+		return 0, fmt.Errorf("failed to get dockerfile ConfigMap %s: %v", namespacedName, err)
+	}
+	data, ok := dockerfileCM.Data[constants.DockerfileCMKey]
+	if !ok {
+		return 0, fmt.Errorf("invalid Dockerfile ConfigMap %s format, %s key is missing", namespacedName, constants.DockerfileCMKey)
+	}
+
+	return getHashValue(podTemplate, data)
+}
+
+func volumes(modSpec kmmv1beta1.ModuleSpec, buildConfig *kmmv1beta1.Build) []v1.Volume {
+	volumes := []v1.Volume{dockerfileVolume(dockerfileVolumeName, buildConfig.DockerfileConfigMap)}
+	if irs := modSpec.ImageRepoSecret; irs != nil {
+		volumes = append(volumes, makeImagePullSecretVolume(irs))
+	}
+	volumes = append(volumes, makeBuildSecretVolumes(buildConfig.Secrets)...)
+	return volumes
+}
+
+func volumeMounts(modSpec kmmv1beta1.ModuleSpec, buildConfig *kmmv1beta1.Build) []v1.VolumeMount {
+	volumeMounts := []v1.VolumeMount{dockerfileVolumeMount(dockerfileVolumeName)}
+	if irs := modSpec.ImageRepoSecret; irs != nil {
+		volumeMounts = append(volumeMounts, makeImagePullSecretVolumeMount(irs))
+	}
+	volumeMounts = append(volumeMounts, makeBuildSecretVolumeMounts(buildConfig.Secrets)...)
+	return volumeMounts
+}
+
+func dockerfileVolume(name string, dockerfileConfigMap *v1.LocalObjectReference) v1.Volume {
+	return v1.Volume{
+		Name: name,
 		VolumeSource: v1.VolumeSource{
 			ConfigMap: &v1.ConfigMapVolumeSource{
-				LocalObjectReference: *buildConfig.DockerfileConfigMap,
+				LocalObjectReference: *dockerfileConfigMap,
 				Items: []v1.KeyToPath{
 					{
 						Key:  constants.DockerfileCMKey,
@@ -101,80 +235,14 @@ func (m *maker) MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buil
 			},
 		},
 	}
+}
 
-	dockerFileVolumeMount := v1.VolumeMount{
-		Name:      dockerfileVolumeName,
+func dockerfileVolumeMount(name string) v1.VolumeMount {
+	return v1.VolumeMount{
+		Name:      name,
 		ReadOnly:  true,
 		MountPath: "/workspace",
 	}
-
-	volumes := []v1.Volume{dockerFileVolume}
-	volumeMounts := []v1.VolumeMount{dockerFileVolumeMount}
-	if irs := mod.Spec.ImageRepoSecret; irs != nil {
-		volumes = append(volumes, makeImagePullSecretVolume(irs))
-		volumeMounts = append(volumeMounts, makeImagePullSecretVolumeMount(irs))
-	}
-	volumes = append(volumes, makeBuildSecretVolumes(buildConfig.Secrets)...)
-	volumeMounts = append(volumeMounts, makeBuildSecretVolumeMounts(buildConfig.Secrets)...)
-
-	kanikoImageTag := "latest"
-	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
-		kanikoImageTag = buildConfig.KanikoParams.Tag
-	}
-
-	specTemplate := v1.PodTemplateSpec{
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Args:         args,
-					Name:         "kaniko",
-					Image:        "gcr.io/kaniko-project/executor:" + kanikoImageTag,
-					VolumeMounts: volumeMounts,
-				},
-			},
-			NodeSelector:  mod.Spec.Selector,
-			RestartPolicy: v1.RestartPolicyOnFailure,
-			Volumes:       volumes,
-		},
-	}
-	specTemplateHash, err := m.getHashAnnotationValue(ctx, buildConfig, mod.Namespace, &specTemplate)
-	if err != nil {
-		return nil, fmt.Errorf("could not hash job's definitions: %v", err)
-	}
-
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: mod.Name + "-build-",
-			Namespace:    mod.Namespace,
-			Labels:       m.jobHelper.JobLabels(mod, targetKernel, utils.JobTypeBuild),
-			Annotations:  map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
-		},
-		Spec: batchv1.JobSpec{
-			Completions: pointer.Int32(1),
-			Template:    specTemplate,
-		},
-	}
-
-	if err := controllerutil.SetControllerReference(&mod, job, m.scheme); err != nil {
-		return nil, fmt.Errorf("could not set the owner reference: %v", err)
-	}
-
-	return job, nil
-}
-
-func (m *maker) getHashAnnotationValue(ctx context.Context, buildConfig *kmmv1beta1.Build, namespace string, podTemplate *v1.PodTemplateSpec) (uint64, error) {
-	dockerfileCM := &corev1.ConfigMap{}
-	namespacedName := types.NamespacedName{Name: buildConfig.DockerfileConfigMap.Name, Namespace: namespace}
-	err := m.client.Get(ctx, namespacedName, dockerfileCM)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get dockerfile ConfigMap %s: %v", namespacedName, err)
-	}
-	data, ok := dockerfileCM.Data[constants.DockerfileCMKey]
-	if !ok {
-		return 0, fmt.Errorf("invalid Dockerfile ConfigMap %s format, %s key is missing", namespacedName, constants.DockerfileCMKey)
-	}
-
-	return getHashValue(podTemplate, data)
 }
 
 func getHashValue(podTemplate *v1.PodTemplateSpec, dockerfile string) (uint64, error) {
@@ -190,7 +258,6 @@ func getHashValue(podTemplate *v1.PodTemplateSpec, dockerfile string) (uint64, e
 }
 
 func makeImagePullSecretVolume(secretRef *v1.LocalObjectReference) v1.Volume {
-
 	if secretRef == nil {
 		return v1.Volume{}
 	}
@@ -212,7 +279,6 @@ func makeImagePullSecretVolume(secretRef *v1.LocalObjectReference) v1.Volume {
 }
 
 func makeImagePullSecretVolumeMount(secretRef *v1.LocalObjectReference) v1.VolumeMount {
-
 	if secretRef == nil {
 		return v1.VolumeMount{}
 	}
@@ -225,7 +291,6 @@ func makeImagePullSecretVolumeMount(secretRef *v1.LocalObjectReference) v1.Volum
 }
 
 func makeBuildSecretVolumes(secretRefs []v1.LocalObjectReference) []v1.Volume {
-
 	volumes := make([]v1.Volume, 0, len(secretRefs))
 
 	for _, secretRef := range secretRefs {
@@ -245,7 +310,6 @@ func makeBuildSecretVolumes(secretRefs []v1.LocalObjectReference) []v1.Volume {
 }
 
 func makeBuildSecretVolumeMounts(secretRefs []v1.LocalObjectReference) []v1.VolumeMount {
-
 	secretVolumeMounts := make([]v1.VolumeMount, 0, len(secretRefs))
 
 	for _, secretRef := range secretRefs {

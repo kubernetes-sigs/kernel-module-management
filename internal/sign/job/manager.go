@@ -5,40 +5,75 @@ import (
 	"errors"
 	"fmt"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 type signJobManager struct {
+	client    client.Client
 	signer    Signer
-	helper    sign.Helper
 	jobHelper utils.JobHelper
+	registry  registry.Registry
 }
 
-func NewSignJobManager(signer Signer, helper sign.Helper, jobHelper utils.JobHelper) *signJobManager {
+func NewSignJobManager(
+	client client.Client,
+	signer Signer,
+	jobHelper utils.JobHelper,
+	registry registry.Registry) *signJobManager {
 	return &signJobManager{
+		client:    client,
 		signer:    signer,
-		helper:    helper,
 		jobHelper: jobHelper,
+		registry:  registry,
 	}
 }
 
-func (jbm *signJobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1beta1.KernelMapping, targetKernel string, imageToSign string, targetImage string, pushImage bool) (utils.Result, error) {
+func (jbm *signJobManager) ShouldSync(
+	ctx context.Context,
+	mod kmmv1beta1.Module,
+	m kmmv1beta1.KernelMapping) (bool, error) {
+
+	// if there is no sign specified skip
+	if !module.ShouldBeSigned(mod.Spec, m) {
+		return false, nil
+	}
+
+	exists, err := module.ImageExists(ctx, jbm.client, jbm.registry, mod.Spec, mod.Namespace, m, m.ContainerImage)
+	if err != nil {
+		return false, fmt.Errorf("failed to check existence of image %s: %w", m.ContainerImage, err)
+	}
+
+	return !exists, nil
+}
+
+func (jbm *signJobManager) Sync(
+	ctx context.Context,
+	mod kmmv1beta1.Module,
+	m kmmv1beta1.KernelMapping,
+	targetKernel string,
+	imageToSign string,
+	pushImage bool,
+	owner metav1.Object) (utils.Result, error) {
+
 	logger := log.FromContext(ctx)
 
 	logger.Info("Signing in-cluster")
 
-	signConfig := jbm.helper.GetRelevantSign(mod, m)
-	jobLabels := jbm.jobHelper.JobLabels(mod, targetKernel, "sign")
+	labels := jbm.jobHelper.JobLabels(mod.Name, targetKernel, "sign")
 
-	jobTemplate, err := jbm.signer.MakeJobTemplate(mod, signConfig, targetKernel, imageToSign, targetImage, jobLabels, pushImage)
+	jobTemplate, err := jbm.signer.MakeJobTemplate(mod, m, targetKernel, labels, imageToSign, pushImage, owner)
 	if err != nil {
 		return utils.Result{}, fmt.Errorf("could not make Job template: %v", err)
 	}
 
-	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod, targetKernel, utils.JobTypeSign)
+	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, targetKernel, utils.JobTypeSign)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoMatchingJob) {
 			return utils.Result{}, fmt.Errorf("error getting the signing job: %v", err)
@@ -73,6 +108,6 @@ func (jbm *signJobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m km
 	if err != nil {
 		return utils.Result{}, err
 	}
-	return utils.Result{Status: statusmsg, Requeue: inprogress}, nil
 
+	return utils.Result{Status: statusmsg, Requeue: inprogress}, nil
 }

@@ -34,7 +34,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/rbac"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign/job"
+	signjob "github.com/kubernetes-sigs/kernel-module-management/internal/sign/job"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 
@@ -139,12 +139,14 @@ func main() {
 	helperAPI := build.NewHelper()
 	jobHelperAPI := utils.NewJobHelper(client)
 	makerAPI := job.NewMaker(client, helperAPI, jobHelperAPI, scheme)
-	buildAPI := job.NewBuildManager(client, makerAPI, helperAPI, jobHelperAPI)
+	buildAPI := job.NewBuildManager(client, makerAPI, jobHelperAPI, registryAPI)
 
+	signHelperAPI := sign.NewSignerHelper()
 	signAPI := signjob.NewSignJobManager(
-		signjob.NewSigner(scheme),
-		sign.NewSignerHelper(),
+		client,
+		signjob.NewSigner(scheme, signHelperAPI, jobHelperAPI),
 		utils.NewJobHelper(client),
+		registryAPI,
 	)
 
 	rbacAPI := rbac.NewCreator(client, scheme)
@@ -154,7 +156,7 @@ func main() {
 	preflightStatusUpdaterAPI := statusupdater.NewPreflightStatusUpdater(client)
 	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
 
-	mc := controllers.NewModuleReconciler(client, buildAPI, signAPI, rbacAPI, daemonAPI, kernelAPI, metricsAPI, filter, registryAPI, moduleStatusUpdaterAPI)
+	mc := controllers.NewModuleReconciler(client, buildAPI, signAPI, rbacAPI, daemonAPI, kernelAPI, metricsAPI, filter, moduleStatusUpdaterAPI)
 
 	if err = mc.SetupWithManager(mgr, kernelLabel); err != nil {
 		setupLogger.Error(err, "unable to create controller", "controller", "Module")
