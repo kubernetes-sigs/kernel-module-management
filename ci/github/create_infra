@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+
+CLUSTER_ARGS="$@"
+
+build_cluster () {
+      curl -O https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
+      sudo dpkg -i ./minikube_latest_amd64.deb
+      minikube start --driver=docker $CLUSTER_ARGS
+      kubectl wait --for=condition=available deployment coredns -n kube-system
+}
+
+build_controller () {
+      make docker-build  
+}
+
+build_driver_container () {
+      cd ci/kmm-kmod && make KERNEL_SRC_DIR="/usr/src/linux-headers-$(uname -r)" && \
+      minikube image build -t kmm-kmod:local --build-opt build-arg=KERNEL_VERSION=$(uname -r) . 
+}
+
+collect_troubleshooting () {
+      kubectl get all -n kmm-operator-system
+      kubectl get all
+      kubectl describe node
+      kubectl describe daemonset -l kmm.node.kubernetes.io/module.name
+      kubectl describe pod -l kmm.node.kubernetes.io/module.name
+      sudo dmesg
+      kubectl logs deployment.apps/kmm-operator-controller-manager -n kmm-operator-system
+      # If fails
+      echo "Describe the Deployment and get its YAML if that failed..."
+      kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+      kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+}
+

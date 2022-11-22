@@ -1,0 +1,71 @@
+##!/usr/bin/env bash
+
+set -euxo pipefail
+
+echo "Label the node so that it gets the module..."
+kubectl label node minikube wants-module=kmm_ci_a
+
+echo "Deploy KMMO..."
+make deploy
+
+echo "Wait until the KMMO Deployment is Available..."
+kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager --request-timeout=1m
+
+
+echo "Describe the Deployment and get its YAML if that failed..."
+kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+
+echo "Check that the kmm_ci_a module is not loaded on the node..."
+          if minikube ssh -- lsmod | grep kmm_ci_a; then
+            echo "Unexpected lsmod output - the module should not be loaded"
+            exit 1
+          fi
+echo "Create one module for each node..."
+          # Node minikube gets module a
+          sed -e s/NAME_CHANGEME/kmm-ci-a/g \
+            -e s/KMOD_CHANGEME/kmm_ci_a/g \
+            -e "s/KVER_CHANGEME/$(uname -r)/g" \
+            ci/module-kmm-ci.template.yaml | tee module-kmm-ci-a.yaml
+
+          # Node minikube-m02 gets module b
+          sed -e s/NAME_CHANGEME/kmm-ci-b/g \
+            -e s/KMOD_CHANGEME/kmm_ci_b/g \
+            -e "s/KVER_CHANGEME/$(uname -r)/g" \
+            ci/module-kmm-ci.template.yaml | tee module-kmm-ci-b.yaml
+
+          kubectl apply -f module-kmm-ci-a.yaml -f module-kmm-ci-b.yaml
+
+
+echo "Label the first node to have it receive module a..."
+kubectl label node minikube wants-module=kmm_ci_a
+
+echo "Check that module a gets loaded on the first node..."
+          kubectl describe po
+          until timeout 1m minikube ssh -- lsmod | grep kmm_ci_a; do
+            sleep 3
+          done
+
+echo "Label the second node to have it receive module b..."
+kubectl label node minikube-m02 wants-module=kmm_ci_b
+
+echo "Check that module b gets loaded on the second node..."
+          until timeout 1m minikube ssh -n minikube-m02 -- lsmod | grep kmm_ci_b; do
+            sleep 3
+          done
+
+echo "Remove the wants-module label on the second node..."
+kubectl label node minikube-m02 wants-module-
+
+echo "Check that module b gets unloaded from the second node..."
+          until ! minikube ssh -n minikube-m02 -- lsmod | grep kmm_ci_b; do
+            sleep 3
+          done 
+
+echo "Verify that the DaemonSet gets garbage collected..."
+          # Cannot use kubectl wait because it will fail if there is no initial match
+          until [ $(kubectl get daemonsets.apps -l 'kmm.node.kubernetes.io/module.name=kmm-ci-b, kmm.node.kubernetes.io/role!=device-plugin' -o go-template='{{ len .items }}') -eq 0 ]; do
+            sleep 3
+          done
+
+

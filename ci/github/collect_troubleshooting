@@ -1,0 +1,13 @@
+#!/bin/bash
+set -euxo pipefail
+collect_troubleshooting () {
+      kubectl get all -n kmm-operator-system
+      kubectl get all
+      kubectl describe node
+      kubectl describe daemonset -l kmm.node.kubernetes.io/module.name
+      kubectl describe pod -l kmm.node.kubernetes.io/module.name
+      sudo dmesg
+      kubectl logs deployment.apps/kmm-operator-controller-manager -n kmm-operator-system
+}
+
+collect_troubleshooting
