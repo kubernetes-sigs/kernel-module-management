@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -9,34 +10,44 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/mitchellh/hashstructure"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 //go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
 
 type Maker interface {
-	MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error)
+	MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error)
 }
 
 type maker struct {
+	client    client.Client
 	helper    build.Helper
 	jobHelper utils.JobHelper
 	scheme    *runtime.Scheme
 }
 
-func NewMaker(helper build.Helper, jobHelper utils.JobHelper, scheme *runtime.Scheme) Maker {
+type hashData struct {
+	Dockerfile  string
+	PodTemplate *v1.PodTemplateSpec
+}
+
+func NewMaker(client client.Client, helper build.Helper, jobHelper utils.JobHelper, scheme *runtime.Scheme) Maker {
 	return &maker{
+		client:    client,
 		helper:    helper,
 		jobHelper: jobHelper,
 		scheme:    scheme,
 	}
 }
 
-func (m *maker) MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error) {
+func (m *maker) MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error) {
 	args := []string{}
 	if pushImage {
 		args = append(args, "--destination", containerImage)
@@ -74,11 +85,12 @@ func (m *maker) MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.B
 	dockerFileVolume := v1.Volume{
 		Name: dockerfileVolumeName,
 		VolumeSource: v1.VolumeSource{
-			DownwardAPI: &v1.DownwardAPIVolumeSource{
-				Items: []v1.DownwardAPIVolumeFile{
+			ConfigMap: &v1.ConfigMapVolumeSource{
+				LocalObjectReference: *buildConfig.DockerfileConfigMap,
+				Items: []v1.KeyToPath{
 					{
-						Path:     "Dockerfile",
-						FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.annotations['Dockerfile']"},
+						Key:  constants.DockerfileCMKey,
+						Path: "Dockerfile",
 					},
 				},
 			},
@@ -106,9 +118,6 @@ func (m *maker) MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.B
 	}
 
 	specTemplate := v1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{
-			Annotations: map[string]string{"Dockerfile": buildConfig.Dockerfile},
-		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
@@ -123,9 +132,9 @@ func (m *maker) MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.B
 			Volumes:       volumes,
 		},
 	}
-	specTemplateHash, err := hashstructure.Hash(specTemplate, nil)
+	specTemplateHash, err := m.getHashAnnotationValue(ctx, buildConfig, mod.Namespace, &specTemplate)
 	if err != nil {
-		return nil, fmt.Errorf("could not hash job's spec template: %v", err)
+		return nil, fmt.Errorf("could not hash job's definitions: %v", err)
 	}
 
 	job := &batchv1.Job{
@@ -146,6 +155,33 @@ func (m *maker) MakeJobTemplate(mod kmmv1beta1.Module, buildConfig *kmmv1beta1.B
 	}
 
 	return job, nil
+}
+
+func (m *maker) getHashAnnotationValue(ctx context.Context, buildConfig *kmmv1beta1.Build, namespace string, podTemplate *v1.PodTemplateSpec) (uint64, error) {
+	dockerfileCM := &corev1.ConfigMap{}
+	namespacedName := types.NamespacedName{Name: buildConfig.DockerfileConfigMap.Name, Namespace: namespace}
+	err := m.client.Get(ctx, namespacedName, dockerfileCM)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get dockerfile ConfigMap %s: %v", namespacedName, err)
+	}
+	data, ok := dockerfileCM.Data[constants.DockerfileCMKey]
+	if !ok {
+		return 0, fmt.Errorf("invalid Dockerfile ConfigMap %s format, %s key is missing", namespacedName, constants.DockerfileCMKey)
+	}
+
+	return getHashValue(podTemplate, data)
+}
+
+func getHashValue(podTemplate *v1.PodTemplateSpec, dockerfile string) (uint64, error) {
+	dataToHash := hashData{
+		Dockerfile:  dockerfile,
+		PodTemplate: podTemplate,
+	}
+	hashValue, err := hashstructure.Hash(dataToHash, nil)
+	if err != nil {
+		return 0, fmt.Errorf("could not hash job's spec template and dockefile: %v", err)
+	}
+	return hashValue, nil
 }
 
 func makeImagePullSecretVolume(secretRef *v1.LocalObjectReference) v1.Volume {

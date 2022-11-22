@@ -9,4 +9,5 @@ const (
 	JobHashAnnotation    = "kmm.node.kubernetes.io/last-hash"
 
 	ManagedClusterModuleNameLabel = "kmm.node.kubernetes.io/managedclustermodule.name"
+	DockerfileCMKey               = "dockerfile"
 )

@@ -54,7 +54,7 @@ func (jbm *jobManager) Sync(ctx context.Context, mod kmmv1beta1.Module, m kmmv1b
 
 	buildConfig := jbm.helper.GetRelevantBuild(mod, m)
 
-	jobTemplate, err := jbm.maker.MakeJobTemplate(mod, buildConfig, targetKernel, targetImage, pushImage)
+	jobTemplate, err := jbm.maker.MakeJobTemplate(ctx, mod, buildConfig, targetKernel, targetImage, pushImage)
 	if err != nil {
 		return build.Result{}, fmt.Errorf("could not make Job template: %v", err)
 	}

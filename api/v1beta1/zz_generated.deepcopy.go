@@ -34,6 +34,11 @@ func (in *Build) DeepCopyInto(out *Build) {
 		*out = make([]BuildArg, len(*in))
 		copy(*out, *in)
 	}
+	if in.DockerfileConfigMap != nil {
+		in, out := &in.DockerfileConfigMap, &out.DockerfileConfigMap
+		*out = new(v1.LocalObjectReference)
+		**out = **in
+	}
 	out.Pull = in.Pull
 	out.Push = in.Push
 	if in.Secrets != nil {

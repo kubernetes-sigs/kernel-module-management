@@ -138,7 +138,7 @@ func main() {
 	registryAPI := registry.NewRegistry()
 	helperAPI := build.NewHelper()
 	jobHelperAPI := utils.NewJobHelper(client)
-	makerAPI := job.NewMaker(helperAPI, jobHelperAPI, scheme)
+	makerAPI := job.NewMaker(client, helperAPI, jobHelperAPI, scheme)
 	buildAPI := job.NewBuildManager(client, makerAPI, helperAPI, jobHelperAPI)
 
 	signAPI := signjob.NewSignJobManager(
