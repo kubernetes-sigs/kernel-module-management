@@ -87,7 +87,7 @@ func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(ctx context.Context, 
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mcm.Name,
-			Namespace: mcm.Spec.Namespace,
+			Namespace: mcm.Spec.SpokeNamespace,
 		},
 		Spec: mcm.Spec.ModuleSpec,
 	}

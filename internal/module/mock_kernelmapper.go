@@ -64,6 +64,20 @@ func (mr *MockKernelMapperMockRecorder) GetNodeOSConfig(node interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeOSConfig", reflect.TypeOf((*MockKernelMapper)(nil).GetNodeOSConfig), node)
 }
 
+// GetNodeOSConfigFromKernelVersion mocks base method.
+func (m *MockKernelMapper) GetNodeOSConfigFromKernelVersion(kernelVersion string) *NodeOSConfig {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNodeOSConfigFromKernelVersion", kernelVersion)
+	ret0, _ := ret[0].(*NodeOSConfig)
+	return ret0
+}
+
+// GetNodeOSConfigFromKernelVersion indicates an expected call of GetNodeOSConfigFromKernelVersion.
+func (mr *MockKernelMapperMockRecorder) GetNodeOSConfigFromKernelVersion(kernelVersion interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeOSConfigFromKernelVersion", reflect.TypeOf((*MockKernelMapper)(nil).GetNodeOSConfigFromKernelVersion), kernelVersion)
+}
+
 // PrepareKernelMapping mocks base method.
 func (m *MockKernelMapper) PrepareKernelMapping(mapping *v1beta1.KernelMapping, osConfig *NodeOSConfig) (*v1beta1.KernelMapping, error) {
 	m.ctrl.T.Helper()

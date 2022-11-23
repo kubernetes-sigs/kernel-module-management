@@ -31,6 +31,7 @@ type NodeOSConfig struct {
 type KernelMapper interface {
 	FindMappingForKernel(mappings []kmmv1beta1.KernelMapping, kernelVersion string) (*kmmv1beta1.KernelMapping, error)
 	GetNodeOSConfig(node *v1.Node) *NodeOSConfig
+	GetNodeOSConfigFromKernelVersion(kernelVersion string) *NodeOSConfig
 	PrepareKernelMapping(mapping *kmmv1beta1.KernelMapping, osConfig *NodeOSConfig) (*kmmv1beta1.KernelMapping, error)
 }
 
@@ -63,11 +64,15 @@ func (k *kernelMapper) FindMappingForKernel(mappings []kmmv1beta1.KernelMapping,
 }
 
 func (k *kernelMapper) GetNodeOSConfig(node *v1.Node) *NodeOSConfig {
+	return k.GetNodeOSConfigFromKernelVersion(node.Status.NodeInfo.KernelVersion)
+}
+
+func (k *kernelMapper) GetNodeOSConfigFromKernelVersion(kernelVersion string) *NodeOSConfig {
 	osConfig := NodeOSConfig{}
 
-	osConfigFieldsList := regexp.MustCompile("[.,-]").Split(node.Status.NodeInfo.KernelVersion, -1)
+	osConfigFieldsList := regexp.MustCompile("[.,-]").Split(kernelVersion, -1)
 
-	osConfig.KernelFullVersion = node.Status.NodeInfo.KernelVersion
+	osConfig.KernelFullVersion = kernelVersion
 	osConfig.KernelVersionMMP = strings.Join(osConfigFieldsList[:kernelVersionPatchIdx+1], ".")
 	osConfig.KernelVersionMajor = osConfigFieldsList[kernelVersionMajorIdx]
 	osConfig.KernelVersionMinor = osConfigFieldsList[kernelVersionMinorIdx]
