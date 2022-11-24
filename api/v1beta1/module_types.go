@@ -27,21 +27,10 @@ type BuildArg struct {
 	Value string `json:"value"`
 }
 
-type PullOptions struct {
+type TLSOptions struct {
 
 	// +optional
-	// If Insecure is true, images can be pulled from an insecure (plain HTTP) registry.
-	Insecure bool `json:"insecure,omitempty"`
-
-	// +optional
-	// If InsecureSkipTLSVerify, the operator will accept any certificate provided by the registry.
-	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
-}
-
-type PushOptions struct {
-
-	// +optional
-	// If Insecure is true, built images can be pushed to an insecure (plain HTTP) registry.
+	// If Insecure is true, the operator will be able to access a registry in an insecure (plain HTTP) protocol.
 	Insecure bool `json:"insecure,omitempty"`
 
 	// +optional
@@ -64,12 +53,8 @@ type Build struct {
 	DockerfileConfigMap *v1.LocalObjectReference `json:"dockerfileConfigMap"`
 
 	// +optional
-	// Pull contains settings determining how to pull the base images of the build process.
-	Pull PullOptions `json:"pull"`
-
-	// +optional
-	// Push contains settings determining how to push a built DriverContainer image.
-	Push PushOptions `json:"push"`
+	// BaseImageRegistryTLS contains settings determining how to access registries of the base images in the build-process' Dockerfile.
+	BaseImageRegistryTLS TLSOptions `json:"baseImageRegistryTLS"`
 
 	// +optional
 	// Secrets is an optional list of secrets to be made available to the build system.
@@ -118,9 +103,8 @@ type KernelMapping struct {
 	Literal string `json:"literal"`
 
 	// +optional
-	// Pull contains settings determining how to check if the ModuleLoader image already exists
-	// and allows overriding of the ModuleLoader's pull options
-	Pull *PullOptions `json:"pull"`
+	// RegistryTLS set the TLS configs for accessing the registry of the module-loader's image.
+	RegistryTLS *TLSOptions `json:"registryTLS"`
 
 	// +optional
 	// Regexp is a regular expression to be match against node kernels.
@@ -199,8 +183,8 @@ type ModuleLoaderContainerSpec struct {
 	Modprobe ModprobeSpec `json:"modprobe"`
 
 	// +optional
-	// Pull contains settings determining how to check if the ModuleLoader image already exists.
-	Pull *PullOptions `json:"pull"`
+	// RegistryTLS set the TLS configs for accessing the registry of the module-loader's image.
+	RegistryTLS *TLSOptions `json:"registryTLS"`
 }
 
 type ModuleLoaderSpec struct {

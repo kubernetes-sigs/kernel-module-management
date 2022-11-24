@@ -11,15 +11,13 @@ spec:
       kernelMappings:
         - literal: KVER_CHANGEME
           containerImage: registry.minikube/kmm-kmod:local
-          pull:
+          registryTLS:
             insecure: true
           build:
             buildArgs:
               - name: CI_BUILD_ARG
                 value: some-build-arg
-            pull:
-              insecure: true
-            push:
+            baseImageRegistryTLS:
               insecure: true
             secrets:
               - name: build-secret

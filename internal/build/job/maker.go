@@ -23,7 +23,8 @@ import (
 //go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
 
 type Maker interface {
-	MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error)
+	MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel,
+		containerImage string, pushImage bool, registryTLS *kmmv1beta1.TLSOptions) (*batchv1.Job, error)
 }
 
 type maker struct {
@@ -47,7 +48,9 @@ func NewMaker(client client.Client, helper build.Helper, jobHelper utils.JobHelp
 	}
 }
 
-func (m *maker) MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel, containerImage string, pushImage bool) (*batchv1.Job, error) {
+func (m *maker) MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buildConfig *kmmv1beta1.Build, targetKernel,
+	containerImage string, pushImage bool, registryTLS *kmmv1beta1.TLSOptions) (*batchv1.Job, error) {
+
 	args := []string{}
 	if pushImage {
 		args = append(args, "--destination", containerImage)
@@ -64,20 +67,22 @@ func (m *maker) MakeJobTemplate(ctx context.Context, mod kmmv1beta1.Module, buil
 		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", ba.Name, ba.Value))
 	}
 
-	if buildConfig.Pull.Insecure {
+	if buildConfig.BaseImageRegistryTLS.Insecure {
 		args = append(args, "--insecure-pull")
 	}
 
-	if buildConfig.Pull.InsecureSkipTLSVerify {
+	if buildConfig.BaseImageRegistryTLS.InsecureSkipTLSVerify {
 		args = append(args, "--skip-tls-verify-pull")
 	}
 
-	if buildConfig.Push.Insecure {
-		args = append(args, "--insecure")
-	}
+	if registryTLS != nil {
+		if registryTLS.Insecure {
+			args = append(args, "--insecure")
+		}
 
-	if buildConfig.Push.InsecureSkipTLSVerify {
-		args = append(args, "--skip-tls-verify")
+		if registryTLS.InsecureSkipTLSVerify {
+			args = append(args, "--skip-tls-verify")
+		}
 	}
 
 	const dockerfileVolumeName = "dockerfile"

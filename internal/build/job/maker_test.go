@@ -220,7 +220,7 @@ var _ = Describe("MakeJobTemplate", func() {
 			jobhelper.EXPECT().JobLabels(*mod, kernelVersion, utils.JobTypeBuild).Return(labels),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, *mod, km.Build, kernelVersion, km.ContainerImage, true)
+		actual, err := m.MakeJobTemplate(ctx, *mod, km.Build, kernelVersion, km.ContainerImage, true, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -251,7 +251,7 @@ var _ = Describe("MakeJobTemplate", func() {
 		),
 	)
 
-	DescribeTable("should set correct kaniko flags", func(b kmmv1beta1.Build, kanikoFlag string, pushFlag bool) {
+	DescribeTable("should set correct kaniko flags", func(registryTLS *kmmv1beta1.TLSOptions, b kmmv1beta1.Build, kanikoFlag string, pushFlag bool) {
 		ctx := context.Background()
 
 		km := kmmv1beta1.KernelMapping{
@@ -273,7 +273,7 @@ var _ = Describe("MakeJobTemplate", func() {
 			jobhelper.EXPECT().JobLabels(mod, kernelVersion, utils.JobTypeBuild).Return(map[string]string{}),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, mod, &b, kernelVersion, km.ContainerImage, pushFlag)
+		actual, err := m.MakeJobTemplate(ctx, mod, &b, kernelVersion, km.ContainerImage, pushFlag, registryTLS)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
 		if pushFlag {
@@ -284,26 +284,36 @@ var _ = Describe("MakeJobTemplate", func() {
 
 	},
 		Entry(
-			"PullOptions.Insecure",
-			kmmv1beta1.Build{Pull: kmmv1beta1.PullOptions{Insecure: true}, DockerfileConfigMap: &dockerfileConfigMap},
+			"BaseImageRegistryTLS.Insecure",
+			nil,
+			kmmv1beta1.Build{
+				BaseImageRegistryTLS: kmmv1beta1.TLSOptions{Insecure: true},
+				DockerfileConfigMap:  &dockerfileConfigMap,
+			},
 			"--insecure-pull",
 			true,
 		),
 		Entry(
-			"PullOptions.InsecureSkipTLSVerify",
-			kmmv1beta1.Build{Pull: kmmv1beta1.PullOptions{InsecureSkipTLSVerify: true}, DockerfileConfigMap: &dockerfileConfigMap},
+			"BaseImageRegistryTLS.InsecureSkipTLSVerify",
+			nil,
+			kmmv1beta1.Build{
+				BaseImageRegistryTLS: kmmv1beta1.TLSOptions{InsecureSkipTLSVerify: true},
+				DockerfileConfigMap:  &dockerfileConfigMap,
+			},
 			"--skip-tls-verify-pull",
 			false,
 		),
 		Entry(
-			"PushOptions.Insecure",
-			kmmv1beta1.Build{Push: kmmv1beta1.PushOptions{Insecure: true}, DockerfileConfigMap: &dockerfileConfigMap},
+			"RegistryTLS.Insecure",
+			&kmmv1beta1.TLSOptions{Insecure: true},
+			kmmv1beta1.Build{DockerfileConfigMap: &dockerfileConfigMap},
 			"--insecure",
 			true,
 		),
 		Entry(
-			"PushOptions.InsecureSkipTLSVerify",
-			kmmv1beta1.Build{Push: kmmv1beta1.PushOptions{InsecureSkipTLSVerify: true}, DockerfileConfigMap: &dockerfileConfigMap},
+			"RegistryTLS.InsecureSkipTLSVerify",
+			&kmmv1beta1.TLSOptions{InsecureSkipTLSVerify: true},
+			kmmv1beta1.Build{DockerfileConfigMap: &dockerfileConfigMap},
 			"--skip-tls-verify",
 			false,
 		),
@@ -334,7 +344,7 @@ var _ = Describe("MakeJobTemplate", func() {
 			jobhelper.EXPECT().JobLabels(mod, kernelVersion, utils.JobTypeBuild).Return(map[string]string{}),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, mod, km.Build, kernelVersion, km.ContainerImage, false)
+		actual, err := m.MakeJobTemplate(ctx, mod, km.Build, kernelVersion, km.ContainerImage, false, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/kaniko-project/executor:" + customTag))
 	})
