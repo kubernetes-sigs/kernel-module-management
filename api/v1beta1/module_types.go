@@ -60,7 +60,8 @@ type Build struct {
 	// BuildArgs is an array of build variables that are provided to the image building backend.
 	BuildArgs []BuildArg `json:"buildArgs"`
 
-	Dockerfile string `json:"dockerfile"`
+	// ConfigMap that holds Dockerfile contents
+	DockerfileConfigMap *v1.LocalObjectReference `json:"dockerfileConfigMap"`
 
 	// +optional
 	// Pull contains settings determining how to pull the base images of the build process.

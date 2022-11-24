@@ -365,6 +365,9 @@ jobs:
         run: kubectl get all -n kube-system
         if: ${{ failure() }}
 
+      - name: Add a configmap that contain the kernel module build dockerfile
+        run: kubectl apply -f ci/kmm-kmod-dockerfile.yaml
+
       - name: Add an kmm-ci Module that contains a valid mapping
         run: |
           sed -e "s/KVER_CHANGEME/$(uname -r)/g" ci/module-kmm-ci-build.template.yaml | tee module-kmm-ci.yaml
@@ -374,7 +377,7 @@ jobs:
       - name: Wait for the job to be created
         run: |
           until kubectl get job -l kmm.node.kubernetes.io/module.name | grep kmm; do
-            sleep 3
+            sleep 1
           done
         timeout-minutes: 1
 

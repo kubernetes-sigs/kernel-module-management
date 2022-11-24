@@ -71,7 +71,7 @@ var _ = Describe("Sync", func() {
 
 			gomock.InOrder(
 				helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-				maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
+				maker.EXPECT().MakeJobTemplate(ctx, mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
 				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeBuild).Return(&j, nil),
 				jobhelper.EXPECT().IsJobChanged(&j, &j).Return(false, nil),
 			)
@@ -97,7 +97,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-			maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(nil, errors.New("random error")),
+			maker.EXPECT().MakeJobTemplate(ctx, mod, km.Build, kernelVersion, km.ContainerImage, true).Return(nil, errors.New("random error")),
 		)
 
 		mgr := NewBuildManager(clnt, maker, helper, jobhelper)
@@ -124,7 +124,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-			maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
+			maker.EXPECT().MakeJobTemplate(ctx, mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
 			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeBuild).Return(nil, utils.ErrNoMatchingJob),
 			jobhelper.EXPECT().CreateJob(ctx, &j).Return(errors.New("some error")),
 		)
@@ -154,7 +154,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-			maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
+			maker.EXPECT().MakeJobTemplate(ctx, mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&j, nil),
 			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeBuild).Return(nil, utils.ErrNoMatchingJob),
 			jobhelper.EXPECT().CreateJob(ctx, &j).Return(nil),
 		)
@@ -197,7 +197,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			helper.EXPECT().GetRelevantBuild(mod, km).Return(km.Build),
-			maker.EXPECT().MakeJobTemplate(mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&newJob, nil),
+			maker.EXPECT().MakeJobTemplate(ctx, mod, km.Build, kernelVersion, km.ContainerImage, true).Return(&newJob, nil),
 			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod, kernelVersion, utils.JobTypeBuild).Return(&j, nil),
 			jobhelper.EXPECT().IsJobChanged(&j, &newJob).Return(true, nil),
 			jobhelper.EXPECT().DeleteJob(ctx, &j).Return(nil),

@@ -1890,8 +1890,16 @@ spec:
                               - value
                               type: object
                             type: array
-                          dockerfile:
-                            type: string
+                          dockerfileConfigMap:
+                            description: ConfigMap that holds Dockerfile contents
+                            properties:
+                              name:
+                                description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  TODO: Add other useful fields. apiVersion, kind,
+                                  uid?'
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
                           kanikoParams:
                             description: KanikoParams is used to customize the building
                               process of the image.
@@ -1947,7 +1955,7 @@ spec:
                               x-kubernetes-map-type: atomic
                             type: array
                         required:
-                        - dockerfile
+                        - dockerfileConfigMap
                         type: object
                       containerImage:
                         description: ContainerImage is a top-level field
@@ -1988,8 +1996,17 @@ spec:
                                     - value
                                     type: object
                                   type: array
-                                dockerfile:
-                                  type: string
+                                dockerfileConfigMap:
+                                  description: ConfigMap that holds Dockerfile contents
+                                  properties:
+                                    name:
+                                      description: 'Name of the referent. More info:
+                                        https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        TODO: Add other useful fields. apiVersion,
+                                        kind, uid?'
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
                                 kanikoParams:
                                   description: KanikoParams is used to customize the
                                     building process of the image.
@@ -2049,7 +2066,7 @@ spec:
                                     x-kubernetes-map-type: atomic
                                   type: array
                               required:
-                              - dockerfile
+                              - dockerfileConfigMap
                               type: object
                             containerImage:
                               description: ContainerImage is the name of the DriverContainer

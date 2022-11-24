@@ -100,7 +100,7 @@ var _ = Describe("PrepareKernelMapping", func() {
 					{Name: "name1", Value: "value1"},
 					{Name: "kernel version", Value: "${KERNEL_FULL_VERSION}"},
 				},
-				Dockerfile: dockerfile,
+				DockerfileConfigMap: &v1.LocalObjectReference{},
 			},
 		}
 		expectMapping := kmmv1beta1.KernelMapping{
@@ -112,7 +112,7 @@ var _ = Describe("PrepareKernelMapping", func() {
 					{Name: "name1", Value: "value1"},
 					{Name: "kernel version", Value: "${KERNEL_FULL_VERSION}"},
 				},
-				Dockerfile: dockerfile,
+				DockerfileConfigMap: &v1.LocalObjectReference{},
 			},
 		}
 
