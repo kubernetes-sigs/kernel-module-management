@@ -1,24 +1,29 @@
-FROM registry.fedoraproject.org/fedora as ksource
-RUN yum install -y kernel-devel
+FROM alpine:3.16 as ksource
+RUN apk add linux-virt-dev
 
-FROM golang:1.19 as builder
+FROM golang:1.19-alpine3.16 as builder
 
 WORKDIR /workspace
+
+# Download dependencies
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+RUN apk add bash make
 
 COPY cmd cmd
 COPY api api
 COPY internal internal
 COPY Makefile Makefile
 COPY docs.mk docs.mk
-COPY go.mod go.mod
-COPY go.sum go.sum
-RUN go mod download
+
 # Build
 RUN make signimage
 
-FROM registry.fedoraproject.org/fedora
+FROM alpine:3.16
 
-COPY --from=builder /workspace/cmd/signimage/signimage /
-COPY --from=ksource /usr/src/kernels/*/scripts/sign-file /sign-file
+COPY --from=builder /workspace/signimage /
+COPY --from=ksource /usr/src/linux-headers-*-virt/scripts/sign-file /sign-file
 
 ENTRYPOINT ["/signimage"]

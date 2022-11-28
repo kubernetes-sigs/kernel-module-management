@@ -265,11 +265,11 @@ catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
 .PHONY: signimage
-signimage: ## Build manager binary.
-	go build -o cmd/signimage/signimage cmd/signimage/signimage.go
+signimage: ## Build signer binary.
+	go build -o $@ cmd/signimage/signimage.go
 
 .PHONY: signimage-build 
-signimage-build: ## Build docker image with the manager.
+signimage-build: ## Build docker image with the signer.
 	$(PODMAN) build -f Dockerfile.signimage -t $(SIGNER_IMG)
 
 include docs.mk
