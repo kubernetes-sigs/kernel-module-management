@@ -2373,6 +2373,10 @@ spec:
             required:
             - selector
             type: object
+          status:
+            description: ManagedClusterModuleStatus defines the observed state of
+              ManagedClusterModule.
+            type: object
         type: object
     served: true
     storage: true
