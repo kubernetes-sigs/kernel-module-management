@@ -32,6 +32,10 @@ type ManagedClusterModuleSpec struct {
 	Selector map[string]string `json:"selector"`
 }
 
+// ManagedClusterModuleStatus defines the observed state of ManagedClusterModule.
+type ManagedClusterModuleStatus struct {
+}
+
 //+kubebuilder:object:root=true
 //+kubebuilder:resource:path=managedclustermodules,scope=Cluster
 //+kubebuilder:subresource:status
@@ -41,7 +45,8 @@ type ManagedClusterModule struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec ManagedClusterModuleSpec `json:"spec,omitempty"`
+	Spec   ManagedClusterModuleSpec   `json:"spec,omitempty"`
+	Status ManagedClusterModuleStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
