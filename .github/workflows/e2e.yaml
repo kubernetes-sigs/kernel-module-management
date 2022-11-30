@@ -76,74 +76,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
-      - name: Deploy KMMO
-        run: make deploy
-        env:
-          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
-
-      - name: Wait until the KMMO Deployment is Available
-        run: kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-        timeout-minutes: 1
-
-      - name: Describe the Deployment and get its YAML if that failed
-        run: |
-          kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-          kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-        if: ${{ failure() }}
-
-      - name: Check that the kmm_ci_a module is not loaded on the node
-        run: |
-          if minikube ssh -- lsmod | grep kmm_ci_a; then
-            echo "Unexpected lsmod output - the module should not be loaded"
-            exit 1
-          fi
-
-      - name: Add an kmm-ci Module that contains a valid mapping
-        run: |
-          sed -e "s/KVER_CHANGEME/$(uname -r)/g" \
-            -e s/NAME_CHANGEME/kmm-ci/ \
-            -e s/KMOD_CHANGEME/kmm_ci_a/ \
-            ci/module-kmm-ci.template.yaml | tee module-kmm-ci.yaml
-
-          kubectl apply -f module-kmm-ci.yaml
-
-      - name: Check that the module gets loaded on the node
-        run: |
-          until minikube ssh -- lsmod | grep kmm_ci_a; do
-            sleep 3
-          done
-        timeout-minutes: 1
-
-      - name: Check that the node gets labeled with the module's name
-        run: |
-          until kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/kmm-ci.ready")'; do
-            sleep 3
-          done
-        timeout-minutes: 1
-
-      - name: Check that the daemon-set for device plugin is running
-        run: |
-          until kubectl get ds  -l 'kmm.node.kubernetes.io/module.name=kmm-ci,kmm.node.kubernetes.io/role=device-plugin' -ojson | jq -e '.items[] | select(.status.numberReady == 1)'; do 
-            sleep 3
-          done
-        timeout-minutes: 1
-
-      - name: Remove the Module
-        run: kubectl delete -f module-kmm-ci.yaml
-
-      - name: Check that the module gets unloaded from the node
-        run: |
-          until ! minikube ssh -- lsmod | grep kmm_ci_a; do
-            sleep 3
-          done
-        timeout-minutes: 1
-
-      - name: Check that the node gets unlabeled with the module's name
-        run: |
-          until ! kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/kmm-ci.ready")'; do
-            sleep 3
-          done
-        timeout-minutes: 1
+      - name: Run e2e-prebuilt-kernel-module tests
+        run: ./ci/prow/e2e-prebuilt-kernel-module
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
@@ -195,77 +129,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
-      - name: Deploy KMMO
-        run: make deploy
-        env:
-          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
-
-      - name: Wait until the KMMO Deployment is Available
-        run: kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-        timeout-minutes: 1
-
-      - name: Describe the Deployment / pods and get their YAML if that failed
-        run: |
-          kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-          kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-
-          kubectl describe pod -n kmm-operator-system
-          kubectl get -o yaml pod -n kmm-operator-system
-        if: ${{ failure() }}
-
-      - name: Create one Module for each node
-        run: |
-          # Node minikube gets module a
-          sed -e s/NAME_CHANGEME/kmm-ci-a/g \
-            -e s/KMOD_CHANGEME/kmm_ci_a/g \
-            -e "s/KVER_CHANGEME/${KERNEL_VERSION}/g" \
-            ci/module-kmm-ci.template.yaml | tee module-kmm-ci-a.yaml
-
-          # Node minikube-m02 gets module b
-          sed -e s/NAME_CHANGEME/kmm-ci-b/g \
-            -e s/KMOD_CHANGEME/kmm_ci_b/g \
-            -e "s/KVER_CHANGEME/${KERNEL_VERSION}/g" \
-            ci/module-kmm-ci.template.yaml | tee module-kmm-ci-b.yaml
-
-          kubectl apply -f module-kmm-ci-a.yaml -f module-kmm-ci-b.yaml
-
-      - name: Label the first node to have it receive module a
-        run: kubectl label node minikube wants-module=kmm_ci_a
-
-      - name: Check that module a gets loaded on the first node
-        run: |
-          until minikube ssh -- lsmod | grep kmm_ci_a; do
-            sleep 3
-          done
-        timeout-minutes: 1
-
-      - name: Label the second node to have it receive module b
-        run: kubectl label node minikube-m02 wants-module=kmm_ci_b
-
-      - name: Check that module b gets loaded on the second node
-        run: |
-          until minikube ssh -n minikube-m02 -- lsmod | grep kmm_ci_b; do
-            sleep 3
-          done
-        timeout-minutes: 1
-
-      - name: Remove the wants-module label on the second node
-        run: kubectl label node minikube-m02 wants-module-
-
-      - name: Check that module b gets unloaded from the second node
-        run: |
-          until ! minikube ssh -n minikube-m02 -- lsmod | grep kmm_ci_b; do
-            sleep 3
-          done
-        timeout-minutes: 1
-
-      - name: Verify that the DaemonSet gets garbage collected
-        run: |
-          # Cannot use kubectl wait because it will fail if there is no initial match
-          until [ $(kubectl get daemonsets.apps -l 'kmm.node.kubernetes.io/module.name=kmm-ci-b, kmm.node.kubernetes.io/role!=device-plugin' -o go-template='{{ len .items }}') -eq 0 ]; do
-            sleep 3
-          done
-        timeout-minutes: 1
+      - name: Run e2e-prebuilt-kernel-module-two-nodes tests
+        run: ./ci/prow/e2e-prebuilt-kernel-module-two-nodes
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
@@ -328,28 +193,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
-      - name: Deploy KMMO
-        run: make deploy
-        env:
-          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
-
-      - name: Wait until the KMMO Deployment is Available
-        run: kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-        timeout-minutes: 1
-
-      - name: Describe the Deployment / pods and get their YAML if that failed
-        run: |
-          kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-          kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-
-          kubectl describe pod -n kmm-operator-system
-          kubectl get -o yaml pod -n kmm-operator-system
-        if: ${{ failure() }}
-
-      - name: Create a build secret
-        run: kubectl create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
-
-      # The minikube registry-alias addon creates a Job that adds registry.minikube to the CoreDNS configuration.
+     # The minikube registry-alias addon creates a Job that adds registry.minikube to the CoreDNS configuration.
       # https://github.com/kubernetes/minikube/blob/master/deploy/addons/registry-aliases/patch-coredns-job.tmpl
       # This job sometimes does not finish before the operator starts looking for the image in the registry, which
       # results in failed DNS resolution.
@@ -361,76 +205,9 @@ jobs:
           kubectl wait --for=condition=Complete --timeout -1s job/wait-minikube-registry-alias
         timeout-minutes: 6
 
-      - name: Check the status of components in the kube-system namespace
-        run: kubectl get all -n kube-system
-        if: ${{ failure() }}
 
-      - name: Add a configmap that contain the kernel module build dockerfile
-        run: kubectl apply -f ci/kmm-kmod-dockerfile.yaml
-
-      - name: Add an kmm-ci Module that contains a valid mapping
-        run: |
-          sed -e "s/KVER_CHANGEME/$(uname -r)/g" ci/module-kmm-ci-build.template.yaml | tee module-kmm-ci.yaml
-
-          kubectl apply -f module-kmm-ci.yaml
-
-      - name: Wait for the job to be created
-        run: |
-          until kubectl get job -l kmm.node.kubernetes.io/module.name | grep kmm; do
-            sleep 1
-          done
-        timeout-minutes: 1
-
-      - name: Check that the module gets loaded on the node
-        run: |
-          until minikube ssh -- lsmod | grep kmm_ci_a; do
-            sleep 3
-          done
-        timeout-minutes: 1
-
-      - name: Check that the DriverContainer prints the secret's value to the standard output
-        run: |
-          POD_NAME=$(kubectl get pod -l kmm.node.kubernetes.io/module.name --template='{{ (index .items 0).metadata.name }}')
-
-          echo "::group::Looking for the build secret"
-
-          until kubectl exec $POD_NAME -- grep super-secret-value /ci-build-secret; do
-            sleep 3
-          done
-
-          echo "::endgroup::"
-          echo "::group::Looking for the build argument"
-
-          until kubectl exec $POD_NAME -- grep some-build-arg /build-arg; do
-            sleep 3
-          done
-
-          echo "::endgroup::"
-          echo "::group::Looking for the kernel version"
-
-          until kubectl exec $POD_NAME -- grep $KERNEL_VERSION /kernel-version; do
-            sleep 3
-          done
-
-          echo "::endgroup::"
-          echo "::group::Looking for the build argument with a default value"
-
-          until kubectl exec $POD_NAME -- grep default-value /default-value; do
-            sleep 3
-          done
-
-          echo "::endgroup::"
-        timeout-minutes: 1
-
-      - name: Remove the Module
-        run: kubectl delete -f module-kmm-ci.yaml
-
-      - name: Check that the module gets unloaded from the node
-        run: |
-          until ! minikube ssh -- lsmod | grep kmm_ci_a; do
-            sleep 3
-          done
-        timeout-minutes: 1
+      - name: Run e2e-incluster-build tests
+        run: ./ci/prow/e2e-incluster-build
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
@@ -483,47 +260,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
-      - name: Deploy KMMO
-        run: make deploy
-        env:
-          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
-
-      - name: Wait until the KMMO Deployment is Available
-        run: kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-        timeout-minutes: 1
-
-      - name: Describe the Deployment and get its YAML if that failed
-        run: |
-          kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-          kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-        if: ${{ failure() }}
-
-      - name: Check that the kmm_ci_a module is not loaded on the node
-        run: |
-          if minikube ssh -- lsmod | grep kmm_ci_a; then
-            echo "Unexpected lsmod output - the module should not be loaded"
-            exit 1
-          fi
-
-      - name: Add an kmm-ci Module that contains a valid mapping
-        run: kubectl apply -f ci/module-kmm-ci-variable.yaml
-
-      - name: Check that the module gets loaded on the node
-        run: |
-          until minikube ssh -- lsmod | grep kmm_ci_a; do
-            sleep 3
-          done
-        timeout-minutes: 1
-
-      - name: Remove the Module
-        run: kubectl delete -f ci/module-kmm-ci-variable.yaml
-
-      - name: Check that the module gets unloaded from the node
-        run: |
-          until ! minikube ssh -- lsmod | grep kmm_ci_a; do
-            sleep 3
-          done
-        timeout-minutes: 1
+      - name: Run e2e-crd-variable tests
+        run: ./ci/prow/e2e-crd-variable
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting

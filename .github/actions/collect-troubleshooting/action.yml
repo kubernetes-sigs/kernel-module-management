@@ -33,3 +33,11 @@ runs:
     - name: Get all operator logs
       run: kubectl logs deployment.apps/kmm-operator-controller-manager -n kmm-operator-system
       shell: bash
+
+    - name: Describe the Controller Deployment
+      run: kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+      shell: bash
+
+    - name: Get the Controller Deployment
+      run: kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+      shell: bash
