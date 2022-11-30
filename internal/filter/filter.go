@@ -54,6 +54,24 @@ func (f *Filter) NodeKernelReconcilerPredicate(labelName string) predicate.Predi
 	return predicate.And(skipDeletions, labelMismatch)
 }
 
+func NodeUpdateKernelChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+			oldNode, ok := updateEvent.ObjectOld.(*v1.Node)
+			if !ok {
+				return false
+			}
+
+			newNode, ok := updateEvent.ObjectNew.(*v1.Node)
+			if !ok {
+				return false
+			}
+
+			return oldNode.Status.NodeInfo.KernelVersion != newNode.Status.NodeInfo.KernelVersion
+		},
+	}
+}
+
 func (f *Filter) FindModulesForNode(node client.Object) []reconcile.Request {
 	logger := f.logger.WithValues("node", node.GetName())
 
