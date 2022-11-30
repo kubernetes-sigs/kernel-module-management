@@ -15,6 +15,12 @@ spec:
       kind: Module
       name: modules.kmm.sigs.k8s.io
       version: v1alpha1
+    - description: ManagedClusterModule is the Schema for the managedclustermodules
+        API
+      displayName: Managed Cluster Module
+      kind: ManagedClusterModule
+      name: managedclustermodules.kmm.sigs.k8s.io
+      version: v1beta1
     - description: Module is the Schema for the modules API
       displayName: Module
       kind: Module
