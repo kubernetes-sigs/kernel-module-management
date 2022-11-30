@@ -6,7 +6,7 @@ By installing the controller in a Kubernetes cluster we will get a new Namespace
 
 Once the ReplicaSet is running we can create and use a new Module object which will manage the build and/or run of a kernel module.
 
-In this document we will find examples and YAML files including in-cluster module building, device plugins and use of module loaders with KMM for different Kubernetes environments : [EKS](#elastic-kubernetes-service-eks), [GKE](#google-kubernetes-engine-gke), [Azure](#microsoft-azure-aks), [Ubuntu bare metal](#ubuntu-bare-metal-cluster). 
+In this document we will find YAML example files including in-cluster module building ConfigMaps, device plugins and use of module loaders with KMM for different Kubernetes environments : [EKS](#elastic-kubernetes-service-eks), [GKE](#google-kubernetes-engine-gke), [Azure](#microsoft-azure-aks), [Ubuntu bare metal](#ubuntu-bare-metal-cluster). 
 
 ## Installation
 
@@ -54,7 +54,7 @@ EKS can also be used with custom node groups based on [Ubuntu](https://cloud-ima
 apt update && apt-cache search linux-headers | grep aws
 ```
 
-Please refer the [Ubuntu EKS](aws/ubuntu-kmm-kmod.yaml) or [Amazon Linux EKS](aws/kmm-kmod.yaml) examples for further details.
+[Amazon Linux EKS](aws) examples are available.
  
 ### Google Kubernetes Engine GKE
 
@@ -86,7 +86,7 @@ apt update && apt-cache search linux-headers | grep gke
 The default option, Google's Container-optimized OS, comes with security settings that make it difficult to load out-of-tree kernel modules.
 Using Ubuntu nodes with containerd in GKE is the straight, preferred and easier option if you are willing to use KMM.
 
-Use case example for above can be found [here](gke/gke-ubuntu-nodes.yaml).
+Use case example for above can be found [here](gke).
 
 If worker nodes are based on the default GKE option which is COS, you will have to download the kernel sources for the same kernel version matching the node before the build step unless you find a kernel header package matching the exact same version as the one running in our nodes which is not the case today in 5.10.109 kernel used in examples. No major distribution delivers this specific kernel headers version in repositories.
 
@@ -136,11 +136,11 @@ apt update && apt-cache search linux-headers | grep azure
 
 Kernel versions used in every AKS Ubuntu 18.04 release can be reached [here](https://github.com/Azure/AKS/tree/master/vhd-notes/aks-ubuntu/AKSUbuntu-1804).
 
-KMM examples for AKS clusters can be accessed [here](azure/kmm-kmod.yaml).
+KMM examples for AKS clusters can be accessed [here](azure).
 
 ### Ubuntu Bare Metal Cluster
 
-Examples in [ubuntu](ubuntu/kmm-kmod.yaml) directory are based on a bare-metal (or any kind of cloud instances) cluster with Ubuntu 22.04 LTS nodes.
+Examples in [ubuntu](ubuntu) directory are based on a bare-metal (or any kind of cloud instances) cluster with Ubuntu 22.04 LTS nodes.
 
 This case is pretty straightforward as worker nodes and docker images used for building are the same OS so kernel headers should be included as a package and ready to install and use at the CRD build step.
 

@@ -9,43 +9,14 @@ spec:
         moduleName: kmm-ci-a 
 
       kernelMappings:
-        - literal: 5.4.196-108.356.amzn2.x86_64
-          containerImage: <aws_account_number>.dkr.ecr.<aws_region>.amazonaws.com/kmmo-lab:kmm-2.2
+        - regexp: '^.+.amzn2' 
+          containerImage: <aws-account-id>.dkr.ecr.<aws-region>.amazonaws.com/kmmo-lab:kmm-2.3
           build:
             buildArgs:
               - name: CI_BUILD_ARG
                 value: some-build-arg
-            dockerfile: |
-              FROM amazonlinux as builder
-              ARG KERNEL_VERSION=''
-              RUN amazon-linux-extras install kernel-5.4 -y
-              RUN yum -y install kernel-headers-${KERNEL_VERSION} \
-                  kernel-${KERNEL_VERSION} \
-                  kernel-devel-${KERNEL_VERSION} \
-                  python3 \
-                  git \
-                  make \
-                  gcc \
-                  bison \
-                  flex \
-                  elfutils-libelf-devel \
-                  linux-headers \
-                  openssl-devel \
-                  xz \
-                  yum-utils \
-                  bc && \
-                  yum clean all
-
-              RUN git clone https://github.com/kubernetes-sigs/kernel-module-management.git
-              WORKDIR kernel-module-management/ci/kmm-kmod 
-              RUN make 
-    
-              FROM amazonlinux
-              ARG KERNEL_VERSION
-              RUN yum -y install kmod && yum clean all
-              COPY --from=builder kernel-module-management/ci/kmm-kmod/kmm_ci_a.ko /opt/lib/modules/${KERNEL_VERSION}/
-              COPY --from=builder kernel-module-management/ci/kmm-kmod/kmm_ci_b.ko /opt/lib/modules/${KERNEL_VERSION}/
-              RUN depmod -b /opt
+            dockerfileConfigMap:
+              name: build-module 
   imageRepoSecret: 
     name: aws-repo-secret
   selector:  

@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: build-module
+data:
+  dockerfile: |
+    FROM amazonlinux as builder
+    ARG KERNEL_VERSION=''
+    RUN amazon-linux-extras install kernel-5.4 -y
+    RUN yum -y install dkms \ 
+    kernel-headers-${KERNEL_VERSION} \
+    kernel-${KERNEL_VERSION} \
+    kernel-devel-${KERNEL_VERSION} \
+    python3 \
+    git \
+    make \
+    gcc \
+    bison \
+    flex \
+    elfutils-libelf-devel \
+    linux-headers \
+    openssl-devel \
+    xz \
+    yum-utils \
+    bc &&\
+    yum clean all
+    WORKDIR /usr/src
+    RUN git clone https://github.com/kubernetes-sigs/kernel-module-management.git && \
+    mv kernel-module-management/ci/kmm-kmod kmm-kmod-0.0.1 && \
+    dkms add kmm-kmod/0.0.1 && \
+    dkms build kmm-kmod/0.0.1 && \
+    dkms install kmm-kmod/0.0.1
+    
+    FROM amazonlinux
+    ARG KERNEL_VERSION
+    RUN yum -y install kmod && yum clean all
+    COPY --from=builder /lib/modules/${KERNEL_VERSION}/kernel/drivers/other/kmm_ci_a/ /opt/lib/modules/${KERNEL_VERSION}/
+    RUN depmod -b /opt
+    
