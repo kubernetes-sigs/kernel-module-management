@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+echo "Deploy KMMO..."
+make deploy
+
+echo "Wait until the KMMO Deployment is Available..."
+timeout 1m kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+
+echo "Check that the kmm_ci_a module is not loaded on the node..."
+if minikube ssh -- lsmod | grep kmm_ci_a; then
+   echo "Unexpected lsmod output - the module should not be loaded"
+   exit 1
+fi
+
+echo " Add an kmm-ci Module that contains a valid mapping..."
+kubectl apply -f ci/module-kmm-ci-variable.yaml
+
+echo "Check that the module gets loaded on the node..."
+timeout 1m bash -c 'until minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
+
+echo "Remove the Module..."
+kubectl delete -f ci/module-kmm-ci-variable.yaml
+
+echo "Check that the module gets unloaded from the node..."
+timeout 1m bash -c 'until ! minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'

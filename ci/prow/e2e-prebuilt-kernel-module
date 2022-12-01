@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+echo "Label the node so that it gets the module..."
+kubectl label node minikube wants-module=kmm_ci_a
+
+echo "Deploy KMMO..."
+make deploy
+
+echo "Wait until the KMMO Deployment is Available and show info if it fails..."
+timeout 1m kubectl wait --for condition=Available deployments.apps -n kmm-operator-system kmm-operator-controller-manager
+ 
+echo "Check that the kmm_ci_a module is not loaded on the node..."
+if minikube ssh -- lsmod | grep kmm_ci_a; then
+ echo "Unexpected lsmod output - the module is present on the node before the module was applied to the cluster"
+ exit 1
+fi
+
+echo "Add a kmm-ci Module that contains a valid mapping..."
+sed -e "s/KVER_CHANGEME/$(uname -r)/g" \
+    -e s/NAME_CHANGEME/kmm-ci/ \
+    -e s/KMOD_CHANGEME/kmm_ci_a/ \
+    ci/module-kmm-ci.template.yaml | tee module-kmm-ci.yaml
+kubectl apply -f module-kmm-ci.yaml
+
+echo "Check that the kernel module gets loaded on the node..."
+timeout 1m bash -c 'until minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
+
+echo "Check that the node gets labeled with the module's name..."
+timeout 1m bash <<EOF
+  until kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/kmm-ci.ready")'; do sleep 3; done
+EOF
+
+echo "Check that the daemon-set for device plugin is running..."
+timeout 1m bash <<EOF
+  until kubectl get ds -l 'kmm.node.kubernetes.io/module.name=kmm-ci,kmm.node.kubernetes.io/role=device-plugin' -ojson | jq -e '.items[] | select(.status.numberReady == 1)'; do sleep 3; done
+EOF
+
+echo "Remove the Module..."
+kubectl delete -f module-kmm-ci.yaml
+
+echo "Check that the module gets unloaded from the node..."
+timeout 1m bash -c 'until ! minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
+
+echo "Check that the node gets unlabeled with the module's name..."
+timeout 1m bash <<EOF
+  until ! kubectl get node minikube -o jsonpath='{.metadata.labels}' | jq -e 'has("kmm.node.kubernetes.io/kmm-ci.ready")'; do sleep 3; done
+EOF
