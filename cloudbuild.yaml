@@ -5,6 +5,13 @@ steps:
     - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG
     - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator:latest
     - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-signimage:$_GIT_TAG
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-signimage:latest
+      - --file=Dockerfile.signimage
+      - .
 # this prevents errors if you don't use both _GIT_TAG and _PULL_BASE_REF,
 # or any new substitutions added in the future.
 options:
@@ -12,3 +19,5 @@ options:
 images:
   - gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG
   - gcr.io/$PROJECT_ID/kernel-module-management-operator:latest
+  - gcr.io/$PROJECT_ID/kernel-module-management-signimage:$_GIT_TAG
+  - gcr.io/$PROJECT_ID/kernel-module-management-signimage:latest
