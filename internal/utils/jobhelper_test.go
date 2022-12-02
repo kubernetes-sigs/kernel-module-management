@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,7 +33,7 @@ var _ = Describe("JobLabels", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName"},
 		}
 		mgr := NewJobHelper(clnt)
-		labels := mgr.JobLabels(mod, "targetKernel", "jobType")
+		labels := mgr.JobLabels(mod.Name, "targetKernel", "jobType")
 
 		Expect(labels).To(HaveKeyWithValue(constants.ModuleNameLabel, "moduleName"))
 		Expect(labels).To(HaveKeyWithValue(constants.TargetKernelTarget, "targetKernel"))
@@ -79,7 +80,7 @@ var _ = Describe("GetModuleJobByKernel", func() {
 			},
 		)
 
-		job, err := jh.GetModuleJobByKernel(ctx, mod, "targetKernel", "jobType")
+		job, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType")
 
 		Expect(job).To(Equal(&j))
 		Expect(err).NotTo(HaveOccurred())
@@ -105,7 +106,7 @@ var _ = Describe("GetModuleJobByKernel", func() {
 
 		clnt.EXPECT().List(ctx, &jobList, opts).Return(errors.New("random error"))
 
-		_, err := jh.GetModuleJobByKernel(ctx, mod, "targetKernel", "jobType")
+		_, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType")
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -135,7 +136,7 @@ var _ = Describe("GetModuleJobByKernel", func() {
 			},
 		)
 
-		_, err := jh.GetModuleJobByKernel(ctx, mod, "targetKernel", "jobType")
+		_, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType")
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -178,7 +179,7 @@ var _ = Describe("GetModuleJobs", func() {
 			},
 		)
 
-		jobs, err := jh.GetModuleJobs(ctx, mod, "jobType")
+		jobs, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(jobs)).To(Equal(2))
@@ -203,7 +204,7 @@ var _ = Describe("GetModuleJobs", func() {
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).Return(fmt.Errorf("some error"))
 
-		_, err := jh.GetModuleJobs(ctx, mod, "jobType")
+		_, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType")
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -232,7 +233,7 @@ var _ = Describe("GetModuleJobs", func() {
 			},
 		)
 
-		jobs, err := jh.GetModuleJobs(ctx, mod, "jobType")
+		jobs, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(jobs)).To(Equal(0))

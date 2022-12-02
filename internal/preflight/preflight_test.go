@@ -296,33 +296,36 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 	It("sync failed", func() {
 		mod.Spec.ModuleLoader.Container.Build = &kmmv1beta1.Build{}
 		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
-		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, mapping.ContainerImage, false).Return(build.Result{}, fmt.Errorf("some error"))
+
+		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, pv.Spec.PushBuiltImage, pv).
+			Return(build.Result{}, fmt.Errorf("some error"))
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mapping, mod)
 		Expect(res).To(BeFalse())
 		Expect(msg).To(Equal(fmt.Sprintf("Failed to verify build for module %s, kernel version %s, error %s", mod.Name, kernelVersion, fmt.Errorf("some error"))))
-
 	})
 
 	It("sync completed", func() {
 		mod.Spec.ModuleLoader.Container.Build = &kmmv1beta1.Build{}
 		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
-		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, mapping.ContainerImage, false).Return(build.Result{Status: build.StatusCompleted}, nil)
+
+		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, pv.Spec.PushBuiltImage, pv).
+			Return(build.Result{Status: build.StatusCompleted}, nil)
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mapping, mod)
 		Expect(res).To(BeTrue())
 		Expect(msg).To(Equal(fmt.Sprintf(VerificationStatusReasonVerified, "build compiles")))
-
 	})
 
 	It("sync not completed yet", func() {
 		mod.Spec.ModuleLoader.Container.Build = &kmmv1beta1.Build{}
 		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
-		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, mapping.ContainerImage, false).Return(build.Result{Status: build.StatusInProgress}, nil)
+
+		mockBuildAPI.EXPECT().Sync(context.Background(), *mod, mapping, kernelVersion, pv.Spec.PushBuiltImage, pv).
+			Return(build.Result{Status: build.StatusInProgress}, nil)
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mapping, mod)
 		Expect(res).To(BeFalse())
 		Expect(msg).To(Equal("Waiting for build verification"))
-
 	})
 })

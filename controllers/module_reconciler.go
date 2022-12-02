@@ -22,14 +22,12 @@ import (
 	"strings"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/rbac"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -60,7 +58,6 @@ type ModuleReconciler struct {
 	daemonAPI        daemonset.DaemonSetCreator
 	kernelAPI        module.KernelMapper
 	metricsAPI       metrics.Metrics
-	registry         registry.Registry
 	filter           *filter.Filter
 	statusUpdaterAPI statusupdater.ModuleStatusUpdater
 }
@@ -74,7 +71,6 @@ func NewModuleReconciler(
 	kernelAPI module.KernelMapper,
 	metricsAPI metrics.Metrics,
 	filter *filter.Filter,
-	registry registry.Registry,
 	statusUpdaterAPI statusupdater.ModuleStatusUpdater) *ModuleReconciler {
 	return &ModuleReconciler{
 		Client:           client,
@@ -85,7 +81,6 @@ func NewModuleReconciler(
 		kernelAPI:        kernelAPI,
 		metricsAPI:       metricsAPI,
 		filter:           filter,
-		registry:         registry,
 		statusUpdaterAPI: statusUpdaterAPI,
 	}
 }
@@ -146,9 +141,9 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	for kernelVersion, m := range mappings {
-		requeue, err := r.handleBuild(ctx, mod, m, kernelVersion, m.ContainerImage)
+		requeue, err := r.handleBuild(ctx, mod, m, kernelVersion)
 		if err != nil {
-			return res, fmt.Errorf("failed to handle build for kernel version %s: %w", kernelVersion, err)
+			return res, fmt.Errorf("failed to handle build for kernel version %s: %v", kernelVersion, err)
 		}
 		if requeue {
 			logger.Info("Build requires a requeue; skipping handling driver container for now", "kernelVersion", kernelVersion, "image", m)
@@ -156,7 +151,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			continue
 		}
 
-		signrequeue, err := r.handleSigning(ctx, mod, m, kernelVersion, m.ContainerImage)
+		signrequeue, err := r.handleSigning(ctx, mod, m, kernelVersion)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle signing for kernel version %s: %v", kernelVersion, err)
 		}
@@ -265,33 +260,20 @@ func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *kmmv
 func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	km *kmmv1beta1.KernelMapping,
-	kernelVersion string,
-	containerImage string) (bool, error) {
+	kernelVersion string) (bool, error) {
 
-	//if theres no build specified skip this section
-	if !r.willBuild(mod, km) {
-		return false, nil
-	}
-	//if build is specified AND sign is specified then we want to build an intermediate image
-	// and let sign produce the one specified in containerImage
-	if r.willSign(mod, km) {
-		containerImage = r.appendToTag(containerImage, mod.Namespace+"_"+mod.Name+"_kmm_unsigned")
-	}
-
-	// build is specified and containerImage is either the final image, or the intermediate image tag depending on if sign is defined
-	// either way if containerImage exists we can skip building it
-	exists, err := r.checkImageExists(ctx, mod, km, containerImage)
+	shouldSync, err := r.buildAPI.ShouldSync(ctx, *mod, *km)
 	if err != nil {
-		return false, fmt.Errorf("failed to check existence of image %s for kernel %s: %w", containerImage, kernelVersion, err)
+		return false, fmt.Errorf("could not check if build synchronization is needed: %w", err)
 	}
-	if exists {
+	if !shouldSync {
 		return false, nil
 	}
 
-	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", containerImage)
+	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildRes, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion, containerImage, true)
+	buildRes, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion, true, mod)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
@@ -306,65 +288,29 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	return buildRes.Requeue, nil
 }
 
-// is sign defined in the CR
-func (r *ModuleReconciler) willSign(mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping) bool {
-	if mod.Spec.ModuleLoader.Container.Sign == nil && km.Sign == nil {
-		return false
-	}
-	return true
-}
-
-// is build defined in the CR
-func (r *ModuleReconciler) willBuild(mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping) bool {
-	if mod.Spec.ModuleLoader.Container.Build == nil && km.Build == nil {
-		return false
-	}
-	return true
-}
-
-// append tag to the image name cleanly, avoiding messing up the name or getting "name:-tag"
-func (r *ModuleReconciler) appendToTag(name string, tag string) string {
-	if strings.Contains(name, ":") {
-		return name + "_" + tag
-	} else {
-		return name + ":" + tag
-	}
-
-}
-
 func (r *ModuleReconciler) handleSigning(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	km *kmmv1beta1.KernelMapping,
-	kernelVersion string,
-	containerImage string) (bool, error) {
+	kernelVersion string) (bool, error) {
 
-	// if sign is not specified skip
-	if !r.willSign(mod, km) {
-		return false, nil
-	}
-
-	// if its already built, skip
-	exists, err := r.checkImageExists(ctx, mod, km, containerImage)
+	shouldSync, err := r.signAPI.ShouldSync(ctx, *mod, *km)
 	if err != nil {
-		return false, fmt.Errorf("failed to check existence of image %s for kernel %s: %w", containerImage, kernelVersion, err)
+		return false, fmt.Errorf("cound not check if synchronization is needed: %w", err)
 	}
-	if exists {
+	if !shouldSync {
 		return false, nil
 	}
 
 	// if we need to sign AND we've built, then we must have built the intermediate image so must figure out its name
 	previousImage := ""
-	if r.willBuild(mod, km) {
-		previousImage = r.appendToTag(containerImage, mod.Namespace+"_"+mod.Name+"_kmm_unsigned")
-		if err != nil {
-			return false, err
-		}
+	if module.ShouldBeBuilt(mod.Spec, *km) {
+		previousImage = module.IntermediateImageName(mod.Name, mod.Namespace, km.ContainerImage)
 	}
 
-	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", containerImage)
+	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
 	signCtx := log.IntoContext(ctx, logger)
 
-	signRes, err := r.signAPI.Sync(signCtx, *mod, *km, kernelVersion, previousImage, containerImage, true)
+	signRes, err := r.signAPI.Sync(signCtx, *mod, *km, kernelVersion, previousImage, true, mod)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the signing: %w", err)
 	}
@@ -377,16 +323,6 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context,
 	}
 
 	return signRes.Requeue, nil
-}
-
-func (r *ModuleReconciler) checkImageExists(ctx context.Context, mod *kmmv1beta1.Module, km *kmmv1beta1.KernelMapping, imageName string) (bool, error) {
-	registryAuthGetter := auth.NewRegistryAuthGetterFrom(r.Client, mod)
-	tlsOptions := module.GetRelevantTLSOptions(mod, km)
-	imageAvailable, err := r.registry.ImageExists(ctx, imageName, tlsOptions, registryAuthGetter)
-	if err != nil {
-		return false, fmt.Errorf("could not check if the image is available: %v", err)
-	}
-	return imageAvailable, nil
 }
 
 func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
@@ -467,7 +403,7 @@ func (r *ModuleReconciler) garbageCollect(ctx context.Context,
 	logger.Info("Garbage-collected DaemonSets", "names", deleted)
 
 	// Garbage collect for successfully finished build jobs
-	deleted, err = r.buildAPI.GarbageCollect(ctx, *mod)
+	deleted, err = r.buildAPI.GarbageCollect(ctx, mod.Name, mod.Namespace)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect build objects: %v", err)
 	}

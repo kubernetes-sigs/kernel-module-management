@@ -106,7 +106,7 @@ func (p *preflightHelper) verifyImage(ctx context.Context, mapping *kmmv1beta1.K
 	moduleFileName := mod.Spec.ModuleLoader.Container.Modprobe.ModuleName + ".ko"
 	baseDir := mod.Spec.ModuleLoader.Container.Modprobe.DirName
 
-	tlsOptions := module.GetRelevantTLSOptions(mod, mapping)
+	tlsOptions := module.TLSOptions(mod.Spec, *mapping)
 	registryAuthGetter := auth.NewRegistryAuthGetterFrom(p.client, mod)
 	digests, repoConfig, err := p.registryAPI.GetLayersDigests(ctx, image, tlsOptions, registryAuthGetter)
 	if err != nil {
@@ -137,7 +137,7 @@ func (p *preflightHelper) verifyBuild(ctx context.Context,
 	mapping *kmmv1beta1.KernelMapping,
 	mod *kmmv1beta1.Module) (bool, string) {
 	// at this stage we know that eiher mapping Build or Container build are defined
-	buildRes, err := p.buildAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, mapping.ContainerImage, pv.Spec.PushBuiltImage)
+	buildRes, err := p.buildAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, pv.Spec.PushBuiltImage, pv)
 	if err != nil {
 		return false, fmt.Sprintf("Failed to verify build for module %s, kernel version %s, error %s", mod.Name, pv.Spec.KernelVersion, err)
 	}

@@ -7,7 +7,7 @@ import (
 //go:generate mockgen -source=helper.go -package=sign -destination=mock_helper.go
 
 type Helper interface {
-	GetRelevantSign(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.Sign
+	GetRelevantSign(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmmv1beta1.Sign
 }
 
 type helper struct{}
@@ -16,18 +16,17 @@ func NewSignerHelper() Helper {
 	return &helper{}
 }
 
-func (m *helper) GetRelevantSign(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.Sign {
-
-	if mod.Spec.ModuleLoader.Container.Sign == nil {
+func (m *helper) GetRelevantSign(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmmv1beta1.Sign {
+	if modSpec.ModuleLoader.Container.Sign == nil {
 		// km.Sign cannot be nil in case mod.Sign is nil, checked above
 		return km.Sign.DeepCopy()
 	}
 
 	if km.Sign == nil {
-		return mod.Spec.ModuleLoader.Container.Sign.DeepCopy()
+		return modSpec.ModuleLoader.Container.Sign.DeepCopy()
 	}
 
-	signConfig := mod.Spec.ModuleLoader.Container.Sign.DeepCopy()
+	signConfig := modSpec.ModuleLoader.Container.Sign.DeepCopy()
 
 	if km.Sign.UnsignedImage != "" {
 		signConfig.UnsignedImage = km.Sign.UnsignedImage

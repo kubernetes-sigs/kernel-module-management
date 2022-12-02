@@ -4,35 +4,64 @@ import (
 	"fmt"
 	"strings"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 //go:generate mockgen -source=signer.go -package=signjob -destination=mock_signer.go
 
 type Signer interface {
-	MakeJobTemplate(mod kmmv1beta1.Module, signConfig *kmmv1beta1.Sign, targetKernel string, imageToSign string, targetImage string, labels map[string]string, pushImage bool) (*batchv1.Job, error)
+	MakeJobTemplate(
+		mod kmmv1beta1.Module,
+		km kmmv1beta1.KernelMapping,
+		targetKernel string,
+		labels map[string]string,
+		imageToSign string,
+		pushImage bool,
+		owner metav1.Object,
+	) (*batchv1.Job, error)
 }
 
 type signer struct {
-	scheme *runtime.Scheme
+	scheme    *runtime.Scheme
+	helper    sign.Helper
+	jobHelper utils.JobHelper
 }
 
-func NewSigner(scheme *runtime.Scheme) Signer {
-	return &signer{scheme: scheme}
+func NewSigner(
+	scheme *runtime.Scheme,
+	helper sign.Helper,
+	jobHelper utils.JobHelper) Signer {
+	return &signer{
+		scheme:    scheme,
+		helper:    helper,
+		jobHelper: jobHelper,
+	}
 }
 
-func (m *signer) MakeJobTemplate(mod kmmv1beta1.Module, signConfig *kmmv1beta1.Sign, targetKernel string, imageToSign string, targetImage string, labels map[string]string, pushImage bool) (*batchv1.Job, error) {
-	var args []string
+func (m *signer) MakeJobTemplate(
+	mod kmmv1beta1.Module,
+	km kmmv1beta1.KernelMapping,
+	targetKernel string,
+	labels map[string]string,
+	imageToSign string,
+	pushImage bool,
+	owner metav1.Object) (*batchv1.Job, error) {
+
+	signConfig := m.helper.GetRelevantSign(mod.Spec, km)
+
+	args := make([]string, 0)
 
 	if pushImage {
-		args = []string{"-signedimage", targetImage}
+		args = append(args, "-signedimage", km.ContainerImage)
 	} else {
 		args = append(args, "-no-push")
 	}
@@ -92,7 +121,7 @@ func (m *signer) MakeJobTemplate(mod kmmv1beta1.Module, signConfig *kmmv1beta1.S
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(&mod, job, m.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(owner, job, m.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner reference: %v", err)
 	}
 

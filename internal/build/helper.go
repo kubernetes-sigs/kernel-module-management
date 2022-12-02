@@ -1,7 +1,6 @@
 package build
 
 import (
-	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -10,8 +9,8 @@ import (
 //go:generate mockgen -source=helper.go -package=build -destination=mock_helper.go
 
 type Helper interface {
-	ApplyBuildArgOverrides(args []v1beta1.BuildArg, overrides ...v1beta1.BuildArg) []v1beta1.BuildArg
-	GetRelevantBuild(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build
+	ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, overrides ...kmmv1beta1.BuildArg) []kmmv1beta1.BuildArg
+	GetRelevantBuild(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build
 }
 
 type helper struct{}
@@ -20,8 +19,8 @@ func NewHelper() Helper {
 	return &helper{}
 }
 
-func (m *helper) ApplyBuildArgOverrides(args []v1beta1.BuildArg, overrides ...v1beta1.BuildArg) []v1beta1.BuildArg {
-	overridesMap := make(map[string]v1beta1.BuildArg, len(overrides))
+func (m *helper) ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, overrides ...kmmv1beta1.BuildArg) []kmmv1beta1.BuildArg {
+	overridesMap := make(map[string]kmmv1beta1.BuildArg, len(overrides))
 
 	for _, o := range overrides {
 		overridesMap[o.Name] = o
@@ -45,16 +44,16 @@ func (m *helper) ApplyBuildArgOverrides(args []v1beta1.BuildArg, overrides ...v1
 	return args
 }
 
-func (m *helper) GetRelevantBuild(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build {
-	if mod.Spec.ModuleLoader.Container.Build == nil {
+func (m *helper) GetRelevantBuild(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build {
+	if modSpec.ModuleLoader.Container.Build == nil {
 		return km.Build.DeepCopy()
 	}
 
 	if km.Build == nil {
-		return mod.Spec.ModuleLoader.Container.Build.DeepCopy()
+		return modSpec.ModuleLoader.Container.Build.DeepCopy()
 	}
 
-	buildConfig := mod.Spec.ModuleLoader.Container.Build.DeepCopy()
+	buildConfig := modSpec.ModuleLoader.Container.Build.DeepCopy()
 	buildConfig.DockerfileConfigMap = km.Build.DockerfileConfigMap
 
 	buildConfig.BuildArgs = m.ApplyBuildArgOverrides(buildConfig.BuildArgs, km.Build.BuildArgs...)
