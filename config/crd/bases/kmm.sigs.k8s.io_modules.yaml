@@ -2108,6 +2108,22 @@ spec:
                                   description: Image to sign, ignored if a Build is
                                     present, required otherwise
                                   type: string
+                                unsignedImageRegistryTLS:
+                                  description: UnsignedImageRegistryTLS contains settings
+                                    determining how to access registries of the unsigned
+                                    image.
+                                  properties:
+                                    insecure:
+                                      description: If Insecure is true, the operator
+                                        will be able to access a registry in an insecure
+                                        (plain HTTP) protocol.
+                                      type: boolean
+                                    insecureSkipTLSVerify:
+                                      description: If InsecureSkipTLSVerify, the operator
+                                        will accept any certificate provided by the
+                                        registry.
+                                      type: boolean
+                                  type: object
                               required:
                               - certSecret
                               - keySecret
@@ -2238,6 +2254,21 @@ spec:
                             description: Image to sign, ignored if a Build is present,
                               required otherwise
                             type: string
+                          unsignedImageRegistryTLS:
+                            description: UnsignedImageRegistryTLS contains settings
+                              determining how to access registries of the unsigned
+                              image.
+                            properties:
+                              insecure:
+                                description: If Insecure is true, the operator will
+                                  be able to access a registry in an insecure (plain
+                                  HTTP) protocol.
+                                type: boolean
+                              insecureSkipTLSVerify:
+                                description: If InsecureSkipTLSVerify, the operator
+                                  will accept any certificate provided by the registry.
+                                type: boolean
+                            type: object
                         required:
                         - certSecret
                         - keySecret

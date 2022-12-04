@@ -72,7 +72,7 @@ var _ = Describe("ShouldSync", func() {
 		}
 
 		gomock.InOrder(
-			reg.EXPECT().ImageExists(ctx, imageName, nil, gomock.Any()).Return(true, nil),
+			reg.EXPECT().ImageExists(ctx, imageName, gomock.Any(), gomock.Any()).Return(true, nil),
 		)
 
 		mgr := NewBuildManager(clnt, nil, nil, reg)
@@ -102,7 +102,7 @@ var _ = Describe("ShouldSync", func() {
 		}
 
 		gomock.InOrder(
-			reg.EXPECT().ImageExists(ctx, imageName, nil, gomock.Any()).Return(false, errors.New("generic-registry-error")),
+			reg.EXPECT().ImageExists(ctx, imageName, gomock.Any(), gomock.Any()).Return(false, errors.New("generic-registry-error")),
 		)
 
 		mgr := NewBuildManager(clnt, nil, nil, reg)
@@ -133,7 +133,7 @@ var _ = Describe("ShouldSync", func() {
 		}
 
 		gomock.InOrder(
-			reg.EXPECT().ImageExists(ctx, imageName, nil, gomock.Any()).Return(false, nil),
+			reg.EXPECT().ImageExists(ctx, imageName, gomock.Any(), gomock.Any()).Return(false, nil),
 		)
 
 		mgr := NewBuildManager(clnt, nil, nil, reg)

@@ -293,7 +293,7 @@ var _ = Describe("MakeJobTemplate", func() {
 				DockerfileConfigMap:  &dockerfileConfigMap,
 			},
 			"--insecure-pull",
-			true,
+			false,
 		),
 		Entry(
 			"BaseImageRegistryTLS.InsecureSkipTLSVerify",
@@ -317,7 +317,7 @@ var _ = Describe("MakeJobTemplate", func() {
 			&kmmv1beta1.TLSOptions{InsecureSkipTLSVerify: true},
 			&kmmv1beta1.Build{DockerfileConfigMap: &dockerfileConfigMap},
 			"--skip-tls-verify",
-			false,
+			true,
 		),
 	)
 

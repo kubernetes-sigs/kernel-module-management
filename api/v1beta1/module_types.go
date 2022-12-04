@@ -54,7 +54,7 @@ type Build struct {
 
 	// +optional
 	// BaseImageRegistryTLS contains settings determining how to access registries of the base images in the build-process' Dockerfile.
-	BaseImageRegistryTLS TLSOptions `json:"baseImageRegistryTLS"`
+	BaseImageRegistryTLS TLSOptions `json:"baseImageRegistryTLS,omitempty"`
 
 	// +optional
 	// Secrets is an optional list of secrets to be made available to the build system.
@@ -71,6 +71,10 @@ type Sign struct {
 	// +optional
 	// Image to sign, ignored if a Build is present, required otherwise
 	UnsignedImage string `json:"unsignedImage,omitempty"`
+
+	// +optional
+	// UnsignedImageRegistryTLS contains settings determining how to access registries of the unsigned image.
+	UnsignedImageRegistryTLS TLSOptions `json:"unsignedImageRegistryTLS,omitempty"`
 
 	// a secret containing the private key used to sign kernel modules for secureboot
 	KeySecret *v1.LocalObjectReference `json:"keySecret"`
@@ -184,7 +188,7 @@ type ModuleLoaderContainerSpec struct {
 
 	// +optional
 	// RegistryTLS set the TLS configs for accessing the registry of the module-loader's image.
-	RegistryTLS *TLSOptions `json:"registryTLS"`
+	RegistryTLS TLSOptions `json:"registryTLS"`
 }
 
 type ModuleLoaderSpec struct {
