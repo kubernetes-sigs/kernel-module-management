@@ -40,7 +40,7 @@ var _ = Describe("TLSOptions", func() {
 			Spec: kmmv1beta1.ModuleSpec{
 				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
-						RegistryTLS: &kmmv1beta1.TLSOptions{},
+						RegistryTLS: kmmv1beta1.TLSOptions{},
 					},
 				},
 			},
@@ -48,7 +48,7 @@ var _ = Describe("TLSOptions", func() {
 		km := kmmv1beta1.KernelMapping{}
 
 		Expect(
-			TLSOptions(mod.Spec, km),
+			*TLSOptions(mod.Spec, km),
 		).To(
 			Equal(mod.Spec.ModuleLoader.Container.RegistryTLS),
 		)
@@ -241,7 +241,7 @@ var _ = Describe("ImageExists", func() {
 
 	It("should return true if the image exists", func() {
 		gomock.InOrder(
-			mockRegistry.EXPECT().ImageExists(ctx, imageName, nil, nil).Return(true, nil),
+			mockRegistry.EXPECT().ImageExists(ctx, imageName, gomock.Any(), nil).Return(true, nil),
 		)
 
 		exists, err := ImageExists(ctx, clnt, mockRegistry, mod.Spec, namespace, km, imageName)
@@ -252,7 +252,7 @@ var _ = Describe("ImageExists", func() {
 
 	It("should return false if the image does not exist", func() {
 		gomock.InOrder(
-			mockRegistry.EXPECT().ImageExists(ctx, imageName, nil, nil).Return(false, nil),
+			mockRegistry.EXPECT().ImageExists(ctx, imageName, gomock.Any(), nil).Return(false, nil),
 		)
 
 		exists, err := ImageExists(ctx, clnt, mockRegistry, mod.Spec, namespace, km, imageName)
@@ -263,7 +263,7 @@ var _ = Describe("ImageExists", func() {
 
 	It("should return an error if the registry call fails", func() {
 		gomock.InOrder(
-			mockRegistry.EXPECT().ImageExists(ctx, imageName, nil, nil).Return(false, errors.New("some-error")),
+			mockRegistry.EXPECT().ImageExists(ctx, imageName, gomock.Any(), nil).Return(false, errors.New("some-error")),
 		)
 
 		exists, err := ImageExists(ctx, clnt, mockRegistry, mod.Spec, namespace, km, imageName)
@@ -283,7 +283,7 @@ var _ = Describe("ImageExists", func() {
 		}
 
 		gomock.InOrder(
-			mockRegistry.EXPECT().ImageExists(ctx, imageName, nil, gomock.Not(gomock.Nil())).Return(false, nil),
+			mockRegistry.EXPECT().ImageExists(ctx, imageName, gomock.Any(), gomock.Not(gomock.Nil())).Return(false, nil),
 		)
 
 		exists, err := ImageExists(ctx, clnt, mockRegistry, mod.Spec, namespace, km, imageName)

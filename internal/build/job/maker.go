@@ -81,12 +81,13 @@ func (m *maker) MakeJobTemplate(
 		containerImage = module.IntermediateImageName(mod.Name, mod.Namespace, containerImage)
 	}
 
+	registryTLS := module.TLSOptions(mod.Spec, km)
 	specTemplate := m.specTemplate(
 		mod.Spec,
 		buildConfig,
 		targetKernel,
 		containerImage,
-		km.RegistryTLS,
+		registryTLS,
 		pushImage)
 
 	specTemplateHash, err := m.getHashAnnotationValue(ctx, buildConfig.DockerfileConfigMap.Name, mod.Namespace, &specTemplate)
@@ -175,7 +176,7 @@ func (m *maker) containerArgs(
 		args = append(args, "--skip-tls-verify-pull")
 	}
 
-	if registryTLS != nil {
+	if pushImage {
 		if registryTLS.Insecure {
 			args = append(args, "--insecure")
 		}

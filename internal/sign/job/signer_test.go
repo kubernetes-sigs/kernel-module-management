@@ -267,4 +267,58 @@ var _ = Describe("MakeJobTemplate", func() {
 			false,
 		),
 	)
+
+	DescribeTable("should set correct kmod-signer TLS flags", func(kmRegistryTLS,
+		unsignedImageRegistryTLS kmmv1beta1.TLSOptions, expectedFlag string) {
+
+		km := kmmv1beta1.KernelMapping{
+			RegistryTLS: &kmRegistryTLS,
+			Sign: &kmmv1beta1.Sign{
+				UnsignedImage:            signedImage,
+				UnsignedImageRegistryTLS: unsignedImageRegistryTLS,
+			},
+		}
+
+		gomock.InOrder(
+			helper.EXPECT().GetRelevantSign(mod.Spec, km).Return(km.Sign),
+		)
+
+		actual, err := m.MakeJobTemplate(mod, km, kernelVersion, labels, "", true, &mod)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(expectedFlag))
+	},
+		Entry(
+			"filelist and push",
+			kmmv1beta1.TLSOptions{
+				Insecure: true,
+			},
+			kmmv1beta1.TLSOptions{},
+			"--insecure",
+		),
+		Entry(
+			"filelist and push",
+			kmmv1beta1.TLSOptions{
+				InsecureSkipTLSVerify: true,
+			},
+			kmmv1beta1.TLSOptions{},
+			"--skip-tls-verify",
+		),
+		Entry(
+			"filelist and push",
+			kmmv1beta1.TLSOptions{},
+			kmmv1beta1.TLSOptions{
+				Insecure: true,
+			},
+			"--insecure-pull",
+		),
+		Entry(
+			"filelist and push",
+			kmmv1beta1.TLSOptions{},
+			kmmv1beta1.TLSOptions{
+				InsecureSkipTLSVerify: true,
+			},
+			"--skip-tls-verify-pull",
+		),
+	)
 })

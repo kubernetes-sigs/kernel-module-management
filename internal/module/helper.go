@@ -17,7 +17,7 @@ func TLSOptions(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmm
 	if km.RegistryTLS != nil {
 		return km.RegistryTLS
 	}
-	return modSpec.ModuleLoader.Container.RegistryTLS
+	return &modSpec.ModuleLoader.Container.RegistryTLS
 }
 
 // AppendToTag adds the specified tag to the image name cleanly, i.e. by avoiding messing up

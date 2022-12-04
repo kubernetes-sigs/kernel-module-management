@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
@@ -62,6 +63,14 @@ func (m *signer) MakeJobTemplate(
 
 	if pushImage {
 		args = append(args, "-signedimage", km.ContainerImage)
+
+		registryTLS := module.TLSOptions(mod.Spec, km)
+		if registryTLS.Insecure {
+			args = append(args, "--insecure")
+		}
+		if registryTLS.InsecureSkipTLSVerify {
+			args = append(args, "--skip-tls-verify")
+		}
 	} else {
 		args = append(args, "-no-push")
 	}
@@ -78,6 +87,14 @@ func (m *signer) MakeJobTemplate(
 
 	if len(signConfig.FilesToSign) > 0 {
 		args = append(args, "-filestosign", strings.Join(signConfig.FilesToSign, ":"))
+	}
+
+	if signConfig.UnsignedImageRegistryTLS.Insecure {
+		args = append(args, "--insecure-pull")
+	}
+
+	if signConfig.UnsignedImageRegistryTLS.InsecureSkipTLSVerify {
+		args = append(args, "--skip-tls-verify-pull")
 	}
 
 	volumes := []v1.Volume{
