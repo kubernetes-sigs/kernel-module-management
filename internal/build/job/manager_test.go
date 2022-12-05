@@ -196,7 +196,7 @@ var _ = Describe("Sync", func() {
 
 			gomock.InOrder(
 				maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(&j, nil),
-				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild).Return(&j, nil),
+				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild, &mod).Return(&j, nil),
 				jobhelper.EXPECT().IsJobChanged(&j, &j).Return(false, nil),
 			)
 
@@ -247,7 +247,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(&j, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild).Return(nil, utils.ErrNoMatchingJob),
+			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild, &mod).Return(nil, utils.ErrNoMatchingJob),
 			jobhelper.EXPECT().CreateJob(ctx, &j).Return(errors.New("some error")),
 		)
 
@@ -276,7 +276,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(&j, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild).Return(nil, utils.ErrNoMatchingJob),
+			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild, &mod).Return(nil, utils.ErrNoMatchingJob),
 			jobhelper.EXPECT().CreateJob(ctx, &j).Return(nil),
 		)
 
@@ -318,7 +318,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(&newJob, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild).Return(&j, nil),
+			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild, &mod).Return(&j, nil),
 			jobhelper.EXPECT().IsJobChanged(&j, &newJob).Return(true, nil),
 			jobhelper.EXPECT().DeleteJob(ctx, &j).Return(nil),
 		)
@@ -384,7 +384,7 @@ var _ = Describe("GarbageCollect", func() {
 				returnedError = nil
 			}
 
-			jobhelper.EXPECT().GetModuleJobs(context.Background(), mod.Name, mod.Namespace, utils.JobTypeBuild).Return([]batchv1.Job{job1, job2}, returnedError)
+			jobhelper.EXPECT().GetModuleJobs(context.Background(), mod.Name, mod.Namespace, utils.JobTypeBuild, &mod).Return([]batchv1.Job{job1, job2}, returnedError)
 			if !expectsErr {
 				if job1.Status.Succeeded == 1 {
 					jobhelper.EXPECT().DeleteJob(context.Background(), &job1).Return(nil)
@@ -394,7 +394,7 @@ var _ = Describe("GarbageCollect", func() {
 				}
 			}
 
-			names, err := mgr.GarbageCollect(context.Background(), mod.Name, mod.Namespace)
+			names, err := mgr.GarbageCollect(context.Background(), mod.Name, mod.Namespace, &mod)
 
 			if expectsErr {
 				Expect(err).To(HaveOccurred())

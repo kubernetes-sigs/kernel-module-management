@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
@@ -60,7 +61,12 @@ var _ = Describe("GetModuleJobByKernel", func() {
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
 		}
-		j := batchv1.Job{}
+		j := batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob", Namespace: "moduleNamespace"},
+		}
+
+		err := controllerutil.SetControllerReference(&mod, &j, scheme)
+		Expect(err).NotTo(HaveOccurred())
 
 		labels := map[string]string{
 			constants.ModuleNameLabel:    "moduleName",
@@ -80,7 +86,7 @@ var _ = Describe("GetModuleJobByKernel", func() {
 			},
 		)
 
-		job, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType")
+		job, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType", &mod)
 
 		Expect(job).To(Equal(&j))
 		Expect(err).NotTo(HaveOccurred())
@@ -106,7 +112,7 @@ var _ = Describe("GetModuleJobByKernel", func() {
 
 		clnt.EXPECT().List(ctx, &jobList, opts).Return(errors.New("random error"))
 
-		_, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType")
+		_, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType", &mod)
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -117,6 +123,18 @@ var _ = Describe("GetModuleJobByKernel", func() {
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
 		}
+
+		j1 := batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob1", Namespace: "moduleNamespace"},
+		}
+		j2 := batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob2", Namespace: "moduleNamespace"},
+		}
+
+		err := controllerutil.SetControllerReference(&mod, &j1, scheme)
+		Expect(err).NotTo(HaveOccurred())
+		err = controllerutil.SetControllerReference(&mod, &j2, scheme)
+		Expect(err).NotTo(HaveOccurred())
 
 		labels := map[string]string{
 			constants.ModuleNameLabel:    "moduleName",
@@ -131,14 +149,62 @@ var _ = Describe("GetModuleJobByKernel", func() {
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
 			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
-				list.Items = []batchv1.Job{batchv1.Job{}, batchv1.Job{}}
+				list.Items = []batchv1.Job{j1, j2}
 				return nil
 			},
 		)
 
-		_, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType")
+		_, err = jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType", &mod)
 
 		Expect(err).To(HaveOccurred())
+	})
+	It("more then 1 job exists, but only one is owned by the module", func() {
+		ctx := context.Background()
+
+		mod := kmmv1beta1.Module{
+			TypeMeta:   metav1.TypeMeta{Kind: "some kind", APIVersion: "some version"},
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace", UID: "some uuid"},
+		}
+
+		anotherMod := kmmv1beta1.Module{
+			TypeMeta:   metav1.TypeMeta{Kind: "some kind", APIVersion: "some version"},
+			ObjectMeta: metav1.ObjectMeta{Name: "anotherModuleName", Namespace: "moduleNamespace", UID: "another uuid"},
+		}
+
+		j1 := batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob1", Namespace: "moduleNamespace"},
+		}
+		j2 := batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob2", Namespace: "moduleNamespace"},
+		}
+
+		err := controllerutil.SetControllerReference(&mod, &j1, scheme)
+		Expect(err).NotTo(HaveOccurred())
+		err = controllerutil.SetControllerReference(&anotherMod, &j2, scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		labels := map[string]string{
+			constants.ModuleNameLabel:    "moduleName",
+			constants.TargetKernelTarget: "targetKernel",
+			constants.JobType:            "jobType",
+		}
+
+		opts := []sigclient.ListOption{
+			sigclient.MatchingLabels(labels),
+			sigclient.InNamespace("moduleNamespace"),
+		}
+
+		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
+			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
+				list.Items = []batchv1.Job{j1, j2}
+				return nil
+			},
+		)
+
+		job, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType", &mod)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(job).To(Equal(&j1))
 	})
 })
 
@@ -162,6 +228,17 @@ var _ = Describe("GetModuleJobs", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
 		}
 
+		j1 := batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob1", Namespace: "moduleNamespace"},
+		}
+		j2 := batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob12", Namespace: "moduleNamespace"},
+		}
+		err := controllerutil.SetControllerReference(&mod, &j1, scheme)
+		Expect(err).NotTo(HaveOccurred())
+		err = controllerutil.SetControllerReference(&mod, &j2, scheme)
+		Expect(err).NotTo(HaveOccurred())
+
 		labels := map[string]string{
 			constants.ModuleNameLabel: "moduleName",
 			constants.JobType:         "jobType",
@@ -174,12 +251,12 @@ var _ = Describe("GetModuleJobs", func() {
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
 			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
-				list.Items = []batchv1.Job{batchv1.Job{}, batchv1.Job{}}
+				list.Items = []batchv1.Job{j1, j2}
 				return nil
 			},
 		)
 
-		jobs, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType")
+		jobs, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType", &mod)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(jobs)).To(Equal(2))
@@ -204,7 +281,7 @@ var _ = Describe("GetModuleJobs", func() {
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).Return(fmt.Errorf("some error"))
 
-		_, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType")
+		_, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType", &mod)
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -233,7 +310,7 @@ var _ = Describe("GetModuleJobs", func() {
 			},
 		)
 
-		jobs, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType")
+		jobs, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType", &mod)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(jobs)).To(Equal(0))

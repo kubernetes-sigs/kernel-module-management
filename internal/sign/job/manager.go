@@ -73,7 +73,7 @@ func (jbm *signJobManager) Sync(
 		return utils.Result{}, fmt.Errorf("could not make Job template: %v", err)
 	}
 
-	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, targetKernel, utils.JobTypeSign)
+	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, targetKernel, utils.JobTypeSign, owner)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoMatchingJob) {
 			return utils.Result{}, fmt.Errorf("error getting the signing job: %v", err)

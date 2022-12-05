@@ -403,7 +403,7 @@ func (r *ModuleReconciler) garbageCollect(ctx context.Context,
 	logger.Info("Garbage-collected DaemonSets", "names", deleted)
 
 	// Garbage collect for successfully finished build jobs
-	deleted, err = r.buildAPI.GarbageCollect(ctx, mod.Name, mod.Namespace)
+	deleted, err = r.buildAPI.GarbageCollect(ctx, mod.Name, mod.Namespace, mod)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect build objects: %v", err)
 	}

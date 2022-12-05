@@ -36,8 +36,8 @@ func NewBuildManager(
 	}
 }
 
-func (jbm *jobManager) GarbageCollect(ctx context.Context, modName, namespace string) ([]string, error) {
-	jobs, err := jbm.jobHelper.GetModuleJobs(ctx, modName, namespace, utils.JobTypeBuild)
+func (jbm *jobManager) GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error) {
+	jobs, err := jbm.jobHelper.GetModuleJobs(ctx, modName, namespace, utils.JobTypeBuild, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get build jobs for module %s: %v", modName, err)
 	}
@@ -101,7 +101,7 @@ func (jbm *jobManager) Sync(
 		return build.Result{}, fmt.Errorf("could not make Job template: %v", err)
 	}
 
-	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, targetKernel, utils.JobTypeBuild)
+	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, targetKernel, utils.JobTypeBuild, owner)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoMatchingJob) {
 			return build.Result{}, fmt.Errorf("error getting the build: %v", err)
