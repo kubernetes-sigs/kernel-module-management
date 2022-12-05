@@ -24,7 +24,7 @@ type Result struct {
 //go:generate mockgen -source=manager.go -package=build -destination=mock_manager.go
 
 type Manager interface {
-	GarbageCollect(ctx context.Context, modName, namespace string) ([]string, error)
+	GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error)
 
 	ShouldSync(
 		ctx context.Context,

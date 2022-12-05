@@ -36,8 +36,8 @@ type Result struct {
 type JobHelper interface {
 	IsJobChanged(existingJob *batchv1.Job, newJob *batchv1.Job) (bool, error)
 	JobLabels(modName string, targetKernel string, jobType string) map[string]string
-	GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel, jobType string) (*batchv1.Job, error)
-	GetModuleJobs(ctx context.Context, modName, namespace, jobType string) ([]batchv1.Job, error)
+	GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel, jobType string, owner metav1.Object) (*batchv1.Job, error)
+	GetModuleJobs(ctx context.Context, modName, namespace, jobType string, owner metav1.Object) ([]batchv1.Job, error)
 	DeleteJob(ctx context.Context, job *batchv1.Job) error
 	CreateJob(ctx context.Context, jobTemplate *batchv1.Job) error
 	GetJobStatus(job *batchv1.Job) (Status, bool, error)
@@ -69,26 +69,32 @@ func (jh *jobHelper) JobLabels(modName string, targetKernel string, jobType stri
 	return moduleKernelLabels(modName, targetKernel, jobType)
 }
 
-func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel, jobType string) (*batchv1.Job, error) {
+func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel, jobType string, owner metav1.Object) (*batchv1.Job, error) {
 	matchLabels := moduleKernelLabels(modName, targetKernel, jobType)
 	jobs, err := jh.getJobs(ctx, namespace, matchLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get module %s, jobs by kernel %s: %v", modName, targetKernel, err)
 	}
 
-	numFoundJobs := len(jobs)
+	moduleOwnedJobs := filterJobsByOwner(jobs, owner)
+	numFoundJobs := len(moduleOwnedJobs)
 	if numFoundJobs == 0 {
 		return nil, ErrNoMatchingJob
 	} else if numFoundJobs > 1 {
 		return nil, fmt.Errorf("expected 0 or 1 %s job, got %d", jobType, numFoundJobs)
 	}
 
-	return &jobs[0], nil
+	return &moduleOwnedJobs[0], nil
 }
 
-func (jh *jobHelper) GetModuleJobs(ctx context.Context, modName, namespace, jobType string) ([]batchv1.Job, error) {
+func (jh *jobHelper) GetModuleJobs(ctx context.Context, modName, namespace, jobType string, owner metav1.Object) ([]batchv1.Job, error) {
 	matchLabels := moduleLabels(modName, jobType)
-	return jh.getJobs(ctx, namespace, matchLabels)
+	jobs, err := jh.getJobs(ctx, namespace, matchLabels)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get jobs for module %s, namespace %s: %v", modName, namespace, err)
+	}
+	moduleOwnedJobs := filterJobsByOwner(jobs, owner)
+	return moduleOwnedJobs, nil
 }
 
 func (jh *jobHelper) DeleteJob(ctx context.Context, job *batchv1.Job) error {
@@ -149,4 +155,14 @@ func moduleLabels(moduleName, jobType string) map[string]string {
 		constants.ModuleNameLabel: moduleName,
 		constants.JobType:         jobType,
 	}
+}
+
+func filterJobsByOwner(jobs []batchv1.Job, owner metav1.Object) []batchv1.Job {
+	ownedJobs := []batchv1.Job{}
+	for _, job := range jobs {
+		if metav1.IsControlledBy(&job, owner) {
+			ownedJobs = append(ownedJobs, job)
+		}
+	}
+	return ownedJobs
 }
