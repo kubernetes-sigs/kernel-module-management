@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -38,7 +39,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
-const reconcileRequeueInSeconds = 60
+const reconcileRequeueInSeconds = 180
 
 // ClusterPreflightReconciler reconciles a PreflightValidation object
 type PreflightValidationReconciler struct {
@@ -64,6 +65,7 @@ func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("preflightvalidation").
 		For(&kmmv1beta1.PreflightValidation{}, builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate())).
+		Owns(&batchv1.Job{}).
 		Watches(
 			&source.Kind{Type: &kmmv1beta1.Module{}},
 			handler.EnqueueRequestsFromMapFunc(r.filter.EnqueueAllPreflightValidations),
@@ -105,6 +107,10 @@ func (r *PreflightValidationReconciler) Reconcile(ctx context.Context, req ctrl.
 		log.Info("PreflightValidation reconciliation success")
 		return ctrl.Result{}, nil
 	}
+	// if not all the modules has been reconciled, then maybe there is a problem with build
+	// configuration. Since build configuration is stored in the ConfigMap, and we cannot watch
+	// ConfigMap (since we don't know which ones to watch), then we need a requeue in order to run
+	// reconciliation again
 	log.Info("PreflightValidation reconciliation requeue")
 	return ctrl.Result{RequeueAfter: time.Second * reconcileRequeueInSeconds}, nil
 }

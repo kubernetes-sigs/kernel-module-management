@@ -136,6 +136,7 @@ func (p *preflightHelper) verifyBuild(ctx context.Context,
 	pv *kmmv1beta1.PreflightValidation,
 	mapping *kmmv1beta1.KernelMapping,
 	mod *kmmv1beta1.Module) (bool, string) {
+	log := ctrlruntime.LoggerFrom(ctx)
 	// at this stage we know that eiher mapping Build or Container build are defined
 	buildRes, err := p.buildAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, pv.Spec.PushBuiltImage, pv)
 	if err != nil {
@@ -147,6 +148,7 @@ func (p *preflightHelper) verifyBuild(ctx context.Context,
 		if pv.Spec.PushBuiltImage {
 			msg += " and image pushed"
 		}
+		log.Info("build for module during preflight has been build successfully", "module", mod.Name)
 		return true, fmt.Sprintf(VerificationStatusReasonVerified, msg)
 	}
 	return false, "Waiting for build verification"
