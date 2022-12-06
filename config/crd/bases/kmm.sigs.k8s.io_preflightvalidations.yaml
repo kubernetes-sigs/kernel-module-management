@@ -76,6 +76,7 @@ spec:
                       enum:
                       - Image
                       - Build
+                      - Sign
                       - Requeued
                       - Done
                       type: string

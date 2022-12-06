@@ -102,3 +102,18 @@ func (mr *MockpreflightHelperAPIMockRecorder) verifyImage(ctx, mapping, mod, ker
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyImage", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifyImage), ctx, mapping, mod, kernelVersion)
 }
+
+// verifySign mocks base method.
+func (m *MockpreflightHelperAPI) verifySign(ctx context.Context, pv *v1beta1.PreflightValidation, mapping *v1beta1.KernelMapping, mod *v1beta1.Module) (bool, string) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "verifySign", ctx, pv, mapping, mod)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(string)
+	return ret0, ret1
+}
+
+// verifySign indicates an expected call of verifySign.
+func (mr *MockpreflightHelperAPIMockRecorder) verifySign(ctx, pv, mapping, mod interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifySign", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifySign), ctx, pv, mapping, mod)
+}

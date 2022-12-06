@@ -9,6 +9,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 
@@ -32,10 +33,11 @@ type PreflightAPI interface {
 func NewPreflightAPI(
 	client client.Client,
 	buildAPI build.Manager,
+	signAPI sign.SignManager,
 	registryAPI registry.Registry,
 	statusUpdater statusupdater.PreflightStatusUpdater,
 	kernelAPI module.KernelMapper) PreflightAPI {
-	helper := newPreflightHelper(client, buildAPI, registryAPI)
+	helper := newPreflightHelper(client, buildAPI, signAPI, registryAPI)
 	return &preflight{
 		kernelAPI:     kernelAPI,
 		statusUpdater: statusUpdater,
@@ -69,7 +71,7 @@ func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.Pr
 	}
 
 	imageVerified, msg := p.helper.verifyImage(ctx, mapping, mod, kernelVersion)
-	if imageVerified || (mapping.Build == nil && mod.Spec.ModuleLoader.Container.Build == nil) {
+	if imageVerified || !module.ShouldBeBuilt(mod.Spec, *mapping) {
 		return imageVerified, msg
 	}
 
@@ -78,24 +80,37 @@ func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.Pr
 		log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to build stage"), "module", mod.Name, "error", err)
 	}
 
-	return p.helper.verifyBuild(ctx, pv, mapping, mod)
+	buildVerified, msg := p.helper.verifyBuild(ctx, pv, mapping, mod)
+	if !buildVerified || !module.ShouldBeSigned(mod.Spec, *mapping) {
+		return buildVerified, msg
+	}
+
+	err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mod.Name, kmmv1beta1.VerificationStageSign)
+	if err != nil {
+		log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to sign stage"), "module", mod.Name, "error", err)
+	}
+
+	return p.helper.verifySign(ctx, pv, mapping, mod)
 }
 
 type preflightHelperAPI interface {
 	verifyImage(ctx context.Context, mapping *kmmv1beta1.KernelMapping, mod *kmmv1beta1.Module, kernelVersion string) (bool, string)
 	verifyBuild(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mapping *kmmv1beta1.KernelMapping, mod *kmmv1beta1.Module) (bool, string)
+	verifySign(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mapping *kmmv1beta1.KernelMapping, mod *kmmv1beta1.Module) (bool, string)
 }
 
 type preflightHelper struct {
 	client      client.Client
 	registryAPI registry.Registry
 	buildAPI    build.Manager
+	signAPI     sign.SignManager
 }
 
-func newPreflightHelper(client client.Client, buildAPI build.Manager, registryAPI registry.Registry) preflightHelperAPI {
+func newPreflightHelper(client client.Client, buildAPI build.Manager, signAPI sign.SignManager, registryAPI registry.Registry) preflightHelperAPI {
 	return &preflightHelper{
 		client:      client,
 		buildAPI:    buildAPI,
+		signAPI:     signAPI,
 		registryAPI: registryAPI,
 	}
 }
@@ -152,4 +167,32 @@ func (p *preflightHelper) verifyBuild(ctx context.Context,
 		return true, fmt.Sprintf(VerificationStatusReasonVerified, msg)
 	}
 	return false, "Waiting for build verification"
+}
+
+func (p *preflightHelper) verifySign(ctx context.Context,
+	pv *kmmv1beta1.PreflightValidation,
+	mapping *kmmv1beta1.KernelMapping,
+	mod *kmmv1beta1.Module) (bool, string) {
+	log := ctrlruntime.LoggerFrom(ctx)
+
+	previousImage := ""
+	if module.ShouldBeBuilt(mod.Spec, *mapping) {
+		previousImage = module.IntermediateImageName(mod.Name, mod.Namespace, mapping.ContainerImage)
+	}
+
+	// at this stage we know that eiher mapping Sign or Container sign are defined
+	signRes, err := p.signAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, previousImage, pv.Spec.PushBuiltImage, pv)
+	if err != nil {
+		return false, fmt.Sprintf("Failed to verify signing for module %s, kernel version %s, error %s", mod.Name, pv.Spec.KernelVersion, err)
+	}
+
+	if signRes.Status == utils.StatusCompleted {
+		msg := "sign completes"
+		if pv.Spec.PushBuiltImage {
+			msg += " and image pushed"
+		}
+		log.Info("build for module during preflight has been build successfully", "module", mod.Name)
+		return true, fmt.Sprintf(VerificationStatusReasonVerified, msg)
+	}
+	return false, "Waiting for sign verification"
 }
