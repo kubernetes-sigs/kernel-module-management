@@ -65,32 +65,40 @@ func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.Pr
 		return false, fmt.Sprintf("Failed to substitute template in kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)
 	}
 
+	shouldBuild := module.ShouldBeBuilt(mod.Spec, *mapping)
+	shouldSign := module.ShouldBeSigned(mod.Spec, *mapping)
+
 	err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mod.Name, kmmv1beta1.VerificationStageImage)
 	if err != nil {
 		log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to image stage"), "module", mod.Name, "error", err)
 	}
 
-	imageVerified, msg := p.helper.verifyImage(ctx, mapping, mod, kernelVersion)
-	if imageVerified || !module.ShouldBeBuilt(mod.Spec, *mapping) {
-		return imageVerified, msg
+	verified, msg := p.helper.verifyImage(ctx, mapping, mod, kernelVersion)
+	if verified {
+		shouldBuild = false
+		shouldSign = false
 	}
 
-	err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mod.Name, kmmv1beta1.VerificationStageBuild)
-	if err != nil {
-		log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to build stage"), "module", mod.Name, "error", err)
+	if shouldBuild {
+		err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mod.Name, kmmv1beta1.VerificationStageBuild)
+		if err != nil {
+			log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to build stage"), "module", mod.Name, "error", err)
+		}
+
+		verified, msg = p.helper.verifyBuild(ctx, pv, mapping, mod)
+		if !verified {
+			shouldSign = false
+		}
 	}
 
-	buildVerified, msg := p.helper.verifyBuild(ctx, pv, mapping, mod)
-	if !buildVerified || !module.ShouldBeSigned(mod.Spec, *mapping) {
-		return buildVerified, msg
+	if shouldSign {
+		err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mod.Name, kmmv1beta1.VerificationStageSign)
+		if err != nil {
+			log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to sign stage"), "module", mod.Name, "error", err)
+		}
+		verified, msg = p.helper.verifySign(ctx, pv, mapping, mod)
 	}
-
-	err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mod.Name, kmmv1beta1.VerificationStageSign)
-	if err != nil {
-		log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to sign stage"), "module", mod.Name, "error", err)
-	}
-
-	return p.helper.verifySign(ctx, pv, mapping, mod)
+	return verified, msg
 }
 
 type preflightHelperAPI interface {
