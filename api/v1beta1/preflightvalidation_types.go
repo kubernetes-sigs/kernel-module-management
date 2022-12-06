@@ -25,6 +25,7 @@ const (
 	VerificationFalse         string = "False"
 	VerificationStageImage    string = "Image"
 	VerificationStageBuild    string = "Build"
+	VerificationStageSign     string = "Sign"
 	VerificationStageRequeued string = "Requeued"
 	VerificationStageDone     string = "Done"
 )
@@ -60,7 +61,7 @@ type CRStatus struct {
 	// image (image existence verification), build(build process verification)
 	// +required
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=Image;Build;Requeued;Done
+	// +kubebuilder:validation:Enum=Image;Build;Sign;Requeued;Done
 	VerificationStage string `json:"verificationStage"`
 
 	// LastTransitionTime is the last time the CR status transitioned from one status to another.
