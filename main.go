@@ -144,7 +144,7 @@ func main() {
 	signHelperAPI := sign.NewSignerHelper()
 	signAPI := signjob.NewSignJobManager(
 		client,
-		signjob.NewSigner(scheme, signHelperAPI, jobHelperAPI),
+		signjob.NewSigner(client, scheme, signHelperAPI, jobHelperAPI),
 		utils.NewJobHelper(client),
 		registryAPI,
 	)

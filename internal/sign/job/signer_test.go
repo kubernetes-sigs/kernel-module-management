@@ -1,6 +1,8 @@
 package signjob
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -11,9 +13,12 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -28,10 +33,13 @@ var _ = Describe("MakeJobTemplate", func() {
 		kernelVersion = "1.2.3"
 		moduleName    = "module-name"
 		namespace     = "some-namespace"
+		privateKey    = "some private key"
+		publicKey     = "some public key"
 	)
 
 	var (
 		ctrl      *gomock.Controller
+		clnt      *client.MockClient
 		m         Signer
 		mod       kmmv1beta1.Module
 		helper    *sign.MockHelper
@@ -40,9 +48,10 @@ var _ = Describe("MakeJobTemplate", func() {
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
 		helper = sign.NewMockHelper(ctrl)
 		jobhelper = utils.NewMockJobHelper(ctrl)
-		m = NewSigner(scheme, helper, jobhelper)
+		m = NewSigner(clnt, scheme, helper, jobhelper)
 		mod = kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      moduleName,
@@ -60,7 +69,11 @@ var _ = Describe("MakeJobTemplate", func() {
 		"kmm.node.kubernetes.io/target-kernel": kernelVersion,
 	}
 
+	publicSignData := map[string][]byte{constants.PublicSignDataKey: []byte(publicKey)}
+	privateSignData := map[string][]byte{constants.PrivateSignDataKey: []byte(privateKey)}
+
 	DescribeTable("should set fields correctly", func(imagePullSecret *v1.LocalObjectReference) {
+		ctx := context.Background()
 		nodeSelector := map[string]string{"arch": "x64"}
 
 		km := kmmv1beta1.KernelMapping{
@@ -190,14 +203,31 @@ var _ = Describe("MakeJobTemplate", func() {
 				)
 		}
 
+		hash, err := getHashValue(&expected.Spec.Template, []byte(publicKey), []byte(privateKey))
+		Expect(err).NotTo(HaveOccurred())
+		annotations := map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", hash)}
+		expected.SetAnnotations(annotations)
+
 		mod := mod.DeepCopy()
 		mod.Spec.Selector = nodeSelector
 
 		gomock.InOrder(
 			helper.EXPECT().GetRelevantSign(mod.Spec, km).Return(km.Sign),
+			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: km.Sign.KeySecret.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+					secret.Data = privateSignData
+					return nil
+				},
+			),
+			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: km.Sign.CertSecret.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+					secret.Data = publicSignData
+					return nil
+				},
+			),
 		)
 
-		actual, err := m.MakeJobTemplate(*mod, km, kernelVersion, labels, unsignedImage, true, mod)
+		actual, err := m.MakeJobTemplate(ctx, *mod, km, kernelVersion, labels, unsignedImage, true, mod)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -217,7 +247,7 @@ var _ = Describe("MakeJobTemplate", func() {
 	)
 
 	DescribeTable("should set correct kmod-signer flags", func(filelist []string, pushImage bool) {
-
+		ctx := context.Background()
 		km := kmmv1beta1.KernelMapping{
 			Sign: &kmmv1beta1.Sign{
 				UnsignedImage: signedImage,
@@ -230,9 +260,21 @@ var _ = Describe("MakeJobTemplate", func() {
 
 		gomock.InOrder(
 			helper.EXPECT().GetRelevantSign(mod.Spec, km).Return(km.Sign),
+			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: km.Sign.KeySecret.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+					secret.Data = privateSignData
+					return nil
+				},
+			),
+			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: km.Sign.CertSecret.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+					secret.Data = publicSignData
+					return nil
+				},
+			),
 		)
 
-		actual, err := m.MakeJobTemplate(mod, km, kernelVersion, labels, "", pushImage, &mod)
+		actual, err := m.MakeJobTemplate(ctx, mod, km, kernelVersion, labels, "", pushImage, &mod)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("-unsignedimage"))
@@ -270,20 +312,34 @@ var _ = Describe("MakeJobTemplate", func() {
 
 	DescribeTable("should set correct kmod-signer TLS flags", func(kmRegistryTLS,
 		unsignedImageRegistryTLS kmmv1beta1.TLSOptions, expectedFlag string) {
-
+		ctx := context.Background()
 		km := kmmv1beta1.KernelMapping{
 			RegistryTLS: &kmRegistryTLS,
 			Sign: &kmmv1beta1.Sign{
 				UnsignedImage:            signedImage,
 				UnsignedImageRegistryTLS: unsignedImageRegistryTLS,
+				KeySecret:                &v1.LocalObjectReference{Name: "securebootkey"},
+				CertSecret:               &v1.LocalObjectReference{Name: "securebootcert"},
 			},
 		}
 
 		gomock.InOrder(
 			helper.EXPECT().GetRelevantSign(mod.Spec, km).Return(km.Sign),
+			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: km.Sign.KeySecret.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+					secret.Data = privateSignData
+					return nil
+				},
+			),
+			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: km.Sign.CertSecret.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+					secret.Data = publicSignData
+					return nil
+				},
+			),
 		)
 
-		actual, err := m.MakeJobTemplate(mod, km, kernelVersion, labels, "", true, &mod)
+		actual, err := m.MakeJobTemplate(ctx, mod, km, kernelVersion, labels, "", true, &mod)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(expectedFlag))
