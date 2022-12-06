@@ -10,4 +10,6 @@ const (
 
 	ManagedClusterModuleNameLabel = "kmm.node.kubernetes.io/managedclustermodule.name"
 	DockerfileCMKey               = "dockerfile"
+	PublicSignDataKey             = "cert"
+	PrivateSignDataKey            = "key"
 )

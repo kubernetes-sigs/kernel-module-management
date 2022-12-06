@@ -68,7 +68,7 @@ func (jbm *signJobManager) Sync(
 
 	labels := jbm.jobHelper.JobLabels(mod.Name, targetKernel, "sign")
 
-	jobTemplate, err := jbm.signer.MakeJobTemplate(mod, m, targetKernel, labels, imageToSign, pushImage, owner)
+	jobTemplate, err := jbm.signer.MakeJobTemplate(ctx, mod, m, targetKernel, labels, imageToSign, pushImage, owner)
 	if err != nil {
 		return utils.Result{}, fmt.Errorf("could not make Job template: %v", err)
 	}

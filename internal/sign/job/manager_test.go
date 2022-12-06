@@ -213,7 +213,7 @@ var _ = Describe("JobManager", func() {
 
 				gomock.InOrder(
 					jobhelper.EXPECT().JobLabels(mod.Name, kernelVersion, "sign").Return(labels),
-					maker.EXPECT().MakeJobTemplate(mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&j, nil),
+					maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&j, nil),
 					jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeSign, &mod).Return(&newJob, nil),
 					jobhelper.EXPECT().IsJobChanged(&j, &newJob).Return(false, nil),
 					jobhelper.EXPECT().GetJobStatus(&newJob).Return(r.Status, r.Requeue, joberr),
@@ -241,7 +241,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				jobhelper.EXPECT().JobLabels(mod.Name, kernelVersion, "sign").Return(labels),
-				maker.EXPECT().MakeJobTemplate(mod, km, kernelVersion, labels, previousImageName, true, &mod).
+				maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, labels, previousImageName, true, &mod).
 					Return(nil, errors.New("random error")),
 			)
 
@@ -269,7 +269,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				jobhelper.EXPECT().JobLabels(mod.Name, kernelVersion, "sign").Return(labels),
-				maker.EXPECT().MakeJobTemplate(mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&j, nil),
+				maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&j, nil),
 				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeSign, &mod).Return(nil, errors.New("random error")),
 			)
 
@@ -297,7 +297,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				jobhelper.EXPECT().JobLabels(mod.Name, kernelVersion, "sign").Return(labels),
-				maker.EXPECT().MakeJobTemplate(mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&j, nil),
+				maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&j, nil),
 				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeSign, &mod).Return(nil, utils.ErrNoMatchingJob),
 				jobhelper.EXPECT().CreateJob(ctx, &j).Return(errors.New("unable to create job")),
 			)
@@ -327,7 +327,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				jobhelper.EXPECT().JobLabels(mod.Name, kernelVersion, "sign").Return(labels),
-				maker.EXPECT().MakeJobTemplate(mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&j, nil),
+				maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&j, nil),
 				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeSign, &mod).Return(nil, utils.ErrNoMatchingJob),
 				jobhelper.EXPECT().CreateJob(ctx, &j).Return(nil),
 			)
@@ -358,7 +358,7 @@ var _ = Describe("JobManager", func() {
 
 			gomock.InOrder(
 				jobhelper.EXPECT().JobLabels(mod.Name, kernelVersion, "sign").Return(labels),
-				maker.EXPECT().MakeJobTemplate(mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&newJob, nil),
+				maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&newJob, nil),
 				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeSign, &mod).Return(&newJob, nil),
 				jobhelper.EXPECT().IsJobChanged(&newJob, &newJob).Return(true, nil),
 				jobhelper.EXPECT().DeleteJob(ctx, &newJob).Return(nil),
