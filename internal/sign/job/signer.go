@@ -73,7 +73,10 @@ func (m *signer) MakeJobTemplate(
 	pushImage bool,
 	owner metav1.Object) (*batchv1.Job, error) {
 
-	signConfig := m.helper.GetRelevantSign(mod.Spec, km)
+	signConfig, err := m.helper.GetRelevantSign(mod.Spec, km, targetKernel)
+	if err != nil {
+		return nil, fmt.Errorf("calculate the signing parameters: %v", err)
+	}
 
 	args := make([]string, 0)
 

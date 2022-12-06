@@ -35,15 +35,16 @@ func (m *MockHelper) EXPECT() *MockHelperMockRecorder {
 }
 
 // GetRelevantSign mocks base method.
-func (m *MockHelper) GetRelevantSign(modSpec v1beta1.ModuleSpec, km v1beta1.KernelMapping) *v1beta1.Sign {
+func (m *MockHelper) GetRelevantSign(modSpec v1beta1.ModuleSpec, km v1beta1.KernelMapping, kernel string) (*v1beta1.Sign, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRelevantSign", modSpec, km)
+	ret := m.ctrl.Call(m, "GetRelevantSign", modSpec, km, kernel)
 	ret0, _ := ret[0].(*v1beta1.Sign)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetRelevantSign indicates an expected call of GetRelevantSign.
-func (mr *MockHelperMockRecorder) GetRelevantSign(modSpec, km interface{}) *gomock.Call {
+func (mr *MockHelperMockRecorder) GetRelevantSign(modSpec, km, kernel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRelevantSign", reflect.TypeOf((*MockHelper)(nil).GetRelevantSign), modSpec, km)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRelevantSign", reflect.TypeOf((*MockHelper)(nil).GetRelevantSign), modSpec, km, kernel)
 }
