@@ -53,8 +53,8 @@ func signFile(filename string, publickey string, privatekey string) error {
 
 func getAuthFromFile(configfile string, repo string) (authn.Authenticator, error) {
 
-	if configfile == "" {
-		logger.Info("no pull secret defined, default to Anonymous")
+	if configfile == "" || configfile == "anonymous" {
+		logger.Info("no secret given, default to Anonymous")
 		return authn.Anonymous, nil
 	}
 
@@ -178,6 +178,10 @@ func main() {
 	var privKeyFile string
 	var pubKeyFile string
 	var nopush bool
+	var insecurePull bool
+	var skipTlsVerifyPull bool
+	var insecurePush bool
+	var skipTlsVerifyPush bool
 
 	logger = klogr.New()
 
@@ -190,6 +194,11 @@ func main() {
 	flag.StringVar(&pullSecret, "pushsecret", "", "path to file containing credentials for pushing images")
 	flag.BoolVar(&nopush, "no-push", false, "do not push the resulting image")
 
+	flag.BoolVar(&insecurePull, "insecure-pull", false, "images can be pulled from an insecure (plain HTTP) registry")
+	flag.BoolVar(&skipTlsVerifyPull, "skip-tls-verify-pull", false, "do not check TLS certs on pull")
+	flag.BoolVar(&insecurePush, "insecure", false, "built images can be pushed to an insecure (plain HTTP) registry")
+	flag.BoolVar(&skipTlsVerifyPush, "skip-tls-verify", false, "do not check TLS certs on push")
+
 	flag.Parse()
 
 	checkArg(&unsignedImageName, "unsignedimage", "")
@@ -197,7 +206,7 @@ func main() {
 	checkArg(&filesList, "filestosign", "")
 	checkArg(&privKeyFile, "key", "")
 	checkArg(&pubKeyFile, "cert", "")
-	checkArg(&pullSecret, "pullsecret", "")
+	checkArg(&pullSecret, "pullsecret", "anonymous")
 	checkArg(&pushSecret, "pushsecret", pullSecret)
 	// if we've made it this far the arguments are sane
 
@@ -229,7 +238,7 @@ func main() {
 
 	r := registry.NewRegistry()
 
-	img, err := r.GetImageByName(unsignedImageName, a)
+	img, err := r.GetImageByName(unsignedImageName, a, insecurePull, skipTlsVerifyPull)
 	if err != nil {
 		die(3, "could not Image()", err)
 	}
@@ -286,7 +295,7 @@ func main() {
 		}
 
 		// write the image back to the name:tag set via the args
-		err := r.WriteImageByName(signedImageName, signedImage, a)
+		err := r.WriteImageByName(signedImageName, signedImage, a, insecurePush, skipTlsVerifyPush)
 		if err != nil {
 			die(8, "failed to write signed image", err)
 		}
