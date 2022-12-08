@@ -102,7 +102,7 @@ func (f *Filter) FindModulesForNode(node client.Object) []reconcile.Request {
 
 			requirement, err := labels.NewRequirement(k, selection.Equals, []string{v})
 			if err != nil {
-				logger.Error(err, "could not generate requirement: %v", err)
+				logger.Error(err, "could not generate requirement")
 				return reqs
 			}
 
@@ -155,7 +155,7 @@ func (f *Filter) FindManagedClusterModulesForCluster(cluster client.Object) []re
 
 			requirement, err := labels.NewRequirement(k, selection.Equals, []string{v})
 			if err != nil {
-				logger.Error(err, "could not generate requirement: %v", err)
+				logger.Error(err, "could not generate requirement")
 				return reqs
 			}
 
