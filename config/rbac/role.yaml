@@ -27,18 +27,23 @@ rules:
   - watch
 - apiGroups:
   - cluster.open-cluster-management.io
+  resources:
+  - clusterclaims
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cluster.open-cluster-management.io
   resourceNames:
   - kernel-versions.kmm.node.kubernetes.io
   resources:
   - clusterclaims
   verbs:
-  - create
   - delete
-  - get
-  - list
   - patch
   - update
-  - watch
 - apiGroups:
   - cluster.open-cluster-management.io
   resources:
