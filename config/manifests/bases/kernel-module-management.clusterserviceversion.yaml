@@ -26,6 +26,12 @@ spec:
       kind: Module
       name: modules.kmm.sigs.k8s.io
       version: v1beta1
+    - description: PreflightValidation initiates a preflight validations for all Modules
+        on the current Kubernetes cluster.
+      displayName: Preflight Validation
+      kind: PreflightValidation
+      name: preflightvalidations.kmm.sigs.k8s.io
+      version: v1beta1
   description: Kubernetes operator managing out of tree kernel modules
   displayName: Kernel Module Management
   icon:
