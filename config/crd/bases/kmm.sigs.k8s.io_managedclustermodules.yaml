@@ -36,6 +36,10 @@ spec:
           spec:
             description: ManagedClusterModuleSpec defines the desired state of ManagedClusterModule
             properties:
+              jobNamespace:
+                description: JobNamespace describes the Hub namespace, to which Build
+                  and Sign Jobs should be deployed.
+                type: string
               moduleSpec:
                 description: ModuleSpec describes how the KMM operator should deploy
                   a Module on those nodes that need it.
@@ -2392,16 +2396,16 @@ spec:
                 - moduleLoader
                 - selector
                 type: object
-              namespace:
-                description: Namespace describes the Spoke namespace, in which the
-                  ModuleSpec should be applied.
-                type: string
               selector:
                 additionalProperties:
                   type: string
                 description: Selector describes on which managed clusters the ModuleSpec
                   should be applied.
                 type: object
+              spokeNamespace:
+                description: SpokeNamespace describes the Spoke namespace, in which
+                  the ModuleSpec should be applied.
+                type: string
             required:
             - selector
             type: object

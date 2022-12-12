@@ -25,8 +25,11 @@ type ManagedClusterModuleSpec struct {
 	// ModuleSpec describes how the KMM operator should deploy a Module on those nodes that need it.
 	ModuleSpec ModuleSpec `json:"moduleSpec,omitempty"`
 
-	// Namespace describes the Spoke namespace, in which the ModuleSpec should be applied.
-	Namespace string `json:"namespace,omitempty"`
+	// SpokeNamespace describes the Spoke namespace, in which the ModuleSpec should be applied.
+	SpokeNamespace string `json:"spokeNamespace,omitempty"`
+
+	// JobNamespace describes the Hub namespace, to which Build and Sign Jobs should be deployed.
+	JobNamespace string `json:"jobNamespace,omitempty"`
 
 	// Selector describes on which managed clusters the ModuleSpec should be applied.
 	Selector map[string]string `json:"selector"`

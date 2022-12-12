@@ -147,3 +147,22 @@ var _ = Describe("GetNodeOSConfig", func() {
 		Expect(*res).To(Equal(expectedOSConfig))
 	})
 })
+
+var _ = Describe("GetNodeOSConfigFromKernelVersion", func() {
+	km := NewKernelMapper()
+
+	It("parsing the kernel version", func() {
+		kernelVersion := "4.18.0-305.45.1.el8_4.x86_64"
+
+		expectedOSConfig := NodeOSConfig{
+			KernelFullVersion:  "4.18.0-305.45.1.el8_4.x86_64",
+			KernelVersionMMP:   "4.18.0",
+			KernelVersionMajor: "4",
+			KernelVersionMinor: "18",
+			KernelVersionPatch: "0",
+		}
+
+		res := km.GetNodeOSConfigFromKernelVersion(kernelVersion)
+		Expect(*res).To(Equal(expectedOSConfig))
+	})
+})
