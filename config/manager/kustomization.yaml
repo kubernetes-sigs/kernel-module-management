@@ -1,16 +1,18 @@
-resources:
-- manager.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
 
-generatorOptions:
-  disableNameSuffixHash: true
+resources:
+- ../manager-base
+
+images:
+- name: controller
+  newName: gcr.io/k8s-staging-kmm/kernel-module-management-operator
+  newTag: latest
 
 configMapGenerator:
 - files:
   - controller_manager_config.yaml
   name: manager-config
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-images:
-- name: controller
-  newName: gcr.io/k8s-staging-kmm/kernel-module-management-operator
-  newTag: latest
+
+generatorOptions:
+  disableNameSuffixHash: true

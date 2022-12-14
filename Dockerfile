@@ -12,8 +12,9 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
 COPY api api
+COPY api-hub api-hub
+COPY cmd cmd
 COPY controllers controllers
 COPY internal internal
 
@@ -24,14 +25,19 @@ COPY docs.mk docs.mk
 # Copy the .git directory which is needed to store the build info
 COPY .git .git
 
+ARG TARGET
+
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make manager
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make ${TARGET}
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
-COPY --from=builder /workspace/manager .
+
+ARG TARGET
+
+COPY --from=builder /workspace/${TARGET} /manager
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

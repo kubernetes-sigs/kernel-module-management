@@ -1,0 +1,53 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: kernel-module-management-hub.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: ManagedClusterModule is the Schema for the managedclustermodules
+        API
+      displayName: Managed Cluster Module
+      kind: ManagedClusterModule
+      name: managedclustermodules.hub.kmm.sigs.x-k8s.io
+      version: v1beta1
+  description: Hub component for Kernel Module Management
+  displayName: Kernel Module Management (Hub)
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - oot
+  - out-of-tree
+  - kernel
+  - module
+  - modules
+  links:
+  - name: Kernel Module Management Hub
+    url: https://github.com/kubernetes-sigs/kernel-module-management
+  maintainers:
+  - email: quba@redhat.com
+    name: Quentin Barrand
+  maturity: alpha
+  provider:
+    name: Community
+    url: https://github.com/kubernetes-sigs/kernel-module-management
+  version: 0.0.0

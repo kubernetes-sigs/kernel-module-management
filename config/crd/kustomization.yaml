@@ -4,7 +4,6 @@
 resources:
 - bases/kmm.sigs.x-k8s.io_modules.yaml
 - bases/kmm.sigs.x-k8s.io_preflightvalidations.yaml
-- bases/kmm.sigs.x-k8s.io_managedclustermodules.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

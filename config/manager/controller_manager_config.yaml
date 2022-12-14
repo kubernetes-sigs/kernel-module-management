@@ -3,9 +3,10 @@ kind: ControllerManagerConfig
 health:
   healthProbeBindAddress: :8081
 metrics:
-  bindAddress: :8080
+  bindAddress: 127.0.0.1:8080
 webhook:
   port: 9443
 leaderElection:
-  leaderElect: false
-  resourceName: c5baf8af.sigs.k8s.io
+  leaderElect: true
+  resourceName: kmm.sigs.x-k8s.io
+

@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	gomock "github.com/golang/mock/gomock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
@@ -46,12 +46,12 @@ var _ = Describe("ClusterAPI", func() {
 
 	var _ = Describe("RequestedManagedClusterModule", func() {
 		It("should return the requested ManagedClusterModule", func() {
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcmName,
 					Namespace: namespace,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					ModuleSpec: kmmv1beta1.ModuleSpec{},
 					Selector:   map[string]string{"key": "value"},
 				},
@@ -66,7 +66,7 @@ var _ = Describe("ClusterAPI", func() {
 
 			gomock.InOrder(
 				clnt.EXPECT().Get(ctx, nsn, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *kmmv1beta1.ManagedClusterModule, _ ...ctrlclient.GetOption) error {
+					func(_ interface{}, _ interface{}, m *hubv1beta1.ManagedClusterModule, _ ...ctrlclient.GetOption) error {
 						m.ObjectMeta = mcm.ObjectMeta
 						m.Spec = mcm.Spec
 						return nil
@@ -106,12 +106,12 @@ var _ = Describe("ClusterAPI", func() {
 
 	var _ = Describe("SelectedManagedClusters", func() {
 		It("should return the ManagedClusters matching the ManagedClusterModule selector", func() {
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcmName,
 					Namespace: namespace,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					ModuleSpec: kmmv1beta1.ModuleSpec{},
 					Selector:   map[string]string{"key": "value"},
 				},
@@ -156,7 +156,7 @@ var _ = Describe("ClusterAPI", func() {
 
 			c := NewClusterAPI(clnt, mockKM, nil, nil, "")
 
-			res, err := c.SelectedManagedClusters(ctx, &kmmv1beta1.ManagedClusterModule{})
+			res, err := c.SelectedManagedClusters(ctx, &hubv1beta1.ManagedClusterModule{})
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("generic-error"))
@@ -174,12 +174,12 @@ var _ = Describe("ClusterAPI", func() {
 		It("should do nothing when no kernel mappings are found", func() {
 			osConfig := module.NodeOSConfig{}
 
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcmName,
 					Namespace: namespace,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					ModuleSpec: kmmv1beta1.ModuleSpec{},
 					Selector:   map[string]string{"key": "value"},
 				},
@@ -226,12 +226,12 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcmName,
 					Namespace: namespace,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 							Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -273,11 +273,11 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
@@ -344,11 +344,11 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
@@ -416,11 +416,11 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
@@ -487,11 +487,11 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
@@ -559,11 +559,11 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
@@ -631,11 +631,11 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
@@ -704,11 +704,11 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			mcm := &kmmv1beta1.ManagedClusterModule{
+			mcm := &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 							Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -771,11 +771,11 @@ var _ = Describe("ClusterAPI", func() {
 
 	var _ = Describe("GarbageCollectBuilds", func() {
 		It("should return the deleted build names when garbage collection succeeds", func() {
-			mcm := kmmv1beta1.ManagedClusterModule{
+			mcm := hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					JobNamespace: "test",
 				},
 			}
@@ -797,11 +797,11 @@ var _ = Describe("ClusterAPI", func() {
 		})
 
 		It("should return an error when garbage collection fails", func() {
-			mcm := kmmv1beta1.ManagedClusterModule{
+			mcm := hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
-				Spec: kmmv1beta1.ManagedClusterModuleSpec{
+				Spec: hubv1beta1.ManagedClusterModuleSpec{
 					JobNamespace: "test",
 				},
 			}
@@ -819,7 +819,7 @@ var _ = Describe("ClusterAPI", func() {
 		})
 
 		It("should use the defaultJobNamespace if the ManagedClusterModule.Spec.JobNamespace is not specified", func() {
-			mcm := kmmv1beta1.ManagedClusterModule{
+			mcm := hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: mcmName,
 				},
