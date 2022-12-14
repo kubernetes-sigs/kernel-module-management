@@ -1,0 +1,9 @@
+[
+  {
+    "op": "add",
+    "path": "/metadata/labels",
+    "value": {
+      "api-approved.kubernetes.io": "unapproved, testing-only"
+    }
+  }
+]

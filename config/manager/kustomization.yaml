@@ -14,3 +14,21 @@ images:
 - name: controller
   newName: gcr.io/k8s-staging-kmm/kernel-module-management-operator
   newTag: latest
+
+patchesStrategicMerge:
+- |
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: controller-manager
+    namespace: system
+  spec:
+    template:
+      spec:
+        containers:
+          - name: manager
+            env:
+              - name: OPERATOR_NAMESPACE
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.namespace

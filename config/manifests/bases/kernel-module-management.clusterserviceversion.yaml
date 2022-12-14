@@ -15,6 +15,11 @@ spec:
       kind: Module
       name: modules.kmm.sigs.k8s.io
       version: v1alpha1
+    - description: Config is the Schema for the configs API
+      displayName: Config
+      kind: Config
+      name: configs.kmm.sigs.k8s.io
+      version: v1beta1
     - description: ManagedClusterModule is the Schema for the managedclustermodules
         API
       displayName: Managed Cluster Module
