@@ -39,7 +39,11 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
-const reconcileRequeueInSeconds = 180
+const (
+	reconcileRequeueInSeconds = 180
+
+	PreflightValidationReconcilerName = "PreflightValidation"
+)
 
 // ClusterPreflightReconciler reconciles a PreflightValidation object
 type PreflightValidationReconciler struct {
@@ -63,7 +67,7 @@ func NewPreflightValidationReconciler(
 
 func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("preflightvalidation").
+		Named(PreflightValidationReconcilerName).
 		For(&kmmv1beta1.PreflightValidation{}, builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate())).
 		Owns(&batchv1.Job{}).
 		Watches(

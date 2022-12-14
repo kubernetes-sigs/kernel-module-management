@@ -15,6 +15,10 @@ import (
 
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;patch;list;watch
 
+const (
+	NodeKernelReconcilerName = "NodeKernel"
+)
+
 type NodeKernelReconciler struct {
 	client    client.Client
 	labelName string
@@ -64,7 +68,7 @@ func (r *NodeKernelReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *NodeKernelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.
 		NewControllerManagedBy(mgr).
-		Named("node-kernel").
+		Named(NodeKernelReconcilerName).
 		For(&v1.Node{}).
 		WithEventFilter(
 			r.filter.NodeKernelReconcilerPredicate(r.labelName),
