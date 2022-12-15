@@ -10,7 +10,7 @@ spec:
 
       kernelMappings:
         - regexp: '^.+.gke$'
-          containerImage: <aws_account>.dkr.ecr.<aws_region>.amazonaws.com/kmmo-lab:1.22-gke
+          containerImage: gcr.io/<myrepo>/kmmo-lab:1.22-gke
           build:
             buildArgs:
               - name: CI_BUILD_ARG
@@ -19,7 +19,7 @@ spec:
               name: build-module 
             
   imageRepoSecret: 
-    name: aws-repo-secret  
-  selector:  
+    name: gcr-repo-secret
+  selector:
     kubernetes.io/hostname: gke-kmmo-lab-cluster-default-pool-073f8f9f-9z5s 
 
