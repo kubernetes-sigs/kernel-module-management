@@ -32,7 +32,6 @@ var _ = Describe("module status update", func() {
 	var (
 		ctrl        *gomock.Controller
 		clnt        *client.MockClient
-		mockDC      *daemonset.MockDaemonSetCreator
 		mockMetrics *metrics.MockMetrics
 		mod         *kmmv1beta1.Module
 		su          ModuleStatusUpdater
@@ -41,10 +40,9 @@ var _ = Describe("module status update", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 		mockMetrics = metrics.NewMockMetrics(ctrl)
 		mod = &kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
-		su = NewModuleStatusUpdater(clnt, mockDC, mockMetrics)
+		su = NewModuleStatusUpdater(clnt, mockMetrics)
 	})
 
 	DescribeTable("checking status updater based on module",
