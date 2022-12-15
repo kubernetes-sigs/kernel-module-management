@@ -40,6 +40,8 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
 )
 
+const ManagedClusterModuleReconcilerName = "ManagedClusterModule"
+
 // ManagedClusterModuleReconciler reconciles a ManagedClusterModule object
 type ManagedClusterModuleReconciler struct {
 	client client.Client
@@ -151,6 +153,6 @@ func (r *ManagedClusterModuleReconciler) SetupWithManager(mgr ctrl.Manager) erro
 			&source.Kind{Type: &clusterv1.ManagedCluster{}},
 			handler.EnqueueRequestsFromMapFunc(r.filter.FindManagedClusterModulesForCluster),
 			builder.WithPredicates(predicate.LabelChangedPredicate{})).
-		Named("managedclustermodule").
+		Named(ManagedClusterModuleReconcilerName).
 		Complete(r)
 }

@@ -25,7 +25,11 @@ import (
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=clusterclaims,verbs=create;get;list;watch
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=clusterclaims,resourceNames=kernel-versions.kmm.node.kubernetes.io,verbs=delete;patch;update
 
-const clusterClaimName = "kernel-versions.kmm.node.kubernetes.io"
+const (
+	clusterClaimName = "kernel-versions.kmm.node.kubernetes.io"
+
+	NodeKernelClusterClaimReconcilerName = "NodeKernelClusterClaim"
+)
 
 type NodeKernelClusterClaimReconciler struct {
 	client client.Client
@@ -86,7 +90,7 @@ func (r *NodeKernelClusterClaimReconciler) Reconcile(ctx context.Context, req ct
 func (r *NodeKernelClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.
 		NewControllerManagedBy(mgr).
-		Named("node-kernel-clusterclaim").
+		Named(NodeKernelClusterClaimReconcilerName).
 		// Each time a Node's .status.nodeInfo.kernelVersion is updated, enqueue a reconciliation request
 		For(
 			&v1.Node{},
