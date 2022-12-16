@@ -86,9 +86,8 @@ var _ = Describe("PrepareKernelMapping", func() {
 
 	It("should only substitute the ContainerImage field", func() {
 		const (
-			dockerfile = "RUN echo $MYVAR"
-			literal    = "some literal:${KERNEL_XYZ"
-			regexp     = "some regexp:${KERNEL_XYZ"
+			literal = "some literal:${KERNEL_XYZ"
+			regexp  = "some regexp:${KERNEL_XYZ"
 		)
 
 		mapping := kmmv1beta1.KernelMapping{

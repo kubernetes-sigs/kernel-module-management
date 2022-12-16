@@ -115,7 +115,7 @@ func (m *MockPreflightStatusUpdater) EXPECT() *MockPreflightStatusUpdaterMockRec
 }
 
 // PreflightPresetStatuses mocks base method.
-func (m *MockPreflightStatusUpdater) PreflightPresetStatuses(ctx context.Context, pv *v1beta10.PreflightValidation, existingModules sets.String, newModules []string) error {
+func (m *MockPreflightStatusUpdater) PreflightPresetStatuses(ctx context.Context, pv *v1beta10.PreflightValidation, existingModules sets.Set[string], newModules []string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PreflightPresetStatuses", ctx, pv, existingModules, newModules)
 	ret0, _ := ret[0].(error)

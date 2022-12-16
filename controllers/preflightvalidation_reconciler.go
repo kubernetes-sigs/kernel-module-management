@@ -190,7 +190,7 @@ func (r *PreflightValidationReconciler) presetModulesStatuses(ctx context.Contex
 	if pv.Status.CRStatuses == nil {
 		pv.Status.CRStatuses = make(map[string]*v1beta12.CRStatus, len(modules))
 	}
-	existingModulesName := sets.NewString()
+	existingModulesName := sets.New[string]()
 	newModulesNames := make([]string, 0, len(modules))
 	for _, module := range modules {
 		if module.GetDeletionTimestamp() != nil {

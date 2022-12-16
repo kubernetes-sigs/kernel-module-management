@@ -395,7 +395,7 @@ func (r *ModuleReconciler) garbageCollect(ctx context.Context,
 	existingDS map[string]*appsv1.DaemonSet) error {
 	logger := log.FromContext(ctx)
 	// Garbage collect old DaemonSets for which there are no nodes.
-	validKernels := sets.StringKeySet(mappings)
+	validKernels := sets.KeySet[string](mappings)
 
 	deleted, err := r.daemonAPI.GarbageCollect(ctx, existingDS, validKernels)
 	if err != nil {

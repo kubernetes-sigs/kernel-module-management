@@ -227,7 +227,7 @@ var _ = Describe("preflight status updates", func() {
 		pv.Status.CRStatuses["moduleName1"] = &kmmv1beta1.CRStatus{VerificationStage: kmmv1beta1.VerificationStageBuild}
 		pv.Status.CRStatuses["moduleName2"] = &kmmv1beta1.CRStatus{VerificationStage: kmmv1beta1.VerificationStageBuild}
 		pv.Status.CRStatuses["moduleName3"] = &kmmv1beta1.CRStatus{VerificationStage: kmmv1beta1.VerificationStageImage}
-		existingModules := sets.NewString("moduleName1", "moduleName2")
+		existingModules := sets.New[string]("moduleName1", "moduleName2")
 		newModules := []string{"moduleName4"}
 
 		statusWrite := client.NewMockStatusWriter(ctrl)

@@ -195,11 +195,11 @@ controller-gen: ## Download controller-gen locally if necessary.
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
 .PHONY: golangci-lint
 golangci-lint: ## Download golangci-lint locally if necessary.
-	$(call go-get-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint@v1.49.0)
+	$(call go-get-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1)
 
 .PHONY: mockgen
 mockgen: ## Install mockgen locally.
-	go install github.com/golang/mock/mockgen@v1.6.0
+	go install github.com/golang/mock/mockgen@v1.7.0-rc.1
 
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 .PHONY: kustomize
