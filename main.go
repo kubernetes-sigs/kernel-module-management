@@ -152,7 +152,7 @@ func main() {
 	rbacAPI := rbac.NewCreator(client, scheme)
 	daemonAPI := daemonset.NewCreator(client, kernelLabel, scheme)
 	kernelAPI := module.NewKernelMapper()
-	moduleStatusUpdaterAPI := statusupdater.NewModuleStatusUpdater(client, daemonAPI, metricsAPI)
+	moduleStatusUpdaterAPI := statusupdater.NewModuleStatusUpdater(client, metricsAPI)
 	preflightStatusUpdaterAPI := statusupdater.NewPreflightStatusUpdater(client)
 	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
 
