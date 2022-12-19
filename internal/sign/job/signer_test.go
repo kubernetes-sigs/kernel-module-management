@@ -137,7 +137,7 @@ var _ = Describe("MakeJobTemplate", func() {
 
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion:         "kmm.sigs.k8s.io/v1beta1",
+						APIVersion:         "kmm.sigs.x-k8s.io/v1beta1",
 						Kind:               "Module",
 						Name:               moduleName,
 						Controller:         pointer.Bool(true),

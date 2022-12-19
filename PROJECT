@@ -1,4 +1,4 @@
-domain: sigs.k8s.io
+domain: sigs.x-k8s.io
 layout:
 - go.kubebuilder.io/v3
 plugins:
@@ -11,7 +11,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: sigs.k8s.io
+  domain: sigs.x-k8s.io
   group: kmm
   kind: Module
   path: github.com/kubernetes-sigs/kernel-module-management/api/v1beta1
@@ -20,7 +20,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: sigs.k8s.io
+  domain: sigs.x-k8s.io
   group: kmm
   kind: ManagedClusterModule
   path: github.com/kubernetes-sigs/kernel-module-management/api/v1beta1
@@ -29,7 +29,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: sigs.k8s.io
+  domain: sigs.x-k8s.io
   group: kmm
   kind: PreflightValidation
   path: github.com/kubernetes-sigs/kernel-module-management/api/v1beta1

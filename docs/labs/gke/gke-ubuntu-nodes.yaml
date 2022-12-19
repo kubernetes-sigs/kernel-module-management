@@ -1,4 +1,4 @@
-apiVersion: kmm.sigs.k8s.io/v1beta1
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
 kind: Module
 metadata:
   name: kmm-ci-a
