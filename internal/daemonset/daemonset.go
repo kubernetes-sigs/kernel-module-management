@@ -370,7 +370,7 @@ func MakeLoadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 	var loadCommand strings.Builder
 
 	if fw := spec.FirmwarePath; fw != "" {
-		fmt.Fprintf(&loadCommand, "cp -r %s %s && ", fw, nodeVarLibFirmwarePath)
+		fmt.Fprintf(&loadCommand, "cp -r %s/* %s && ", fw, nodeVarLibFirmwarePath)
 	}
 
 	loadCommand.WriteString("modprobe")
@@ -419,7 +419,7 @@ func MakeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 
 	fwUnloadCommand := ""
 	if fw := spec.FirmwarePath; fw != "" {
-		fwUnloadCommand = fmt.Sprintf(" && cd %s && find |sort -r |xargs -I{} rm -d %s/$(basename %s)/{}", fw, nodeVarLibFirmwarePath, fw)
+		fwUnloadCommand = fmt.Sprintf(" && cd %s && find |sort -r |xargs -I{} rm -d %s/{}", fw, nodeVarLibFirmwarePath)
 	}
 
 	if rawArgs := spec.RawArgs; rawArgs != nil && len(rawArgs.Unload) > 0 {
