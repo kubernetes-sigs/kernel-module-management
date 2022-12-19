@@ -50,9 +50,9 @@ type ManagedClusterModuleReconciler struct {
 	filter *filter.Filter
 }
 
-//+kubebuilder:rbac:groups=kmm.sigs.k8s.io,resources=managedclustermodules,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups=kmm.sigs.k8s.io,resources=managedclustermodules/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kmm.sigs.k8s.io,resources=managedclustermodules/finalizers,verbs=update
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=managedclustermodules,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=managedclustermodules/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=managedclustermodules/finalizers,verbs=update
 //+kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworks,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;list;watch
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=create;list;watch;delete

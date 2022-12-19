@@ -77,9 +77,9 @@ func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Complete(r)
 }
 
-//+kubebuilder:rbac:groups=kmm.sigs.k8s.io,resources=modules,verbs=get;list;watch
-//+kubebuilder:rbac:groups=kmm.sigs.k8s.io,resources=preflightvalidations,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kmm.sigs.k8s.io,resources=preflightvalidations/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modules,verbs=get;list;watch
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=preflightvalidations,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=preflightvalidations/status,verbs=get;update;patch
 
 // Reconcile Reconiliation entry point
 func (r *PreflightValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

@@ -78,6 +78,8 @@ jobs:
 
       - name: Run e2e-prebuilt-kernel-module tests
         run: ./ci/prow/e2e-prebuilt-kernel-module
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
@@ -131,6 +133,8 @@ jobs:
 
       - name: Run e2e-prebuilt-kernel-module-two-nodes tests
         run: ./ci/prow/e2e-prebuilt-kernel-module-two-nodes
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
@@ -205,9 +209,10 @@ jobs:
           kubectl wait --for=condition=Complete --timeout -1s job/wait-minikube-registry-alias
         timeout-minutes: 6
 
-
       - name: Run e2e-incluster-build tests
         run: ./ci/prow/e2e-incluster-build
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
@@ -262,6 +267,8 @@ jobs:
 
       - name: Run e2e-crd-variable tests
         run: ./ci/prow/e2e-crd-variable
+        env:
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
