@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/a8m/envsubst v1.3.0
-	github.com/docker/cli v20.10.21+incompatible
+	github.com/docker/cli v20.10.22+incompatible
 	github.com/go-logr/logr v1.2.3
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.9
