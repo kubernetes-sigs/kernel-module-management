@@ -4,13 +4,32 @@ metadata:
   name: kmm-kmod-dockerfile
 data:
   dockerfile: |
-    FROM registry.minikube/kmm-base:local
+    FROM ubuntu as builder
 
-    ARG CI_BUILD_ARG
     ARG KERNEL_VERSION
-    ARG WITH_DEFAULT_VALUE=default-value
 
-    RUN cat /run/secrets/build-secret/ci-build-secret > /ci-build-secret
-    RUN echo $CI_BUILD_ARG > /build-arg
-    RUN echo $KERNEL_VERSION > /kernel-version
-    RUN echo $WITH_DEFAULT_VALUE > /default-value
+    RUN apt-get update && \
+        apt-get install -y \
+        git \
+        make \
+        gcc \
+        linux-headers-${KERNEL_VERSION}
+
+    WORKDIR /usr/src
+
+    RUN git clone https://github.com/kubernetes-sigs/kernel-module-management.git
+
+    WORKDIR /usr/src/kernel-module-management/ci/kmm-kmod
+
+    RUN KERNEL_SRC_DIR=/usr/src/linux-headers-${KERNEL_VERSION} make all
+
+    FROM ubuntu
+
+    ARG KERNEL_VERSION
+
+    RUN apt-get update && \
+        apt-get install -y kmod
+
+    COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_a.ko /opt/lib/modules/${KERNEL_VERSION}/
+    COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_b.ko /opt/lib/modules/${KERNEL_VERSION}/
+    RUN depmod -b /opt

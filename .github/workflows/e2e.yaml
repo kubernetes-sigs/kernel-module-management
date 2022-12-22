@@ -148,6 +148,7 @@ jobs:
     needs: [build-operator-image]
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v2
 
@@ -156,31 +157,10 @@ jobs:
         with:
           start-args: --addons registry,registry-aliases
 
-      - name: Expose the registry outside the cluster
-        run: kubectl apply -f ci/registry-nodeport.yaml
-
-      - name: Install skopeo
-        run: |
-          sudo apt -y update
-          sudo apt -y install skopeo
-
       - name: Download container images
         uses: actions/download-artifact@v3
         with:
           name: ci-images
-
-      - name: Save the kernel version
-        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
-
-      - name: Build the DriverContainer image
-        uses: ./.github/actions/build-drivercontainer-image
-        with:
-          kernel-version: ${{ env.KERNEL_VERSION }}
-
-      - name: Import DriverContainer base into the internal-registry
-        run: |
-          MINIKUBE_REGISTRY_EXT="$(minikube service registry-nodeport -n kube-system --format '{{.IP}}:{{.Port}}' --url)"
-          skopeo copy --dest-tls-verify=false docker-archive:kmm-kmod_local.tar docker://${MINIKUBE_REGISTRY_EXT}/kmm-base:local
 
       - name: Import the KMMO image into minikube
         run: minikube image load kmm_local.tar
