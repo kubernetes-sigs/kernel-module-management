@@ -204,12 +204,21 @@ GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
 }
 endef
 
+OPERATOR_SDK = $(shell pwd)/bin/operator-sdk
+.PHONY: operator-sdk
+operator-sdk:
+	@if [ ! -f ${OPERATOR_SDK} ]; then \
+		echo "Downloading ${OPERATOR_SDK}"; \
+		curl -Lo ${OPERATOR_SDK} 'https://github.com/operator-framework/operator-sdk/releases/download/v1.25.2/operator-sdk_linux_amd64'; \
+		chmod +x ${OPERATOR_SDK}; \
+	fi
+
 .PHONY: bundle
-bundle: manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
-	operator-sdk generate kustomize manifests -q
+bundle: operator-sdk manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
+	${OPERATOR_SDK} generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	kubectl kustomize config/manifests | operator-sdk generate bundle $(BUNDLE_GEN_FLAGS)
-	operator-sdk bundle validate ./bundle
+	kubectl kustomize config/manifests | ${OPERATOR_SDK} generate bundle $(BUNDLE_GEN_FLAGS)
+	${OPERATOR_SDK} bundle validate ./bundle
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
