@@ -6,6 +6,21 @@ edit_uri: edit/main/docs/
 docs_dir: mkdocs
 strict: true
 
+nav:
+  - index.md
+  - Documentation:
+      - documentation/install.md
+      - documentation/deploy_kmod.md
+      - documentation/module_loader_image.md
+      - Binary firmwares: documentation/firmwares.md
+      - Secure boot: documentation/secure_boot.md
+      - Preflight validation: documentation/preflight_validation.md
+      - documentation/uninstall.md
+  - Developer:
+      - developer/index.md
+      - developer/use_cases.md
+      - developer/reconciliation_loops.md
+
 plugins:
   - exclude:
       glob:
