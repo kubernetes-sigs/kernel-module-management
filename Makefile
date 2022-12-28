@@ -225,7 +225,9 @@ OPERATOR_SDK = $(shell pwd)/bin/operator-sdk
 .PHONY: operator-sdk
 operator-sdk:
 	@if [ ! -f ${OPERATOR_SDK} ]; then \
+		set -e ;\
 		echo "Downloading ${OPERATOR_SDK}"; \
+		mkdir -p $(dir ${OPERATOR_SDK}) ;\
 		curl -Lo ${OPERATOR_SDK} 'https://github.com/operator-framework/operator-sdk/releases/download/v1.25.2/operator-sdk_linux_amd64'; \
 		chmod +x ${OPERATOR_SDK}; \
 	fi
