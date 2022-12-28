@@ -48,6 +48,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+const ModuleReconcilerName = "Module"
+
 // ModuleReconciler reconciles a Module object
 type ModuleReconciler struct {
 	client.Client
@@ -448,7 +450,7 @@ func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string
 				r.filter.ModuleReconcilerNodePredicate(kernelLabel),
 			),
 		).
-		Named("module").
+		Named(ModuleReconcilerName).
 		Complete(r)
 }
 

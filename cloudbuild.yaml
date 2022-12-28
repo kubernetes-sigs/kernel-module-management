@@ -1,10 +1,24 @@
 steps:
-  - name: gcr.io/cloud-builders/docker
+  - id: build-manager-image
+    name: gcr.io/cloud-builders/docker
     args:
     - build
+    - --build-arg
+    - TARGET=manager
     - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG
     - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator:latest
     - .
+    waitFor: ['-']
+  - id: build-manager-hub-image
+    name: gcr.io/cloud-builders/docker
+    args:
+    - build
+    - --build-arg
+    - TARGET=manager-hub
+    - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:$_GIT_TAG
+    - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:latest
+    - .
+    waitFor: ['-']
   - name: gcr.io/cloud-builders/docker
     args:
       - build
@@ -12,6 +26,68 @@ steps:
       - --tag=gcr.io/$PROJECT_ID/kernel-module-management-signimage:latest
       - --file=Dockerfile.signimage
       - .
+    waitFor: ['-']
+  - id: build-bundles
+    name: golang:1.19-alpine3.17
+    env:
+      - '_GIT_TAG=$_GIT_TAG'
+      - 'PROJECT_ID=$PROJECT_ID'
+    script: |
+      set -euxo pipefail
+      apk add bash curl gcc make musl-dev
+
+      # Install kubectl
+      curl -Lo /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      chmod +x /usr/local/bin/kubectl
+
+      # install operator-sdk
+      curl -Lo /usr/local/bin/operator-sdk 'https://github.com/operator-framework/operator-sdk/releases/download/v1.25.2/operator-sdk_linux_amd64'
+      chmod +x /usr/local/bin/operator-sdk
+
+      # Include the destination directory of `go install` in $PATH
+      export PATH=$(go env GOPATH)/bin:${PATH}
+
+      # KMM
+      make bundle IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG USE_IMAGE_DIGESTS=true
+      mv bundle bundle.Dockerfile /bundle-kmm
+
+      # KMM Hub
+      make bundle-hub HUB_IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:$_GIT_TAG USE_IMAGE_DIGESTS=true
+      mv bundle bundle.Dockerfile /bundle-hub
+    volumes:
+      - name: bundle-kmm
+        path: /bundle-kmm
+      - name: bundle-hub
+        path: /bundle-hub
+    waitFor: [build-manager-image, build-manager-hub-image]
+  - id: build-kmm-bundle-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=bundle.Dockerfile
+      - --cache-from=gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:latest
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:$_GIT_TAG
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:latest
+      - .
+    dir: /bundle-kmm
+    volumes:
+      - name: bundle-kmm
+        path: /bundle-kmm
+    waitFor: [build-bundles]
+  - id: build-hub-bundle-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=bundle.Dockerfile
+      - --cache-from=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:latest
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:$_GIT_TAG
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:latest
+      - .
+    dir: /bundle-hub
+    volumes:
+      - name: bundle-hub
+        path: /bundle-hub
+    waitFor: [build-bundles]
 # this prevents errors if you don't use both _GIT_TAG and _PULL_BASE_REF,
 # or any new substitutions added in the future.
 options:
@@ -19,5 +95,11 @@ options:
 images:
   - gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG
   - gcr.io/$PROJECT_ID/kernel-module-management-operator:latest
+  - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:$_GIT_TAG
+  - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:latest
   - gcr.io/$PROJECT_ID/kernel-module-management-signimage:$_GIT_TAG
   - gcr.io/$PROJECT_ID/kernel-module-management-signimage:latest
+  - gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:$_GIT_TAG
+  - gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:latest
+  - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:$_GIT_TAG
+  - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:latest

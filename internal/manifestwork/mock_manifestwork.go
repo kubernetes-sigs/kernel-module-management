@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	v1 "open-cluster-management.io/api/cluster/v1"
 	v10 "open-cluster-management.io/api/work/v1"
 )

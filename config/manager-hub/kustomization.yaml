@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../manager-base
+
+images:
+- name: controller
+  newName: gcr.io/k8s-staging-kmm/kernel-module-management-operator-hub
+  newTag: latest
+
+patchesStrategicMerge:
+- |-
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: controller-manager
+    namespace: system
+  spec:
+    template:
+      spec:
+        containers:
+          - name: manager
+            env:
+              - name: OPERATOR_NAMESPACE
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.namespace
+
+configMapGenerator:
+- files:
+  - controller_manager_config.yaml
+  name: manager-config
+
+generatorOptions:
+  disableNameSuffixHash: true

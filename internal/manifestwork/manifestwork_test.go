@@ -3,6 +3,7 @@ package manifestwork
 import (
 	"context"
 
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -30,8 +31,8 @@ var _ = Describe("GarbageCollect", func() {
 	ctx := context.Background()
 
 	It("should work as expected", func() {
-		mcm := kmmv1beta1.ManagedClusterModule{
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+		mcm := hubv1beta1.ManagedClusterModule{
+			Spec: hubv1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{
 					Selector: map[string]string{"key": "value"},
 				},
@@ -100,15 +101,15 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 
 	It("should return an error if the ManifestWork is nil", func() {
 		Expect(
-			mwc.SetManifestWorkAsDesired(context.Background(), nil, kmmv1beta1.ManagedClusterModule{}),
+			mwc.SetManifestWorkAsDesired(context.Background(), nil, hubv1beta1.ManagedClusterModule{}),
 		).To(
 			HaveOccurred(),
 		)
 	})
 
 	It("should remove all Build and Sign sections of the Module", func() {
-		mcm := kmmv1beta1.ManagedClusterModule{
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+		mcm := hubv1beta1.ManagedClusterModule{
+			Spec: hubv1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{
 					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 						Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -141,8 +142,8 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 	})
 
 	It("should work as expected", func() {
-		mcm := kmmv1beta1.ManagedClusterModule{
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+		mcm := hubv1beta1.ManagedClusterModule{
+			Spec: hubv1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{
 					Selector: map[string]string{"key": "value"},
 				},

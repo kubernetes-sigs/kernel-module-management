@@ -20,6 +20,8 @@ import (
 //+kubebuilder:rbac:groups="core",resources=pods,verbs=get;patch;list;watch
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;watch
 
+const PodNodeModuleReconcilerName = "PodNodeModule"
+
 type PodNodeModuleReconciler struct {
 	client    client.Client
 	daemonAPI daemonset.DaemonSetCreator
@@ -107,7 +109,7 @@ func (pnmr *PodNodeModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.
 		NewControllerManagedBy(mgr).
-		Named("pod-node-module").
+		Named(PodNodeModuleReconcilerName).
 		For(&v1.Pod{}).
 		WithEventFilter(p).
 		Complete(pnmr)

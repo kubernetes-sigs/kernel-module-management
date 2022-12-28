@@ -14,12 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package hub
 
 import (
 	"context"
 	"fmt"
 
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,11 +35,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
 )
+
+const ManagedClusterModuleReconcilerName = "ManagedClusterModule"
 
 // ManagedClusterModuleReconciler reconciles a ManagedClusterModule object
 type ManagedClusterModuleReconciler struct {
@@ -50,9 +52,9 @@ type ManagedClusterModuleReconciler struct {
 	filter *filter.Filter
 }
 
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=managedclustermodules,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=managedclustermodules/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=managedclustermodules/finalizers,verbs=update
+//+kubebuilder:rbac:groups=hub.kmm.sigs.x-k8s.io,resources=managedclustermodules,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=hub.kmm.sigs.x-k8s.io,resources=managedclustermodules/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=hub.kmm.sigs.x-k8s.io,resources=managedclustermodules/finalizers,verbs=update
 //+kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworks,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;list;watch
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=create;list;watch;delete
@@ -144,13 +146,13 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, req ctrl
 // SetupWithManager sets up the controller with the Manager.
 func (r *ManagedClusterModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kmmv1beta1.ManagedClusterModule{}).
+		For(&hubv1beta1.ManagedClusterModule{}).
 		Owns(&workv1.ManifestWork{}).
 		Owns(&batchv1.Job{}).
 		Watches(
 			&source.Kind{Type: &clusterv1.ManagedCluster{}},
 			handler.EnqueueRequestsFromMapFunc(r.filter.FindManagedClusterModulesForCluster),
 			builder.WithPredicates(predicate.LabelChangedPredicate{})).
-		Named("managedclustermodule").
+		Named(ManagedClusterModuleReconcilerName).
 		Complete(r)
 }

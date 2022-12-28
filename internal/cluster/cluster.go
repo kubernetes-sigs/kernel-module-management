@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,10 +27,10 @@ const (
 //go:generate mockgen -source=cluster.go -package=cluster -destination=mock_cluster.go
 
 type ClusterAPI interface {
-	RequestedManagedClusterModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.ManagedClusterModule, error)
-	SelectedManagedClusters(ctx context.Context, mcm *kmmv1beta1.ManagedClusterModule) (*clusterv1.ManagedClusterList, error)
-	BuildAndSign(ctx context.Context, mcm kmmv1beta1.ManagedClusterModule, cluster clusterv1.ManagedCluster) (bool, error)
-	GarbageCollectBuilds(ctx context.Context, mcm kmmv1beta1.ManagedClusterModule) ([]string, error)
+	RequestedManagedClusterModule(ctx context.Context, namespacedName types.NamespacedName) (*hubv1beta1.ManagedClusterModule, error)
+	SelectedManagedClusters(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule) (*clusterv1.ManagedClusterList, error)
+	BuildAndSign(ctx context.Context, mcm hubv1beta1.ManagedClusterModule, cluster clusterv1.ManagedCluster) (bool, error)
+	GarbageCollectBuilds(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error)
 }
 
 type clusterAPI struct {
@@ -57,9 +58,9 @@ func NewClusterAPI(
 
 func (c *clusterAPI) RequestedManagedClusterModule(
 	ctx context.Context,
-	namespacedName types.NamespacedName) (*kmmv1beta1.ManagedClusterModule, error) {
+	namespacedName types.NamespacedName) (*hubv1beta1.ManagedClusterModule, error) {
 
-	mcm := kmmv1beta1.ManagedClusterModule{}
+	mcm := hubv1beta1.ManagedClusterModule{}
 	if err := c.client.Get(ctx, namespacedName, &mcm); err != nil {
 		return nil, fmt.Errorf("failed to get the ManagedClusterModule %s: %w", namespacedName, err)
 	}
@@ -68,7 +69,7 @@ func (c *clusterAPI) RequestedManagedClusterModule(
 
 func (c *clusterAPI) SelectedManagedClusters(
 	ctx context.Context,
-	mcm *kmmv1beta1.ManagedClusterModule) (*clusterv1.ManagedClusterList, error) {
+	mcm *hubv1beta1.ManagedClusterModule) (*clusterv1.ManagedClusterList, error) {
 
 	clusterList := &clusterv1.ManagedClusterList{}
 
@@ -85,7 +86,7 @@ func (c *clusterAPI) SelectedManagedClusters(
 
 func (c *clusterAPI) BuildAndSign(
 	ctx context.Context,
-	mcm kmmv1beta1.ManagedClusterModule,
+	mcm hubv1beta1.ManagedClusterModule,
 	cluster clusterv1.ManagedCluster) (bool, error) {
 
 	requeue := false
@@ -128,7 +129,7 @@ func (c *clusterAPI) BuildAndSign(
 	return requeue, nil
 }
 
-func (c *clusterAPI) GarbageCollectBuilds(ctx context.Context, mcm kmmv1beta1.ManagedClusterModule) ([]string, error) {
+func (c *clusterAPI) GarbageCollectBuilds(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error) {
 	namespace := c.defaultJobNamespace
 	if mcm.Spec.JobNamespace != "" {
 		namespace = mcm.Spec.JobNamespace
@@ -198,7 +199,7 @@ func (c *clusterAPI) kernelVersions(cluster clusterv1.ManagedCluster) ([]string,
 func (c *clusterAPI) build(
 	ctx context.Context,
 	mod kmmv1beta1.Module,
-	mcm *kmmv1beta1.ManagedClusterModule,
+	mcm *hubv1beta1.ManagedClusterModule,
 	kernelMapping *kmmv1beta1.KernelMapping,
 	kernelVersion string) (bool, error) {
 
@@ -226,7 +227,7 @@ func (c *clusterAPI) build(
 func (c *clusterAPI) sign(
 	ctx context.Context,
 	mod kmmv1beta1.Module,
-	mcm *kmmv1beta1.ManagedClusterModule,
+	mcm *hubv1beta1.ManagedClusterModule,
 	kernelMapping *kmmv1beta1.KernelMapping,
 	kernelVersion string) (bool, error) {
 

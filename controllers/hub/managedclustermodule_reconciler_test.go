@@ -14,12 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package hub
 
 import (
 	"context"
 	"errors"
 
+	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -32,7 +34,6 @@ import (
 	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
@@ -92,11 +93,11 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 	})
 
 	It("should return an error when fetching selected managed clusters fails", func() {
-		mcm := &kmmv1beta1.ManagedClusterModule{
+		mcm := &v1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: mcmName,
 			},
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+			Spec: v1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{},
 				Selector:   map[string]string{"key": "value"},
 			},
@@ -119,11 +120,11 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 	})
 
 	It("should do nothing but garbage collect any obsolete ManifestWorks and Builds when no managed clusters match the selector", func() {
-		mcm := &kmmv1beta1.ManagedClusterModule{
+		mcm := &v1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: mcmName,
 			},
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+			Spec: v1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{},
 				Selector:   map[string]string{"key": "value"},
 			},
@@ -146,11 +147,11 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 	})
 
 	It("should return an error when ManifestWork garbage collection fails", func() {
-		mcm := &kmmv1beta1.ManagedClusterModule{
+		mcm := &v1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: mcmName,
 			},
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+			Spec: v1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{},
 				Selector:   map[string]string{"key": "value"},
 			},
@@ -172,11 +173,11 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 	})
 
 	It("should return an error when Builds garbage collection fails", func() {
-		mcm := &kmmv1beta1.ManagedClusterModule{
+		mcm := &v1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: mcmName,
 			},
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+			Spec: v1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{},
 				Selector:   map[string]string{"key": "value"},
 			},
@@ -199,11 +200,11 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 	})
 
 	It("should requeue the request when build is specified and a managed cluster matches the selector", func() {
-		mcm := kmmv1beta1.ManagedClusterModule{
+		mcm := v1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: mcmName,
 			},
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+			Spec: v1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{
 					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 						Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -242,11 +243,11 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 	})
 
 	It("should create a ManifestWork if a managed cluster matches the selector", func() {
-		mcm := kmmv1beta1.ManagedClusterModule{
+		mcm := v1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: mcmName,
 			},
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+			Spec: v1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{},
 				Selector:   map[string]string{"key": "value"},
 			},
@@ -289,11 +290,11 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 	})
 
 	It("should patch the ManifestWork if it already exists", func() {
-		mcm := kmmv1beta1.ManagedClusterModule{
+		mcm := v1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: mcmName,
 			},
-			Spec: kmmv1beta1.ManagedClusterModuleSpec{
+			Spec: v1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{},
 				Selector:   map[string]string{"key": "value"},
 			},
@@ -323,7 +324,7 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			mockClusterAPI.EXPECT().BuildAndSign(gomock.Any(), mcm, clusterList.Items[0]).Return(false, nil),
 			clnt.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()),
 			mockMW.EXPECT().SetManifestWorkAsDesired(context.Background(), &mw, gomock.AssignableToTypeOf(mcm)).Do(
-				func(ctx context.Context, m *workv1.ManifestWork, _ kmmv1beta1.ManagedClusterModule) {
+				func(ctx context.Context, m *workv1.ManifestWork, _ v1beta1.ManagedClusterModule) {
 					m.SetLabels(map[string]string{"test": "test"})
 				}),
 			clnt.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()),

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	reflect "reflect"
 
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,8 +23,8 @@ import (
 //go:generate mockgen -source=manifestwork.go -package=manifestwork -destination=mock_manifestwork.go
 
 type ManifestWorkCreator interface {
-	GarbageCollect(ctx context.Context, clusters clusterv1.ManagedClusterList, mcm kmmv1beta1.ManagedClusterModule) error
-	SetManifestWorkAsDesired(ctx context.Context, mw *workv1.ManifestWork, mcm kmmv1beta1.ManagedClusterModule) error
+	GarbageCollect(ctx context.Context, clusters clusterv1.ManagedClusterList, mcm hubv1beta1.ManagedClusterModule) error
+	SetManifestWorkAsDesired(ctx context.Context, mw *workv1.ManifestWork, mcm hubv1beta1.ManagedClusterModule) error
 }
 
 type manifestWorkGenerator struct {
@@ -38,7 +39,7 @@ func NewCreator(client client.Client, scheme *runtime.Scheme) ManifestWorkCreato
 	}
 }
 
-func (mwg *manifestWorkGenerator) GarbageCollect(ctx context.Context, clusters clusterv1.ManagedClusterList, mcm kmmv1beta1.ManagedClusterModule) error {
+func (mwg *manifestWorkGenerator) GarbageCollect(ctx context.Context, clusters clusterv1.ManagedClusterList, mcm hubv1beta1.ManagedClusterModule) error {
 	manifestWorks, err := mwg.getOwnedManifestWorks(ctx, mcm)
 	if err != nil {
 		return fmt.Errorf("failed to get owned ManifestWorks: %w", err)
@@ -62,7 +63,7 @@ func (mwg *manifestWorkGenerator) GarbageCollect(ctx context.Context, clusters c
 	return nil
 }
 
-func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(ctx context.Context, mw *workv1.ManifestWork, mcm kmmv1beta1.ManagedClusterModule) error {
+func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(ctx context.Context, mw *workv1.ManifestWork, mcm hubv1beta1.ManagedClusterModule) error {
 	if mw == nil {
 		return errors.New("mw cannot be nil")
 	}
@@ -111,7 +112,7 @@ func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(ctx context.Context, 
 	return controllerutil.SetControllerReference(&mcm, mw, mwg.scheme)
 }
 
-func (mwg *manifestWorkGenerator) getOwnedManifestWorks(ctx context.Context, mcm kmmv1beta1.ManagedClusterModule) (*workv1.ManifestWorkList, error) {
+func (mwg *manifestWorkGenerator) getOwnedManifestWorks(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) (*workv1.ManifestWorkList, error) {
 	manifestWorkList := &workv1.ManifestWorkList{}
 
 	selector := map[string]string{constants.ManagedClusterModuleNameLabel: mcm.Name}

@@ -1,6 +1,0 @@
-apiVersion: kmm.sigs.x-k8s.io/v1beta1
-kind: Module
-metadata:
-  name: module-sample
-spec:
-  # TODO(user): Add fields here
