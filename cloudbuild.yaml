@@ -9,6 +9,13 @@ steps:
     - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator:latest
     - .
     waitFor: ['-']
+  - id: push-manager-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - gcr.io/$PROJECT_ID/kernel-module-management-operator
+    waitFor: [build-manager-image]
   - id: build-manager-hub-image
     name: gcr.io/cloud-builders/docker
     args:
@@ -19,7 +26,15 @@ steps:
     - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:latest
     - .
     waitFor: ['-']
-  - name: gcr.io/cloud-builders/docker
+  - id: push-manager-hub-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub
+    waitFor: [build-manager-hub-image]
+  - id: build-signimage
+    name: gcr.io/cloud-builders/docker
     args:
       - build
       - --tag=gcr.io/$PROJECT_ID/kernel-module-management-signimage:$_GIT_TAG
@@ -27,35 +42,47 @@ steps:
       - --file=Dockerfile.signimage
       - .
     waitFor: ['-']
+  - id: push-signimage
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - gcr.io/$PROJECT_ID/kernel-module-management-signimage
+    waitFor: [build-signimage]
   - id: build-bundles
     name: golang:1.19-alpine3.17
     env:
       - '_GIT_TAG=$_GIT_TAG'
       - 'PROJECT_ID=$PROJECT_ID'
-    script: |
-      set -euxo pipefail
-      apk add bash curl gcc make musl-dev
+    entrypoint: sh
+    args:
+      - -eEuo
+      - pipefail
+      - -c
+      - |-
+        set -euxo pipefail
+        apk add bash curl gcc make musl-dev
 
-      # Install kubectl
-      curl -Lo /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-      chmod +x /usr/local/bin/kubectl
+        # Install kubectl
+        curl -Lo /usr/local/bin/kubectl "https://dl.k8s.io/release/$$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x /usr/local/bin/kubectl
 
-      # Include the destination directory of `go install` in $PATH
-      export PATH=$(go env GOPATH)/bin:${PATH}
+        # Include the destination directory of `go install` in $$PATH
+        export PATH=$$(go env GOPATH)/bin:$${PATH}
 
-      # KMM
-      make bundle IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG USE_IMAGE_DIGESTS=true
-      mv bundle bundle.Dockerfile /bundle-kmm
+        # KMM
+        make bundle IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG USE_IMAGE_DIGESTS=true
+        mv bundle bundle.Dockerfile /bundle-kmm
 
-      # KMM Hub
-      make bundle-hub HUB_IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:$_GIT_TAG USE_IMAGE_DIGESTS=true
-      mv bundle bundle.Dockerfile /bundle-hub
+        # KMM Hub
+        make bundle-hub HUB_IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:$_GIT_TAG USE_IMAGE_DIGESTS=true
+        mv bundle bundle.Dockerfile /bundle-hub
     volumes:
       - name: bundle-kmm
         path: /bundle-kmm
       - name: bundle-hub
         path: /bundle-hub
-    waitFor: [build-manager-image, build-manager-hub-image]
+    waitFor: [push-manager-image, build-manager-hub-image, push-signimage]
   - id: build-kmm-bundle-image
     name: gcr.io/cloud-builders/docker
     args:
@@ -89,12 +116,8 @@ steps:
 options:
   substitution_option: ALLOW_LOOSE
 images:
-  - gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG
-  - gcr.io/$PROJECT_ID/kernel-module-management-operator:latest
-  - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:$_GIT_TAG
-  - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:latest
-  - gcr.io/$PROJECT_ID/kernel-module-management-signimage:$_GIT_TAG
-  - gcr.io/$PROJECT_ID/kernel-module-management-signimage:latest
+  # Binary images pushed manually in steps so that they are available in build-bundles,
+  # which looks for their SHA on their registry.
   - gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:$_GIT_TAG
   - gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:latest
   - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:$_GIT_TAG
