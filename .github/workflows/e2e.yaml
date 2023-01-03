@@ -4,6 +4,7 @@ on: [pull_request]
 
 env:
   GO_VERSION: 1.18
+  IMG: kmm:local
 
 jobs:
   build-operator-image:
@@ -16,7 +17,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Build the image
-        run: make docker-build IMG=kmm:local
+        run: make docker-build
 
       - name: Export the image
         run: docker save -o kmm_local.tar kmm:local
