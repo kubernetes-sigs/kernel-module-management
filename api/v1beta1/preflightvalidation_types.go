@@ -89,7 +89,7 @@ type PreflightValidationStatus struct {
 
 // PreflightValidation initiates a preflight validations for all Modules on the current Kubernetes cluster.
 // +kubebuilder:resource:path=preflightvalidations,scope=Cluster
-// +kubebuilder:resource:path=preflightvalidations,scope=Cluster,shortName=pv
+// +kubebuilder:resource:path=preflightvalidations,scope=Cluster,shortName=pfv
 type PreflightValidation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
