@@ -3,6 +3,8 @@ package job
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/mitchellh/hashstructure"
 	batchv1 "k8s.io/api/batch/v1"
@@ -123,9 +125,14 @@ func (m *maker) specTemplate(
 	registryTLS *kmmv1beta1.TLSOptions,
 	pushImage bool) v1.PodTemplateSpec {
 
-	kanikoImageTag := "latest"
+	kanikoImage := os.Getenv("RELATED_IMAGES_BUILD")
+
 	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
-		kanikoImageTag = buildConfig.KanikoParams.Tag
+		if idx := strings.IndexAny(kanikoImage, "@:"); idx != -1 {
+			kanikoImage = kanikoImage[0:idx]
+		}
+
+		kanikoImage += ":" + buildConfig.KanikoParams.Tag
 	}
 
 	return v1.PodTemplateSpec{
@@ -134,7 +141,7 @@ func (m *maker) specTemplate(
 				{
 					Args:         m.containerArgs(buildConfig, targetKernel, containerImage, registryTLS, pushImage),
 					Name:         "kaniko",
-					Image:        "gcr.io/kaniko-project/executor:" + kanikoImageTag,
+					Image:        kanikoImage,
 					VolumeMounts: volumeMounts(modSpec, buildConfig),
 				},
 			},

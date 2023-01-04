@@ -41,6 +41,11 @@ spec:
         - /manager
         image: controller:latest
         name: manager
+        env:
+          - name: RELATED_IMAGES_BUILD
+            value: gcr.io/kaniko-project/executor:latest
+          - name: RELATED_IMAGES_SIGN
+            value: gcr.io/k8s-staging-kmm/kernel-module-management-signimage:latest
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false

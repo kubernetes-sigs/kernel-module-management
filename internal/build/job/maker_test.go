@@ -26,11 +26,13 @@ import (
 
 var _ = Describe("MakeJobTemplate", func() {
 	const (
-		image         = "my.registry/my/image"
-		dockerfile    = "FROM test"
-		kernelVersion = "1.2.3"
-		moduleName    = "module-name"
-		namespace     = "some-namespace"
+		image              = "my.registry/my/image"
+		dockerfile         = "FROM test"
+		kanikoImage        = "some-kaniko-image:some-tag"
+		kernelVersion      = "1.2.3"
+		moduleName         = "module-name"
+		namespace          = "some-namespace"
+		relatedImageEnvVar = "RELATED_IMAGES_BUILD"
 	)
 
 	var (
@@ -68,6 +70,8 @@ var _ = Describe("MakeJobTemplate", func() {
 	dockerfileCMData := map[string]string{constants.DockerfileCMKey: dockerfile}
 
 	DescribeTable("should set fields correctly", func(buildSecrets []v1.LocalObjectReference, imagePullSecret *v1.LocalObjectReference) {
+		GinkgoT().Setenv(relatedImageEnvVar, kanikoImage)
+
 		ctx := context.Background()
 		nodeSelector := map[string]string{"arch": "x64"}
 
@@ -112,7 +116,7 @@ var _ = Describe("MakeJobTemplate", func() {
 									"--build-arg", "KERNEL_VERSION=" + kernelVersion,
 								},
 								Name:  "kaniko",
-								Image: "gcr.io/kaniko-project/executor:latest",
+								Image: kanikoImage,
 								VolumeMounts: []v1.VolumeMount{
 									{
 										Name:      "dockerfile",
@@ -325,6 +329,8 @@ var _ = Describe("MakeJobTemplate", func() {
 		const customTag = "some-tag"
 		ctx := context.Background()
 
+		GinkgoT().Setenv(relatedImageEnvVar, "some-build-image:original-tag")
+
 		km := kmmv1beta1.KernelMapping{
 			Build: &kmmv1beta1.Build{
 				BuildArgs:           buildArgs,
@@ -350,7 +356,7 @@ var _ = Describe("MakeJobTemplate", func() {
 		actual, err := m.MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, false)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Template.Spec.Containers[0].Image).To(Equal("gcr.io/kaniko-project/executor:" + customTag))
+		Expect(actual.Spec.Template.Spec.Containers[0].Image).To(Equal("some-build-image:" + customTag))
 	})
 
 	It("should add the kmm_unsigned suffix to the target image if sign is defined", func() {
