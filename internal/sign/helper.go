@@ -31,6 +31,14 @@ func (m *helper) GetRelevantSign(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.Ke
 	if km.Sign.UnsignedImage != "" {
 		signConfig.UnsignedImage = km.Sign.UnsignedImage
 	}
+
+	if km.Sign.UnsignedImageRegistryTLS.Insecure {
+		signConfig.UnsignedImageRegistryTLS.Insecure = km.Sign.UnsignedImageRegistryTLS.Insecure
+	}
+	if km.Sign.UnsignedImageRegistryTLS.InsecureSkipTLSVerify {
+		signConfig.UnsignedImageRegistryTLS.InsecureSkipTLSVerify = km.Sign.UnsignedImageRegistryTLS.InsecureSkipTLSVerify
+	}
+
 	if km.Sign.KeySecret != nil {
 		signConfig.KeySecret = km.Sign.KeySecret
 	}
