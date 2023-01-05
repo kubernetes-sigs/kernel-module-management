@@ -5,15 +5,17 @@ set -euxo pipefail
 echo "Deploy KMMO..."
 make deploy
 
-echo "Create a build secret..."
-kubectl create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
+echo "Check that the kmm_ci_a module is not loaded on the node..."
+if minikube ssh -- lsmod | grep kmm_ci_a; then
+ echo "Unexpected lsmod output - the module is present on the node before the module was applied to the cluster"
+ exit 1
+fi
 
 echo "Add a configmap that contain the kernel module build dockerfile..."
 kubectl apply -f ci/kmm-kmod-dockerfile.yaml
 
 echo "Add an kmm-ci Module that contains a valid mapping..."
-sed -e "s/KVER_CHANGEME/$(minikube ssh -- uname -r)/g" ci/module-kmm-ci-build.template.yaml | tee module-kmm-ci.yaml
-kubectl apply -f module-kmm-ci.yaml
+kubectl apply -f ci/module-kmm-ci-build.yaml
 
 # Wait for the build pod to be created. `kubectl wait` doesn't support such option,
 # see https://github.com/kubernetes/kubernetes/issues/83242.
@@ -30,9 +32,8 @@ kubectl logs pod/${POD_NAME} -f
 echo "Check that the module gets loaded on the node..."
 timeout 10m bash -c 'until minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
 
-
 echo "Remove the Module..."
-kubectl delete -f module-kmm-ci.yaml
+kubectl delete -f ci/module-kmm-ci-build.yaml
 
 echo "Check that the module gets unloaded from the node..."
 timeout 1m bash -c 'until ! minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'

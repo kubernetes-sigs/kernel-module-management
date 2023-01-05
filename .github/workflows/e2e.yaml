@@ -6,6 +6,7 @@ env:
   GO_VERSION: 1.18
 
 jobs:
+
   build-operator-image:
     runs-on: ubuntu-latest
 
@@ -29,124 +30,11 @@ jobs:
           path: kmm_local.tar
           retention-days: 1
 
-  e2e:
-    runs-on: ubuntu-latest
-
-    name: Prebuilt kernel module
-
-    needs: [build-operator-image]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Create the minikube cluster
-        uses: ./.github/actions/create-minikube-cluster
-
-      - name: Label the node so that it gets the module
-        run: kubectl label node minikube wants-module=kmm_ci_a
-
-      - name: Download container images
-        uses: actions/download-artifact@v3
-        with:
-          name: ci-images
-
-      - name: Save the kernel version
-        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
-
-      - name: Build the DriverContainer image
-        uses: ./.github/actions/build-drivercontainer-image
-        with:
-          kernel-version: ${{ env.KERNEL_VERSION }}
-
-      - name: Import images into minikube
-        run: |
-          minikube image load kmm_local.tar
-          minikube image load kmm-kmod_local.tar
-
-      - name: Cache binaries needed by Makefile
-        id: cache-bin
-        uses: actions/cache@v3
-        with:
-          path: ./bin
-          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
-
-      - uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GO_VERSION }}
-        if: steps.cache-bin.outputs.cache-hit != 'true'
-
-      - name: Run e2e-prebuilt-kernel-module tests
-        run: ./ci/prow/e2e-prebuilt-kernel-module
-        env:
-          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
-
-      - name: Collect troubleshooting data
-        uses: ./.github/actions/collect-troubleshooting
-        if: ${{ always() }}
-
-  e2e-two-nodes:
-    name: Prebuilt kernel module - two nodes
-
-    runs-on: ubuntu-latest
-
-    needs: [build-operator-image]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Create the minikube cluster
-        uses: ./.github/actions/create-minikube-cluster
-        with:
-          start-args: --nodes 2
-
-      - name: Download container images
-        uses: actions/download-artifact@v3
-        with:
-          name: ci-images
-
-      - name: Save the kernel version
-        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
-
-      - name: Build the DriverContainer image
-        uses: ./.github/actions/build-drivercontainer-image
-        with:
-          kernel-version: ${{ env.KERNEL_VERSION }}
-
-      - name: Import images into minikube
-        run: |
-          minikube image load kmm_local.tar
-          minikube image load kmm-kmod_local.tar
-
-      - name: Cache binaries needed by Makefile
-        id: cache-bin
-        uses: actions/cache@v3
-        with:
-          path: ./bin
-          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
-
-      - uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GO_VERSION }}
-        if: steps.cache-bin.outputs.cache-hit != 'true'
-
-      - name: Run e2e-prebuilt-kernel-module-two-nodes tests
-        run: ./ci/prow/e2e-prebuilt-kernel-module-two-nodes
-        env:
-          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
-
-      - name: Collect troubleshooting data
-        uses: ./.github/actions/collect-troubleshooting
-        if: ${{ always() }}
-
   in-cluster-build:
+
     runs-on: ubuntu-latest
-
-    name: In-cluster build
-
+    name: in-cluster-build
     needs: [build-operator-image]
-
     steps:
 
       - name: Checkout
@@ -189,64 +77,8 @@ jobs:
           kubectl wait --for=condition=Complete --timeout -1s job/wait-minikube-registry-alias
         timeout-minutes: 6
 
-      - name: Run e2e-incluster-build tests
+      - name: Run test
         run: ./ci/prow/e2e-incluster-build
-        env:
-          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
-
-      - name: Collect troubleshooting data
-        uses: ./.github/actions/collect-troubleshooting
-        if: ${{ always() }}
-
-  e2e-crd-variable:
-    runs-on: ubuntu-latest
-
-    name: Container image CRD variable
-
-    needs: [build-operator-image]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Create the minikube cluster
-        uses: ./.github/actions/create-minikube-cluster
-
-      - name: Download container images
-        uses: actions/download-artifact@v3
-        with:
-          name: ci-images
-
-      - name: Save the kernel version
-        run: echo "KERNEL_VERSION=$(uname -r)" >> $GITHUB_ENV
-
-      - name: Build the DriverContainer image
-        uses: ./.github/actions/build-drivercontainer-image
-        with:
-          kernel-version: ${{ env.KERNEL_VERSION }}
-
-      - name: Import images into minikube
-        run: |
-          minikube image load kmm_local.tar
-          minikube image load kmm-kmod_local.tar
-
-      - name: Tag the DriverContainer image with the kernel version
-        run: minikube image tag kmm-kmod:local kmm-kmod:${{ env.KERNEL_VERSION }}
-
-      - name: Cache binaries needed by Makefile
-        id: cache-bin
-        uses: actions/cache@v3
-        with:
-          path: ./bin
-          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
-
-      - uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GO_VERSION }}
-        if: steps.cache-bin.outputs.cache-hit != 'true'
-
-      - name: Run e2e-crd-variable tests
-        run: ./ci/prow/e2e-crd-variable
         env:
           KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
 
