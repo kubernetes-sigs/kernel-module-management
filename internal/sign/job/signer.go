@@ -3,6 +3,7 @@ package signjob
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -133,7 +134,7 @@ func (m *signer) MakeJobTemplate(
 			Containers: []v1.Container{
 				{
 					Name:         "signimage",
-					Image:        "quay.io/chrisp262/kmod-signer:latest",
+					Image:        os.Getenv("RELATED_IMAGES_SIGN"),
 					Args:         args,
 					VolumeMounts: volumeMounts,
 				},
