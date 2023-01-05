@@ -17,6 +17,7 @@ var _ = Describe("GetRelevantSign", func() {
 		keySecret     = "securebootkey"
 		certSecret    = "securebootcert"
 		filesToSign   = "/modules/simple-kmod.ko:/modules/simple-procfs-kmod.ko"
+		kernelVersion = "1.2.3"
 	)
 
 	var (
@@ -35,8 +36,9 @@ var _ = Describe("GetRelevantSign", func() {
 	}
 
 	DescribeTable("should set fields correctly", func(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) {
+		//macros := map[string]string{"KERNEL_VERSION": kernelVersion}
 
-		actual := h.GetRelevantSign(mod.Spec, km)
+		actual, _ := h.GetRelevantSign(mod.Spec, km, kernelVersion)
 		Expect(
 			cmp.Diff(expected, actual),
 		).To(
@@ -165,4 +167,75 @@ var _ = Describe("GetRelevantSign", func() {
 		),
 	)
 
+})
+var _ = Describe("GetRelevantSign", func() {
+
+	const (
+		unsignedImage = "my.registry/my/image"
+		keySecret     = "securebootkey"
+		certSecret    = "securebootcert"
+		filesToSign   = "/modules/${KERNEL_VERSION}/simple-kmod.ko:/modules/${KERNEL_VERSION}/simple-procfs-kmod.ko"
+		kernelVersion = "1.2.3"
+	)
+
+	var (
+		h Helper
+	)
+
+	BeforeEach(func() {
+		h = NewSignerHelper()
+	})
+
+	expected := &kmmv1beta1.Sign{
+		UnsignedImage: unsignedImage + ":" + kernelVersion,
+		KeySecret:     &v1.LocalObjectReference{Name: keySecret},
+		CertSecret:    &v1.LocalObjectReference{Name: certSecret},
+		FilesToSign:   strings.Split("/modules/"+kernelVersion+"/simple-kmod.ko:/modules/"+kernelVersion+"/simple-procfs-kmod.ko", ":"),
+	}
+
+	DescribeTable("should set fields correctly", func(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) {
+		actual, _ := h.GetRelevantSign(mod.Spec, km, kernelVersion)
+		Expect(
+			cmp.Diff(expected, actual),
+		).To(
+			BeEmpty(),
+		)
+	},
+		Entry(
+			"no km.Sign",
+			kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+						Container: kmmv1beta1.ModuleLoaderContainerSpec{
+							Sign: &kmmv1beta1.Sign{
+								UnsignedImage: unsignedImage + ":${KERNEL_VERSION}",
+								KeySecret:     &v1.LocalObjectReference{Name: keySecret},
+								CertSecret:    &v1.LocalObjectReference{Name: certSecret},
+								FilesToSign:   strings.Split(filesToSign, ":"),
+							},
+						},
+					},
+				},
+			},
+			kmmv1beta1.KernelMapping{},
+		),
+		Entry(
+			"no container.Sign",
+			kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+						Container: kmmv1beta1.ModuleLoaderContainerSpec{},
+					},
+				},
+			},
+			kmmv1beta1.KernelMapping{
+				Sign: &kmmv1beta1.Sign{
+					UnsignedImage: unsignedImage + ":${KERNEL_VERSION}",
+					KeySecret:     &v1.LocalObjectReference{Name: keySecret},
+					CertSecret:    &v1.LocalObjectReference{Name: certSecret},
+					FilesToSign:   strings.Split(filesToSign, ":"),
+				},
+			},
+		),
+	)
 })

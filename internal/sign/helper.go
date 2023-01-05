@@ -2,51 +2,57 @@ package sign
 
 import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 //go:generate mockgen -source=helper.go -package=sign -destination=mock_helper.go
 
 type Helper interface {
-	GetRelevantSign(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmmv1beta1.Sign
+	GetRelevantSign(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping, kernel string) (*kmmv1beta1.Sign, error)
 }
 
-type helper struct{}
+type helper struct {
+}
 
 func NewSignerHelper() Helper {
 	return &helper{}
 }
 
-func (m *helper) GetRelevantSign(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmmv1beta1.Sign {
+func (m *helper) GetRelevantSign(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping, kernel string) (*kmmv1beta1.Sign, error) {
+	var signConfig *kmmv1beta1.Sign
 	if modSpec.ModuleLoader.Container.Sign == nil {
 		// km.Sign cannot be nil in case mod.Sign is nil, checked above
-		return km.Sign.DeepCopy()
+		signConfig = km.Sign.DeepCopy()
+	} else if km.Sign == nil {
+		signConfig = modSpec.ModuleLoader.Container.Sign.DeepCopy()
+	} else {
+		signConfig = modSpec.ModuleLoader.Container.Sign.DeepCopy()
+
+		if km.Sign.UnsignedImage != "" {
+			signConfig.UnsignedImage = km.Sign.UnsignedImage
+		}
+
+		if km.Sign.KeySecret != nil {
+			signConfig.KeySecret = km.Sign.KeySecret
+		}
+		if km.Sign.CertSecret != nil {
+			signConfig.CertSecret = km.Sign.CertSecret
+		}
+		//append (not overwrite) any files in the km to the defaults
+		signConfig.FilesToSign = append(signConfig.FilesToSign, km.Sign.FilesToSign...)
 	}
 
-	if km.Sign == nil {
-		return modSpec.ModuleLoader.Container.Sign.DeepCopy()
+	osConfigEnvVars := utils.KernelComponentsAsEnvVars(kernel)
+	unsignedImage, err := utils.ReplaceInTemplates(osConfigEnvVars, signConfig.UnsignedImage)
+	if err != nil {
+		return nil, err
 	}
+	signConfig.UnsignedImage = unsignedImage[0]
+	filesToSign, err := utils.ReplaceInTemplates(osConfigEnvVars, signConfig.FilesToSign...)
+	if err != nil {
+		return nil, err
+	}
+	signConfig.FilesToSign = filesToSign
 
-	signConfig := modSpec.ModuleLoader.Container.Sign.DeepCopy()
-
-	if km.Sign.UnsignedImage != "" {
-		signConfig.UnsignedImage = km.Sign.UnsignedImage
-	}
-
-	if km.Sign.UnsignedImageRegistryTLS.Insecure {
-		signConfig.UnsignedImageRegistryTLS.Insecure = km.Sign.UnsignedImageRegistryTLS.Insecure
-	}
-	if km.Sign.UnsignedImageRegistryTLS.InsecureSkipTLSVerify {
-		signConfig.UnsignedImageRegistryTLS.InsecureSkipTLSVerify = km.Sign.UnsignedImageRegistryTLS.InsecureSkipTLSVerify
-	}
-
-	if km.Sign.KeySecret != nil {
-		signConfig.KeySecret = km.Sign.KeySecret
-	}
-	if km.Sign.CertSecret != nil {
-		signConfig.CertSecret = km.Sign.CertSecret
-	}
-	//append (not overwrite) any files in the km to the defaults
-	signConfig.FilesToSign = append(signConfig.FilesToSign, km.Sign.FilesToSign...)
-
-	return signConfig
+	return signConfig, nil
 }
