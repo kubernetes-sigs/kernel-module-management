@@ -36,9 +36,8 @@ var _ = Describe("GetRelevantSign", func() {
 	}
 
 	DescribeTable("should set fields correctly", func(mod kmmv1beta1.Module, km kmmv1beta1.KernelMapping) {
-		//macros := map[string]string{"KERNEL_VERSION": kernelVersion}
-
-		actual, _ := h.GetRelevantSign(mod.Spec, km, kernelVersion)
+		actual, err := h.GetRelevantSign(mod.Spec, km, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(
 			cmp.Diff(expected, actual),
 		).To(
