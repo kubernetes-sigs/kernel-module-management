@@ -2,9 +2,10 @@ package utils
 
 import (
 	"fmt"
-	"github.com/a8m/envsubst/parse"
 	"regexp"
 	"strings"
+
+	"github.com/a8m/envsubst/parse"
 )
 
 const (
@@ -13,8 +14,10 @@ const (
 	kernelVersionPatchIdx = 2
 )
 
+var kernelRegexp = regexp.MustCompile("[.,-]")
+
 func KernelComponentsAsEnvVars(kernel string) []string {
-	osConfigFieldsList := regexp.MustCompile("[.,-]").Split(kernel, -1)
+	osConfigFieldsList := kernelRegexp.Split(kernel, -1)
 
 	envvars := []string{
 		"KERNEL_FULL_VERSION=" + kernel,
@@ -31,12 +34,14 @@ func KernelComponentsAsEnvVars(kernel string) []string {
 func ReplaceInTemplates(envvars []string, templates ...string) ([]string, error) {
 	parser := parse.New("mapping", envvars, &parse.Restrictions{})
 
-	var replacedStrings []string
+	replacedStrings := make([]string, 0, len(templates))
+
 	for _, v := range templates {
 		resultString, err := parser.Parse(v)
 		if err != nil {
-			return nil, fmt.Errorf("failed to substitute \"%s\" : %w", v, err)
+			return nil, fmt.Errorf("failed to substitute %q: %v", v, err)
 		}
+
 		replacedStrings = append(replacedStrings, resultString)
 	}
 	return replacedStrings, nil
