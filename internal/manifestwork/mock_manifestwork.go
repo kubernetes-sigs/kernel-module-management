@@ -51,6 +51,21 @@ func (mr *MockManifestWorkCreatorMockRecorder) GarbageCollect(ctx, clusters, mcm
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockManifestWorkCreator)(nil).GarbageCollect), ctx, clusters, mcm)
 }
 
+// GetOwnedManifestWorks mocks base method.
+func (m *MockManifestWorkCreator) GetOwnedManifestWorks(ctx context.Context, mcm v1beta1.ManagedClusterModule) (*v10.ManifestWorkList, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOwnedManifestWorks", ctx, mcm)
+	ret0, _ := ret[0].(*v10.ManifestWorkList)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOwnedManifestWorks indicates an expected call of GetOwnedManifestWorks.
+func (mr *MockManifestWorkCreatorMockRecorder) GetOwnedManifestWorks(ctx, mcm interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwnedManifestWorks", reflect.TypeOf((*MockManifestWorkCreator)(nil).GetOwnedManifestWorks), ctx, mcm)
+}
+
 // SetManifestWorkAsDesired mocks base method.
 func (m *MockManifestWorkCreator) SetManifestWorkAsDesired(ctx context.Context, mw *v10.ManifestWork, mcm v1beta1.ManagedClusterModule) error {
 	m.ctrl.T.Helper()

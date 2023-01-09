@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"time"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 )
 
 //go:generate mockgen -source=statusupdater.go -package=statusupdater -destination=mock_statusupdater.go
@@ -20,6 +23,13 @@ import (
 type ModuleStatusUpdater interface {
 	ModuleUpdateStatus(ctx context.Context, mod *kmmv1beta1.Module, kernelMappingNodes []v1.Node,
 		targetedNodes []v1.Node, dsByKernelVersion map[string]*appsv1.DaemonSet) error
+}
+
+//go:generate mockgen -source=statusupdater.go -package=statusupdater -destination=mock_statusupdater.go
+
+type ManagedClusterModuleStatusUpdater interface {
+	ManagedClusterModuleUpdateStatus(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule,
+		ownedManifestWorks []workv1.ManifestWork) error
 }
 
 //go:generate mockgen -source=statusupdater.go -package=statusupdater -destination=mock_statusupdater.go
@@ -38,6 +48,10 @@ type moduleStatusUpdater struct {
 	metricsAPI metrics.Metrics
 }
 
+type managedClusterModuleStatusUpdater struct {
+	client client.Client
+}
+
 type preflightStatusUpdater struct {
 	client client.Client
 }
@@ -46,6 +60,12 @@ func NewModuleStatusUpdater(client client.Client, metricsAPI metrics.Metrics) Mo
 	return &moduleStatusUpdater{
 		client:     client,
 		metricsAPI: metricsAPI,
+	}
+}
+
+func NewManagedClusterModuleStatusUpdater(client client.Client) ManagedClusterModuleStatusUpdater {
+	return &managedClusterModuleStatusUpdater{
+		client: client,
 	}
 }
 
@@ -82,6 +102,33 @@ func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
 	}
 	m.updateMetrics(ctx, mod, dsByKernelVersion)
 	return m.client.Status().Update(ctx, mod)
+}
+
+func (m *managedClusterModuleStatusUpdater) ManagedClusterModuleUpdateStatus(ctx context.Context,
+	mcm *hubv1beta1.ManagedClusterModule,
+	ownedManifestWorks []workv1.ManifestWork) error {
+
+	var numApplied int32
+	var numDegraded int32
+	for _, mw := range ownedManifestWorks {
+		for _, condition := range mw.Status.Conditions {
+			if condition.Status != metav1.ConditionTrue {
+				continue
+			}
+
+			switch condition.Type {
+			case workv1.WorkApplied:
+				numApplied += 1
+			case workv1.WorkDegraded:
+				numDegraded += 1
+			}
+		}
+	}
+	mcm.Status.NumberDesired = int32(len(ownedManifestWorks))
+	mcm.Status.NumberApplied = numApplied
+	mcm.Status.NumberDegraded = numDegraded
+
+	return m.client.Status().Update(ctx, mcm)
 }
 
 func (p *preflightStatusUpdater) PreflightPresetStatuses(ctx context.Context,

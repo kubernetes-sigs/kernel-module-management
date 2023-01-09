@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,9 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 )
 
 const ManagedClusterModuleReconcilerName = "ManagedClusterModule"
@@ -46,8 +47,9 @@ const ManagedClusterModuleReconcilerName = "ManagedClusterModule"
 type ManagedClusterModuleReconciler struct {
 	client client.Client
 
-	manifestAPI manifestwork.ManifestWorkCreator
-	clusterAPI  cluster.ClusterAPI
+	manifestAPI      manifestwork.ManifestWorkCreator
+	clusterAPI       cluster.ClusterAPI
+	statusupdaterAPI statusupdater.ManagedClusterModuleStatusUpdater
 
 	filter *filter.Filter
 }
@@ -63,12 +65,14 @@ func NewManagedClusterModuleReconciler(
 	client client.Client,
 	manifestAPI manifestwork.ManifestWorkCreator,
 	clusterAPI cluster.ClusterAPI,
+	statusupdaterAPI statusupdater.ManagedClusterModuleStatusUpdater,
 	filter *filter.Filter) *ManagedClusterModuleReconciler {
 	return &ManagedClusterModuleReconciler{
-		client:      client,
-		manifestAPI: manifestAPI,
-		clusterAPI:  clusterAPI,
-		filter:      filter,
+		client:           client,
+		manifestAPI:      manifestAPI,
+		clusterAPI:       clusterAPI,
+		statusupdaterAPI: statusupdaterAPI,
+		filter:           filter,
 	}
 }
 
@@ -138,6 +142,14 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	if len(deleted) > 0 {
 		logger.Info("Garbage-collected Build objects", "names", deleted)
+	}
+
+	ownedManifestWorkList, err := r.manifestAPI.GetOwnedManifestWorks(ctx, *mcm)
+	if err != nil {
+		return res, fmt.Errorf("failed to fetch owned ManifestWorks of the ManagedClusterModule: %v", err)
+	}
+	if err := r.statusupdaterAPI.ManagedClusterModuleUpdateStatus(ctx, mcm, ownedManifestWorkList.Items); err != nil {
+		return res, fmt.Errorf("failed to update status of the ManagedClusterModule: %v", err)
 	}
 
 	return res, nil

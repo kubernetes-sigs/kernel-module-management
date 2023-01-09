@@ -24,6 +24,7 @@ import (
 
 type ManifestWorkCreator interface {
 	GarbageCollect(ctx context.Context, clusters clusterv1.ManagedClusterList, mcm hubv1beta1.ManagedClusterModule) error
+	GetOwnedManifestWorks(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) (*workv1.ManifestWorkList, error)
 	SetManifestWorkAsDesired(ctx context.Context, mw *workv1.ManifestWork, mcm hubv1beta1.ManagedClusterModule) error
 }
 
@@ -61,6 +62,10 @@ func (mwg *manifestWorkGenerator) GarbageCollect(ctx context.Context, clusters c
 	}
 
 	return nil
+}
+
+func (mwg *manifestWorkGenerator) GetOwnedManifestWorks(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) (*workv1.ManifestWorkList, error) {
+	return mwg.getOwnedManifestWorks(ctx, mcm)
 }
 
 func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(ctx context.Context, mw *workv1.ManifestWork, mcm hubv1beta1.ManagedClusterModule) error {

@@ -4,17 +4,22 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/golang/mock/gomock"
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/golang/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+	workv1 "open-cluster-management.io/api/work/v1"
+
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 )
 
 type daemonSetConfig struct {
@@ -115,6 +120,85 @@ var _ = Describe("module status update", func() {
 			true,
 		),
 	)
+})
+
+var _ = Describe("ManagedClusterModule status update", func() {
+	const (
+		name = "mcm-name"
+	)
+
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		mcm  *hubv1beta1.ManagedClusterModule
+		su   ManagedClusterModuleStatusUpdater
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mcm = &hubv1beta1.ManagedClusterModule{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		su = NewManagedClusterModuleStatusUpdater(clnt)
+	})
+
+	It("", func() {
+		statusWrite := client.NewMockStatusWriter(ctrl)
+		clnt.EXPECT().Status().Return(statusWrite)
+		statusWrite.EXPECT().Update(context.Background(), mcm).Return(nil)
+
+		mw := workv1.ManifestWork{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "a-namespace",
+				Labels: map[string]string{
+					constants.ManagedClusterModuleNameLabel: mcm.Name,
+				},
+			},
+			Status: workv1.ManifestWorkStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:   workv1.WorkApplied,
+						Status: metav1.ConditionTrue,
+					},
+					{
+						Type:   workv1.WorkDegraded,
+						Status: metav1.ConditionFalse,
+					},
+				},
+			},
+		}
+		degradedMW := workv1.ManifestWork{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-degraded",
+				Namespace: "another-namespace",
+				Labels: map[string]string{
+					constants.ManagedClusterModuleNameLabel: mcm.Name,
+				},
+			},
+			Status: workv1.ManifestWorkStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:   workv1.WorkApplied,
+						Status: metav1.ConditionFalse,
+					},
+					{
+						Type:   workv1.WorkDegraded,
+						Status: metav1.ConditionTrue,
+					},
+				},
+			},
+		}
+		manifestWorkList := workv1.ManifestWorkList{
+			Items: []workv1.ManifestWork{mw, degradedMW},
+		}
+
+		res := su.ManagedClusterModuleUpdateStatus(context.Background(), mcm, manifestWorkList.Items)
+
+		Expect(res).To(BeNil())
+		Expect(mcm.Status.NumberDesired).To(BeEquivalentTo(len(manifestWorkList.Items)))
+		Expect(mcm.Status.NumberApplied).To(BeEquivalentTo(1))
+		Expect(mcm.Status.NumberDegraded).To(BeEquivalentTo(1))
+	})
 })
 
 var _ = Describe("preflight status updates", func() {

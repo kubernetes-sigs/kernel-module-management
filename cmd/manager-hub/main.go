@@ -47,6 +47,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	signjob "github.com/kubernetes-sigs/kernel-module-management/internal/sign/job"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	//+kubebuilder:scaffold:imports
 )
@@ -133,6 +134,7 @@ func main() {
 		client,
 		manifestwork.NewCreator(client, scheme),
 		cluster.NewClusterAPI(client, module.NewKernelMapper(), buildAPI, signAPI, operatorNamespace),
+		statusupdater.NewManagedClusterModuleStatusUpdater(client),
 		filterAPI,
 	)
 
