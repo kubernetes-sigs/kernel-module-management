@@ -308,7 +308,8 @@ type ModuleStatus struct {
 //+kubebuilder:resource:scope=Namespaced
 //+kubebuilder:subresource:status
 
-// Module is the Schema for the modules API
+// Module describes how to load a module on different kernel versions
+// +operator-sdk:csv:customresourcedefinitions:displayName="Module"
 type Module struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

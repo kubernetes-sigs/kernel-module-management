@@ -18,8 +18,8 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ManagedClusterModule is the Schema for the managedclustermodules
-          API
+        description: ManagedClusterModule describes how to load a kernel module on
+          managed clusters
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

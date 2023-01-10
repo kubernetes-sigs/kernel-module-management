@@ -1,0 +1,16 @@
+apiVersion: hub.kmm.sigs.x-k8s.io/v1beta1
+kind: ManagedClusterModule
+metadata:
+  name: managedclustermodule-sample
+spec:
+  moduleSpec:
+    moduleLoader:
+      container:
+        kernelMappings: []
+        modprobe:
+          moduleName: sample
+    selector:
+      node-role.kubernetes.io/worker: ""
+  selector:
+    cluster.open-cluster-management.io/clusterset: default
+  spokeNamespace: default

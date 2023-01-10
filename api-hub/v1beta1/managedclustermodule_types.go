@@ -49,7 +49,8 @@ type ManagedClusterModuleStatus struct {
 //+kubebuilder:resource:path=managedclustermodules,scope=Cluster
 //+kubebuilder:subresource:status
 
-// ManagedClusterModule is the Schema for the managedclustermodules API
+// ManagedClusterModule describes how to load a kernel module on managed clusters
+// +operator-sdk:csv:customresourcedefinitions:displayName="Managed Cluster Module"
 type ManagedClusterModule struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
