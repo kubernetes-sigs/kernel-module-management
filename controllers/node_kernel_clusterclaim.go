@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"open-cluster-management.io/api/cluster/v1alpha1"
@@ -19,6 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 )
 
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;patch;list;watch
@@ -26,8 +28,6 @@ import (
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=clusterclaims,resourceNames=kernel-versions.kmm.node.kubernetes.io,verbs=delete;patch;update
 
 const (
-	clusterClaimName = "kernel-versions.kmm.node.kubernetes.io"
-
 	NodeKernelClusterClaimReconcilerName = "NodeKernelClusterClaim"
 )
 
@@ -68,7 +68,7 @@ func (r *NodeKernelClusterClaimReconciler) Reconcile(ctx context.Context, req ct
 	sort.Strings(kernelsSlice)
 
 	cc := v1alpha1.ClusterClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: clusterClaimName},
+		ObjectMeta: metav1.ObjectMeta{Name: constants.KernelVersionsClusterClaimName},
 	}
 
 	logger.Info("Creating or patching ClusterClaim")
@@ -109,7 +109,7 @@ func (r *NodeKernelClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) er
 			}),
 			builder.WithPredicates(
 				predicate.NewPredicateFuncs(func(object client.Object) bool {
-					return object.GetName() == clusterClaimName
+					return object.GetName() == constants.KernelVersionsClusterClaimName
 				}),
 			),
 		).

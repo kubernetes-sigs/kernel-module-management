@@ -2,19 +2,23 @@ package filter
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/go-logr/logr"
-	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/util/podutils"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 )
 
 func HasLabel(label string) predicate.Predicate {
@@ -25,6 +29,37 @@ func HasLabel(label string) predicate.Predicate {
 
 var skipDeletions predicate.Predicate = predicate.Funcs{
 	DeleteFunc: func(_ event.DeleteEvent) bool { return false },
+}
+
+var kmmClusterClaimChanged predicate.Predicate = predicate.Funcs{
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		oldManagedCluster, ok := e.ObjectOld.(*clusterv1.ManagedCluster)
+		if !ok {
+			return false
+		}
+
+		newManagedCluster, ok := e.ObjectNew.(*clusterv1.ManagedCluster)
+		if !ok {
+			return false
+		}
+
+		newClusterClaim := clusterClaim(constants.KernelVersionsClusterClaimName, newManagedCluster.Status.ClusterClaims)
+		if newClusterClaim == nil {
+			return false
+		}
+		oldClusterClaim := clusterClaim(constants.KernelVersionsClusterClaimName, oldManagedCluster.Status.ClusterClaims)
+
+		return !reflect.DeepEqual(newClusterClaim, oldClusterClaim)
+	},
+}
+
+func clusterClaim(name string, clusterClaims []clusterv1.ManagedClusterClaim) *clusterv1.ManagedClusterClaim {
+	for _, clusterClaim := range clusterClaims {
+		if clusterClaim.Name == name {
+			return &clusterClaim
+		}
+	}
+	return nil
 }
 
 type Filter struct {
@@ -177,6 +212,13 @@ func (f *Filter) FindManagedClusterModulesForCluster(cluster client.Object) []re
 	logger.V(1).Info("New requests", "requests", reqs)
 
 	return reqs
+}
+
+func (f *Filter) ManagedClusterModuleReconcilerManagedClusterPredicate() predicate.Predicate {
+	return predicate.Or(
+		predicate.LabelChangedPredicate{},
+		kmmClusterClaimChanged,
+	)
 }
 
 func (f *Filter) EnqueueAllPreflightValidations(mod client.Object) []reconcile.Request {
