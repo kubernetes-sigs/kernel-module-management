@@ -20,6 +20,33 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 )
 
+var moduleStatusJSONPaths = []workv1.JsonPath{
+	{
+		Name: "devicePlugin.availableNumber",
+		Path: ".status.devicePlugin.availableNumber",
+	},
+	{
+		Name: "devicePlugin.desiredNumber",
+		Path: ".status.devicePlugin.desiredNumber",
+	},
+	{
+		Name: "devicePlugin.nodesMatchingSelectorNumber",
+		Path: ".status.devicePlugin.nodesMatchingSelectorNumber",
+	},
+	{
+		Name: "moduleLoader.availableNumber",
+		Path: ".status.moduleLoader.availableNumber",
+	},
+	{
+		Name: "moduleLoader.desiredNumber",
+		Path: ".status.moduleLoader.desiredNumber",
+	},
+	{
+		Name: "moduleLoader.nodesMatchingSelectorNumber",
+		Path: ".status.moduleLoader.nodesMatchingSelectorNumber",
+	},
+}
+
 //go:generate mockgen -source=manifestwork.go -package=manifestwork -destination=mock_manifestwork.go
 
 type ManifestWorkCreator interface {
@@ -95,7 +122,8 @@ func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(ctx context.Context, 
 			Name:      mcm.Name,
 			Namespace: mcm.Spec.SpokeNamespace,
 		},
-		Spec: mcm.Spec.ModuleSpec,
+		Spec:   mcm.Spec.ModuleSpec,
+		Status: kmmv1beta1.ModuleStatus{},
 	}
 
 	manifest := workv1.Manifest{
@@ -111,6 +139,22 @@ func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(ctx context.Context, 
 	mw.Spec = workv1.ManifestWorkSpec{
 		Workload: workv1.ManifestsTemplate{
 			Manifests: []workv1.Manifest{manifest},
+		},
+		ManifestConfigs: []workv1.ManifestConfigOption{
+			{
+				ResourceIdentifier: workv1.ResourceIdentifier{
+					Group:     mod.GroupVersionKind().Group,
+					Resource:  "modules",
+					Name:      mod.Name,
+					Namespace: mod.Namespace,
+				},
+				FeedbackRules: []workv1.FeedbackRule{
+					{
+						Type:      workv1.JSONPathsType,
+						JsonPaths: moduleStatusJSONPaths,
+					},
+				},
+			},
 		},
 	}
 

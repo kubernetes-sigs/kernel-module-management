@@ -201,8 +201,15 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 	})
 
 	It("should work as expected", func() {
+		const (
+			mcmName        = "test"
+			spokeNamespace = "test-namespace"
+		)
+
 		mcm := hubv1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{Name: mcmName},
 			Spec: hubv1beta1.ManagedClusterModuleSpec{
+				SpokeNamespace: spokeNamespace,
 				ModuleSpec: kmmv1beta1.ModuleSpec{
 					Selector: map[string]string{"key": "value"},
 				},
@@ -211,10 +218,24 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 
 		mw := &workv1.ManifestWork{}
 
+		expectedResourceIdentifier := workv1.ResourceIdentifier{
+			Group:     "kmm.sigs.x-k8s.io",
+			Resource:  "modules",
+			Name:      mcm.Name,
+			Namespace: spokeNamespace,
+		}
+
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(constants.ManagedClusterModuleNameLabel).To(BeKeyOf(mw.Labels))
 		Expect(mw.Spec.Workload.Manifests).To(HaveLen(1))
 		Expect((mw.Spec.Workload.Manifests[0].RawExtension.Object).(*kmmv1beta1.Module).Spec).To(Equal(mcm.Spec.ModuleSpec))
+
+		Expect(mw.Spec.ManifestConfigs).To(HaveLen(1))
+		Expect(mw.Spec.ManifestConfigs[0].ResourceIdentifier).To(Equal(expectedResourceIdentifier))
+
+		Expect(mw.Spec.ManifestConfigs[0].FeedbackRules).To(HaveLen(1))
+		Expect(mw.Spec.ManifestConfigs[0].FeedbackRules[0].Type).To(Equal(workv1.JSONPathsType))
+		Expect(mw.Spec.ManifestConfigs[0].FeedbackRules[0].JsonPaths).To(Equal(moduleStatusJSONPaths))
 	})
 })
