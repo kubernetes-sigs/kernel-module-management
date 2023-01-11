@@ -37,6 +37,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 )
 
 var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
@@ -45,6 +46,7 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 		clnt           *client.MockClient
 		mockMW         *manifestwork.MockManifestWorkCreator
 		mockClusterAPI *cluster.MockClusterAPI
+		mockSU         *statusupdater.MockManagedClusterModuleStatusUpdater
 	)
 
 	BeforeEach(func() {
@@ -52,6 +54,7 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 		clnt = client.NewMockClient(ctrl)
 		mockMW = manifestwork.NewMockManifestWorkCreator(ctrl)
 		mockClusterAPI = cluster.NewMockClusterAPI(ctrl)
+		mockSU = statusupdater.NewMockManagedClusterModuleStatusUpdater(ctrl)
 	})
 
 	const (
@@ -73,7 +76,7 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 				apierrors.NewNotFound(schema.GroupResource{}, mcmName),
 			)
 
-		mcmr := NewManagedClusterModuleReconciler(clnt, nil, mockClusterAPI, nil)
+		mcmr := NewManagedClusterModuleReconciler(clnt, nil, mockClusterAPI, nil, nil)
 		Expect(
 			mcmr.Reconcile(ctx, req),
 		).To(
@@ -85,7 +88,7 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 		mockClusterAPI.EXPECT().RequestedManagedClusterModule(ctx, req.NamespacedName).
 			Return(nil, errors.New("test"))
 
-		mr := NewManagedClusterModuleReconciler(clnt, nil, mockClusterAPI, nil)
+		mr := NewManagedClusterModuleReconciler(clnt, nil, mockClusterAPI, nil, nil)
 
 		res, err := mr.Reconcile(ctx, req)
 		Expect(err).To(HaveOccurred())
@@ -112,7 +115,7 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 				),
 		)
 
-		mr := NewManagedClusterModuleReconciler(clnt, nil, mockClusterAPI, nil)
+		mr := NewManagedClusterModuleReconciler(clnt, nil, mockClusterAPI, nil, nil)
 
 		res, err := mr.Reconcile(context.Background(), req)
 		Expect(err).To(HaveOccurred())
@@ -131,15 +134,18 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 		}
 
 		clusterList := clusterv1.ManagedClusterList{}
+		manifestWorkList := workv1.ManifestWorkList{}
 
 		gomock.InOrder(
 			mockClusterAPI.EXPECT().RequestedManagedClusterModule(ctx, req.NamespacedName).Return(mcm, nil),
 			mockClusterAPI.EXPECT().SelectedManagedClusters(ctx, gomock.Any()).Return(&clusterList, nil),
 			mockMW.EXPECT().GarbageCollect(ctx, clusterList, *mcm),
 			mockClusterAPI.EXPECT().GarbageCollectBuilds(ctx, *mcm),
+			mockMW.EXPECT().GetOwnedManifestWorks(ctx, *mcm).Return(&manifestWorkList, nil),
+			mockSU.EXPECT().ManagedClusterModuleUpdateStatus(ctx, mcm, manifestWorkList.Items).Return(nil),
 		)
 
-		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, nil)
+		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, mockSU, nil)
 
 		res, err := mr.Reconcile(context.Background(), req)
 		Expect(err).NotTo(HaveOccurred())
@@ -165,7 +171,7 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			mockMW.EXPECT().GarbageCollect(ctx, clusterList, *mcm).Return(errors.New("test")),
 		)
 
-		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, nil)
+		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, nil, nil)
 
 		res, err := mr.Reconcile(context.Background(), req)
 		Expect(err).To(HaveOccurred())
@@ -192,7 +198,65 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			mockClusterAPI.EXPECT().GarbageCollectBuilds(ctx, *mcm).Return(nil, errors.New("test")),
 		)
 
-		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, nil)
+		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, nil, nil)
+
+		res, err := mr.Reconcile(context.Background(), req)
+		Expect(err).To(HaveOccurred())
+		Expect(res).To(Equal(reconcile.Result{}))
+	})
+
+	It("should return an error when fetching the owned ManifestWorks fails", func() {
+		mcm := &v1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: mcmName,
+			},
+			Spec: v1beta1.ManagedClusterModuleSpec{
+				ModuleSpec: kmmv1beta1.ModuleSpec{},
+				Selector:   map[string]string{"key": "value"},
+			},
+		}
+
+		clusterList := clusterv1.ManagedClusterList{}
+
+		gomock.InOrder(
+			mockClusterAPI.EXPECT().RequestedManagedClusterModule(ctx, req.NamespacedName).Return(mcm, nil),
+			mockClusterAPI.EXPECT().SelectedManagedClusters(ctx, gomock.Any()).Return(&clusterList, nil),
+			mockMW.EXPECT().GarbageCollect(ctx, clusterList, *mcm),
+			mockClusterAPI.EXPECT().GarbageCollectBuilds(ctx, *mcm),
+			mockMW.EXPECT().GetOwnedManifestWorks(ctx, *mcm).Return(nil, errors.New("generic-error")),
+		)
+
+		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, nil, nil)
+
+		res, err := mr.Reconcile(context.Background(), req)
+		Expect(err).To(HaveOccurred())
+		Expect(res).To(Equal(reconcile.Result{}))
+	})
+
+	It("should return an error when status update fails", func() {
+		mcm := &v1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: mcmName,
+			},
+			Spec: v1beta1.ManagedClusterModuleSpec{
+				ModuleSpec: kmmv1beta1.ModuleSpec{},
+				Selector:   map[string]string{"key": "value"},
+			},
+		}
+
+		clusterList := clusterv1.ManagedClusterList{}
+		manifestWorkList := workv1.ManifestWorkList{}
+
+		gomock.InOrder(
+			mockClusterAPI.EXPECT().RequestedManagedClusterModule(ctx, req.NamespacedName).Return(mcm, nil),
+			mockClusterAPI.EXPECT().SelectedManagedClusters(ctx, gomock.Any()).Return(&clusterList, nil),
+			mockMW.EXPECT().GarbageCollect(ctx, clusterList, *mcm),
+			mockClusterAPI.EXPECT().GarbageCollectBuilds(ctx, *mcm),
+			mockMW.EXPECT().GetOwnedManifestWorks(ctx, *mcm).Return(&manifestWorkList, nil),
+			mockSU.EXPECT().ManagedClusterModuleUpdateStatus(ctx, mcm, manifestWorkList.Items).Return(errors.New("generic-error")),
+		)
+
+		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, mockSU, nil)
 
 		res, err := mr.Reconcile(context.Background(), req)
 		Expect(err).To(HaveOccurred())
@@ -227,15 +291,19 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			},
 		}
 
+		manifestWorkList := workv1.ManifestWorkList{}
+
 		gomock.InOrder(
 			mockClusterAPI.EXPECT().RequestedManagedClusterModule(ctx, req.NamespacedName).Return(&mcm, nil),
 			mockClusterAPI.EXPECT().SelectedManagedClusters(ctx, gomock.Any()).Return(&clusterList, nil),
 			mockClusterAPI.EXPECT().BuildAndSign(gomock.Any(), mcm, clusterList.Items[0]).Return(true, nil),
 			mockMW.EXPECT().GarbageCollect(ctx, clusterList, mcm),
 			mockClusterAPI.EXPECT().GarbageCollectBuilds(ctx, mcm),
+			mockMW.EXPECT().GetOwnedManifestWorks(ctx, mcm).Return(&manifestWorkList, nil),
+			mockSU.EXPECT().ManagedClusterModuleUpdateStatus(ctx, &mcm, manifestWorkList.Items).Return(nil),
 		)
 
-		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, nil)
+		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, mockSU, nil)
 
 		res, err := mr.Reconcile(context.Background(), req)
 		Expect(err).ToNot(HaveOccurred())
@@ -263,6 +331,7 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 				},
 			},
 		}
+		manifestWorkList := workv1.ManifestWorkList{}
 
 		mw := workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{
@@ -280,9 +349,11 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			clnt.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil),
 			mockMW.EXPECT().GarbageCollect(ctx, clusterList, mcm),
 			mockClusterAPI.EXPECT().GarbageCollectBuilds(ctx, mcm),
+			mockMW.EXPECT().GetOwnedManifestWorks(ctx, mcm).Return(&manifestWorkList, nil),
+			mockSU.EXPECT().ManagedClusterModuleUpdateStatus(ctx, &mcm, manifestWorkList.Items).Return(nil),
 		)
 
-		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, nil)
+		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, mockSU, nil)
 
 		res, err := mr.Reconcile(context.Background(), req)
 		Expect(err).NotTo(HaveOccurred())
@@ -311,6 +382,8 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			},
 		}
 
+		manifestWorkList := workv1.ManifestWorkList{}
+
 		mw := workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      mcm.Name,
@@ -330,9 +403,11 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			clnt.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()),
 			mockMW.EXPECT().GarbageCollect(ctx, clusterList, mcm),
 			mockClusterAPI.EXPECT().GarbageCollectBuilds(ctx, mcm),
+			mockMW.EXPECT().GetOwnedManifestWorks(ctx, mcm).Return(&manifestWorkList, nil),
+			mockSU.EXPECT().ManagedClusterModuleUpdateStatus(ctx, &mcm, manifestWorkList.Items).Return(nil),
 		)
 
-		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, nil)
+		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, mockSU, nil)
 
 		res, err := mr.Reconcile(context.Background(), req)
 		Expect(err).NotTo(HaveOccurred())

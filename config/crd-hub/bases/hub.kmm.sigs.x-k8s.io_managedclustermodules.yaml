@@ -2412,6 +2412,24 @@ spec:
           status:
             description: ManagedClusterModuleStatus defines the observed state of
               ManagedClusterModule.
+            properties:
+              numberApplied:
+                description: Number of ManifestWorks that have been successfully applied.
+                format: int32
+                type: integer
+              numberDegraded:
+                description: Number of ManifestWorks that could not be successfully
+                  applied.
+                format: int32
+                type: integer
+              numberDesired:
+                description: Number of ManifestWorks to be applied.
+                format: int32
+                type: integer
+            required:
+            - numberApplied
+            - numberDegraded
+            - numberDesired
             type: object
         type: object
     served: true

@@ -89,7 +89,66 @@ var _ = Describe("GarbageCollect", func() {
 		err := mwc.GarbageCollect(context.Background(), clusterList, mcm)
 		Expect(err).NotTo(HaveOccurred())
 	})
+})
 
+var _ = Describe("GetOwnedManifestWorks", func() {
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+	})
+
+	ctx := context.Background()
+
+	It("should work as expected", func() {
+		mcm := hubv1beta1.ManagedClusterModule{
+			Spec: hubv1beta1.ManagedClusterModuleSpec{
+				ModuleSpec: kmmv1beta1.ModuleSpec{
+					Selector: map[string]string{"key": "value"},
+				},
+			},
+		}
+
+		clusterList := clusterv1.ManagedClusterList{
+			Items: []clusterv1.ManagedCluster{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "default",
+						Labels: map[string]string{"key": "value"},
+					},
+				},
+			},
+		}
+
+		mw := workv1.ManifestWork{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: clusterList.Items[0].Name,
+				Labels: map[string]string{
+					constants.ManagedClusterModuleNameLabel: mcm.Name,
+				},
+			},
+		}
+
+		manifestWorkList := workv1.ManifestWorkList{
+			Items: []workv1.ManifestWork{mw},
+		}
+
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *workv1.ManifestWorkList, _ ...interface{}) error {
+					list.Items = manifestWorkList.Items
+					return nil
+				},
+			),
+		)
+
+		mwc := NewCreator(clnt, scheme)
+
+		ownedManifestWorks, err := mwc.GetOwnedManifestWorks(context.Background(), mcm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ownedManifestWorks.Items).NotTo(BeEmpty())
+		Expect(ownedManifestWorks.Items).To(Equal(manifestWorkList.Items))
+	})
 })
 
 var _ = Describe("SetManifestWorkAsDesired", func() {
