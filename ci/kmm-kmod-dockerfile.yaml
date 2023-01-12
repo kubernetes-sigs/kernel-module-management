@@ -17,6 +17,8 @@ data:
 
     WORKDIR /usr/src
 
+    RUN grep super-secret-value /run/secrets/build-secret/ci-build-secret
+
     RUN git clone https://github.com/kubernetes-sigs/kernel-module-management.git
 
     WORKDIR /usr/src/kernel-module-management/ci/kmm-kmod

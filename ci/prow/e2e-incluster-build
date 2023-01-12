@@ -29,9 +29,6 @@ POD_NAME=$(kubectl get pods -o json | jq -r '.items[].metadata.name | select(.? 
 # we can't exec a command nor get the logs on a pod that isn't `Running` yet.
 kubectl wait pod/${POD_NAME} --for jsonpath='{.status.phase}'=Running --timeout=60s
 
-# Check that the build secret is available to the build pod
-timeout 1m bash -c "until kubectl exec ${POD_NAME} -- grep super-secret-value /run/secrets/build-secret/ci-build-secret; do sleep 3; done"
-
 # The build job/pod is deleted once done so we won't be able to get this info later on in the troubleshooting section.
 echo "Print the build logs..."
 kubectl logs pod/${POD_NAME} -f
