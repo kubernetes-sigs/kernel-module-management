@@ -9,8 +9,9 @@ const (
 	JobHashAnnotation    = "kmm.node.kubernetes.io/last-hash"
 	KernelLabel          = "kmm.node.kubernetes.io/kernel-version.full"
 
-	ManagedClusterModuleNameLabel = "kmm.node.kubernetes.io/managedclustermodule.name"
-	DockerfileCMKey               = "dockerfile"
-	PublicSignDataKey             = "cert"
-	PrivateSignDataKey            = "key"
+	ManagedClusterModuleNameLabel  = "kmm.node.kubernetes.io/managedclustermodule.name"
+	KernelVersionsClusterClaimName = "kernel-versions.kmm.node.kubernetes.io"
+	DockerfileCMKey                = "dockerfile"
+	PublicSignDataKey              = "cert"
+	PrivateSignDataKey             = "key"
 )

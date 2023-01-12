@@ -16,6 +16,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -195,7 +196,7 @@ var _ = Describe("ClusterAPI", func() {
 						Status: clusterv1.ManagedClusterStatus{
 							ClusterClaims: []clusterv1.ManagedClusterClaim{
 								{
-									Name:  clusterClaimName,
+									Name:  constants.KernelVersionsClusterClaimName,
 									Value: kernelVersion,
 								},
 							},
@@ -300,7 +301,7 @@ var _ = Describe("ClusterAPI", func() {
 						Status: clusterv1.ManagedClusterStatus{
 							ClusterClaims: []clusterv1.ManagedClusterClaim{
 								{
-									Name:  clusterClaimName,
+									Name:  constants.KernelVersionsClusterClaimName,
 									Value: kernelVersion,
 								},
 							},
@@ -371,7 +372,7 @@ var _ = Describe("ClusterAPI", func() {
 						Status: clusterv1.ManagedClusterStatus{
 							ClusterClaims: []clusterv1.ManagedClusterClaim{
 								{
-									Name:  clusterClaimName,
+									Name:  constants.KernelVersionsClusterClaimName,
 									Value: kernelVersion,
 								},
 							},
@@ -443,7 +444,7 @@ var _ = Describe("ClusterAPI", func() {
 						Status: clusterv1.ManagedClusterStatus{
 							ClusterClaims: []clusterv1.ManagedClusterClaim{
 								{
-									Name:  clusterClaimName,
+									Name:  constants.KernelVersionsClusterClaimName,
 									Value: kernelVersion,
 								},
 							},
@@ -514,7 +515,7 @@ var _ = Describe("ClusterAPI", func() {
 						Status: clusterv1.ManagedClusterStatus{
 							ClusterClaims: []clusterv1.ManagedClusterClaim{
 								{
-									Name:  clusterClaimName,
+									Name:  constants.KernelVersionsClusterClaimName,
 									Value: kernelVersion,
 								},
 							},
@@ -586,7 +587,7 @@ var _ = Describe("ClusterAPI", func() {
 						Status: clusterv1.ManagedClusterStatus{
 							ClusterClaims: []clusterv1.ManagedClusterClaim{
 								{
-									Name:  clusterClaimName,
+									Name:  constants.KernelVersionsClusterClaimName,
 									Value: kernelVersion,
 								},
 							},
@@ -658,7 +659,7 @@ var _ = Describe("ClusterAPI", func() {
 						Status: clusterv1.ManagedClusterStatus{
 							ClusterClaims: []clusterv1.ManagedClusterClaim{
 								{
-									Name:  clusterClaimName,
+									Name:  constants.KernelVersionsClusterClaimName,
 									Value: kernelVersion,
 								},
 							},
@@ -730,7 +731,7 @@ var _ = Describe("ClusterAPI", func() {
 						Status: clusterv1.ManagedClusterStatus{
 							ClusterClaims: []clusterv1.ManagedClusterClaim{
 								{
-									Name:  clusterClaimName,
+									Name:  constants.KernelVersionsClusterClaimName,
 									Value: kernelVersion,
 								},
 							},
