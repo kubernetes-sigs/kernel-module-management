@@ -9,20 +9,25 @@ func MakeSecretVolume(secretRef *v1.LocalObjectReference, key string, path strin
 		return v1.Volume{}
 	}
 
-	return v1.Volume{
+	vol := v1.Volume{
 		Name: volumeNameFromSecretRef(*secretRef),
 		VolumeSource: v1.VolumeSource{
 			Secret: &v1.SecretVolumeSource{
 				SecretName: secretRef.Name,
-				Items: []v1.KeyToPath{
-					{
-						Key:  key,
-						Path: path,
-					},
-				},
 			},
 		},
 	}
+
+	if key != "" {
+		vol.VolumeSource.Secret.Items = []v1.KeyToPath{
+			{
+				Key:  key,
+				Path: path,
+			},
+		}
+	}
+
+	return vol
 }
 
 func MakeSecretVolumeMount(secretRef *v1.LocalObjectReference, mountPath string) v1.VolumeMount {

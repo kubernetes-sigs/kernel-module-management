@@ -161,6 +161,7 @@ var _ = Describe("MakeJobTemplate", func() {
 									"-key", "/signingkey/key.priv",
 									"-cert", "/signingcert/public.der",
 									"-filestosign", filesToSign,
+									"-secretdir", "/docker_config/",
 								},
 								VolumeMounts: []v1.VolumeMount{secretMount, certMount},
 							},
@@ -175,14 +176,14 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 		if imagePullSecret != nil {
 			mod.Spec.ImageRepoSecret = imagePullSecret
-			expected.Spec.Template.Spec.Containers[0].Args = append(expected.Spec.Template.Spec.Containers[0].Args, "-pullsecret")
-			expected.Spec.Template.Spec.Containers[0].Args = append(expected.Spec.Template.Spec.Containers[0].Args, "/docker_config/config.json")
+			//expected.Spec.Template.Spec.Containers[0].Args = append(expected.Spec.Template.Spec.Containers[0].Args, "-secretdir")
+			//expected.Spec.Template.Spec.Containers[0].Args = append(expected.Spec.Template.Spec.Containers[0].Args, "/docker_config/")
 			expected.Spec.Template.Spec.Containers[0].VolumeMounts =
 				append(expected.Spec.Template.Spec.Containers[0].VolumeMounts,
 					v1.VolumeMount{
 						Name:      "secret-pull-push-secret",
 						ReadOnly:  true,
-						MountPath: "/docker_config",
+						MountPath: "/docker_config/pull-push-secret",
 					},
 				)
 
@@ -193,12 +194,6 @@ var _ = Describe("MakeJobTemplate", func() {
 						VolumeSource: v1.VolumeSource{
 							Secret: &v1.SecretVolumeSource{
 								SecretName: "pull-push-secret",
-								Items: []v1.KeyToPath{
-									{
-										Key:  v1.DockerConfigJsonKey,
-										Path: "config.json",
-									},
-								},
 							},
 						},
 					},

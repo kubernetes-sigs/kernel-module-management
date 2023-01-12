@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mitchellh/hashstructure"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +21,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
-	"github.com/mitchellh/hashstructure"
 )
 
 //go:generate mockgen -source=signer.go -package=signjob -destination=mock_signer.go
@@ -64,7 +64,7 @@ func NewSigner(
 	}
 }
 
-func (m *signer) MakeJobTemplate(
+func (s *signer) MakeJobTemplate(
 	ctx context.Context,
 	mod kmmv1beta1.Module,
 	km kmmv1beta1.KernelMapping,
@@ -74,7 +74,7 @@ func (m *signer) MakeJobTemplate(
 	pushImage bool,
 	owner metav1.Object) (*batchv1.Job, error) {
 
-	signConfig, err := m.helper.GetRelevantSign(mod.Spec, km, targetKernel)
+	signConfig, err := s.helper.GetRelevantSign(mod.Spec, km, targetKernel)
 	if err != nil {
 		return nil, fmt.Errorf("calculate the signing parameters: %v", err)
 	}
@@ -126,10 +126,11 @@ func (m *signer) MakeJobTemplate(
 		utils.MakeSecretVolumeMount(signConfig.KeySecret, "/signingkey"),
 	}
 
-	if mod.Spec.ImageRepoSecret != nil {
-		args = append(args, "-pullsecret", "/docker_config/config.json")
-		volumes = append(volumes, utils.MakeSecretVolume(mod.Spec.ImageRepoSecret, v1.DockerConfigJsonKey, "config.json"))
-		volumeMounts = append(volumeMounts, utils.MakeSecretVolumeMount(mod.Spec.ImageRepoSecret, "/docker_config"))
+	args = append(args, "-secretdir", "/docker_config/")
+	imageSecret := mod.Spec.ImageRepoSecret
+	if imageSecret != nil {
+		volumes = append(volumes, utils.MakeSecretVolume(imageSecret, "", ""))
+		volumeMounts = append(volumeMounts, utils.MakeSecretVolumeMount(imageSecret, "/docker_config/"+imageSecret.Name))
 	}
 
 	specTemplate := v1.PodTemplateSpec{
@@ -148,7 +149,7 @@ func (m *signer) MakeJobTemplate(
 		},
 	}
 
-	specTemplateHash, err := m.getHashAnnotationValue(ctx, signConfig.KeySecret.Name, signConfig.CertSecret.Name, mod.Namespace, &specTemplate)
+	specTemplateHash, err := s.getHashAnnotationValue(ctx, signConfig.KeySecret.Name, signConfig.CertSecret.Name, mod.Namespace, &specTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("could not hash job's definitions: %v", err)
 	}
@@ -166,7 +167,7 @@ func (m *signer) MakeJobTemplate(
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(owner, job, m.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(owner, job, s.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner reference: %v", err)
 	}
 
