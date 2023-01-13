@@ -176,8 +176,6 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 		if imagePullSecret != nil {
 			mod.Spec.ImageRepoSecret = imagePullSecret
-			//expected.Spec.Template.Spec.Containers[0].Args = append(expected.Spec.Template.Spec.Containers[0].Args, "-secretdir")
-			//expected.Spec.Template.Spec.Containers[0].Args = append(expected.Spec.Template.Spec.Containers[0].Args, "/docker_config/")
 			expected.Spec.Template.Spec.Containers[0].VolumeMounts =
 				append(expected.Spec.Template.Spec.Containers[0].VolumeMounts,
 					v1.VolumeMount{
