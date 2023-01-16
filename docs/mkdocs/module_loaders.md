@@ -1,4 +1,4 @@
-# How to build module-loaders to be used by KMMO
+# Building a module-loader
 
 ### Pre-build module-loaders
 
