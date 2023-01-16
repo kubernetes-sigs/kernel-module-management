@@ -97,7 +97,8 @@ Note: if Sign section is defined for the upgraded kernel, then the resulting ima
 since the resulting image should be the product of Sign flow
 
 ### Sign validation stage
-Sign validation is executed only in case image validation has failed, there is a Sign section in the Module that is relevent for the upgrade kernel, and build validation finished successfully in case there was a Build section in the Module relevent for the upgraded kernel. Sign validation will try to run sign job and validate that it finishes successfully. In case "Push" flag is defined in the Preflight CR, it will also try to push the resulting image into its repo.The result image is always the image defined in the ContainerImage field of the Module. The input image is either the output of the Build stage, or an image defined in the UnsignedImage field
+Sign validation is executed only in case image validation has failed, there is a Sign section in the Module that is relevent for the upgrade kernel, and build validation finished successfully in case there was a Build section in the Module relevent for the upgraded kernel. Sign validation will try to run sign job and validate that it finishes successfully. In case "Push" flag is defined in the Preflight CR, it will also try to push the resulting image into its repo.The result image is always the image defined in the ContainerImage field of the Module. The input image is either the output of the Build stage, or an image defined in the UnsignedImage field.
+Note: in case Build section exists, Sign section input image is the Build's section output image. Therefore, in order for the input image to be available for the Sign section, the "Push" flag must be defined in the preflight CR
 
 
 ### Example CR
