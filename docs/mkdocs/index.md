@@ -5,6 +5,7 @@ Kernel Module Management optionally builds and runs DriverContainers on Kubernet
 ## Getting started
 
 Install the bleeding edge version of the KMM Operator by running the following command:
-```shell
+
+```bash
 kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default
 ```
