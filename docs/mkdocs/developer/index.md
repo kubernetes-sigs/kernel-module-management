@@ -1,18 +1,21 @@
 # Design notes
 
 Kernel Module Management brings a new `Module` CRD.
-`Module` represents an out-of-tree kernel module that must be inserted into the cluster nodes’ kernel through a
-DriverContainer scheduled by a `DaemonSet`.
+
+`Module` represents an out-of-tree kernel module that must be inserted into the cluster nodes’ kernel through a `ModuleLoader` scheduled by a `DaemonSet`.
 
 KMM optionally builds and runs DriverContainers on the cluster.
-It picks the right DriverContainer image by leveraging kernel mappings in the `Module` CRD that describe which image
-should be used for which kernel.
+
+It picks the right `ModuleLoader` image by leveraging kernel mappings in the `Module` CRD that describe which image should be used for which kernel.
 
 A kernel mapping maps either a literal kernel name or a regex with a kernel’s node.
+
 This allows for more flexibility when targeting a set of kernels (e.g. “for Ubuntu nodes, build from that repository”).
+
 Variables available at build time still reflect the actual kernel version.
 
 ## `Module` CRD
+
 ```yaml
 apiVersion: ooto.sigs.k8s.io/v1alpha1
 kind: Module
@@ -57,7 +60,7 @@ spec:
           FROM some-image
           RUN some-command
       containerImage: quay.io/vendor/module-sample:gke
-  selector:  # top-level selector
+  selector: # top-level selector
     feature.node.kubernetes.io/cpu-cpuid.VMX: true
 status:
   conditions:
@@ -70,29 +73,31 @@ status:
 ```
 
 ## In-cluster builds
+
 Virtually any Kubernetes distribution ships with its own kernel.
 It is thus challenging for a kernel module vendor to make DriverContainer images available for all kernels available
 in all Kubernetes distributions out there (or even for a subset of them).
 
-KMM supports in-cluster builds of DriverContainer images when those are not made available by the vendor.
-The in-cluster build system is able to build an image from any Git repository that contains a `Dockerfile`.
-It can then push said image to a user-provided repository, optionally using authentication provided in a Kubernetes secret.
+KMM supports in-cluster builds of DriverContainer images when those are not made available by the vendor. The in-cluster build system is able to build an image from any Git repository that contains a `Dockerfile`. It can then push said image to a user-provided repository, optionally using authentication provided in a Kubernetes secret.
 
-**Optional:** on upstream Kubernetes, we may want to deploy an in-cluster registry to host in-cluster built images.  
+**Optional:** on upstream Kubernetes, we may want to deploy an in-cluster registry to host in-cluster built images.
+
 **On OCP**, the build mechanism would be BuildConfig (maybe Shipwright in the future) and we can leverage the
 integrated in-cluster registry.
 
 ## Unloading modules
-Users must provide a [preStop lifecycle hook](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/)
-to their DriverContainer pod template to make sure that their module is unloaded when the DriverContainer pod exits.
+
+Users must provide a [preStop lifecycle hook](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/) to their DriverContainer pod template to make sure that their module is unloaded when the DriverContainer pod exits.
 
 ## Security
 
 ### DriverContainer privileges
+
 By default, the operator would only grant the [`CAP_SYS_MODULE`](https://man7.org/linux/man-pages/man7/capabilities.7.html)
 capability to DriverContainer `DaemonSets`.
 
 ### Kubernetes API privileges
+
 The KMM Operator would only be granted a limited set of Kubernetes API privileges:
 
 - Read, modify (for kernel version labeling) and watch `Nodes`;

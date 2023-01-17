@@ -10,13 +10,12 @@ On a secure-boot enabled system all kernel modules (kmods) must be signed with a
 
 To use this functionality you need:
 
- * A public private key pair in the correct (der) format
- * At least one secure-boot enabled nodes with the public key enrolled in its MOK database
- * Either a pre-built driver container image, or the source code and dockerfile needed to build one in-cluster.
+- A public private key pair in the correct (der) format
+- At least one secure-boot enabled nodes with the public key enrolled in its MOK database
+- Either a pre-built driver container image, or the source code and dockerfile needed to build one in-cluster.
 
 If you have a pre-built image, such as one distributed by a hardware vendor, or already built elsewhere please see the [Signing](secureboot-signing.md) docs for signing with KMM.
 
 Alternatively if you have source code and need to build your image first, please see the [Build and Sign](secureboot-build-and-sign.md) docs for deploying with KMM.
 
 If all goes well KMM should load your driver into the nodes kernel. If not see the list of [Common Issues](debugging.md)
-
