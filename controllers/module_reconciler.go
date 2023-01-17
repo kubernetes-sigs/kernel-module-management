@@ -412,6 +412,14 @@ func (r *ModuleReconciler) garbageCollect(ctx context.Context,
 
 	logger.Info("Garbage-collected Build objects", "names", deleted)
 
+	// Garbage collect for successfully finished sign jobs
+	deleted, err = r.signAPI.GarbageCollect(ctx, mod.Name, mod.Namespace, mod)
+	if err != nil {
+		return fmt.Errorf("could not garbage collect sign objects: %v", err)
+	}
+
+	logger.Info("Garbage-collected Sign objects", "names", deleted)
+
 	return nil
 }
 
