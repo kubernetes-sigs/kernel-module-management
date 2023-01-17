@@ -12,6 +12,8 @@ import (
 //go:generate mockgen -source=manager.go -package=sign -destination=mock_manager.go
 
 type SignManager interface {
+	GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error)
+
 	ShouldSync(
 		ctx context.Context,
 		mod kmmv1beta1.Module,

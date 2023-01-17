@@ -35,6 +35,25 @@ func NewSignJobManager(
 	}
 }
 
+func (jbm *signJobManager) GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error) {
+	jobs, err := jbm.jobHelper.GetModuleJobs(ctx, modName, namespace, utils.JobTypeSign, owner)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sign jobs for module %s: %v", modName, err)
+	}
+
+	deleteNames := make([]string, 0, len(jobs))
+	for _, job := range jobs {
+		if job.Status.Succeeded == 1 {
+			err = jbm.jobHelper.DeleteJob(ctx, &job)
+			if err != nil {
+				return nil, fmt.Errorf("failed to delete build job %s: %v", job.Name, err)
+			}
+			deleteNames = append(deleteNames, job.Name)
+		}
+	}
+	return deleteNames, nil
+}
+
 func (jbm *signJobManager) ShouldSync(
 	ctx context.Context,
 	mod kmmv1beta1.Module,

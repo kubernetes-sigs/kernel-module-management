@@ -37,6 +37,21 @@ func (m *MockSignManager) EXPECT() *MockSignManagerMockRecorder {
 	return m.recorder
 }
 
+// GarbageCollect mocks base method.
+func (m *MockSignManager) GarbageCollect(ctx context.Context, modName, namespace string, owner v1.Object) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GarbageCollect", ctx, modName, namespace, owner)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GarbageCollect indicates an expected call of GarbageCollect.
+func (mr *MockSignManagerMockRecorder) GarbageCollect(ctx, modName, namespace, owner interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockSignManager)(nil).GarbageCollect), ctx, modName, namespace, owner)
+}
+
 // ShouldSync mocks base method.
 func (m_2 *MockSignManager) ShouldSync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping) (bool, error) {
 	m_2.ctrl.T.Helper()

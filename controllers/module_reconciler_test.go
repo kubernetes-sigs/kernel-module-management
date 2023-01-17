@@ -144,6 +144,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
+			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
 		)
 
@@ -199,6 +200,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
+			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
 		)
 
@@ -264,6 +266,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
+			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
 		)
 
@@ -363,6 +366,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.ModuleLoaderStage, false),
 			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
+			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
 		)
 
@@ -475,6 +479,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 				}),
 			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
+			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
 		)
 
@@ -555,6 +560,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, "", metrics.DevicePluginStage, false),
 			mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString()),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
+			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, nil).Return(nil),
 		)
 
