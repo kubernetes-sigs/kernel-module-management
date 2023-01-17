@@ -9,16 +9,17 @@ spec:
         moduleName: kmm-ci-a 
 
       kernelMappings:
-        - regexp: '^.+.amzn2' 
+        - regexp: '^.+.amzn2'
           containerImage: <aws-account-id>.dkr.ecr.<aws-region>.amazonaws.com/kmmo-lab:kmm-2.3
           build:
             buildArgs:
               - name: CI_BUILD_ARG
                 value: some-build-arg
             dockerfileConfigMap:
-              name: build-module 
+              name: build-module
+
   imageRepoSecret: 
     name: aws-repo-secret
-  selector:  
+  selector:
     kubernetes.io/hostname: ip-192-168-13-20.eu-west-3.compute.internal
 

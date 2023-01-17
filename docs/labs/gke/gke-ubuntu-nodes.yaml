@@ -18,7 +18,7 @@ spec:
             dockerfileConfigMap:
               name: build-module 
             
-  imageRepoSecret: 
+  imageRepoSecret:
     name: gcr-repo-secret
   selector:
     kubernetes.io/hostname: gke-kmmo-lab-cluster-default-pool-073f8f9f-9z5s 

@@ -6,15 +6,16 @@ spec:
   moduleLoader:
     container:
       modprobe:
-        moduleName: kmm-ci-a 
+        moduleName: kmm-ci-a
 
       kernelMappings:
         - regexp: '^.+.azure$'
           containerImage: myrepo/myproject/kmmo:2.2.1-azure
           build:
             dockerfileConfigMap:
-              name: build-module 
-  imageRepoSecret: 
+              name: build-module
+
+  imageRepoSecret:
       name: azure-repo-secret
   selector:  
     kubernetes.io/hostname: aks-agentpool-23492437-vmss000000

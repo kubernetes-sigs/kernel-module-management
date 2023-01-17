@@ -3,7 +3,7 @@ kind: Module
 metadata:
   name: kmm-ci-a
 spec:
-  driverContainer:
+  moduleLoader:
     container:
       modprobe:
         moduleName: kmm-ci-a 
@@ -15,7 +15,8 @@ spec:
             dockerfileConfigMap: 
               name: build-module
 
-    imageRepoSecret: 
-      name: my-repo-secret   
+  imageRepoSecret:
+    name: my-repo-secret
+
   selector:  
     kubernetes.io/hostname: worker2
