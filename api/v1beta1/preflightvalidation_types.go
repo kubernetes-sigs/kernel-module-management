@@ -35,7 +35,7 @@ const (
 // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 // +kubebuilder:validation:Required
 type PreflightValidationSpec struct {
-	// KernelImage describes the kernel image that all Modules need to be checked against.
+	// KernelVersion describes the kernel image that all Modules need to be checked against.
 	// +kubebuilder:validation:Required
 	KernelVersion string `json:"kernelVersion"`
 
