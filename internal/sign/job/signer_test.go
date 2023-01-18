@@ -148,7 +148,8 @@ var _ = Describe("MakeJobTemplate", func() {
 				},
 			},
 			Spec: batchv1.JobSpec{
-				Completions: pointer.Int32(1),
+				Completions:  pointer.Int32(1),
+				BackoffLimit: pointer.Int32(0),
 				Template: v1.PodTemplateSpec{
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{
@@ -167,7 +168,7 @@ var _ = Describe("MakeJobTemplate", func() {
 							},
 						},
 						NodeSelector:  nodeSelector,
-						RestartPolicy: v1.RestartPolicyOnFailure,
+						RestartPolicy: v1.RestartPolicyNever,
 
 						Volumes: []v1.Volume{keysecret, certsecret},
 					},
