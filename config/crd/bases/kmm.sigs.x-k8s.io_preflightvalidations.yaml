@@ -41,7 +41,7 @@ spec:
               against as well as the debug configuration of the logs More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status'
             properties:
               kernelVersion:
-                description: KernelImage describes the kernel image that all Modules
+                description: KernelVersion describes the kernel image that all Modules
                   need to be checked against.
                 type: string
               pushBuiltImage:
