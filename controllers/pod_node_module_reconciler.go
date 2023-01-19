@@ -77,7 +77,11 @@ func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if !pod.DeletionTimestamp.IsZero() {
 			logger.Info("Pod deletion requested; removing finalizer")
 
-			if err := pnmr.deleteFinalizer(ctx, &pod); err != nil {
+			// the Pod finalizer update API call can return a NotFound error, which indicates that
+			// the specified Pod has already been deleted. By ignoring NotFound errors we ensure
+			// that no additional, unnecessary reconciliation request will be queued (since a
+			// reconciliation result with a non-nil error will be requeued).
+			if err := pnmr.deleteFinalizer(ctx, &pod); client.IgnoreNotFound(err) != nil {
 				return ctrl.Result{}, fmt.Errorf("could not delete the pod finalizer: %v", err)
 			}
 		}
