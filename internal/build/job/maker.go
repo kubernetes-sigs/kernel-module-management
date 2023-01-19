@@ -105,8 +105,9 @@ func (m *maker) MakeJobTemplate(
 			Annotations:  map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
 		},
 		Spec: batchv1.JobSpec{
-			Completions: pointer.Int32(1),
-			Template:    specTemplate,
+			Completions:  pointer.Int32(1),
+			BackoffLimit: pointer.Int32(0),
+			Template:     specTemplate,
 		},
 	}
 
@@ -146,7 +147,7 @@ func (m *maker) specTemplate(
 				},
 			},
 			NodeSelector:  modSpec.Selector,
-			RestartPolicy: v1.RestartPolicyOnFailure,
+			RestartPolicy: v1.RestartPolicyNever,
 			Volumes:       volumes(modSpec, buildConfig),
 		},
 	}
