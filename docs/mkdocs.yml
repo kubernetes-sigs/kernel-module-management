@@ -20,6 +20,8 @@ nav:
       - developer/index.md
       - developer/use_cases.md
       - developer/reconciliation_loops.md
+  - Integration:
+      - integration/hub-spoke.md
 
 plugins:
   - exclude:
