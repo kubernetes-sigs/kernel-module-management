@@ -5,4 +5,5 @@ docs: bin/plantuml.jar
 
 bin/plantuml.jar:
 	mkdir -p bin
-	curl -Lo $@ https://sourceforge.net/projects/plantuml/files/1.2022.2/plantuml.1.2022.2.jar/download
+	# TODO: Seems that SF is showing updated one, but no download of the previous one we were using: curl -Lo $@ https://sourceforge.net/projects/plantuml/files/1.2022.2/plantuml.1.2022.2.jar/download
+	curl -Lo $@ https://sourceforge.net/projects/plantuml/files/1.2021.9/plantuml-nodot.1.2021.9.jar/download
