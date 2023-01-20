@@ -142,7 +142,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.New[string]()),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
@@ -198,7 +198,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.New[string]()),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
@@ -264,7 +264,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString()),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.New[string]()),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, dsByKernelVersion).Return(nil),
@@ -364,7 +364,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.ModuleLoaderStage, false),
-			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.New[string](kernelVersion)),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
@@ -477,7 +477,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 				func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ kmmv1beta1.Module, _ string) {
 					d.SetLabels(map[string]string{"test": "test"})
 				}),
-			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.NewString(kernelVersion)),
+			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.New[string](kernelVersion)),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, nodeList.Items, nodeList.Items, dsByKernelVersion).Return(nil),
@@ -558,7 +558,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockDC.EXPECT().SetDevicePluginAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&mod)),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, "", metrics.DevicePluginStage, false),
-			mockDC.EXPECT().GarbageCollect(ctx, nil, sets.NewString()),
+			mockDC.EXPECT().GarbageCollect(ctx, nil, sets.New[string]()),
 			mockBM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSM.EXPECT().GarbageCollect(ctx, mod.Name, mod.Namespace, &mod),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, []v1.Node{}, []v1.Node{}, nil).Return(nil),

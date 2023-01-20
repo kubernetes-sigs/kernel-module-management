@@ -3,7 +3,7 @@ name: e2e
 on: [pull_request]
 
 env:
-  GO_VERSION: 1.18
+  GO_VERSION: 1.19
 
 jobs:
 

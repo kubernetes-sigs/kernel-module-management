@@ -36,7 +36,7 @@ type ManagedClusterModuleStatusUpdater interface {
 
 type PreflightStatusUpdater interface {
 	PreflightPresetStatuses(ctx context.Context, pv *kmmv1beta1.PreflightValidation,
-		existingModules sets.String, newModules []string) error
+		existingModules sets.Set[string], newModules []string) error
 	PreflightSetVerificationStatus(ctx context.Context, preflight *kmmv1beta1.PreflightValidation, moduleName string,
 		verificationStatus string, message string) error
 	PreflightSetVerificationStage(ctx context.Context, preflight *kmmv1beta1.PreflightValidation,
@@ -132,9 +132,9 @@ func (m *managedClusterModuleStatusUpdater) ManagedClusterModuleUpdateStatus(ctx
 }
 
 func (p *preflightStatusUpdater) PreflightPresetStatuses(ctx context.Context,
-	pv *kmmv1beta1.PreflightValidation, existingModules sets.String, newModules []string) error {
+	pv *kmmv1beta1.PreflightValidation, existingModules sets.Set[string], newModules []string) error {
 
-	modulesInStatus := sets.StringKeySet(pv.Status.CRStatuses)
+	modulesInStatus := sets.KeySet[string](pv.Status.CRStatuses)
 	modulesToDelete := modulesInStatus.Difference(existingModules).UnsortedList()
 	for _, moduleName := range modulesToDelete {
 		delete(pv.Status.CRStatuses, moduleName)

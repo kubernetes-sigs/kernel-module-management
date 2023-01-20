@@ -39,7 +39,7 @@ func (m *MockDaemonSetCreator) EXPECT() *MockDaemonSetCreatorMockRecorder {
 }
 
 // GarbageCollect mocks base method.
-func (m *MockDaemonSetCreator) GarbageCollect(ctx context.Context, existingDS map[string]*v1.DaemonSet, validKernels sets.String) ([]string, error) {
+func (m *MockDaemonSetCreator) GarbageCollect(ctx context.Context, existingDS map[string]*v1.DaemonSet, validKernels sets.Set[string]) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GarbageCollect", ctx, existingDS, validKernels)
 	ret0, _ := ret[0].([]string)

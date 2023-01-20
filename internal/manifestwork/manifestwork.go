@@ -73,7 +73,7 @@ func (mwg *manifestWorkGenerator) GarbageCollect(ctx context.Context, clusters c
 		return fmt.Errorf("failed to get owned ManifestWorks: %w", err)
 	}
 
-	clusterNames := sets.String{}
+	clusterNames := sets.New[string]()
 	for _, cluster := range clusters.Items {
 		clusterNames.Insert(cluster.Name)
 	}
