@@ -29,26 +29,26 @@ That DaemonSet will target nodes:
 
 The `Module` Custom Resource Definition represents a kernel module that should be loaded on all or select nodes in the
 cluster, through a ModuleLoader image.
-A Module specifies one or more kernel versions it is compatible, as well as a node selector.
+A Module specifies one or more kernel versions it is compatible with, as well as a node selector.
 
 The compatible versions for a `Module` are listed under `.spec.moduleLoader.container.kernelMappings`.
 A kernel mapping can either match a `literal` version, or use `regexp` to match many of them at the same time.
 
 The reconciliation loop for `Module` runs the following steps:
 
-- list all nodes matching `.spec.selector`;
-- build a set of all kernel versions running on those nodes;
-- for each kernel version:
-  - go through `.spec.moduleLoader.container.kernelMappings` and find the appropriate container image name.
-    If the kernel mapping has `build` or `sign` defined and the container image does not already exist, run the build
-    and / or signing job as required;
-  - create a ModuleLoader `DaemonSet` with the container image determined at the previous step;
-  - if `.spec.devicePlugin` is defined, create a device plugin `DaemonSet` using the configuration specified under
-    `.spec.devicePlugin.container`;
-- garbage-collect:
-  - existing `DaemonSets` targeting kernel versions that are not run by any node in the cluster;
-  - successful build jobs;
-  - successful signing jobs.
+1. list all nodes matching `.spec.selector`;
+2. build a set of all kernel versions running on those nodes;
+3. for each kernel version:
+    1. go through `.spec.moduleLoader.container.kernelMappings` and find the appropriate container image name.
+       If the kernel mapping has `build` or `sign` defined and the container image does not already exist, run the build
+       and / or signing job as required;
+    2. create a ModuleLoader `DaemonSet` with the container image determined at the previous step;
+    3. if `.spec.devicePlugin` is defined, create a device plugin `DaemonSet` using the configuration specified under
+       `.spec.devicePlugin.container`;
+4. garbage-collect:
+    1. existing `DaemonSets` targeting kernel versions that are not run by any node in the cluster;
+    2. successful build jobs;
+    3. successful signing jobs.
 
 ## Example resource
 

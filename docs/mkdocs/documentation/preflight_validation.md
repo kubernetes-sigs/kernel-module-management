@@ -73,9 +73,9 @@ type CRStatus struct {
 For each module, you will find the following fields:
 
 1. Verification status - true or false, validated or not
-2. Status reason - verbal explanation reagrding the status. Why it is not validated, etc'
+2. Status reason - verbal explanation regarding the status. Why it is not validated, etc'
 3. Verification stage - describe the validation stage being executed (Image, Build, Sign)
-4. Last transition time - the tinme of the last update to the status
+4. Last transition time - the time of the last update to the status
 
 ## Preflight validation stages per Module
 
