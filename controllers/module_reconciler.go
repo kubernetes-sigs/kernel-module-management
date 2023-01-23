@@ -27,7 +27,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/rbac"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -54,36 +53,37 @@ const ModuleReconcilerName = "Module"
 type ModuleReconciler struct {
 	client.Client
 
-	buildAPI         build.Manager
-	signAPI          sign.SignManager
-	rbacAPI          rbac.RBACCreator
-	daemonAPI        daemonset.DaemonSetCreator
-	kernelAPI        module.KernelMapper
-	metricsAPI       metrics.Metrics
-	filter           *filter.Filter
-	statusUpdaterAPI statusupdater.ModuleStatusUpdater
+	buildAPI          build.Manager
+	signAPI           sign.SignManager
+	daemonAPI         daemonset.DaemonSetCreator
+	kernelAPI         module.KernelMapper
+	metricsAPI        metrics.Metrics
+	operatorNamespace string
+	filter            *filter.Filter
+	statusUpdaterAPI  statusupdater.ModuleStatusUpdater
 }
 
 func NewModuleReconciler(
 	client client.Client,
 	buildAPI build.Manager,
 	signAPI sign.SignManager,
-	rbacAPI rbac.RBACCreator,
 	daemonAPI daemonset.DaemonSetCreator,
 	kernelAPI module.KernelMapper,
 	metricsAPI metrics.Metrics,
 	filter *filter.Filter,
-	statusUpdaterAPI statusupdater.ModuleStatusUpdater) *ModuleReconciler {
+	statusUpdaterAPI statusupdater.ModuleStatusUpdater,
+	operatorNamespace string,
+) *ModuleReconciler {
 	return &ModuleReconciler{
-		Client:           client,
-		buildAPI:         buildAPI,
-		signAPI:          signAPI,
-		rbacAPI:          rbacAPI,
-		daemonAPI:        daemonAPI,
-		kernelAPI:        kernelAPI,
-		metricsAPI:       metricsAPI,
-		filter:           filter,
-		statusUpdaterAPI: statusUpdaterAPI,
+		Client:            client,
+		buildAPI:          buildAPI,
+		signAPI:           signAPI,
+		daemonAPI:         daemonAPI,
+		kernelAPI:         kernelAPI,
+		metricsAPI:        metricsAPI,
+		filter:            filter,
+		statusUpdaterAPI:  statusUpdaterAPI,
+		operatorNamespace: operatorNamespace,
 	}
 }
 
@@ -93,7 +93,6 @@ func NewModuleReconciler(
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
 //+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups="core",resources=configmaps,verbs=get;list;watch
-//+kubebuilder:rbac:groups="core",resources=serviceaccounts,verbs=create;delete;get;list;patch;watch
 //+kubebuilder:rbac:groups="batch",resources=jobs,verbs=create;list;watch;delete
 
 // Reconcile lists all nodes and looks for kernels that match its mappings.
@@ -115,17 +114,6 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	r.setKMMOMetrics(ctx)
-
-	if mod.Spec.ModuleLoader.ServiceAccountName == "" {
-		if err := r.rbacAPI.CreateModuleLoaderServiceAccount(ctx, *mod); err != nil {
-			return res, fmt.Errorf("could not create module-loader's ServiceAccount: %w", err)
-		}
-	}
-	if mod.Spec.DevicePlugin != nil && mod.Spec.DevicePlugin.ServiceAccountName == "" {
-		if err := r.rbacAPI.CreateDevicePluginServiceAccount(ctx, *mod); err != nil {
-			return res, fmt.Errorf("could not create device-plugin's ServiceAccount: %w", err)
-		}
-	}
 
 	targetedNodes, err := r.getNodesListBySelector(ctx, mod)
 	if err != nil {
@@ -346,7 +334,7 @@ func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-		return r.daemonAPI.SetDriverContainerAsDesired(ctx, ds, km.ContainerImage, *mod, kernelVersion)
+		return r.daemonAPI.SetDriverContainerAsDesired(ctx, ds, km.ContainerImage, *mod, kernelVersion, mod.Namespace == r.operatorNamespace)
 	})
 
 	if err == nil {
@@ -376,7 +364,7 @@ func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *kmmv1bet
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-		return r.daemonAPI.SetDevicePluginAsDesired(ctx, ds, mod)
+		return r.daemonAPI.SetDevicePluginAsDesired(ctx, ds, mod, mod.Namespace == r.operatorNamespace)
 	})
 
 	if err == nil {
@@ -449,7 +437,6 @@ func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kmmv1beta1.Module{}).
 		Owns(&appsv1.DaemonSet{}).
-		Owns(&v1.ServiceAccount{}).
 		Owns(&batchv1.Job{}).
 		Watches(
 			&source.Kind{Type: &v1.Node{}},

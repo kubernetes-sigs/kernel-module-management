@@ -212,7 +212,7 @@ var _ = Describe("ClusterAPI", func() {
 				mockKM.EXPECT().FindMappingForKernel(mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(nil, errors.New("generic-error")),
 			)
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, "")
+			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
@@ -257,7 +257,7 @@ var _ = Describe("ClusterAPI", func() {
 
 			ctx := context.Background()
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, "")
+			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).To(HaveOccurred())
@@ -279,7 +279,6 @@ var _ = Describe("ClusterAPI", func() {
 					Name: mcmName,
 				},
 				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 							Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -313,7 +312,7 @@ var _ = Describe("ClusterAPI", func() {
 			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcm.Name,
-					Namespace: mcm.Spec.JobNamespace,
+					Namespace: namespace,
 				},
 				Spec: mcm.Spec.ModuleSpec,
 			}
@@ -328,7 +327,7 @@ var _ = Describe("ClusterAPI", func() {
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 			)
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, "")
+			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
@@ -350,7 +349,6 @@ var _ = Describe("ClusterAPI", func() {
 					Name: mcmName,
 				},
 				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 							Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -384,7 +382,7 @@ var _ = Describe("ClusterAPI", func() {
 			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcm.Name,
-					Namespace: mcm.Spec.JobNamespace,
+					Namespace: namespace,
 				},
 				Spec: mcm.Spec.ModuleSpec,
 			}
@@ -400,7 +398,7 @@ var _ = Describe("ClusterAPI", func() {
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 			)
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, "")
+			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
@@ -422,7 +420,6 @@ var _ = Describe("ClusterAPI", func() {
 					Name: mcmName,
 				},
 				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 							Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -456,7 +453,7 @@ var _ = Describe("ClusterAPI", func() {
 			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcm.Name,
-					Namespace: mcm.Spec.JobNamespace,
+					Namespace: namespace,
 				},
 				Spec: mcm.Spec.ModuleSpec,
 			}
@@ -471,7 +468,7 @@ var _ = Describe("ClusterAPI", func() {
 				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(build.Result{}, errors.New("test-error")),
 			)
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, "")
+			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).To(HaveOccurred())
@@ -493,7 +490,6 @@ var _ = Describe("ClusterAPI", func() {
 					Name: mcmName,
 				},
 				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 							Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -527,7 +523,7 @@ var _ = Describe("ClusterAPI", func() {
 			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcm.Name,
-					Namespace: mcm.Spec.JobNamespace,
+					Namespace: namespace,
 				},
 				Spec: mcm.Spec.ModuleSpec,
 			}
@@ -543,7 +539,7 @@ var _ = Describe("ClusterAPI", func() {
 				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm),
 			)
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, "")
+			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
@@ -565,7 +561,6 @@ var _ = Describe("ClusterAPI", func() {
 					Name: mcmName,
 				},
 				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 							Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -599,7 +594,7 @@ var _ = Describe("ClusterAPI", func() {
 			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcm.Name,
-					Namespace: mcm.Spec.JobNamespace,
+					Namespace: namespace,
 				},
 				Spec: mcm.Spec.ModuleSpec,
 			}
@@ -615,7 +610,7 @@ var _ = Describe("ClusterAPI", func() {
 				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm).Return(utils.Result{}, errors.New("test-error")),
 			)
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, "")
+			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).To(HaveOccurred())
@@ -637,7 +632,6 @@ var _ = Describe("ClusterAPI", func() {
 					Name: mcmName,
 				},
 				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					JobNamespace: "test",
 					ModuleSpec: kmmv1beta1.ModuleSpec{
 						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 							Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -671,7 +665,7 @@ var _ = Describe("ClusterAPI", func() {
 			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcm.Name,
-					Namespace: mcm.Spec.JobNamespace,
+					Namespace: namespace,
 				},
 				Spec: mcm.Spec.ModuleSpec,
 			}
@@ -688,14 +682,14 @@ var _ = Describe("ClusterAPI", func() {
 				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm),
 			)
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, "")
+			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
 			Expect(requeue).To(BeFalse())
 		})
 
-		It("should run both build sync and sign sync if needed to the defaultJobNamespace", func() {
+		It("should run both build sync and sign sync", func() {
 			osConfig := module.NodeOSConfig{}
 
 			mappings := []kmmv1beta1.KernelMapping{
@@ -740,12 +734,10 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			defaultJobNamespace := "test-namespace"
-
 			mod := kmmv1beta1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcm.Name,
-					Namespace: defaultJobNamespace,
+					Namespace: namespace,
 				},
 				Spec: mcm.Spec.ModuleSpec,
 			}
@@ -762,7 +754,7 @@ var _ = Describe("ClusterAPI", func() {
 				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm),
 			)
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, defaultJobNamespace)
+			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
@@ -773,12 +765,7 @@ var _ = Describe("ClusterAPI", func() {
 	var _ = Describe("GarbageCollectBuilds", func() {
 		It("should return the deleted build names when garbage collection succeeds", func() {
 			mcm := hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					JobNamespace: "test",
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: mcmName},
 			}
 
 			collectedBuilds := []string{"test-build"}
@@ -786,10 +773,10 @@ var _ = Describe("ClusterAPI", func() {
 			ctx := context.Background()
 
 			gomock.InOrder(
-				mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, mcm.Spec.JobNamespace, &mcm).Return(collectedBuilds, nil),
+				mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(collectedBuilds, nil),
 			)
 
-			c := NewClusterAPI(clnt, nil, mockBM, nil, "")
+			c := NewClusterAPI(clnt, nil, mockBM, nil, namespace)
 
 			collected, err := c.GarbageCollectBuilds(ctx, mcm)
 
@@ -799,50 +786,19 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should return an error when garbage collection fails", func() {
 			mcm := hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					JobNamespace: "test",
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: mcmName},
 			}
 			ctx := context.Background()
 
 			gomock.InOrder(
-				mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, mcm.Spec.JobNamespace, &mcm).Return(nil, errors.New("test")),
+				mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(nil, errors.New("test")),
 			)
 
-			c := NewClusterAPI(clnt, nil, mockBM, nil, "")
+			c := NewClusterAPI(clnt, nil, mockBM, nil, namespace)
 
 			_, err := c.GarbageCollectBuilds(ctx, mcm)
 
 			Expect(err).To(HaveOccurred())
 		})
-
-		It("should use the defaultJobNamespace if the ManagedClusterModule.Spec.JobNamespace is not specified", func() {
-			mcm := hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-			}
-
-			collectedBuilds := []string{"test-build"}
-
-			defaultJobNamespace := "test-namspace"
-
-			ctx := context.Background()
-
-			gomock.InOrder(
-				mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, defaultJobNamespace, &mcm).Return(collectedBuilds, nil),
-			)
-
-			c := NewClusterAPI(clnt, nil, mockBM, nil, defaultJobNamespace)
-
-			collected, err := c.GarbageCollectBuilds(ctx, mcm)
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(collected).To(Equal(collectedBuilds))
-		})
-
 	})
 })

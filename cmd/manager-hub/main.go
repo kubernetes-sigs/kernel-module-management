@@ -17,13 +17,12 @@ limitations under the License.
 package main
 
 import (
-	"errors"
 	"flag"
-	"os"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/controllers/hub"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -123,12 +122,7 @@ func main() {
 	ctrlLogger := setupLogger.WithValues("name", hub.ManagedClusterModuleReconcilerName)
 	ctrlLogger.Info("Adding controller")
 
-	const operatorNamespaceEnvVar = "OPERATOR_NAMESPACE"
-
-	operatorNamespace := os.Getenv(operatorNamespaceEnvVar)
-	if operatorNamespace == "" {
-		cmd.FatalError(ctrlLogger, errors.New("empty value"), "Could not determine the current namespace", "name", operatorNamespace)
-	}
+	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
 
 	mcmr := hub.NewManagedClusterModuleReconciler(
 		client,

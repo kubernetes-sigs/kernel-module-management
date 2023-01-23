@@ -36,10 +36,6 @@ spec:
           spec:
             description: ManagedClusterModuleSpec defines the desired state of ManagedClusterModule
             properties:
-              jobNamespace:
-                description: JobNamespace describes the Hub namespace, to which Build
-                  and Sign Jobs should be deployed.
-                type: string
               moduleSpec:
                 description: ModuleSpec describes how the KMM operator should deploy
                   a Module on those nodes that need it.

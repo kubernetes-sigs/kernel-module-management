@@ -14,4 +14,6 @@ const (
 	DockerfileCMKey                = "dockerfile"
 	PublicSignDataKey              = "cert"
 	PrivateSignDataKey             = "key"
+
+	OperatorNamespaceEnvVar = "OPERATOR_NAMESPACE"
 )

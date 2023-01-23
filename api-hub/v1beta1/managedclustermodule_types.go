@@ -29,9 +29,6 @@ type ManagedClusterModuleSpec struct {
 	// SpokeNamespace describes the Spoke namespace, in which the ModuleSpec should be applied.
 	SpokeNamespace string `json:"spokeNamespace,omitempty"`
 
-	// JobNamespace describes the Hub namespace, to which Build and Sign Jobs should be deployed.
-	JobNamespace string `json:"jobNamespace,omitempty"`
-
 	// Selector describes on which managed clusters the ModuleSpec should be applied.
 	Selector map[string]string `json:"selector"`
 }

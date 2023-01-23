@@ -31,11 +31,11 @@ type ClusterAPI interface {
 }
 
 type clusterAPI struct {
-	client              client.Client
-	kernelAPI           module.KernelMapper
-	buildAPI            build.Manager
-	signAPI             sign.SignManager
-	defaultJobNamespace string
+	client    client.Client
+	kernelAPI module.KernelMapper
+	buildAPI  build.Manager
+	signAPI   sign.SignManager
+	namespace string
 }
 
 func NewClusterAPI(
@@ -45,11 +45,11 @@ func NewClusterAPI(
 	signAPI sign.SignManager,
 	defaultJobNamespace string) ClusterAPI {
 	return &clusterAPI{
-		client:              client,
-		kernelAPI:           kernelAPI,
-		buildAPI:            buildAPI,
-		signAPI:             signAPI,
-		defaultJobNamespace: defaultJobNamespace,
+		client:    client,
+		kernelAPI: kernelAPI,
+		buildAPI:  buildAPI,
+		signAPI:   signAPI,
+		namespace: defaultJobNamespace,
 	}
 }
 
@@ -94,15 +94,10 @@ func (c *clusterAPI) BuildAndSign(
 		return false, err
 	}
 
-	namespace := c.defaultJobNamespace
-	if mcm.Spec.JobNamespace != "" {
-		namespace = mcm.Spec.JobNamespace
-	}
-
 	mod := kmmv1beta1.Module{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mcm.Name,
-			Namespace: namespace,
+			Namespace: c.namespace,
 		},
 		Spec: mcm.Spec.ModuleSpec,
 	}
@@ -127,11 +122,7 @@ func (c *clusterAPI) BuildAndSign(
 }
 
 func (c *clusterAPI) GarbageCollectBuilds(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error) {
-	namespace := c.defaultJobNamespace
-	if mcm.Spec.JobNamespace != "" {
-		namespace = mcm.Spec.JobNamespace
-	}
-	return c.buildAPI.GarbageCollect(ctx, mcm.Name, namespace, &mcm)
+	return c.buildAPI.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm)
 }
 
 func (c *clusterAPI) kernelMappingsByKernelVersion(
