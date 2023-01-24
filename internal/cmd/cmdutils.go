@@ -14,6 +14,15 @@ func FatalError(l logr.Logger, err error, msg string, fields ...interface{}) {
 	os.Exit(1)
 }
 
+func GetEnvOrFatalError(name string, logger logr.Logger) string {
+	val := os.Getenv(name)
+	if val == "" {
+		FatalError(logger, errors.New("empty value"), "Could not get the environment variable", "name", val)
+	}
+
+	return val
+}
+
 func GitCommit() (string, error) {
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {

@@ -83,29 +83,29 @@ func (mr *MockDaemonSetCreatorMockRecorder) ModuleDaemonSetsByKernelVersion(ctx,
 }
 
 // SetDevicePluginAsDesired mocks base method.
-func (m *MockDaemonSetCreator) SetDevicePluginAsDesired(ctx context.Context, ds *v1.DaemonSet, mod *v1beta1.Module) error {
+func (m *MockDaemonSetCreator) SetDevicePluginAsDesired(ctx context.Context, ds *v1.DaemonSet, mod *v1beta1.Module, useDefaultSA bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetDevicePluginAsDesired", ctx, ds, mod)
+	ret := m.ctrl.Call(m, "SetDevicePluginAsDesired", ctx, ds, mod, useDefaultSA)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetDevicePluginAsDesired indicates an expected call of SetDevicePluginAsDesired.
-func (mr *MockDaemonSetCreatorMockRecorder) SetDevicePluginAsDesired(ctx, ds, mod interface{}) *gomock.Call {
+func (mr *MockDaemonSetCreatorMockRecorder) SetDevicePluginAsDesired(ctx, ds, mod, useDefaultSA interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDevicePluginAsDesired", reflect.TypeOf((*MockDaemonSetCreator)(nil).SetDevicePluginAsDesired), ctx, ds, mod)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDevicePluginAsDesired", reflect.TypeOf((*MockDaemonSetCreator)(nil).SetDevicePluginAsDesired), ctx, ds, mod, useDefaultSA)
 }
 
 // SetDriverContainerAsDesired mocks base method.
-func (m *MockDaemonSetCreator) SetDriverContainerAsDesired(ctx context.Context, ds *v1.DaemonSet, image string, mod v1beta1.Module, kernelVersion string) error {
+func (m *MockDaemonSetCreator) SetDriverContainerAsDesired(ctx context.Context, ds *v1.DaemonSet, image string, mod v1beta1.Module, kernelVersion string, useDefaultSA bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetDriverContainerAsDesired", ctx, ds, image, mod, kernelVersion)
+	ret := m.ctrl.Call(m, "SetDriverContainerAsDesired", ctx, ds, image, mod, kernelVersion, useDefaultSA)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetDriverContainerAsDesired indicates an expected call of SetDriverContainerAsDesired.
-func (mr *MockDaemonSetCreatorMockRecorder) SetDriverContainerAsDesired(ctx, ds, image, mod, kernelVersion interface{}) *gomock.Call {
+func (mr *MockDaemonSetCreatorMockRecorder) SetDriverContainerAsDesired(ctx, ds, image, mod, kernelVersion, useDefaultSA interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDriverContainerAsDesired", reflect.TypeOf((*MockDaemonSetCreator)(nil).SetDriverContainerAsDesired), ctx, ds, image, mod, kernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDriverContainerAsDesired", reflect.TypeOf((*MockDaemonSetCreator)(nil).SetDriverContainerAsDesired), ctx, ds, image, mod, kernelVersion, useDefaultSA)
 }

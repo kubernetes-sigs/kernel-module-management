@@ -10,7 +10,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/rbac"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -37,7 +36,6 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		clnt        *client.MockClient
 		mockBM      *build.MockManager
 		mockSM      *sign.MockSignManager
-		mockRC      *rbac.MockRBACCreator
 		mockDC      *daemonset.MockDaemonSetCreator
 		mockKM      *module.MockKernelMapper
 		mockMetrics *metrics.MockMetrics
@@ -49,7 +47,6 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		clnt = client.NewMockClient(ctrl)
 		mockBM = build.NewMockManager(ctrl)
 		mockSM = sign.NewMockSignManager(ctrl)
-		mockRC = rbac.NewMockRBACCreator(ctrl)
 		mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 		mockKM = module.NewMockKernelMapper(ctrl)
 		mockMetrics = metrics.NewMockMetrics(ctrl)
@@ -75,7 +72,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 				apierrors.NewNotFound(schema.GroupResource{}, moduleName),
 			)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 		Expect(
 			mr.Reconcile(ctx, req),
 		).To(
@@ -121,8 +118,6 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 				},
 			),
 			mockMetrics.EXPECT().SetExistingKMMOModules(1),
-			mockRC.EXPECT().CreateModuleLoaderServiceAccount(ctx, gomock.Any()).Return(nil),
-			mockRC.EXPECT().CreateDevicePluginServiceAccount(ctx, gomock.Any()).Return(nil),
 			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
 					list.Items = []v1.Node{}
@@ -131,12 +126,12 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-			mockDC.EXPECT().SetDevicePluginAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&mod)),
+			mockDC.EXPECT().SetDevicePluginAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&mod), true),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, "", metrics.DevicePluginStage, false),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
 
@@ -192,7 +187,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
 
@@ -258,7 +253,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
@@ -323,7 +318,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		dsByKernelVersion := make(map[string]*appsv1.DaemonSet)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		ds := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -361,7 +356,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
 			mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, &mod),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
+			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion, true),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.ModuleLoaderStage, false),
 			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.New[string](kernelVersion)),
@@ -460,7 +455,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
@@ -473,8 +468,8 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, &mod),
 			mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
 			mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, &mod),
-			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
-				func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ kmmv1beta1.Module, _ string) {
+			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion, true).Do(
+				func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ kmmv1beta1.Module, _ string, _ bool) {
 					d.SetLabels(map[string]string{"test": "test"})
 				}),
 			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.New[string](kernelVersion)),
@@ -523,7 +518,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			},
 		}
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		ds := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -555,7 +550,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(nil, nil),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-			mockDC.EXPECT().SetDevicePluginAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&mod)),
+			mockDC.EXPECT().SetDevicePluginAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&mod), true),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, "", metrics.DevicePluginStage, false),
 			mockDC.EXPECT().GarbageCollect(ctx, nil, sets.New[string]()),
@@ -576,7 +571,6 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 		clnt        *client.MockClient
 		mockBM      *build.MockManager
 		mockSM      *sign.MockSignManager
-		mockRC      *rbac.MockRBACCreator
 		mockDC      *daemonset.MockDaemonSetCreator
 		mockKM      *module.MockKernelMapper
 		mockMetrics *metrics.MockMetrics
@@ -588,7 +582,6 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 		clnt = client.NewMockClient(ctrl)
 		mockBM = build.NewMockManager(ctrl)
 		mockSM = sign.NewMockSignManager(ctrl)
-		mockRC = rbac.NewMockRBACCreator(ctrl)
 		mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 		mockKM = module.NewMockKernelMapper(ctrl)
 		mockMetrics = metrics.NewMockMetrics(ctrl)
@@ -613,7 +606,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 			mockBM.EXPECT().ShouldSync(gomock.Any(), *mod, *km).Return(false, nil),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
@@ -640,7 +633,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, false),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res).To(BeTrue())
@@ -666,7 +659,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, true),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 		res, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res).To(BeFalse())
@@ -680,7 +673,6 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 		clnt        *client.MockClient
 		mockBM      *build.MockManager
 		mockSM      *sign.MockSignManager
-		mockRC      *rbac.MockRBACCreator
 		mockDC      *daemonset.MockDaemonSetCreator
 		mockKM      *module.MockKernelMapper
 		mockMetrics *metrics.MockMetrics
@@ -692,7 +684,6 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 		clnt = client.NewMockClient(ctrl)
 		mockBM = build.NewMockManager(ctrl)
 		mockSM = sign.NewMockSignManager(ctrl)
-		mockRC = rbac.NewMockRBACCreator(ctrl)
 		mockDC = daemonset.NewMockDaemonSetCreator(ctrl)
 		mockKM = module.NewMockKernelMapper(ctrl)
 		mockMetrics = metrics.NewMockMetrics(ctrl)
@@ -717,7 +708,7 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 			mockSM.EXPECT().ShouldSync(gomock.Any(), *mod, *km).Return(false, nil),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		res, err := mr.handleSigning(context.Background(), mod, km, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
@@ -745,7 +736,7 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, false),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		res, err := mr.handleSigning(context.Background(), mod, km, kernelVersion)
 
@@ -774,7 +765,7 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, true),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		res, err := mr.handleSigning(context.Background(), mod, km, kernelVersion)
 
@@ -804,7 +795,7 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, true),
 		)
 
-		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockRC, mockDC, mockKM, mockMetrics, nil, mockSU)
+		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
 		res, err := mr.handleSigning(context.Background(), mod, km, kernelVersion)
 
@@ -840,7 +831,7 @@ var _ = Describe("ModuleReconciler_getNodesListBySelector", func() {
 				return nil
 			},
 		)
-		mr := NewModuleReconciler(clnt, nil, nil, nil, nil, nil, nil, nil, nil)
+		mr := NewModuleReconciler(clnt, nil, nil, nil, nil, nil, nil, nil, namespace)
 		nodeList, err := mr.getNodesListBySelector(context.Background(), &mod)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nodeList)).To(Equal(0))
@@ -853,7 +844,7 @@ var _ = Describe("ModuleReconciler_getNodesListBySelector", func() {
 				return nil
 			},
 		)
-		mr := NewModuleReconciler(clnt, nil, nil, nil, nil, nil, nil, nil, nil)
+		mr := NewModuleReconciler(clnt, nil, nil, nil, nil, nil, nil, nil, namespace)
 		nodeList, err := mr.getNodesListBySelector(context.Background(), &mod)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nodeList)).To(Equal(2))
@@ -875,7 +866,7 @@ var _ = Describe("ModuleReconciler_getNodesListBySelector", func() {
 				return nil
 			},
 		)
-		mr := NewModuleReconciler(clnt, nil, nil, nil, nil, nil, nil, nil, nil)
+		mr := NewModuleReconciler(clnt, nil, nil, nil, nil, nil, nil, nil, namespace)
 		nodeList, err := mr.getNodesListBySelector(context.Background(), &mod)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nodeList)).To(Equal(1))

@@ -1,3 +1,5 @@
 resources:
   - ../rbac-base
+  - module_loader_service_account.yaml
+  - device_plugin_service_account.yaml
   - role.yaml

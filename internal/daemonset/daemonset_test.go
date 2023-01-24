@@ -43,7 +43,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should return an error if the DaemonSet is nil", func() {
 		Expect(
-			dg.SetDriverContainerAsDesired(context.Background(), nil, "", kmmv1beta1.Module{}, ""),
+			dg.SetDriverContainerAsDesired(context.Background(), nil, "", kmmv1beta1.Module{}, "", false),
 		).To(
 			HaveOccurred(),
 		)
@@ -51,7 +51,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should return an error if the image is empty", func() {
 		Expect(
-			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, "", kmmv1beta1.Module{}, ""),
+			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, "", kmmv1beta1.Module{}, "", false),
 		).To(
 			HaveOccurred(),
 		)
@@ -59,7 +59,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should return an error if the kernel version is empty", func() {
 		Expect(
-			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, "", kmmv1beta1.Module{}, ""),
+			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, "", kmmv1beta1.Module{}, "", false),
 		).To(
 			HaveOccurred(),
 		)
@@ -74,7 +74,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 		ds := appsv1.DaemonSet{}
 
-		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(1))
@@ -114,7 +114,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 		ds := appsv1.DaemonSet{}
 
-		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		Expect(ds.Spec.Template.Spec.Volumes[1]).To(Equal(vol))
@@ -122,19 +122,21 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts[1]).To(Equal(volm))
 	})
 
-	It("should add the default ServiceAccount to the module loader if it is not set in the spec", func() {
-		mod := kmmv1beta1.Module{
-			Spec: kmmv1beta1.ModuleSpec{
-				Selector: map[string]string{"has-feature-x": "true"},
-			},
-		}
+	DescribeTable("should add the default ServiceAccount to the module loader",
+		func(useDefaultSA bool, expectedSA string) {
+			mod := kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{},
+			}
 
-		ds := appsv1.DaemonSet{}
+			ds := appsv1.DaemonSet{}
 
-		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal(mod.Name + "-module-loader"))
-	})
+			err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion, useDefaultSA)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal(expectedSA))
+		},
+		Entry(nil, false, ""),
+		Entry(nil, true, "kmm-operator-module-loader"),
+	)
 
 	It("should work as expected", func() {
 		const (
@@ -172,7 +174,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			},
 		}
 
-		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, moduleLoaderImage, mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, moduleLoaderImage, mod, kernelVersion, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		podLabels := map[string]string{
@@ -363,7 +365,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 
 	It("should return an error if the DaemonSet is nil", func() {
 		Expect(
-			dg.SetDevicePluginAsDesired(context.Background(), nil, &kmmv1beta1.Module{}),
+			dg.SetDevicePluginAsDesired(context.Background(), nil, &kmmv1beta1.Module{}, false),
 		).To(
 			HaveOccurred(),
 		)
@@ -372,7 +374,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 	It("should return an error if DevicePlugin not set in the Spec", func() {
 		ds := appsv1.DaemonSet{}
 		Expect(
-			dg.SetDevicePluginAsDesired(context.Background(), &ds, &kmmv1beta1.Module{}),
+			dg.SetDevicePluginAsDesired(context.Background(), &ds, &kmmv1beta1.Module{}, false),
 		).To(
 			HaveOccurred(),
 		)
@@ -392,26 +394,29 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 
 		ds := appsv1.DaemonSet{}
 
-		err := dg.SetDevicePluginAsDesired(context.Background(), &ds, &mod)
+		err := dg.SetDevicePluginAsDesired(context.Background(), &ds, &mod, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		Expect(ds.Spec.Template.Spec.Volumes[1]).To(Equal(vol))
 	})
 
-	It("should add the default ServiceAccount to the device plugin if it is not set in the spec", func() {
-		mod := kmmv1beta1.Module{
-			Spec: kmmv1beta1.ModuleSpec{
-				Selector:     map[string]string{"has-feature-x": "true"},
-				DevicePlugin: &kmmv1beta1.DevicePluginSpec{},
-			},
-		}
+	DescribeTable("should add the default ServiceAccount to the device plugin",
+		func(useDefaultSA bool, expectedSA string) {
+			mod := kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{
+					DevicePlugin: &kmmv1beta1.DevicePluginSpec{},
+				},
+			}
 
-		ds := appsv1.DaemonSet{}
+			ds := appsv1.DaemonSet{}
 
-		err := dg.SetDevicePluginAsDesired(context.Background(), &ds, &mod)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal(mod.Name + "-device-plugin"))
-	})
+			err := dg.SetDevicePluginAsDesired(context.Background(), &ds, &mod, useDefaultSA)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal(expectedSA))
+		},
+		Entry(nil, false, ""),
+		Entry(nil, true, "kmm-operator-device-plugin"),
+	)
 
 	It("should work as expected", func() {
 		const (
@@ -489,7 +494,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 			},
 		}
 
-		err := dg.SetDevicePluginAsDesired(context.Background(), &ds, &mod)
+		err := dg.SetDevicePluginAsDesired(context.Background(), &ds, &mod, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		podLabels := map[string]string{
