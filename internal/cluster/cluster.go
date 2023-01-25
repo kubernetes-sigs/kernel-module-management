@@ -108,13 +108,19 @@ func (c *clusterAPI) BuildAndSign(
 			return false, err
 		}
 
+		if buildRequeue {
+			requeue = true
+			continue
+		}
+
 		signRequeue, err := c.sign(ctx, mod, &mcm, m, kernelVersion)
 		if err != nil {
 			return false, err
 		}
 
-		if buildRequeue || signRequeue {
+		if signRequeue {
 			requeue = true
+			continue
 		}
 	}
 

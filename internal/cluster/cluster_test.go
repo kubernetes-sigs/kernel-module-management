@@ -172,21 +172,34 @@ var _ = Describe("ClusterAPI", func() {
 			kernelVersion = "1.2.3"
 		)
 
-		It("should do nothing when no kernel mappings are found", func() {
-			osConfig := module.NodeOSConfig{}
+		var (
+			osConfig = module.NodeOSConfig{}
 
-			mcm := &hubv1beta1.ManagedClusterModule{
+			mappings = []kmmv1beta1.KernelMapping{
+				{
+					ContainerImage: imageName,
+					Literal:        kernelVersion,
+				},
+			}
+
+			mcm = &hubv1beta1.ManagedClusterModule{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      mcmName,
 					Namespace: namespace,
 				},
 				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{},
-					Selector:   map[string]string{"key": "value"},
+					ModuleSpec: kmmv1beta1.ModuleSpec{
+						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+							Container: kmmv1beta1.ModuleLoaderContainerSpec{
+								KernelMappings: mappings,
+							},
+						},
+					},
+					Selector: map[string]string{"key": "value"},
 				},
 			}
 
-			clusterList := clusterv1.ManagedClusterList{
+			clusterList = clusterv1.ManagedClusterList{
 				Items: []clusterv1.ManagedCluster{
 					{
 						ObjectMeta: metav1.ObjectMeta{
@@ -205,8 +218,18 @@ var _ = Describe("ClusterAPI", func() {
 				},
 			}
 
-			ctx := context.Background()
+			mod = kmmv1beta1.Module{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      mcm.Name,
+					Namespace: namespace,
+				},
+				Spec: mcm.Spec.ModuleSpec,
+			}
 
+			ctx = context.Background()
+		)
+
+		It("should do nothing when no kernel mappings are found", func() {
 			gomock.InOrder(
 				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(nil, errors.New("generic-error")),
@@ -220,30 +243,6 @@ var _ = Describe("ClusterAPI", func() {
 		})
 
 		It("should return an error when ClusterClaims are not found or empty", func() {
-			mappings := []kmmv1beta1.KernelMapping{
-				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcmName,
-					Namespace: namespace,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{
-						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-							Container: kmmv1beta1.ModuleLoaderContainerSpec{
-								KernelMappings: mappings,
-							},
-						},
-					},
-					Selector: map[string]string{"key": "value"},
-				},
-			}
-
 			clusterList := clusterv1.ManagedClusterList{
 				Items: []clusterv1.ManagedCluster{
 					{
@@ -254,8 +253,6 @@ var _ = Describe("ClusterAPI", func() {
 					},
 				},
 			}
-
-			ctx := context.Background()
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
@@ -265,60 +262,6 @@ var _ = Describe("ClusterAPI", func() {
 		})
 
 		It("should do nothing when Build and Sign are not needed", func() {
-			osConfig := module.NodeOSConfig{}
-
-			mappings := []kmmv1beta1.KernelMapping{
-				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{
-						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-							Container: kmmv1beta1.ModuleLoaderContainerSpec{
-								KernelMappings: mappings,
-							},
-						},
-					},
-					Selector: map[string]string{"key": "value"},
-				},
-			}
-
-			clusterList := clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-						Status: clusterv1.ManagedClusterStatus{
-							ClusterClaims: []clusterv1.ManagedClusterClaim{
-								{
-									Name:  constants.KernelVersionsClusterClaimName,
-									Value: kernelVersion,
-								},
-							},
-						},
-					},
-				},
-			}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcm.Name,
-					Namespace: namespace,
-				},
-				Spec: mcm.Spec.ModuleSpec,
-			}
-
-			ctx := context.Background()
-
 			gomock.InOrder(
 				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mappings[0], nil),
@@ -335,60 +278,6 @@ var _ = Describe("ClusterAPI", func() {
 		})
 
 		It("should run build sync if needed", func() {
-			osConfig := module.NodeOSConfig{}
-
-			mappings := []kmmv1beta1.KernelMapping{
-				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{
-						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-							Container: kmmv1beta1.ModuleLoaderContainerSpec{
-								KernelMappings: mappings,
-							},
-						},
-					},
-					Selector: map[string]string{"key": "value"},
-				},
-			}
-
-			clusterList := clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-						Status: clusterv1.ManagedClusterStatus{
-							ClusterClaims: []clusterv1.ManagedClusterClaim{
-								{
-									Name:  constants.KernelVersionsClusterClaimName,
-									Value: kernelVersion,
-								},
-							},
-						},
-					},
-				},
-			}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcm.Name,
-					Namespace: namespace,
-				},
-				Spec: mcm.Spec.ModuleSpec,
-			}
-
-			ctx := context.Background()
-
 			gomock.InOrder(
 				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mappings[0], nil),
@@ -406,60 +295,6 @@ var _ = Describe("ClusterAPI", func() {
 		})
 
 		It("should return an error when build sync errors", func() {
-			osConfig := module.NodeOSConfig{}
-
-			mappings := []kmmv1beta1.KernelMapping{
-				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{
-						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-							Container: kmmv1beta1.ModuleLoaderContainerSpec{
-								KernelMappings: mappings,
-							},
-						},
-					},
-					Selector: map[string]string{"key": "value"},
-				},
-			}
-
-			clusterList := clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-						Status: clusterv1.ManagedClusterStatus{
-							ClusterClaims: []clusterv1.ManagedClusterClaim{
-								{
-									Name:  constants.KernelVersionsClusterClaimName,
-									Value: kernelVersion,
-								},
-							},
-						},
-					},
-				},
-			}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcm.Name,
-					Namespace: namespace,
-				},
-				Spec: mcm.Spec.ModuleSpec,
-			}
-
-			ctx := context.Background()
-
 			gomock.InOrder(
 				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mappings[0], nil),
@@ -476,59 +311,8 @@ var _ = Describe("ClusterAPI", func() {
 		})
 
 		It("should run sign sync if needed", func() {
-			osConfig := module.NodeOSConfig{}
 
-			mappings := []kmmv1beta1.KernelMapping{
-				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{
-						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-							Container: kmmv1beta1.ModuleLoaderContainerSpec{
-								KernelMappings: mappings,
-							},
-						},
-					},
-					Selector: map[string]string{"key": "value"},
-				},
-			}
-
-			clusterList := clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-						Status: clusterv1.ManagedClusterStatus{
-							ClusterClaims: []clusterv1.ManagedClusterClaim{
-								{
-									Name:  constants.KernelVersionsClusterClaimName,
-									Value: kernelVersion,
-								},
-							},
-						},
-					},
-				},
-			}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcm.Name,
-					Namespace: namespace,
-				},
-				Spec: mcm.Spec.ModuleSpec,
-			}
-
-			ctx := context.Background()
+			signResult := utils.Result{Requeue: true}
 
 			gomock.InOrder(
 				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
@@ -536,71 +320,17 @@ var _ = Describe("ClusterAPI", func() {
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm),
+				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm).Return(signResult, nil),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
-			Expect(requeue).To(BeFalse())
+			Expect(requeue).To(Equal(signResult.Requeue))
 		})
 
 		It("should return an error when sign sync errors", func() {
-			osConfig := module.NodeOSConfig{}
-
-			mappings := []kmmv1beta1.KernelMapping{
-				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{
-						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-							Container: kmmv1beta1.ModuleLoaderContainerSpec{
-								KernelMappings: mappings,
-							},
-						},
-					},
-					Selector: map[string]string{"key": "value"},
-				},
-			}
-
-			clusterList := clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-						Status: clusterv1.ManagedClusterStatus{
-							ClusterClaims: []clusterv1.ManagedClusterClaim{
-								{
-									Name:  constants.KernelVersionsClusterClaimName,
-									Value: kernelVersion,
-								},
-							},
-						},
-					},
-				},
-			}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcm.Name,
-					Namespace: namespace,
-				},
-				Spec: mcm.Spec.ModuleSpec,
-			}
-
-			ctx := context.Background()
-
 			gomock.InOrder(
 				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mappings[0], nil),
@@ -617,139 +347,29 @@ var _ = Describe("ClusterAPI", func() {
 			Expect(requeue).To(BeFalse())
 		})
 
-		It("should run both build sync and sign sync if needed", func() {
-			osConfig := module.NodeOSConfig{}
-
-			mappings := []kmmv1beta1.KernelMapping{
-				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{
-						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-							Container: kmmv1beta1.ModuleLoaderContainerSpec{
-								KernelMappings: mappings,
-							},
-						},
-					},
-					Selector: map[string]string{"key": "value"},
-				},
-			}
-
-			clusterList := clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-						Status: clusterv1.ManagedClusterStatus{
-							ClusterClaims: []clusterv1.ManagedClusterClaim{
-								{
-									Name:  constants.KernelVersionsClusterClaimName,
-									Value: kernelVersion,
-								},
-							},
-						},
-					},
-				},
-			}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcm.Name,
-					Namespace: namespace,
-				},
-				Spec: mcm.Spec.ModuleSpec,
-			}
-
-			ctx := context.Background()
-
+		It("should not run sign sync when build sync requires a requeue", func() {
 			gomock.InOrder(
 				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mappings[0], nil),
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm),
-				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm),
+				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(build.Result{Requeue: true}, nil),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
 			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
-			Expect(requeue).To(BeFalse())
+			Expect(requeue).To(BeTrue())
 		})
 
-		It("should run both build sync and sign sync", func() {
-			osConfig := module.NodeOSConfig{}
-
-			mappings := []kmmv1beta1.KernelMapping{
-				{
-					ContainerImage: imageName,
-					Literal:        kernelVersion,
-				},
-			}
-
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mcmName,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{
-						ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-							Container: kmmv1beta1.ModuleLoaderContainerSpec{
-								KernelMappings: mappings,
-							},
-						},
-					},
-					Selector: map[string]string{"key": "value"},
-				},
-			}
-
-			clusterList := clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-						Status: clusterv1.ManagedClusterStatus{
-							ClusterClaims: []clusterv1.ManagedClusterClaim{
-								{
-									Name:  constants.KernelVersionsClusterClaimName,
-									Value: kernelVersion,
-								},
-							},
-						},
-					},
-				},
-			}
-
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcm.Name,
-					Namespace: namespace,
-				},
-				Spec: mcm.Spec.ModuleSpec,
-			}
-
-			ctx := context.Background()
-
+		It("should run both build sync and sign sync when build does not require a requeue", func() {
 			gomock.InOrder(
 				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
 				mockKM.EXPECT().FindMappingForKernel(mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mappings[0], nil),
 				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm),
+				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(build.Result{Requeue: false}, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
 				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm),
 			)
