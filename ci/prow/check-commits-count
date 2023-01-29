@@ -5,7 +5,8 @@ set -euxo pipefail
 git remote add upstream https://github.com/kubernetes-sigs/kernel-module-management.git
 git fetch upstream
 
-commits_count=$(git rev-list --count HEAD ^upstream/main)
+branch_name=$(git branch --show-current)
+commits_count=$(git rev-list --count HEAD ^upstream/${branch_name})
 # When Prow is testing a PR, it is creating a branch for it but then merges it
 # into the "main" branch for testing, therefore, we also get the "merge commit"
 # in addition to the original commit.
