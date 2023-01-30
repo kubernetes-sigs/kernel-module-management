@@ -50,6 +50,22 @@ The reconciliation loop for `Module` runs the following steps:
     2. successful build jobs;
     3. successful signing jobs.
 
+## Security and permissions
+
+Loading kernel modules is a highly sensitive operation.
+Once loaded, kernel modules have all possible permissions to do any kind of operation on the node.
+
+### Pod Security standards
+
+KMM creates privileged workload to load the kernel modules on nodes.  
+If [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) is enabled in the
+cluster, an administrator needs to configure the isolation level for the namespace where the `Module` is deployed for
+the ModuleLoader and device plugin pods to work.
+
+```shell
+kubectl label --overwrite ns "${namespace}" pod-security.kubernetes.io/enforce=privileged
+```
+
 ## Example resource
 
 Below is an annotated `Module` example with most options set.
