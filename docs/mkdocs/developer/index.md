@@ -17,7 +17,7 @@ Variables available at build time still reflect the actual kernel version.
 ## `Module` CRD
 
 ```yaml
-apiVersion: ooto.sigs.k8s.io/v1alpha1
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
 kind: Module
 metadata:
   name: module-sample
@@ -85,10 +85,6 @@ KMM supports in-cluster builds of DriverContainer images when those are not made
 **On OCP**, the build mechanism would be BuildConfig (maybe Shipwright in the future) and we can leverage the
 integrated in-cluster registry.
 
-## Unloading modules
-
-Users must provide a [preStop lifecycle hook](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/) to their DriverContainer pod template to make sure that their module is unloaded when the DriverContainer pod exits.
-
 ## Security
 
 ### DriverContainer privileges
@@ -103,5 +99,6 @@ The KMM Operator would only be granted a limited set of Kubernetes API privilege
 - Read, modify (for kernel version labeling) and watch `Nodes`;
 - Read and watch `Modules`, update their status;
 - Read, create, modify and watch `DaemonSets`;
-- Read, create, modify and watch `Build` objects (from whatever system we agree on);
+- Read, create, modify and watch `Job` objects (used for building and signing);
 - Read `Secrets` for pull and build secrets.
+- Read `Configmaps` for build jobs

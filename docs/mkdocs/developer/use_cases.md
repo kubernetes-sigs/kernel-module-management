@@ -17,8 +17,8 @@ For each `DaemonSet` belonging to `Module`, we set the following labels:
 
 | key                                          | value         |
 | -------------------------------------------- | ------------- |
-| `ooto.sigs.k8s.io/module-name`               | `$moduleName` |
-| `oot.node.kubernetes.io/kernel-version.full` | `$kernel`     |
+| `kmm.node.kubernetes.io/module-name`               | `$moduleName` |
+| `kmm.node.kubernetes.io/kernel-version.full` | `$kernel`     |
 
 We either create those `DaemonSets` (if they do not already exist) or update them (if a `DaemonSet` already exists with
 the same labels).
