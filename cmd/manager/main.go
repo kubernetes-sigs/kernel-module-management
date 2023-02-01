@@ -29,7 +29,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
@@ -168,7 +168,7 @@ func main() {
 	if managed {
 		setupLogger.Info("Starting as managed")
 
-		if err = clusterv1.Install(scheme); err != nil {
+		if err = clusterv1alpha1.Install(scheme); err != nil {
 			cmd.FatalError(setupLogger, err, "could not add the Cluster API to the scheme")
 		}
 
