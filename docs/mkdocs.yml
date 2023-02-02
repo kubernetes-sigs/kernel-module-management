@@ -15,6 +15,7 @@ nav:
       - Binary firmwares: documentation/firmwares.md
       - Secure boot: documentation/secure_boot.md
       - Preflight validation: documentation/preflight_validation.md
+      - documentation/troubleshooting.md
       - documentation/uninstall.md
   - Developer:
       - developer/index.md
