@@ -334,7 +334,7 @@ func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-		return r.daemonAPI.SetDriverContainerAsDesired(ctx, ds, km.ContainerImage, *mod, kernelVersion, mod.Namespace == r.operatorNamespace)
+		return r.daemonAPI.SetDriverContainerAsDesired(ctx, ds, km.ContainerImage, *mod, kernelVersion)
 	})
 
 	if err == nil {
@@ -364,7 +364,7 @@ func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *kmmv1bet
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-		return r.daemonAPI.SetDevicePluginAsDesired(ctx, ds, mod, mod.Namespace == r.operatorNamespace)
+		return r.daemonAPI.SetDevicePluginAsDesired(ctx, ds, mod)
 	})
 
 	if err == nil {

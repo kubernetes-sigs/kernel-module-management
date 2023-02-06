@@ -8,7 +8,6 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +16,6 @@ import (
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -34,8 +32,8 @@ const (
 type DaemonSetCreator interface {
 	GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.Set[string]) ([]string, error)
 	ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error)
-	SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, image string, mod kmmv1beta1.Module, kernelVersion string, useDefaultSA bool) error
-	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *kmmv1beta1.Module, useDefaultSA bool) error
+	SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, image string, mod kmmv1beta1.Module, kernelVersion string) error
+	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *kmmv1beta1.Module) error
 	GetNodeLabelFromPod(pod *v1.Pod, moduleName string) string
 }
 
@@ -97,7 +95,6 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 	image string,
 	mod kmmv1beta1.Module,
 	kernelVersion string,
-	useDefaultSA bool,
 ) error {
 	if ds == nil {
 		return errors.New("ds cannot be nil")
@@ -197,15 +194,6 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 		container.VolumeMounts = append(container.VolumeMounts, firmwareVolumeMount)
 	}
 
-	serviceAccountName := mod.Spec.ModuleLoader.ServiceAccountName
-	if serviceAccountName == "" {
-		if useDefaultSA {
-			serviceAccountName = "kmm-operator-module-loader"
-		} else {
-			log.FromContext(ctx).Info(utils.WarnString("No ServiceAccount set for the ModuleLoader DaemonSet"))
-		}
-	}
-
 	ds.Spec = appsv1.DaemonSetSpec{
 		Template: v1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
@@ -217,7 +205,7 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:       nodeSelector,
 				PriorityClassName:  "system-node-critical",
-				ServiceAccountName: serviceAccountName,
+				ServiceAccountName: mod.Spec.ModuleLoader.ServiceAccountName,
 				Volumes:            volumes,
 			},
 		},
@@ -231,7 +219,6 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 	ctx context.Context,
 	ds *appsv1.DaemonSet,
 	mod *kmmv1beta1.Module,
-	useDefaultSA bool,
 ) error {
 	if ds == nil {
 		return errors.New("ds cannot be nil")
@@ -269,15 +256,6 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 		OverrideLabels(ds.GetLabels(), standardLabels),
 	)
 
-	serviceAccountName := mod.Spec.DevicePlugin.ServiceAccountName
-	if serviceAccountName == "" {
-		if useDefaultSA {
-			serviceAccountName = "kmm-operator-device-plugin"
-		} else {
-			log.FromContext(ctx).Info(utils.WarnString("No ServiceAccount set for the device plugin DaemonSet"))
-		}
-	}
-
 	ds.Spec = appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{MatchLabels: standardLabels},
 		Template: v1.PodTemplateSpec{
@@ -302,7 +280,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 				PriorityClassName:  "system-node-critical",
 				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:       map[string]string{getDriverContainerNodeLabel(mod.Name): ""},
-				ServiceAccountName: serviceAccountName,
+				ServiceAccountName: mod.Spec.DevicePlugin.ServiceAccountName,
 				Volumes:            append([]v1.Volume{devicePluginVolume}, mod.Spec.DevicePlugin.Volumes...),
 			},
 		},
