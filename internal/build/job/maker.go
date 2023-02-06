@@ -73,23 +73,21 @@ func (m *maker) MakeJobTemplate(
 	owner metav1.Object,
 	pushImage bool) (*batchv1.Job, error) {
 
-	buildConfig := m.helper.GetRelevantBuild(mod.Spec, km)
-
+	buildConfig := km.Build
 	containerImage := km.ContainerImage
 
 	// if build AND sign are specified, then we will build an intermediate image
 	// and let sign produce the one specified in its targetImage
-	if module.ShouldBeSigned(mod.Spec, km) {
+	if module.ShouldBeSigned(km) {
 		containerImage = module.IntermediateImageName(mod.Name, mod.Namespace, containerImage)
 	}
 
-	registryTLS := module.TLSOptions(mod.Spec, km)
 	specTemplate := m.specTemplate(
 		mod.Spec,
 		buildConfig,
 		targetKernel,
 		containerImage,
-		registryTLS,
+		km.RegistryTLS,
 		pushImage)
 
 	specTemplateHash, err := m.getHashAnnotationValue(ctx, buildConfig.DockerfileConfigMap.Name, mod.Namespace, &specTemplate)

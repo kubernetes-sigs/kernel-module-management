@@ -36,18 +36,18 @@ func (m *MockKernelMapper) EXPECT() *MockKernelMapperMockRecorder {
 }
 
 // FindMappingForKernel mocks base method.
-func (m *MockKernelMapper) FindMappingForKernel(mappings []v1beta1.KernelMapping, kernelVersion string) (*v1beta1.KernelMapping, error) {
+func (m *MockKernelMapper) FindMappingForKernel(modSpec *v1beta1.ModuleSpec, kernelVersion string) (*v1beta1.KernelMapping, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindMappingForKernel", mappings, kernelVersion)
+	ret := m.ctrl.Call(m, "FindMappingForKernel", modSpec, kernelVersion)
 	ret0, _ := ret[0].(*v1beta1.KernelMapping)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FindMappingForKernel indicates an expected call of FindMappingForKernel.
-func (mr *MockKernelMapperMockRecorder) FindMappingForKernel(mappings, kernelVersion interface{}) *gomock.Call {
+func (mr *MockKernelMapperMockRecorder) FindMappingForKernel(modSpec, kernelVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindMappingForKernel", reflect.TypeOf((*MockKernelMapper)(nil).FindMappingForKernel), mappings, kernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindMappingForKernel", reflect.TypeOf((*MockKernelMapper)(nil).FindMappingForKernel), modSpec, kernelVersion)
 }
 
 // GetNodeOSConfig mocks base method.

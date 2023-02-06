@@ -106,17 +106,18 @@ func main() {
 
 	registryAPI := registry.NewRegistry()
 	jobHelperAPI := utils.NewJobHelper(client)
+	buildHelper := build.NewHelper()
 
 	buildAPI := job.NewBuildManager(
 		client,
-		job.NewMaker(client, build.NewHelper(), jobHelperAPI, scheme),
+		job.NewMaker(client, buildHelper, jobHelperAPI, scheme),
 		jobHelperAPI,
 		registryAPI,
 	)
 
 	signAPI := signjob.NewSignJobManager(
 		client,
-		signjob.NewSigner(client, scheme, sign.NewSignerHelper(), jobHelperAPI),
+		signjob.NewSigner(client, scheme, jobHelperAPI),
 		jobHelperAPI,
 		registryAPI,
 	)
@@ -129,7 +130,7 @@ func main() {
 	mcmr := hub.NewManagedClusterModuleReconciler(
 		client,
 		manifestwork.NewCreator(client, scheme),
-		cluster.NewClusterAPI(client, module.NewKernelMapper(), buildAPI, signAPI, operatorNamespace),
+		cluster.NewClusterAPI(client, module.NewKernelMapper(buildHelper, sign.NewSignerHelper()), buildAPI, signAPI, operatorNamespace),
 		statusupdater.NewManagedClusterModuleStatusUpdater(client),
 		filterAPI,
 	)

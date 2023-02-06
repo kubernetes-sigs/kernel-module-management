@@ -10,7 +10,7 @@ import (
 
 type Helper interface {
 	ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, overrides ...kmmv1beta1.BuildArg) []kmmv1beta1.BuildArg
-	GetRelevantBuild(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build
+	GetRelevantBuild(moduleBuild *kmmv1beta1.Build, mappingBuild *kmmv1beta1.Build) *kmmv1beta1.Build
 }
 
 type helper struct{}
@@ -44,22 +44,24 @@ func (m *helper) ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, overrides ..
 	return args
 }
 
-func (m *helper) GetRelevantBuild(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmmv1beta1.Build {
-	if modSpec.ModuleLoader.Container.Build == nil {
-		return km.Build.DeepCopy()
+func (m *helper) GetRelevantBuild(moduleBuild *kmmv1beta1.Build, mappingBuild *kmmv1beta1.Build) *kmmv1beta1.Build {
+	if moduleBuild == nil {
+		return mappingBuild.DeepCopy()
 	}
 
-	if km.Build == nil {
-		return modSpec.ModuleLoader.Container.Build.DeepCopy()
+	if mappingBuild == nil {
+		return moduleBuild.DeepCopy()
 	}
 
-	buildConfig := modSpec.ModuleLoader.Container.Build.DeepCopy()
-	buildConfig.DockerfileConfigMap = km.Build.DockerfileConfigMap
+	buildConfig := moduleBuild.DeepCopy()
+	if mappingBuild.DockerfileConfigMap != nil {
+		buildConfig.DockerfileConfigMap = mappingBuild.DockerfileConfigMap
+	}
 
-	buildConfig.BuildArgs = m.ApplyBuildArgOverrides(buildConfig.BuildArgs, km.Build.BuildArgs...)
+	buildConfig.BuildArgs = m.ApplyBuildArgOverrides(buildConfig.BuildArgs, mappingBuild.BuildArgs...)
 
 	// [TODO] once MGMT-10832 is consolidated, this code must be revisited. We will decide which
 	// secret and how to use, and if we need to take care of repeated secrets names
-	buildConfig.Secrets = append(buildConfig.Secrets, km.Build.Secrets...)
+	buildConfig.Secrets = append(buildConfig.Secrets, mappingBuild.Secrets...)
 	return buildConfig
 }

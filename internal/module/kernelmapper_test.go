@@ -1,7 +1,10 @@
 package module
 
 import (
+	"github.com/golang/mock/gomock"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -13,28 +16,62 @@ var _ = Describe("FindMappingForKernel", func() {
 		selectedImage = "image1"
 	)
 
-	km := NewKernelMapper()
+	var (
+		ctrl        *gomock.Controller
+		buildHelper *build.MockHelper
+		signHelper  *sign.MockHelper
+		km          KernelMapper
+		modSpec     kmmv1beta1.ModuleSpec
+	)
 
-	It("should work with one literal mapping", func() {
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		buildHelper = build.NewMockHelper(ctrl)
+		signHelper = sign.NewMockHelper(ctrl)
+		km = NewKernelMapper(buildHelper, signHelper)
+		modSpec = kmmv1beta1.ModuleSpec{
+			ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+				Container: kmmv1beta1.ModuleLoaderContainerSpec{},
+			},
+		}
+	})
+
+	AfterEach(func() {
+		ctrl.Finish()
+	})
+
+	It("one literal mapping, no module sign or build", func() {
 		mapping := kmmv1beta1.KernelMapping{
 			ContainerImage: selectedImage,
 			Literal:        "1.2.3",
 		}
+		expectedMapping := kmmv1beta1.KernelMapping{
+			ContainerImage: selectedImage,
+			Literal:        "1.2.3",
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
+		}
+		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
 
-		m, err := km.FindMappingForKernel([]kmmv1beta1.KernelMapping{mapping}, kernelVersion)
+		m, err := km.FindMappingForKernel(&modSpec, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(Equal(&mapping))
+		Expect(m).To(Equal(&expectedMapping))
 	})
 
-	It("should work with one regexp mapping", func() {
+	It("one regexp mapping, no module sign or build", func() {
 		mapping := kmmv1beta1.KernelMapping{
 			ContainerImage: selectedImage,
 			Regexp:         `1\..*`,
 		}
+		expectedMapping := kmmv1beta1.KernelMapping{
+			ContainerImage: selectedImage,
+			Regexp:         `1\..*`,
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
+		}
+		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
 
-		m, err := km.FindMappingForKernel([]kmmv1beta1.KernelMapping{mapping}, kernelVersion)
+		m, err := km.FindMappingForKernel(&modSpec, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(Equal(&mapping))
+		Expect(m).To(Equal(&expectedMapping))
 	})
 
 	It("should return an error if a regex is invalid", func() {
@@ -42,8 +79,9 @@ var _ = Describe("FindMappingForKernel", func() {
 			ContainerImage: selectedImage,
 			Regexp:         "invalid)",
 		}
+		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
 
-		_, err := km.FindMappingForKernel([]kmmv1beta1.KernelMapping{mapping}, kernelVersion)
+		_, err := km.FindMappingForKernel(&modSpec, kernelVersion)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -58,14 +96,66 @@ var _ = Describe("FindMappingForKernel", func() {
 				Regexp:         `0\..*`,
 			},
 		}
+		modSpec.ModuleLoader.Container.KernelMappings = mappings
 
-		_, err := km.FindMappingForKernel(mappings, kernelVersion)
-		Expect(err).To(MatchError("no suitable mapping found"))
+		_, err := km.FindMappingForKernel(&modSpec, kernelVersion)
+		Expect(err).To(MatchError("failed to find mapping for kernel 1.2.3: no suitable mapping found"))
+	})
+
+	It("one literal, unify module and mapping build", func() {
+		mapping := kmmv1beta1.KernelMapping{
+			ContainerImage: selectedImage,
+			Literal:        "1.2.3",
+		}
+		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
+		modSpec.ModuleLoader.Container.Build = &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{
+				Name: "some name",
+			},
+		}
+		expectedMapping := kmmv1beta1.KernelMapping{
+			ContainerImage: selectedImage,
+			Literal:        "1.2.3",
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
+			Build: &kmmv1beta1.Build{
+				DockerfileConfigMap: &v1.LocalObjectReference{
+					Name: "some name",
+				},
+			},
+		}
+		buildHelper.EXPECT().GetRelevantBuild(modSpec.ModuleLoader.Container.Build, mapping.Build).Return(modSpec.ModuleLoader.Container.Build)
+
+		m, err := km.FindMappingForKernel(&modSpec, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(m).To(Equal(&expectedMapping))
+	})
+
+	It("one literal, unify module and mapping sign", func() {
+		mapping := kmmv1beta1.KernelMapping{
+			ContainerImage: selectedImage,
+			Literal:        "1.2.3",
+		}
+		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
+		modSpec.ModuleLoader.Container.Sign = &kmmv1beta1.Sign{
+			UnsignedImage: "some image",
+		}
+		expectedMapping := kmmv1beta1.KernelMapping{
+			ContainerImage: selectedImage,
+			Literal:        "1.2.3",
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
+			Sign: &kmmv1beta1.Sign{
+				UnsignedImage: "some image",
+			},
+		}
+		signHelper.EXPECT().GetRelevantSign(modSpec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(modSpec.ModuleLoader.Container.Sign, nil)
+
+		m, err := km.FindMappingForKernel(&modSpec, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(m).To(Equal(&expectedMapping))
 	})
 })
 
 var _ = Describe("PrepareKernelMapping", func() {
-	km := NewKernelMapper()
 	osConfig := NodeOSConfig{
 		KernelFullVersion:  "kernelFullVersion",
 		KernelVersionMMP:   "kernelMMP",
@@ -73,6 +163,7 @@ var _ = Describe("PrepareKernelMapping", func() {
 		KernelVersionMinor: "kernelMinor",
 		KernelVersionPatch: "kernelPatch",
 	}
+	km := NewKernelMapper(nil, nil)
 
 	It("error input", func() {
 		mapping := kmmv1beta1.KernelMapping{
@@ -122,7 +213,7 @@ var _ = Describe("PrepareKernelMapping", func() {
 })
 
 var _ = Describe("GetNodeOSConfig", func() {
-	km := NewKernelMapper()
+	km := NewKernelMapper(nil, nil)
 
 	It("parsing the node data", func() {
 		node := v1.Node{
@@ -148,7 +239,7 @@ var _ = Describe("GetNodeOSConfig", func() {
 })
 
 var _ = Describe("GetNodeOSConfigFromKernelVersion", func() {
-	km := NewKernelMapper()
+	km := NewKernelMapper(nil, nil)
 
 	It("parsing the kernel version", func() {
 		kernelVersion := "4.18.0-305.45.1.el8_4.x86_64"

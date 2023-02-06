@@ -114,23 +114,24 @@ func main() {
 
 	registryAPI := registry.NewRegistry()
 	jobHelperAPI := utils.NewJobHelper(client)
+	buildHelperAPI := build.NewHelper()
 
 	buildAPI := job.NewBuildManager(
 		client,
-		job.NewMaker(client, build.NewHelper(), jobHelperAPI, scheme),
+		job.NewMaker(client, buildHelperAPI, jobHelperAPI, scheme),
 		jobHelperAPI,
 		registryAPI,
 	)
 
 	signAPI := signjob.NewSignJobManager(
 		client,
-		signjob.NewSigner(client, scheme, sign.NewSignerHelper(), jobHelperAPI),
+		signjob.NewSigner(client, scheme, jobHelperAPI),
 		jobHelperAPI,
 		registryAPI,
 	)
 
 	daemonAPI := daemonset.NewCreator(client, constants.KernelLabel, scheme)
-	kernelAPI := module.NewKernelMapper()
+	kernelAPI := module.NewKernelMapper(buildHelperAPI, sign.NewSignerHelper())
 
 	mc := controllers.NewModuleReconciler(
 		client,

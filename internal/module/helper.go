@@ -13,13 +13,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 )
 
-func TLSOptions(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) *kmmv1beta1.TLSOptions {
-	if km.RegistryTLS != nil {
-		return km.RegistryTLS
-	}
-	return &modSpec.ModuleLoader.Container.RegistryTLS
-}
-
 // AppendToTag adds the specified tag to the image name cleanly, i.e. by avoiding messing up
 // the name or getting "name:-tag"
 func AppendToTag(name string, tag string) string {
@@ -37,14 +30,14 @@ func IntermediateImageName(name, namespace, targetImage string) string {
 
 // ShouldBeBuilt indicates whether the specified KernelMapping of the
 // Module should be built or not.
-func ShouldBeBuilt(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) bool {
-	return modSpec.ModuleLoader.Container.Build != nil || km.Build != nil
+func ShouldBeBuilt(km kmmv1beta1.KernelMapping) bool {
+	return km.Build != nil
 }
 
 // ShouldBeSigned indicates whether the specified KernelMapping of the
 // Module should be signed or not.
-func ShouldBeSigned(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping) bool {
-	return modSpec.ModuleLoader.Container.Sign != nil || km.Sign != nil
+func ShouldBeSigned(km kmmv1beta1.KernelMapping) bool {
+	return km.Sign != nil
 }
 
 func ImageExists(
@@ -64,7 +57,7 @@ func ImageExists(
 		})
 	}
 
-	tlsOptions := TLSOptions(modSpec, km)
+	tlsOptions := km.RegistryTLS
 	exists, err := reg.ImageExists(ctx, imageName, tlsOptions, registryAuthGetter)
 	if err != nil {
 		return false, fmt.Errorf("could not check if the image is available: %v", err)

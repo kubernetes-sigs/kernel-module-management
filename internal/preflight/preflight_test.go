@@ -99,7 +99,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 
 	It("Failed to find mapping", func() {
 		mod.Spec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{}
-		mockKernelAPI.EXPECT().FindMappingForKernel(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(nil, fmt.Errorf("some error"))
+		mockKernelAPI.EXPECT().FindMappingForKernel(&mod.Spec, kernelVersion).Return(nil, fmt.Errorf("some error"))
 
 		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
@@ -112,7 +112,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 		mod.Spec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{}
 
 		gomock.InOrder(
-			mockKernelAPI.EXPECT().FindMappingForKernel(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mapping, nil),
+			mockKernelAPI.EXPECT().FindMappingForKernel(&mod.Spec, kernelVersion).Return(&mapping, nil),
 			mockKernelAPI.EXPECT().PrepareKernelMapping(&mapping, gomock.Any()).Return(nil, fmt.Errorf("some error")),
 		)
 
@@ -134,7 +134,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 			mapping.Sign = &kmmv1beta1.Sign{}
 		}
 
-		mockKernelAPI.EXPECT().FindMappingForKernel(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mapping, nil)
+		mockKernelAPI.EXPECT().FindMappingForKernel(&mod.Spec, kernelVersion).Return(&mapping, nil)
 		mockKernelAPI.EXPECT().PrepareKernelMapping(&mapping, gomock.Any()).Return(&mapping, nil)
 		mockStatusUpdater.EXPECT().PreflightSetVerificationStage(context.Background(), pv, mod.Name, kmmv1beta1.VerificationStageImage).Return(nil)
 		preflightHelper.EXPECT().verifyImage(ctx, &mapping, mod, kernelVersion).Return(imageVerified, "image message")

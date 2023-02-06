@@ -88,8 +88,8 @@ func (c *clusterAPI) BuildAndSign(
 
 	requeue := false
 
-	modKernelMappings := mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings
-	mappings, err := c.kernelMappingsByKernelVersion(ctx, modKernelMappings, cluster)
+	modSpec := mcm.Spec.ModuleSpec
+	mappings, err := c.kernelMappingsByKernelVersion(ctx, &modSpec, cluster)
 	if err != nil {
 		return false, err
 	}
@@ -99,7 +99,7 @@ func (c *clusterAPI) BuildAndSign(
 			Name:      mcm.Name,
 			Namespace: c.namespace,
 		},
-		Spec: mcm.Spec.ModuleSpec,
+		Spec: modSpec,
 	}
 
 	for kernelVersion, m := range mappings {
@@ -133,7 +133,7 @@ func (c *clusterAPI) GarbageCollectBuilds(ctx context.Context, mcm hubv1beta1.Ma
 
 func (c *clusterAPI) kernelMappingsByKernelVersion(
 	ctx context.Context,
-	modKernelMappings []kmmv1beta1.KernelMapping,
+	modSpec *kmmv1beta1.ModuleSpec,
 	cluster clusterv1.ManagedCluster) (map[string]*kmmv1beta1.KernelMapping, error) {
 
 	kernelVersions, err := c.kernelVersions(cluster)
@@ -157,7 +157,7 @@ func (c *clusterAPI) kernelMappingsByKernelVersion(
 			continue
 		}
 
-		m, err := c.kernelAPI.FindMappingForKernel(modKernelMappings, kernelVersion)
+		m, err := c.kernelAPI.FindMappingForKernel(modSpec, kernelVersion)
 		if err != nil {
 			kernelVersionLogger.Info("no suitable container image found; skipping kernel version")
 			continue
@@ -236,7 +236,7 @@ func (c *clusterAPI) sign(
 	// if we need to sign AND we've built, then we must have built
 	// the intermediate image so must figure out its name
 	previousImage := ""
-	if module.ShouldBeBuilt(mcm.Spec.ModuleSpec, *kernelMapping) {
+	if module.ShouldBeBuilt(*kernelMapping) {
 		previousImage = module.IntermediateImageName(mod.Name, mod.Namespace, kernelMapping.ContainerImage)
 	}
 

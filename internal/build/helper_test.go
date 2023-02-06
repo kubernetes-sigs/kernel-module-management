@@ -16,70 +16,39 @@ var _ = Describe("GetRelevantBuild", func() {
 	})
 
 	It("kernel mapping build present, module loader build absent", func() {
-		mod := kmmv1beta1.Module{
-			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-					Container: kmmv1beta1.ModuleLoaderContainerSpec{
-						Build: nil,
-					},
-				},
-			},
-		}
-		km := kmmv1beta1.KernelMapping{
-			Build: &kmmv1beta1.Build{
-				DockerfileConfigMap: &v1.LocalObjectReference{Name: "some kernel mapping build name"},
-			},
+		mappingBuild := &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some kernel mapping build name"},
 		}
 
-		res := nh.GetRelevantBuild(mod.Spec, km)
-		Expect(res).To(Equal(km.Build))
+		res := nh.GetRelevantBuild(nil, mappingBuild)
+		Expect(res).To(Equal(mappingBuild))
 	})
 
 	It("kernel mapping build absent, module loader build present", func() {
-		mod := kmmv1beta1.Module{
-			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-					Container: kmmv1beta1.ModuleLoaderContainerSpec{
-						Build: &kmmv1beta1.Build{
-							DockerfileConfigMap: &v1.LocalObjectReference{Name: "some load module build name"},
-						},
-					},
-				},
-			},
-		}
-		km := kmmv1beta1.KernelMapping{
-			Build: nil,
+		moduleBuild := &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some load module build name"},
 		}
 
-		res := nh.GetRelevantBuild(mod.Spec, km)
-		Expect(res).To(Equal(mod.Spec.ModuleLoader.Container.Build))
+		res := nh.GetRelevantBuild(moduleBuild, nil)
+
+		Expect(res).To(Equal(moduleBuild))
 	})
 
 	It("kernel mapping and module loader builds are present, overrides", func() {
-		mod := kmmv1beta1.Module{
-			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-					Container: kmmv1beta1.ModuleLoaderContainerSpec{
-						Build: &kmmv1beta1.Build{
-							DockerfileConfigMap: &v1.LocalObjectReference{Name: "some load module build name"},
-							BaseImageRegistryTLS: kmmv1beta1.TLSOptions{
-								Insecure:              true,
-								InsecureSkipTLSVerify: true,
-							},
-						},
-					},
-				},
+		moduleBuild := &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some load module build name"},
+			BaseImageRegistryTLS: kmmv1beta1.TLSOptions{
+				Insecure:              true,
+				InsecureSkipTLSVerify: true,
 			},
 		}
-		km := kmmv1beta1.KernelMapping{
-			Build: &kmmv1beta1.Build{
-				DockerfileConfigMap: &v1.LocalObjectReference{Name: "some kernel mapping build name"},
-			},
+		mappingBuild := &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some kernel mapping build name"},
 		}
 
-		res := nh.GetRelevantBuild(mod.Spec, km)
-		Expect(res.DockerfileConfigMap).To(Equal(km.Build.DockerfileConfigMap))
-		Expect(res.BaseImageRegistryTLS).To(Equal(mod.Spec.ModuleLoader.Container.Build.BaseImageRegistryTLS))
+		res := nh.GetRelevantBuild(moduleBuild, mappingBuild)
+		Expect(res.DockerfileConfigMap).To(Equal(mappingBuild.DockerfileConfigMap))
+		Expect(res.BaseImageRegistryTLS).To(Equal(moduleBuild.BaseImageRegistryTLS))
 	})
 })
 
