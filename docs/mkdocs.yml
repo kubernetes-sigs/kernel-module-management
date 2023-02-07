@@ -1,7 +1,7 @@
 ---
 site_name: Kernel Module Management
 repo_url: https://github.com/kubernetes-sigs/kernel-module-management
-edit_uri: edit/main/docs/
+edit_uri: edit/main/docs/mkdocs
 
 docs_dir: mkdocs
 strict: true
