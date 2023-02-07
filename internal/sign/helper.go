@@ -8,7 +8,7 @@ import (
 //go:generate mockgen -source=helper.go -package=sign -destination=mock_helper.go
 
 type Helper interface {
-	GetRelevantSign(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping, kernel string) (*kmmv1beta1.Sign, error)
+	GetRelevantSign(moduleSign *kmmv1beta1.Sign, mappingSign *kmmv1beta1.Sign, kernel string) (*kmmv1beta1.Sign, error)
 }
 
 type helper struct {
@@ -18,28 +18,28 @@ func NewSignerHelper() Helper {
 	return &helper{}
 }
 
-func (m *helper) GetRelevantSign(modSpec kmmv1beta1.ModuleSpec, km kmmv1beta1.KernelMapping, kernel string) (*kmmv1beta1.Sign, error) {
+func (m *helper) GetRelevantSign(moduleSign *kmmv1beta1.Sign, mappingSign *kmmv1beta1.Sign, kernel string) (*kmmv1beta1.Sign, error) {
 	var signConfig *kmmv1beta1.Sign
-	if modSpec.ModuleLoader.Container.Sign == nil {
+	if moduleSign == nil {
 		// km.Sign cannot be nil in case mod.Sign is nil, checked above
-		signConfig = km.Sign.DeepCopy()
-	} else if km.Sign == nil {
-		signConfig = modSpec.ModuleLoader.Container.Sign.DeepCopy()
+		signConfig = mappingSign.DeepCopy()
+	} else if mappingSign == nil {
+		signConfig = moduleSign.DeepCopy()
 	} else {
-		signConfig = modSpec.ModuleLoader.Container.Sign.DeepCopy()
+		signConfig = moduleSign.DeepCopy()
 
-		if km.Sign.UnsignedImage != "" {
-			signConfig.UnsignedImage = km.Sign.UnsignedImage
+		if mappingSign.UnsignedImage != "" {
+			signConfig.UnsignedImage = mappingSign.UnsignedImage
 		}
 
-		if km.Sign.KeySecret != nil {
-			signConfig.KeySecret = km.Sign.KeySecret
+		if mappingSign.KeySecret != nil {
+			signConfig.KeySecret = mappingSign.KeySecret
 		}
-		if km.Sign.CertSecret != nil {
-			signConfig.CertSecret = km.Sign.CertSecret
+		if mappingSign.CertSecret != nil {
+			signConfig.CertSecret = mappingSign.CertSecret
 		}
 		//append (not overwrite) any files in the km to the defaults
-		signConfig.FilesToSign = append(signConfig.FilesToSign, km.Sign.FilesToSign...)
+		signConfig.FilesToSign = append(signConfig.FilesToSign, mappingSign.FilesToSign...)
 	}
 
 	osConfigEnvVars := utils.KernelComponentsAsEnvVars(kernel)

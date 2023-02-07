@@ -61,7 +61,7 @@ func (jbm *jobManager) ShouldSync(
 	m kmmv1beta1.KernelMapping) (bool, error) {
 
 	// if there is no build specified skip
-	if !module.ShouldBeBuilt(mod.Spec, m) {
+	if !module.ShouldBeBuilt(m) {
 		return false, nil
 	}
 
@@ -69,7 +69,7 @@ func (jbm *jobManager) ShouldSync(
 
 	// if build AND sign are specified, then we will build an intermediate image
 	// and let sign produce the one specified in targetImage
-	if module.ShouldBeSigned(mod.Spec, m) {
+	if module.ShouldBeSigned(m) {
 		targetImage = module.IntermediateImageName(mod.Name, mod.Namespace, targetImage)
 	}
 

@@ -348,7 +348,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 				},
 			),
 			mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
-			mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
+			mockKM.EXPECT().FindMappingForKernel(&mod.Spec, kernelVersion).Return(&mappings[0], nil),
 			mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 			mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
@@ -461,7 +461,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			mockKM.EXPECT().GetNodeOSConfig(&nodeList.Items[0]).Return(&osConfig),
-			mockKM.EXPECT().FindMappingForKernel(mappings, kernelVersion).Return(&mappings[0], nil),
+			mockKM.EXPECT().FindMappingForKernel(&mod.Spec, kernelVersion).Return(&mappings[0], nil),
 			mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
 			mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),

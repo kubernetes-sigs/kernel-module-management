@@ -60,7 +60,7 @@ func (jbm *signJobManager) ShouldSync(
 	m kmmv1beta1.KernelMapping) (bool, error) {
 
 	// if there is no sign specified skip
-	if !module.ShouldBeSigned(mod.Spec, m) {
+	if !module.ShouldBeSigned(m) {
 		return false, nil
 	}
 

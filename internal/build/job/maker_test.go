@@ -81,6 +81,7 @@ var _ = Describe("MakeJobTemplate", func() {
 				DockerfileConfigMap: &dockerfileConfigMap,
 			},
 			ContainerImage: image,
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
 		}
 
 		labels := map[string]string{
@@ -216,7 +217,6 @@ var _ = Describe("MakeJobTemplate", func() {
 
 		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		gomock.InOrder(
-			mh.EXPECT().GetRelevantBuild(mod.Spec, km).Return(km.Build),
 			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override).Return(append(slices.Clone(buildArgs), override)),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
@@ -268,7 +268,6 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 
 		gomock.InOrder(
-			mh.EXPECT().GetRelevantBuild(mod.Spec, km).Return(km.Build),
 			mh.EXPECT().ApplyBuildArgOverrides(nil, kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
@@ -339,11 +338,11 @@ var _ = Describe("MakeJobTemplate", func() {
 				KanikoParams:        &kmmv1beta1.KanikoParams{Tag: customTag},
 			},
 			ContainerImage: image,
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
 		}
 
 		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		gomock.InOrder(
-			mh.EXPECT().GetRelevantBuild(mod.Spec, km).Return(km.Build),
 			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
@@ -371,12 +370,12 @@ var _ = Describe("MakeJobTemplate", func() {
 				DockerfileConfigMap: &dockerfileConfigMap,
 			},
 			ContainerImage: image,
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
 		}
 
 		expectedImageName := km.ContainerImage + ":" + mod.Namespace + "_" + mod.Name + "_kmm_unsigned"
 
 		gomock.InOrder(
-			mh.EXPECT().GetRelevantBuild(mod.Spec, km).Return(km.Build),
 			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {

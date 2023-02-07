@@ -203,7 +203,7 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 			continue
 		}
 
-		m, err := r.kernelAPI.FindMappingForKernel(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion)
+		m, err := r.kernelAPI.FindMappingForKernel(&mod.Spec, kernelVersion)
 		if err != nil {
 			nodeLogger.Info("no suitable container image found; skipping node")
 			continue
@@ -293,7 +293,7 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context,
 
 	// if we need to sign AND we've built, then we must have built the intermediate image so must figure out its name
 	previousImage := ""
-	if module.ShouldBeBuilt(mod.Spec, *km) {
+	if module.ShouldBeBuilt(*km) {
 		previousImage = module.IntermediateImageName(mod.Name, mod.Namespace, km.ContainerImage)
 	}
 

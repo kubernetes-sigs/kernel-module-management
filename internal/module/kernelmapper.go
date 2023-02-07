@@ -9,6 +9,8 @@ import (
 
 	"github.com/a8m/envsubst/parse"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -29,21 +31,60 @@ type NodeOSConfig struct {
 //go:generate mockgen -source=kernelmapper.go -package=module -destination=mock_kernelmapper.go
 
 type KernelMapper interface {
-	FindMappingForKernel(mappings []kmmv1beta1.KernelMapping, kernelVersion string) (*kmmv1beta1.KernelMapping, error)
+	FindMappingForKernel(modSpec *kmmv1beta1.ModuleSpec, kernelVersion string) (*kmmv1beta1.KernelMapping, error)
 	GetNodeOSConfig(node *v1.Node) *NodeOSConfig
 	GetNodeOSConfigFromKernelVersion(kernelVersion string) *NodeOSConfig
 	PrepareKernelMapping(mapping *kmmv1beta1.KernelMapping, osConfig *NodeOSConfig) (*kmmv1beta1.KernelMapping, error)
 }
 
-type kernelMapper struct{}
+type kernelMapper struct {
+	buildHelper build.Helper
+	signHelper  sign.Helper
+}
 
-func NewKernelMapper() KernelMapper {
-	return &kernelMapper{}
+func NewKernelMapper(buildHelper build.Helper, signHelper sign.Helper) KernelMapper {
+	return &kernelMapper{
+		buildHelper: buildHelper,
+		signHelper:  signHelper,
+	}
 }
 
 // FindMappingForKernel tries to match kernelVersion against mappings. It returns the first mapping that has a Literal
 // field equal to kernelVersion or a Regexp field that matches kernelVersion.
-func (k *kernelMapper) FindMappingForKernel(mappings []kmmv1beta1.KernelMapping, kernelVersion string) (*kmmv1beta1.KernelMapping, error) {
+func (k *kernelMapper) FindMappingForKernel(modSpec *kmmv1beta1.ModuleSpec, kernelVersion string) (*kmmv1beta1.KernelMapping, error) {
+	mappings := modSpec.ModuleLoader.Container.KernelMappings
+	foundMapping, err := k.findKernelMapping(mappings, kernelVersion)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find mapping for kernel %s: %v", kernelVersion, err)
+	}
+	mapping := foundMapping.DeepCopy()
+
+	// prepare the build for the mapping
+	if mapping.Build != nil || modSpec.ModuleLoader.Container.Build != nil {
+		mapping.Build = k.buildHelper.GetRelevantBuild(modSpec.ModuleLoader.Container.Build, mapping.Build)
+	}
+
+	// prepare the sign for the mapping
+	if mapping.Sign != nil || modSpec.ModuleLoader.Container.Sign != nil {
+		mapping.Sign, err = k.signHelper.GetRelevantSign(modSpec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get the relevant Sign configuration for kernel %s: %v", kernelVersion, err)
+		}
+	}
+
+	// prepare TLS options
+	if mapping.RegistryTLS == nil {
+		mapping.RegistryTLS = &modSpec.ModuleLoader.Container.RegistryTLS
+	}
+
+	//prepare container image
+	if mapping.ContainerImage == "" {
+		mapping.ContainerImage = modSpec.ModuleLoader.Container.ContainerImage
+	}
+	return mapping, nil
+}
+
+func (k *kernelMapper) findKernelMapping(mappings []kmmv1beta1.KernelMapping, kernelVersion string) (*kmmv1beta1.KernelMapping, error) {
 	for _, m := range mappings {
 		if m.Literal != "" && m.Literal == kernelVersion {
 			return &m, nil

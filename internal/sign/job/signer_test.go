@@ -20,7 +20,6 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
@@ -42,16 +41,14 @@ var _ = Describe("MakeJobTemplate", func() {
 		clnt      *client.MockClient
 		m         Signer
 		mod       kmmv1beta1.Module
-		helper    *sign.MockHelper
 		jobhelper *utils.MockJobHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		helper = sign.NewMockHelper(ctrl)
 		jobhelper = utils.NewMockJobHelper(ctrl)
-		m = NewSigner(clnt, scheme, helper, jobhelper)
+		m = NewSigner(clnt, scheme /*helper*/, jobhelper)
 		mod = kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      moduleName,
@@ -86,6 +83,7 @@ var _ = Describe("MakeJobTemplate", func() {
 				FilesToSign:   strings.Split(filesToSign, ","),
 			},
 			ContainerImage: signedImage,
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
 		}
 
 		secretMount := v1.VolumeMount{
@@ -208,7 +206,6 @@ var _ = Describe("MakeJobTemplate", func() {
 		mod.Spec.Selector = nodeSelector
 
 		gomock.InOrder(
-			helper.EXPECT().GetRelevantSign(mod.Spec, km, kernelVersion).Return(km.Sign, nil),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: km.Sign.KeySecret.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
 					secret.Data = privateSignData
@@ -252,10 +249,10 @@ var _ = Describe("MakeJobTemplate", func() {
 				FilesToSign:   filelist,
 			},
 			ContainerImage: unsignedImage,
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
 		}
 
 		gomock.InOrder(
-			helper.EXPECT().GetRelevantSign(mod.Spec, km, kernelVersion).Return(km.Sign, nil),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: km.Sign.KeySecret.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
 					secret.Data = privateSignData
@@ -320,7 +317,6 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 
 		gomock.InOrder(
-			helper.EXPECT().GetRelevantSign(mod.Spec, km, kernelVersion).Return(km.Sign, nil),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: km.Sign.KeySecret.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
 					secret.Data = privateSignData

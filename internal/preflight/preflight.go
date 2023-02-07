@@ -54,7 +54,7 @@ type preflight struct {
 func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mod *kmmv1beta1.Module) (bool, string) {
 	log := ctrlruntime.LoggerFrom(ctx)
 	kernelVersion := pv.Spec.KernelVersion
-	mapping, err := p.kernelAPI.FindMappingForKernel(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion)
+	mapping, err := p.kernelAPI.FindMappingForKernel(&mod.Spec, kernelVersion)
 	if err != nil {
 		return false, fmt.Sprintf("Failed to find kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)
 	}
@@ -75,8 +75,8 @@ func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.Pr
 		return true, msg
 	}
 
-	shouldBuild := module.ShouldBeBuilt(mod.Spec, *mapping)
-	shouldSign := module.ShouldBeSigned(mod.Spec, *mapping)
+	shouldBuild := module.ShouldBeBuilt(*mapping)
+	shouldSign := module.ShouldBeSigned(*mapping)
 
 	if shouldBuild {
 		err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mod.Name, kmmv1beta1.VerificationStageBuild)
@@ -131,9 +131,8 @@ func (p *preflightHelper) verifyImage(ctx context.Context, mapping *kmmv1beta1.K
 	moduleFileName := mod.Spec.ModuleLoader.Container.Modprobe.ModuleName + ".ko"
 	baseDir := mod.Spec.ModuleLoader.Container.Modprobe.DirName
 
-	tlsOptions := module.TLSOptions(mod.Spec, *mapping)
 	registryAuthGetter := auth.NewRegistryAuthGetterFrom(p.client, mod)
-	digests, repoConfig, err := p.registryAPI.GetLayersDigests(ctx, image, tlsOptions, registryAuthGetter)
+	digests, repoConfig, err := p.registryAPI.GetLayersDigests(ctx, image, mapping.RegistryTLS, registryAuthGetter)
 	if err != nil {
 		log.Info("image layers inaccessible, image probably does not exists", "module name", mod.Name, "image", image)
 		return false, fmt.Sprintf("image %s inaccessible or does not exists", image)
@@ -186,7 +185,7 @@ func (p *preflightHelper) verifySign(ctx context.Context,
 	log := ctrlruntime.LoggerFrom(ctx)
 
 	previousImage := ""
-	if module.ShouldBeBuilt(mod.Spec, *mapping) {
+	if module.ShouldBeBuilt(*mapping) {
 		previousImage = module.IntermediateImageName(mod.Name, mod.Namespace, mapping.ContainerImage)
 	}
 
