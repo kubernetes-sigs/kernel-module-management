@@ -3,6 +3,7 @@
 
 # Operator's binaries
 /manager
+/manager-hub
 
 # Binaries for programs and plugins
 *.exe
