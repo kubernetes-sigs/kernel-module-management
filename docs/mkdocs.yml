@@ -17,6 +17,7 @@ nav:
       - Preflight validation: documentation/preflight_validation.md
       - documentation/troubleshooting.md
       - documentation/uninstall.md
+  - Lab: lab/index.md
   - Developer:
       - developer/index.md
       - developer/use_cases.md
