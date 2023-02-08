@@ -97,29 +97,14 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 		ctrl.Finish()
 	})
 
-	It("Failed to find mapping", func() {
+	It("Failed to process mapping", func() {
 		mod.Spec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{}
-		mockKernelAPI.EXPECT().FindMappingForKernel(&mod.Spec, kernelVersion).Return(nil, fmt.Errorf("some error"))
+		mockKernelAPI.EXPECT().GetMergedMappingForKernel(&mod.Spec, kernelVersion).Return(nil, fmt.Errorf("some error"))
 
 		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
 		Expect(res).To(BeFalse())
-		Expect(message).To(Equal(fmt.Sprintf("Failed to find kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)))
-	})
-
-	It("failed to prepare kernel mapping", func() {
-		mapping := kmmv1beta1.KernelMapping{ContainerImage: containerImage}
-		mod.Spec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{}
-
-		gomock.InOrder(
-			mockKernelAPI.EXPECT().FindMappingForKernel(&mod.Spec, kernelVersion).Return(&mapping, nil),
-			mockKernelAPI.EXPECT().PrepareKernelMapping(&mapping, gomock.Any()).Return(nil, fmt.Errorf("some error")),
-		)
-
-		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
-
-		Expect(res).To(BeFalse())
-		Expect(message).To(Equal(fmt.Sprintf("Failed to substitute template in kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)))
+		Expect(message).To(Equal(fmt.Sprintf("failed to process kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)))
 	})
 
 	DescribeTable("correct flow of the image/build/sign verification", func(buildExists, signExists, imageVerified, buildVerified, signVerified,
@@ -134,8 +119,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 			mapping.Sign = &kmmv1beta1.Sign{}
 		}
 
-		mockKernelAPI.EXPECT().FindMappingForKernel(&mod.Spec, kernelVersion).Return(&mapping, nil)
-		mockKernelAPI.EXPECT().PrepareKernelMapping(&mapping, gomock.Any()).Return(&mapping, nil)
+		mockKernelAPI.EXPECT().GetMergedMappingForKernel(&mod.Spec, kernelVersion).Return(&mapping, nil)
 		mockStatusUpdater.EXPECT().PreflightSetVerificationStage(context.Background(), pv, mod.Name, kmmv1beta1.VerificationStageImage).Return(nil)
 		preflightHelper.EXPECT().verifyImage(ctx, &mapping, mod, kernelVersion).Return(imageVerified, "image message")
 		if !imageVerified {

@@ -173,8 +173,6 @@ var _ = Describe("ClusterAPI", func() {
 		)
 
 		var (
-			osConfig = module.NodeOSConfig{}
-
 			mappings = []kmmv1beta1.KernelMapping{
 				{
 					ContainerImage: imageName,
@@ -231,8 +229,7 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should do nothing when no kernel mappings are found", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(nil, errors.New("generic-error")),
+				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(nil, errors.New("generic-error")),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
@@ -263,9 +260,7 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should do nothing when Build and Sign are not needed", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
-				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
+				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 			)
@@ -279,9 +274,7 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should run build sync if needed", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
-				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
+				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
 				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
@@ -296,9 +289,7 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should return an error when build sync errors", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
-				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
+				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
 				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(build.Result{}, errors.New("test-error")),
 			)
@@ -315,9 +306,7 @@ var _ = Describe("ClusterAPI", func() {
 			signResult := utils.Result{Requeue: true}
 
 			gomock.InOrder(
-				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
-				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
+				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
 				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm).Return(signResult, nil),
@@ -332,9 +321,7 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should return an error when sign sync errors", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
-				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
+				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
 				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm).Return(utils.Result{}, errors.New("test-error")),
@@ -349,9 +336,7 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should not run sign sync when build sync requires a requeue", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
-				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
+				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
 				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(build.Result{Requeue: true}, nil),
 			)
@@ -365,9 +350,7 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should run both build sync and sign sync when build does not require a requeue", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetNodeOSConfigFromKernelVersion(kernelVersion).Return(&osConfig),
-				mockKM.EXPECT().FindMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
-				mockKM.EXPECT().PrepareKernelMapping(&mappings[0], &osConfig).Return(&mappings[0], nil),
+				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
 				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(build.Result{Requeue: false}, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),

@@ -145,7 +145,6 @@ func (c *clusterAPI) kernelMappingsByKernelVersion(
 	logger := log.FromContext(ctx)
 
 	for _, kernelVersion := range kernelVersions {
-		osConfig := c.kernelAPI.GetNodeOSConfigFromKernelVersion(kernelVersion)
 		kernelVersion := strings.TrimSuffix(kernelVersion, "+")
 
 		kernelVersionLogger := logger.WithValues(
@@ -157,15 +156,9 @@ func (c *clusterAPI) kernelMappingsByKernelVersion(
 			continue
 		}
 
-		m, err := c.kernelAPI.FindMappingForKernel(modSpec, kernelVersion)
+		m, err := c.kernelAPI.GetMergedMappingForKernel(modSpec, kernelVersion)
 		if err != nil {
 			kernelVersionLogger.Info("no suitable container image found; skipping kernel version")
-			continue
-		}
-
-		m, err = c.kernelAPI.PrepareKernelMapping(m, osConfig)
-		if err != nil {
-			kernelVersionLogger.Info("failed to substitute the template variables in the mapping", "error", err)
 			continue
 		}
 

@@ -54,15 +54,9 @@ type preflight struct {
 func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mod *kmmv1beta1.Module) (bool, string) {
 	log := ctrlruntime.LoggerFrom(ctx)
 	kernelVersion := pv.Spec.KernelVersion
-	mapping, err := p.kernelAPI.FindMappingForKernel(&mod.Spec, kernelVersion)
+	mapping, err := p.kernelAPI.GetMergedMappingForKernel(&mod.Spec, kernelVersion)
 	if err != nil {
-		return false, fmt.Sprintf("Failed to find kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)
-	}
-
-	osConfig := module.NodeOSConfig{KernelFullVersion: kernelVersion}
-	mapping, err = p.kernelAPI.PrepareKernelMapping(mapping, &osConfig)
-	if err != nil {
-		return false, fmt.Sprintf("Failed to substitute template in kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)
+		return false, fmt.Sprintf("failed to process kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)
 	}
 
 	err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mod.Name, kmmv1beta1.VerificationStageImage)
