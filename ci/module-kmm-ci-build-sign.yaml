@@ -23,5 +23,14 @@ spec:
             # Optional. If kanikoParams.tag is empty, the default value will be: 'latest'
             kanikoParams:
               tag: "debug"
+          sign:
+            certSecret:
+              name: kmm-kmod-signing-cert
+            keySecret:
+              name: kmm-kmod-signing-key
+            unsignedImageRegistryTLS:
+              insecure: true
+            filesToSign:
+              - /opt/lib/modules/${KERNEL_FULL_VERSION}/kmm_ci_a.ko
   selector:
     kubernetes.io/hostname: minikube
