@@ -9,7 +9,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	v1 "k8s.io/api/core/v1"
 )
 
 // MockKernelMapper is a mock of KernelMapper interface.
@@ -35,60 +34,83 @@ func (m *MockKernelMapper) EXPECT() *MockKernelMapperMockRecorder {
 	return m.recorder
 }
 
-// FindMappingForKernel mocks base method.
-func (m *MockKernelMapper) FindMappingForKernel(modSpec *v1beta1.ModuleSpec, kernelVersion string) (*v1beta1.KernelMapping, error) {
+// GetMergedMappingForKernel mocks base method.
+func (m *MockKernelMapper) GetMergedMappingForKernel(modSpec *v1beta1.ModuleSpec, kernelVersion string) (*v1beta1.KernelMapping, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindMappingForKernel", modSpec, kernelVersion)
+	ret := m.ctrl.Call(m, "GetMergedMappingForKernel", modSpec, kernelVersion)
 	ret0, _ := ret[0].(*v1beta1.KernelMapping)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// FindMappingForKernel indicates an expected call of FindMappingForKernel.
-func (mr *MockKernelMapperMockRecorder) FindMappingForKernel(modSpec, kernelVersion interface{}) *gomock.Call {
+// GetMergedMappingForKernel indicates an expected call of GetMergedMappingForKernel.
+func (mr *MockKernelMapperMockRecorder) GetMergedMappingForKernel(modSpec, kernelVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindMappingForKernel", reflect.TypeOf((*MockKernelMapper)(nil).FindMappingForKernel), modSpec, kernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMergedMappingForKernel", reflect.TypeOf((*MockKernelMapper)(nil).GetMergedMappingForKernel), modSpec, kernelVersion)
 }
 
-// GetNodeOSConfig mocks base method.
-func (m *MockKernelMapper) GetNodeOSConfig(node *v1.Node) *NodeOSConfig {
+// MockkernelMapperHelperAPI is a mock of kernelMapperHelperAPI interface.
+type MockkernelMapperHelperAPI struct {
+	ctrl     *gomock.Controller
+	recorder *MockkernelMapperHelperAPIMockRecorder
+}
+
+// MockkernelMapperHelperAPIMockRecorder is the mock recorder for MockkernelMapperHelperAPI.
+type MockkernelMapperHelperAPIMockRecorder struct {
+	mock *MockkernelMapperHelperAPI
+}
+
+// NewMockkernelMapperHelperAPI creates a new mock instance.
+func NewMockkernelMapperHelperAPI(ctrl *gomock.Controller) *MockkernelMapperHelperAPI {
+	mock := &MockkernelMapperHelperAPI{ctrl: ctrl}
+	mock.recorder = &MockkernelMapperHelperAPIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockkernelMapperHelperAPI) EXPECT() *MockkernelMapperHelperAPIMockRecorder {
+	return m.recorder
+}
+
+// findKernelMapping mocks base method.
+func (m *MockkernelMapperHelperAPI) findKernelMapping(mappings []v1beta1.KernelMapping, kernelVersion string) (*v1beta1.KernelMapping, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNodeOSConfig", node)
-	ret0, _ := ret[0].(*NodeOSConfig)
-	return ret0
-}
-
-// GetNodeOSConfig indicates an expected call of GetNodeOSConfig.
-func (mr *MockKernelMapperMockRecorder) GetNodeOSConfig(node interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeOSConfig", reflect.TypeOf((*MockKernelMapper)(nil).GetNodeOSConfig), node)
-}
-
-// GetNodeOSConfigFromKernelVersion mocks base method.
-func (m *MockKernelMapper) GetNodeOSConfigFromKernelVersion(kernelVersion string) *NodeOSConfig {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNodeOSConfigFromKernelVersion", kernelVersion)
-	ret0, _ := ret[0].(*NodeOSConfig)
-	return ret0
-}
-
-// GetNodeOSConfigFromKernelVersion indicates an expected call of GetNodeOSConfigFromKernelVersion.
-func (mr *MockKernelMapperMockRecorder) GetNodeOSConfigFromKernelVersion(kernelVersion interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeOSConfigFromKernelVersion", reflect.TypeOf((*MockKernelMapper)(nil).GetNodeOSConfigFromKernelVersion), kernelVersion)
-}
-
-// PrepareKernelMapping mocks base method.
-func (m *MockKernelMapper) PrepareKernelMapping(mapping *v1beta1.KernelMapping, osConfig *NodeOSConfig) (*v1beta1.KernelMapping, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PrepareKernelMapping", mapping, osConfig)
+	ret := m.ctrl.Call(m, "findKernelMapping", mappings, kernelVersion)
 	ret0, _ := ret[0].(*v1beta1.KernelMapping)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// PrepareKernelMapping indicates an expected call of PrepareKernelMapping.
-func (mr *MockKernelMapperMockRecorder) PrepareKernelMapping(mapping, osConfig interface{}) *gomock.Call {
+// findKernelMapping indicates an expected call of findKernelMapping.
+func (mr *MockkernelMapperHelperAPIMockRecorder) findKernelMapping(mappings, kernelVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareKernelMapping", reflect.TypeOf((*MockKernelMapper)(nil).PrepareKernelMapping), mapping, osConfig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "findKernelMapping", reflect.TypeOf((*MockkernelMapperHelperAPI)(nil).findKernelMapping), mappings, kernelVersion)
+}
+
+// mergeMappingData mocks base method.
+func (m *MockkernelMapperHelperAPI) mergeMappingData(mapping *v1beta1.KernelMapping, modSpec *v1beta1.ModuleSpec, kernelVersion string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "mergeMappingData", mapping, modSpec, kernelVersion)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// mergeMappingData indicates an expected call of mergeMappingData.
+func (mr *MockkernelMapperHelperAPIMockRecorder) mergeMappingData(mapping, modSpec, kernelVersion interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mergeMappingData", reflect.TypeOf((*MockkernelMapperHelperAPI)(nil).mergeMappingData), mapping, modSpec, kernelVersion)
+}
+
+// replaceTemplates mocks base method.
+func (m *MockkernelMapperHelperAPI) replaceTemplates(mapping *v1beta1.KernelMapping, kernelVersion string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "replaceTemplates", mapping, kernelVersion)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// replaceTemplates indicates an expected call of replaceTemplates.
+func (mr *MockkernelMapperHelperAPIMockRecorder) replaceTemplates(mapping, kernelVersion interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "replaceTemplates", reflect.TypeOf((*MockkernelMapperHelperAPI)(nil).replaceTemplates), mapping, kernelVersion)
 }

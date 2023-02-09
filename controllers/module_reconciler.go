@@ -189,7 +189,6 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 	nodes := make([]v1.Node, 0, len(targetedNodes))
 
 	for _, node := range targetedNodes {
-		osConfig := r.kernelAPI.GetNodeOSConfig(&node)
 		kernelVersion := strings.TrimSuffix(node.Status.NodeInfo.KernelVersion, "+")
 
 		nodeLogger := logger.WithValues(
@@ -203,16 +202,9 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 			continue
 		}
 
-		m, err := r.kernelAPI.FindMappingForKernel(&mod.Spec, kernelVersion)
+		m, err := r.kernelAPI.GetMergedMappingForKernel(&mod.Spec, kernelVersion)
 		if err != nil {
-			nodeLogger.Info("no suitable container image found; skipping node")
-			continue
-		}
-
-		m, err = r.kernelAPI.PrepareKernelMapping(m, osConfig)
-		if err != nil {
-			nodes = append(nodes, node)
-			nodeLogger.Info("failed to substitute the template variables in the mapping", "error", err)
+			nodeLogger.Error(err, "failed to get and process kernel mapping")
 			continue
 		}
 

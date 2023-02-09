@@ -1,6 +1,7 @@
 package module
 
 import (
+	"fmt"
 	"github.com/golang/mock/gomock"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
@@ -10,160 +11,228 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("FindMappingForKernel", func() {
+var _ = Describe("GetMergedMappingForKernel", func() {
 	const (
 		kernelVersion = "1.2.3"
 		selectedImage = "image1"
 	)
 
 	var (
-		ctrl        *gomock.Controller
-		buildHelper *build.MockHelper
-		signHelper  *sign.MockHelper
-		km          KernelMapper
-		modSpec     kmmv1beta1.ModuleSpec
+		ctrl    *gomock.Controller
+		kh      *MockkernelMapperHelperAPI
+		km      *kernelMapper
+		modSpec kmmv1beta1.ModuleSpec
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		buildHelper = build.NewMockHelper(ctrl)
-		signHelper = sign.NewMockHelper(ctrl)
-		km = NewKernelMapper(buildHelper, signHelper)
-		modSpec = kmmv1beta1.ModuleSpec{
-			ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-				Container: kmmv1beta1.ModuleLoaderContainerSpec{},
-			},
-		}
+		kh = NewMockkernelMapperHelperAPI(ctrl)
+		km = &kernelMapper{helper: kh}
+		modSpec = kmmv1beta1.ModuleSpec{}
 	})
 
 	AfterEach(func() {
 		ctrl.Finish()
 	})
 
-	It("one literal mapping, no module sign or build", func() {
-		mapping := kmmv1beta1.KernelMapping{
-			ContainerImage: selectedImage,
-			Literal:        "1.2.3",
-		}
-		expectedMapping := kmmv1beta1.KernelMapping{
-			ContainerImage: selectedImage,
-			Literal:        "1.2.3",
-			RegistryTLS:    &kmmv1beta1.TLSOptions{},
-		}
-		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
-
-		m, err := km.FindMappingForKernel(&modSpec, kernelVersion)
+	It("good flow", func() {
+		mapping := kmmv1beta1.KernelMapping{}
+		kh.EXPECT().findKernelMapping(modSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mapping, nil)
+		kh.EXPECT().mergeMappingData(&mapping, &modSpec, kernelVersion).Return(nil)
+		kh.EXPECT().replaceTemplates(&mapping, kernelVersion).Return(nil)
+		res, err := km.GetMergedMappingForKernel(&modSpec, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(Equal(&expectedMapping))
+		Expect(res).To(Equal(&mapping))
 	})
 
-	It("one regexp mapping, no module sign or build", func() {
-		mapping := kmmv1beta1.KernelMapping{
-			ContainerImage: selectedImage,
-			Regexp:         `1\..*`,
-		}
-		expectedMapping := kmmv1beta1.KernelMapping{
-			ContainerImage: selectedImage,
-			Regexp:         `1\..*`,
-			RegistryTLS:    &kmmv1beta1.TLSOptions{},
-		}
-		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
+	It("failed to find kernel mapping", func() {
+		kh.EXPECT().findKernelMapping(modSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(nil, fmt.Errorf("some error"))
+		res, err := km.GetMergedMappingForKernel(&modSpec, kernelVersion)
+		Expect(err).To(HaveOccurred())
+		Expect(res).To(BeNil())
+	})
 
-		m, err := km.FindMappingForKernel(&modSpec, kernelVersion)
+	It("failed to merge mapping data", func() {
+		mapping := kmmv1beta1.KernelMapping{}
+		kh.EXPECT().findKernelMapping(modSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mapping, nil)
+		kh.EXPECT().mergeMappingData(&mapping, &modSpec, kernelVersion).Return(fmt.Errorf("some error"))
+		res, err := km.GetMergedMappingForKernel(&modSpec, kernelVersion)
+		Expect(err).To(HaveOccurred())
+		Expect(res).To(BeNil())
+	})
+
+	It("failed to replace templates", func() {
+		mapping := kmmv1beta1.KernelMapping{}
+		kh.EXPECT().findKernelMapping(modSpec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(&mapping, nil)
+		kh.EXPECT().mergeMappingData(&mapping, &modSpec, kernelVersion).Return(nil)
+		kh.EXPECT().replaceTemplates(&mapping, kernelVersion).Return(fmt.Errorf("some error"))
+		res, err := km.GetMergedMappingForKernel(&modSpec, kernelVersion)
+		Expect(err).To(HaveOccurred())
+		Expect(res).To(BeNil())
+	})
+})
+
+var _ = Describe("findKernelMapping", func() {
+	const (
+		kernelVersion = "1.2.3"
+	)
+
+	var (
+		ctrl    *gomock.Controller
+		kh      kernelMapperHelperAPI
+		modSpec kmmv1beta1.ModuleSpec
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		kh = newKernelMapperHelper(nil, nil)
+		modSpec = kmmv1beta1.ModuleSpec{}
+	})
+
+	AfterEach(func() {
+		ctrl.Finish()
+	})
+
+	It("one literal mapping", func() {
+		mapping := kmmv1beta1.KernelMapping{
+			Literal: "1.2.3",
+		}
+
+		m, err := kh.findKernelMapping([]kmmv1beta1.KernelMapping{mapping}, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(Equal(&expectedMapping))
+		Expect(m).To(Equal(&mapping))
+	})
+
+	It("one regexp mapping", func() {
+		mapping := kmmv1beta1.KernelMapping{
+			Regexp: `1\..*`,
+		}
+
+		m, err := kh.findKernelMapping([]kmmv1beta1.KernelMapping{mapping}, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(m).To(Equal(&mapping))
 	})
 
 	It("should return an error if a regex is invalid", func() {
 		mapping := kmmv1beta1.KernelMapping{
-			ContainerImage: selectedImage,
-			Regexp:         "invalid)",
+			Regexp: "invalid)",
 		}
 		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
 
-		_, err := km.FindMappingForKernel(&modSpec, kernelVersion)
+		m, err := kh.findKernelMapping([]kmmv1beta1.KernelMapping{mapping}, kernelVersion)
 		Expect(err).To(HaveOccurred())
+		Expect(m).To(BeNil())
 	})
 
 	It("should return an error if no mapping work", func() {
 		mappings := []kmmv1beta1.KernelMapping{
 			{
-				ContainerImage: selectedImage,
-				Regexp:         `1.2.2`,
+				Regexp: `1.2.2`,
 			},
 			{
-				ContainerImage: selectedImage,
-				Regexp:         `0\..*`,
+				Regexp: `0\..*`,
 			},
 		}
-		modSpec.ModuleLoader.Container.KernelMappings = mappings
 
-		_, err := km.FindMappingForKernel(&modSpec, kernelVersion)
-		Expect(err).To(MatchError("failed to find mapping for kernel 1.2.3: no suitable mapping found"))
+		m, err := kh.findKernelMapping(mappings, kernelVersion)
+		Expect(err).To(MatchError("no suitable mapping found"))
+		Expect(m).To(BeNil())
+	})
+})
+
+var _ = Describe("mergeMappingData", func() {
+	const (
+		kernelVersion = "1.2.3"
+		selectedImage = "image1"
+	)
+
+	var (
+		ctrl            *gomock.Controller
+		buildHelper     *build.MockHelper
+		signHelper      *sign.MockHelper
+		kh              kernelMapperHelperAPI
+		modSpec         kmmv1beta1.ModuleSpec
+		mapping         kmmv1beta1.KernelMapping
+		expectedMapping kmmv1beta1.KernelMapping
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		buildHelper = build.NewMockHelper(ctrl)
+		signHelper = sign.NewMockHelper(ctrl)
+		kh = newKernelMapperHelper(buildHelper, signHelper)
+		modSpec = kmmv1beta1.ModuleSpec{}
+		modSpec.ModuleLoader.Container.ContainerImage = "spec container image"
+		mapping = kmmv1beta1.KernelMapping{}
+		expectedMapping = kmmv1beta1.KernelMapping{}
 	})
 
-	It("one literal, unify module and mapping build", func() {
-		mapping := kmmv1beta1.KernelMapping{
-			ContainerImage: selectedImage,
-			Literal:        "1.2.3",
-		}
-		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
-		modSpec.ModuleLoader.Container.Build = &kmmv1beta1.Build{
+	AfterEach(func() {
+		ctrl.Finish()
+	})
+
+	DescribeTable("prepare mapping", func(buildExistsInMapping, buildExistsInModuleSpec, signExistsInMapping, SignExistsInModuleSpec,
+		registryTLSExistsInMapping, containerImageExistsInMapping bool) {
+		build := &kmmv1beta1.Build{
 			DockerfileConfigMap: &v1.LocalObjectReference{
 				Name: "some name",
 			},
 		}
-		expectedMapping := kmmv1beta1.KernelMapping{
-			ContainerImage: selectedImage,
-			Literal:        "1.2.3",
-			RegistryTLS:    &kmmv1beta1.TLSOptions{},
-			Build: &kmmv1beta1.Build{
-				DockerfileConfigMap: &v1.LocalObjectReference{
-					Name: "some name",
-				},
-			},
+		sign := &kmmv1beta1.Sign{
+			UnsignedImage: "some unsigned image",
 		}
-		buildHelper.EXPECT().GetRelevantBuild(modSpec.ModuleLoader.Container.Build, mapping.Build).Return(modSpec.ModuleLoader.Container.Build)
+		registryTSL := &kmmv1beta1.TLSOptions{
+			Insecure: true,
+		}
+		if buildExistsInMapping {
+			mapping.Build = build
+		}
+		if buildExistsInModuleSpec {
+			modSpec.ModuleLoader.Container.Build = build
+		}
+		if signExistsInMapping {
+			mapping.Sign = sign
+		}
+		if SignExistsInModuleSpec {
+			modSpec.ModuleLoader.Container.Sign = sign
+		}
+		expectedMapping.RegistryTLS = &modSpec.ModuleLoader.Container.RegistryTLS
+		if registryTLSExistsInMapping {
+			mapping.RegistryTLS = registryTSL
+			expectedMapping.RegistryTLS = registryTSL
+		}
+		expectedMapping.ContainerImage = modSpec.ModuleLoader.Container.ContainerImage
+		if containerImageExistsInMapping {
+			mapping.ContainerImage = "mapping container image"
+			expectedMapping.ContainerImage = mapping.ContainerImage
+		}
 
-		m, err := km.FindMappingForKernel(&modSpec, kernelVersion)
+		if buildExistsInMapping || buildExistsInModuleSpec {
+			expectedMapping.Build = build
+			buildHelper.EXPECT().GetRelevantBuild(modSpec.ModuleLoader.Container.Build, mapping.Build).Return(build)
+		}
+		if signExistsInMapping || SignExistsInModuleSpec {
+			expectedMapping.Sign = sign
+			signHelper.EXPECT().GetRelevantSign(modSpec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(sign, nil)
+		}
+
+		err := kh.mergeMappingData(&mapping, &modSpec, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(Equal(&expectedMapping))
-	})
-
-	It("one literal, unify module and mapping sign", func() {
-		mapping := kmmv1beta1.KernelMapping{
-			ContainerImage: selectedImage,
-			Literal:        "1.2.3",
-		}
-		modSpec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{mapping}
-		modSpec.ModuleLoader.Container.Sign = &kmmv1beta1.Sign{
-			UnsignedImage: "some image",
-		}
-		expectedMapping := kmmv1beta1.KernelMapping{
-			ContainerImage: selectedImage,
-			Literal:        "1.2.3",
-			RegistryTLS:    &kmmv1beta1.TLSOptions{},
-			Sign: &kmmv1beta1.Sign{
-				UnsignedImage: "some image",
-			},
-		}
-		signHelper.EXPECT().GetRelevantSign(modSpec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(modSpec.ModuleLoader.Container.Sign, nil)
-
-		m, err := km.FindMappingForKernel(&modSpec, kernelVersion)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(Equal(&expectedMapping))
-	})
+		Expect(mapping).To(Equal(expectedMapping))
+	},
+		Entry("build in mapping only", true, false, false, false, false, false),
+		Entry("build in spec only", false, true, false, false, false, false),
+		Entry("sign in mapping only", false, false, true, false, false, false),
+		Entry("sign in spec only", false, false, false, true, false, false),
+		Entry("registryTLS in mapping", false, false, false, false, true, false),
+		Entry("containerImage in mapping", false, false, false, false, false, true),
+	)
 })
 
-var _ = Describe("PrepareKernelMapping", func() {
-	osConfig := NodeOSConfig{
-		KernelFullVersion:  "kernelFullVersion",
-		KernelVersionMMP:   "kernelMMP",
-		KernelVersionMajor: "kernelMajor",
-		KernelVersionMinor: "kernelMinor",
-		KernelVersionPatch: "kernelPatch",
-	}
-	km := NewKernelMapper(nil, nil)
+var _ = Describe("replaceTemplates", func() {
+	const kernelVersion = "5.8.18-100.fc31.x86_64"
+
+	kh := newKernelMapperHelper(nil, nil)
 
 	It("error input", func() {
 		mapping := kmmv1beta1.KernelMapping{
@@ -171,7 +240,7 @@ var _ = Describe("PrepareKernelMapping", func() {
 			Literal:        "some literal",
 			Regexp:         "regexp",
 		}
-		_, err := km.PrepareKernelMapping(&mapping, &osConfig)
+		err := kh.replaceTemplates(&mapping, kernelVersion)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -194,7 +263,7 @@ var _ = Describe("PrepareKernelMapping", func() {
 			},
 		}
 		expectMapping := kmmv1beta1.KernelMapping{
-			ContainerImage: "some image:kernelMMP",
+			ContainerImage: "some image:5.8.18",
 			Literal:        literal,
 			Regexp:         regexp,
 			Build: &kmmv1beta1.Build{
@@ -206,53 +275,9 @@ var _ = Describe("PrepareKernelMapping", func() {
 			},
 		}
 
-		res, err := km.PrepareKernelMapping(&mapping, &osConfig)
+		err := kh.replaceTemplates(&mapping, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(*res).To(Equal(expectMapping))
+		Expect(mapping).To(Equal(expectMapping))
 	})
-})
 
-var _ = Describe("GetNodeOSConfig", func() {
-	km := NewKernelMapper(nil, nil)
-
-	It("parsing the node data", func() {
-		node := v1.Node{
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{
-					KernelVersion: "4.18.0-305.45.1.el8_4.x86_64",
-					OSImage:       "Red Hat Enterprise Linux CoreOS 410.84.202205191234-0 (Ootpa)",
-				},
-			},
-		}
-
-		expectedOSConfig := NodeOSConfig{
-			KernelFullVersion:  "4.18.0-305.45.1.el8_4.x86_64",
-			KernelVersionMMP:   "4.18.0",
-			KernelVersionMajor: "4",
-			KernelVersionMinor: "18",
-			KernelVersionPatch: "0",
-		}
-
-		res := km.GetNodeOSConfig(&node)
-		Expect(*res).To(Equal(expectedOSConfig))
-	})
-})
-
-var _ = Describe("GetNodeOSConfigFromKernelVersion", func() {
-	km := NewKernelMapper(nil, nil)
-
-	It("parsing the kernel version", func() {
-		kernelVersion := "4.18.0-305.45.1.el8_4.x86_64"
-
-		expectedOSConfig := NodeOSConfig{
-			KernelFullVersion:  "4.18.0-305.45.1.el8_4.x86_64",
-			KernelVersionMMP:   "4.18.0",
-			KernelVersionMajor: "4",
-			KernelVersionMinor: "18",
-			KernelVersionPatch: "0",
-		}
-
-		res := km.GetNodeOSConfigFromKernelVersion(kernelVersion)
-		Expect(*res).To(Equal(expectedOSConfig))
-	})
 })
