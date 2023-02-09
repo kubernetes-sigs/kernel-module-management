@@ -26,5 +26,5 @@ type SignManager interface {
 		targetKernel string,
 		imageToSign string,
 		pushImage bool,
-		owner metav1.Object) (utils.Result, error)
+		owner metav1.Object) (utils.Status, error)
 }

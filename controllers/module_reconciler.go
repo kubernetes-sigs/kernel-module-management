@@ -131,23 +131,21 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	for kernelVersion, m := range mappings {
-		requeue, err := r.handleBuild(ctx, mod, m, kernelVersion)
+		completedSuccessfully, err := r.handleBuild(ctx, mod, m, kernelVersion)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle build for kernel version %s: %v", kernelVersion, err)
 		}
-		if requeue {
-			logger.Info("Build requires a requeue; skipping handling driver container for now", "kernelVersion", kernelVersion, "image", m)
-			res.Requeue = true
+		if !completedSuccessfully {
+			logger.Info("Build has not finished successfully yet:skipping handling signing and driver container for now", "kernelVersion", kernelVersion, "image", m)
 			continue
 		}
 
-		signrequeue, err := r.handleSigning(ctx, mod, m, kernelVersion)
+		completedSuccessfully, err = r.handleSigning(ctx, mod, m, kernelVersion)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle signing for kernel version %s: %v", kernelVersion, err)
 		}
-		if signrequeue {
-			logger.Info("Signing requires a requeue; skipping handling driver container for now", "kernelVersion", kernelVersion, "image", m)
-			res.Requeue = true
+		if !completedSuccessfully {
+			logger.Info("Signing has not finished successfully yet; skipping handling driver container for now", "kernelVersion", kernelVersion, "image", m)
 			continue
 		}
 
@@ -239,6 +237,7 @@ func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *kmmv
 	return nodes, nil
 }
 
+// handleBuild returns true if build is not needed or finished successfully
 func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	km *kmmv1beta1.KernelMapping,
@@ -249,27 +248,32 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 		return false, fmt.Errorf("could not check if build synchronization is needed: %w", err)
 	}
 	if !shouldSync {
-		return false, nil
+		return true, nil
 	}
 
 	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildRes, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion, true, mod)
+	buildStatus, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion, true, mod)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
 
-	switch buildRes.Status {
-	case build.StatusCreated:
+	completedSuccessfully := false
+	switch buildStatus {
+	case utils.StatusCreated:
 		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, false)
-	case build.StatusCompleted:
+	case utils.StatusCompleted:
+		completedSuccessfully = true
 		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, true)
+	case utils.StatusFailed:
+		logger.Info(utils.WarnString("Build job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
 
-	return buildRes.Requeue, nil
+	return completedSuccessfully, nil
 }
 
+// handleSigning returns true if signing is not needed or finished successfully
 func (r *ModuleReconciler) handleSigning(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	km *kmmv1beta1.KernelMapping,
@@ -280,7 +284,7 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context,
 		return false, fmt.Errorf("cound not check if synchronization is needed: %w", err)
 	}
 	if !shouldSync {
-		return false, nil
+		return true, nil
 	}
 
 	// if we need to sign AND we've built, then we must have built the intermediate image so must figure out its name
@@ -292,19 +296,23 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context,
 	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
 	signCtx := log.IntoContext(ctx, logger)
 
-	signRes, err := r.signAPI.Sync(signCtx, *mod, *km, kernelVersion, previousImage, true, mod)
+	signStatus, err := r.signAPI.Sync(signCtx, *mod, *km, kernelVersion, previousImage, true, mod)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the signing: %w", err)
 	}
 
-	switch signRes.Status {
+	completedSuccessfully := false
+	switch signStatus {
 	case utils.StatusCreated:
 		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, false)
 	case utils.StatusCompleted:
+		completedSuccessfully = true
 		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, true)
+	case utils.StatusFailed:
+		logger.Info(utils.WarnString("Sign job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
 
-	return signRes.Requeue, nil
+	return completedSuccessfully, nil
 }
 
 func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,

@@ -68,10 +68,10 @@ func (mr *MockSignManagerMockRecorder) ShouldSync(ctx, mod, m interface{}) *gomo
 }
 
 // Sync mocks base method.
-func (m_2 *MockSignManager) Sync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping, targetKernel, imageToSign string, pushImage bool, owner v1.Object) (utils.Result, error) {
+func (m_2 *MockSignManager) Sync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping, targetKernel, imageToSign string, pushImage bool, owner v1.Object) (utils.Status, error) {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "Sync", ctx, mod, m, targetKernel, imageToSign, pushImage, owner)
-	ret0, _ := ret[0].(utils.Result)
+	ret0, _ := ret[0].(utils.Status)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

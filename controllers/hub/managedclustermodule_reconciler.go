@@ -103,14 +103,13 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, req ctrl
 		logger := log.FromContext(ctx).WithValues("cluster", cluster.Name)
 		clusterCtx := log.IntoContext(ctx, logger)
 
-		requeue, err := r.clusterAPI.BuildAndSign(clusterCtx, *mcm, cluster)
+		completedSuccessfully, err := r.clusterAPI.BuildAndSign(clusterCtx, *mcm, cluster)
 		if err != nil {
 			logger.Error(err, "failed to build")
 			continue
 		}
-		if requeue {
-			logger.Info("Build and Sign require a requeue; skipping ManifestWork reconciliation")
-			res.Requeue = true
+		if !completedSuccessfully {
+			logger.Info("Build and Sign have not finished successfully yet; skipping ManifestWork reconciliation")
 			continue
 		}
 

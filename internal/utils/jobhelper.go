@@ -26,11 +26,6 @@ const (
 
 var ErrNoMatchingJob = errors.New("no matching job")
 
-type Result struct {
-	Requeue bool
-	Status  Status
-}
-
 //go:generate mockgen -source=jobhelper.go -package=utils -destination=mock_jobhelper.go
 
 type JobHelper interface {
@@ -40,7 +35,7 @@ type JobHelper interface {
 	GetModuleJobs(ctx context.Context, modName, namespace, jobType string, owner metav1.Object) ([]batchv1.Job, error)
 	DeleteJob(ctx context.Context, job *batchv1.Job) error
 	CreateJob(ctx context.Context, jobTemplate *batchv1.Job) error
-	GetJobStatus(job *batchv1.Job) (Status, bool, error)
+	GetJobStatus(job *batchv1.Job) (Status, error)
 }
 
 type jobHelper struct {
@@ -118,16 +113,16 @@ func (jh *jobHelper) CreateJob(ctx context.Context, jobTemplate *batchv1.Job) er
 
 // GetJobStatus returns the status of a Job, whether the latter is in progress or not and
 // whether there was an error or not
-func (jh *jobHelper) GetJobStatus(job *batchv1.Job) (Status, bool, error) {
+func (jh *jobHelper) GetJobStatus(job *batchv1.Job) (Status, error) {
 	switch {
 	case job.Status.Succeeded == 1:
-		return StatusCompleted, false, nil
+		return StatusCompleted, nil
 	case job.Status.Active == 1:
-		return StatusInProgress, true, nil
+		return StatusInProgress, nil
 	case job.Status.Failed == 1:
-		return StatusFailed, false, fmt.Errorf("job failed")
+		return StatusFailed, nil
 	default:
-		return StatusFailed, false, fmt.Errorf("unknown status: %v", job.Status)
+		return "", fmt.Errorf("unknown status: %v", job.Status)
 	}
 }
 

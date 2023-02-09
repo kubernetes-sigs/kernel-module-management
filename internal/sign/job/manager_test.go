@@ -177,7 +177,7 @@ var _ = Describe("Sync", func() {
 	}
 
 	DescribeTable("should return the correct status depending on the job status",
-		func(s batchv1.JobStatus, r utils.Result, expectsErr bool) {
+		func(s batchv1.JobStatus, jobStatus utils.Status, expectsErr bool) {
 			j := batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"kmm.node.kubernetes.io/job-type": "sign",
@@ -212,7 +212,7 @@ var _ = Describe("Sync", func() {
 				maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, labels, previousImageName, true, &mod).Return(&j, nil),
 				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeSign, &mod).Return(&newJob, nil),
 				jobhelper.EXPECT().IsJobChanged(&j, &newJob).Return(false, nil),
-				jobhelper.EXPECT().GetJobStatus(&newJob).Return(r.Status, r.Requeue, joberr),
+				jobhelper.EXPECT().GetJobStatus(&newJob).Return(jobStatus, joberr),
 			)
 
 			res, err := mgr.Sync(ctx, mod, km, kernelVersion, previousImageName, true, &mod)
@@ -222,12 +222,12 @@ var _ = Describe("Sync", func() {
 				return
 			}
 
-			Expect(res).To(Equal(r))
+			Expect(res).To(Equal(jobStatus))
 		},
-		Entry("active", batchv1.JobStatus{Active: 1}, utils.Result{Requeue: true, Status: utils.StatusInProgress}, false),
-		Entry("active", batchv1.JobStatus{Active: 1}, utils.Result{Requeue: true, Status: utils.StatusInProgress}, false),
-		Entry("succeeded", batchv1.JobStatus{Succeeded: 1}, utils.Result{Status: utils.StatusCompleted}, false),
-		Entry("failed", batchv1.JobStatus{Failed: 1}, utils.Result{}, true),
+		Entry("active", batchv1.JobStatus{Active: 1}, utils.Status(utils.StatusInProgress), false),
+		Entry("active", batchv1.JobStatus{Active: 1}, utils.Status(utils.StatusInProgress), false),
+		Entry("succeeded", batchv1.JobStatus{Succeeded: 1}, utils.Status(utils.StatusCompleted), false),
+		Entry("failed", batchv1.JobStatus{Failed: 1}, utils.Status(""), true),
 	)
 
 	It("should return an error if there was an error creating the job template", func() {
@@ -323,7 +323,7 @@ var _ = Describe("Sync", func() {
 		Expect(
 			mgr.Sync(ctx, mod, km, kernelVersion, previousImageName, true, &mod),
 		).To(
-			Equal(utils.Result{Requeue: true, Status: utils.StatusCreated}),
+			Equal(utils.Status(utils.StatusCreated)),
 		)
 	})
 
@@ -353,7 +353,7 @@ var _ = Describe("Sync", func() {
 		Expect(
 			mgr.Sync(ctx, mod, km, kernelVersion, previousImageName, true, &mod),
 		).To(
-			Equal(utils.Result{Requeue: true, Status: utils.StatusInProgress}),
+			Equal(utils.Status(utils.StatusInProgress)),
 		)
 	})
 })
