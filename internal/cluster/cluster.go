@@ -19,6 +19,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 //go:generate mockgen -source=cluster.go -package=cluster -destination=mock_cluster.go
@@ -86,12 +87,15 @@ func (c *clusterAPI) BuildAndSign(
 	mcm hubv1beta1.ManagedClusterModule,
 	cluster clusterv1.ManagedCluster) (bool, error) {
 
-	requeue := false
-
 	modSpec := mcm.Spec.ModuleSpec
 	mappings, err := c.kernelMappingsByKernelVersion(ctx, &modSpec, cluster)
 	if err != nil {
 		return false, err
+	}
+
+	// if no mappings were found, return not completed
+	if len(mappings) == 0 {
+		return false, nil
 	}
 
 	mod := kmmv1beta1.Module{
@@ -102,29 +106,38 @@ func (c *clusterAPI) BuildAndSign(
 		Spec: modSpec,
 	}
 
+	logger := log.FromContext(ctx)
+
+	completedSuccessfully := true
 	for kernelVersion, m := range mappings {
-		buildRequeue, err := c.build(ctx, mod, &mcm, m, kernelVersion)
+		buildCompleted, err := c.build(ctx, mod, &mcm, m, kernelVersion)
 		if err != nil {
 			return false, err
 		}
 
-		if buildRequeue {
-			requeue = true
+		kernelVersionLogger := logger.WithValues(
+			"kernel version", kernelVersion,
+		)
+
+		if !buildCompleted {
+			kernelVersionLogger.Info("Build for mapping has not completed yet, skipping Sign")
+			completedSuccessfully = false
 			continue
 		}
 
-		signRequeue, err := c.sign(ctx, mod, &mcm, m, kernelVersion)
+		signCompleted, err := c.sign(ctx, mod, &mcm, m, kernelVersion)
 		if err != nil {
 			return false, err
 		}
 
-		if signRequeue {
-			requeue = true
+		if !signCompleted {
+			kernelVersionLogger.Info("Sign for mapping has not completed yet")
+			completedSuccessfully = false
 			continue
 		}
 	}
 
-	return requeue, nil
+	return completedSuccessfully, nil
 }
 
 func (c *clusterAPI) GarbageCollectBuilds(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error) {
@@ -195,7 +208,7 @@ func (c *clusterAPI) build(
 		return false, fmt.Errorf("could not check if build synchronization is needed: %v", err)
 	}
 	if !shouldSync {
-		return false, nil
+		return true, nil
 	}
 
 	logger := log.FromContext(ctx).WithValues(
@@ -203,12 +216,15 @@ func (c *clusterAPI) build(
 		"image", kernelMapping.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildRes, err := c.buildAPI.Sync(buildCtx, mod, *kernelMapping, kernelVersion, true, mcm)
+	buildStatus, err := c.buildAPI.Sync(buildCtx, mod, *kernelMapping, kernelVersion, true, mcm)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
 
-	return buildRes.Requeue, nil
+	if buildStatus == utils.StatusCompleted {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (c *clusterAPI) sign(
@@ -223,7 +239,7 @@ func (c *clusterAPI) sign(
 		return false, fmt.Errorf("could not check if signing synchronization is needed: %v", err)
 	}
 	if !shouldSync {
-		return false, nil
+		return true, nil
 	}
 
 	// if we need to sign AND we've built, then we must have built
@@ -238,10 +254,13 @@ func (c *clusterAPI) sign(
 		"image", kernelMapping.ContainerImage)
 	signCtx := log.IntoContext(ctx, logger)
 
-	signRes, err := c.signAPI.Sync(signCtx, mod, *kernelMapping, kernelVersion, previousImage, true, mcm)
+	signStatus, err := c.signAPI.Sync(signCtx, mod, *kernelMapping, kernelVersion, previousImage, true, mcm)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the signing: %w", err)
 	}
 
-	return signRes.Requeue, nil
+	if signStatus == utils.StatusCompleted {
+		return true, nil
+	}
+	return false, nil
 }

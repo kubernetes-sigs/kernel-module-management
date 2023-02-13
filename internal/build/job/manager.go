@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -90,7 +89,7 @@ func (jbm *jobManager) Sync(
 	m kmmv1beta1.KernelMapping,
 	targetKernel string,
 	pushImage bool,
-	owner metav1.Object) (build.Result, error) {
+	owner metav1.Object) (utils.Status, error) {
 
 	logger := log.FromContext(ctx)
 
@@ -98,27 +97,27 @@ func (jbm *jobManager) Sync(
 
 	jobTemplate, err := jbm.maker.MakeJobTemplate(ctx, mod, m, targetKernel, owner, pushImage)
 	if err != nil {
-		return build.Result{}, fmt.Errorf("could not make Job template: %v", err)
+		return "", fmt.Errorf("could not make Job template: %v", err)
 	}
 
 	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, targetKernel, utils.JobTypeBuild, owner)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoMatchingJob) {
-			return build.Result{}, fmt.Errorf("error getting the build: %v", err)
+			return "", fmt.Errorf("error getting the build: %v", err)
 		}
 
 		logger.Info("Creating job")
 		err = jbm.jobHelper.CreateJob(ctx, jobTemplate)
 		if err != nil {
-			return build.Result{}, fmt.Errorf("could not create Job: %v", err)
+			return "", fmt.Errorf("could not create Job: %v", err)
 		}
 
-		return build.Result{Status: build.StatusCreated, Requeue: true}, nil
+		return utils.StatusCreated, nil
 	}
 
 	changed, err := jbm.jobHelper.IsJobChanged(job, jobTemplate)
 	if err != nil {
-		return build.Result{}, fmt.Errorf("could not determine if job has changed: %v", err)
+		return "", fmt.Errorf("could not determine if job has changed: %v", err)
 	}
 
 	if changed {
@@ -127,19 +126,15 @@ func (jbm *jobManager) Sync(
 		if err != nil {
 			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete build job %s: %v", job.Name, err)))
 		}
-		return build.Result{Status: build.StatusInProgress, Requeue: true}, nil
+		return utils.StatusInProgress, nil
 	}
 
 	logger.Info("Returning job status", "name", job.Name, "namespace", job.Namespace)
 
-	switch {
-	case job.Status.Succeeded == 1:
-		return build.Result{Status: build.StatusCompleted}, nil
-	case job.Status.Active == 1:
-		return build.Result{Status: build.StatusInProgress, Requeue: true}, nil
-	case job.Status.Failed == 1:
-		return build.Result{}, fmt.Errorf("job failed: %v", err)
-	default:
-		return build.Result{}, fmt.Errorf("unknown status: %v", job.Status)
+	statusmsg, err := jbm.jobHelper.GetJobStatus(job)
+	if err != nil {
+		return "", err
 	}
+
+	return statusmsg, nil
 }

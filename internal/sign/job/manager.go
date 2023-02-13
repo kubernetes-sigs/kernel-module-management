@@ -79,7 +79,7 @@ func (jbm *signJobManager) Sync(
 	targetKernel string,
 	imageToSign string,
 	pushImage bool,
-	owner metav1.Object) (utils.Result, error) {
+	owner metav1.Object) (utils.Status, error) {
 
 	logger := log.FromContext(ctx)
 
@@ -89,27 +89,27 @@ func (jbm *signJobManager) Sync(
 
 	jobTemplate, err := jbm.signer.MakeJobTemplate(ctx, mod, m, targetKernel, labels, imageToSign, pushImage, owner)
 	if err != nil {
-		return utils.Result{}, fmt.Errorf("could not make Job template: %v", err)
+		return "", fmt.Errorf("could not make Job template: %v", err)
 	}
 
 	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, targetKernel, utils.JobTypeSign, owner)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoMatchingJob) {
-			return utils.Result{}, fmt.Errorf("error getting the signing job: %v", err)
+			return "", fmt.Errorf("error getting the signing job: %v", err)
 		}
 
 		logger.Info("Creating job")
 		err = jbm.jobHelper.CreateJob(ctx, jobTemplate)
 		if err != nil {
-			return utils.Result{}, fmt.Errorf("could not create Signing Job: %v", err)
+			return "", fmt.Errorf("could not create Signing Job: %v", err)
 		}
 
-		return utils.Result{Status: utils.StatusCreated, Requeue: true}, nil
+		return utils.StatusCreated, nil
 	}
 	// default, there are no errors, and there is a job, check if it has changed
 	changed, err := jbm.jobHelper.IsJobChanged(job, jobTemplate)
 	if err != nil {
-		return utils.Result{}, fmt.Errorf("could not determine if job has changed: %v", err)
+		return "", fmt.Errorf("could not determine if job has changed: %v", err)
 	}
 
 	if changed {
@@ -118,15 +118,15 @@ func (jbm *signJobManager) Sync(
 		if err != nil {
 			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete signing job %s: %v", job.Name, err)))
 		}
-		return utils.Result{Status: utils.StatusInProgress, Requeue: true}, nil
+		return utils.StatusInProgress, nil
 	}
 
 	logger.Info("Returning job status", "name", job.Name, "namespace", job.Namespace)
 
-	statusmsg, inprogress, err := jbm.jobHelper.GetJobStatus(job)
+	statusmsg, err := jbm.jobHelper.GetJobStatus(job)
 	if err != nil {
-		return utils.Result{}, err
+		return "", err
 	}
 
-	return utils.Result{Status: statusmsg, Requeue: inprogress}, nil
+	return statusmsg, nil
 }

@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	utils "github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -67,10 +68,10 @@ func (mr *MockManagerMockRecorder) ShouldSync(ctx, mod, m interface{}) *gomock.C
 }
 
 // Sync mocks base method.
-func (m_2 *MockManager) Sync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping, targetKernel string, pushImage bool, owner v1.Object) (Result, error) {
+func (m_2 *MockManager) Sync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping, targetKernel string, pushImage bool, owner v1.Object) (utils.Status, error) {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "Sync", ctx, mod, m, targetKernel, pushImage, owner)
-	ret0, _ := ret[0].(Result)
+	ret0, _ := ret[0].(utils.Status)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

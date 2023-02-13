@@ -413,21 +413,20 @@ var _ = Describe("JobStatus", func() {
 	})
 
 	DescribeTable("should return the correct status depending on the job status",
-		func(s *batchv1.Job, r string, expectinprogress bool, expectsErr bool) {
+		func(s *batchv1.Job, jobStatus string, expectsErr bool) {
 
-			res, inprogress, err := jh.GetJobStatus(s)
+			res, err := jh.GetJobStatus(s)
 			if expectsErr {
 				Expect(err).To(HaveOccurred())
 				return
 			}
 
-			Expect(string(res)).To(Equal(r))
-			Expect(inprogress).To(Equal(expectinprogress))
+			Expect(string(res)).To(Equal(jobStatus))
 		},
-		Entry("succeeded", &batchv1.Job{Status: batchv1.JobStatus{Succeeded: 1}}, StatusCompleted, false, false),
-		Entry("in progress", &batchv1.Job{Status: batchv1.JobStatus{Active: 1}}, StatusInProgress, true, false),
-		Entry("Failed", &batchv1.Job{Status: batchv1.JobStatus{Failed: 1}}, StatusFailed, false, true),
-		Entry("unknown", &batchv1.Job{Status: batchv1.JobStatus{Failed: 2}}, StatusFailed, false, true),
+		Entry("succeeded", &batchv1.Job{Status: batchv1.JobStatus{Succeeded: 1}}, StatusCompleted, false),
+		Entry("in progress", &batchv1.Job{Status: batchv1.JobStatus{Active: 1}}, StatusInProgress, false),
+		Entry("Failed", &batchv1.Job{Status: batchv1.JobStatus{Failed: 1}}, StatusFailed, false),
+		Entry("unknown", &batchv1.Job{Status: batchv1.JobStatus{Failed: 2}}, "", true),
 	)
 })
 
@@ -448,13 +447,11 @@ var _ = Describe("IsJobChnaged", func() {
 		func(annotation map[string]string, expectchanged bool, expectsErr bool) {
 			existingJob := batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
-					//Namespace:   namespace,
 					Annotations: annotation,
 				},
 			}
 			newJob := batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
-					//Namespace:   namespace,
 					Annotations: map[string]string{constants.JobHashAnnotation: "some hash"},
 				},
 			}

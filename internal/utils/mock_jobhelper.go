@@ -65,13 +65,12 @@ func (mr *MockJobHelperMockRecorder) DeleteJob(ctx, job interface{}) *gomock.Cal
 }
 
 // GetJobStatus mocks base method.
-func (m *MockJobHelper) GetJobStatus(job *v1.Job) (Status, bool, error) {
+func (m *MockJobHelper) GetJobStatus(job *v1.Job) (Status, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetJobStatus", job)
 	ret0, _ := ret[0].(Status)
-	ret1, _ := ret[1].(bool)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetJobStatus indicates an expected call of GetJobStatus.

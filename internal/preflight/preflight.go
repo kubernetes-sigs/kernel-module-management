@@ -156,12 +156,12 @@ func (p *preflightHelper) verifyBuild(ctx context.Context,
 	mod *kmmv1beta1.Module) (bool, string) {
 	log := ctrlruntime.LoggerFrom(ctx)
 	// at this stage we know that eiher mapping Build or Container build are defined
-	buildRes, err := p.buildAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, pv.Spec.PushBuiltImage, pv)
+	buildStatus, err := p.buildAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, pv.Spec.PushBuiltImage, pv)
 	if err != nil {
 		return false, fmt.Sprintf("Failed to verify build for module %s, kernel version %s, error %s", mod.Name, pv.Spec.KernelVersion, err)
 	}
 
-	if buildRes.Status == build.StatusCompleted {
+	if buildStatus == utils.StatusCompleted {
 		msg := "build compiles"
 		if pv.Spec.PushBuiltImage {
 			msg += " and image pushed"
@@ -184,12 +184,12 @@ func (p *preflightHelper) verifySign(ctx context.Context,
 	}
 
 	// at this stage we know that eiher mapping Sign or Container sign are defined
-	signRes, err := p.signAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, previousImage, pv.Spec.PushBuiltImage, pv)
+	signStatus, err := p.signAPI.Sync(ctx, *mod, *mapping, pv.Spec.KernelVersion, previousImage, pv.Spec.PushBuiltImage, pv)
 	if err != nil {
 		return false, fmt.Sprintf("Failed to verify signing for module %s, kernel version %s, error %s", mod.Name, pv.Spec.KernelVersion, err)
 	}
 
-	if signRes.Status == utils.StatusCompleted {
+	if signStatus == utils.StatusCompleted {
 		msg := "sign completes"
 		if pv.Spec.PushBuiltImage {
 			msg += " and image pushed"

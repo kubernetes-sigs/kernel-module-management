@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
@@ -183,14 +182,13 @@ var _ = Describe("Sync", func() {
 	}
 
 	DescribeTable("should return the correct status depending on the job status",
-		func(s batchv1.JobStatus, r build.Result, expectsErr bool) {
+		func(jobStatus utils.Status, expectsErr bool) {
 			j := batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      map[string]string{"label key": "some label"},
 					Namespace:   namespace,
 					Annotations: map[string]string{constants.JobHashAnnotation: "some hash"},
 				},
-				Status: s,
 			}
 			ctx := context.Background()
 
@@ -198,6 +196,7 @@ var _ = Describe("Sync", func() {
 				maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(&j, nil),
 				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild, &mod).Return(&j, nil),
 				jobhelper.EXPECT().IsJobChanged(&j, &j).Return(false, nil),
+				jobhelper.EXPECT().GetJobStatus(&j).Return(jobStatus, nil),
 			)
 
 			mgr := NewBuildManager(clnt, maker, jobhelper, reg)
@@ -209,11 +208,11 @@ var _ = Describe("Sync", func() {
 				return
 			}
 
-			Expect(res).To(Equal(r))
+			Expect(res).To(Equal(jobStatus))
 		},
-		Entry("active", batchv1.JobStatus{Active: 1}, build.Result{Requeue: true, Status: build.StatusInProgress}, false),
-		Entry("succeeded", batchv1.JobStatus{Succeeded: 1}, build.Result{Status: build.StatusCompleted}, false),
-		Entry("failed", batchv1.JobStatus{Failed: 1}, build.Result{}, true),
+		Entry("active", utils.Status(utils.StatusInProgress), false),
+		Entry("succeeded", utils.Status(utils.StatusCompleted), false),
+		Entry("failed", utils.Status(utils.StatusFailed), false),
 	)
 
 	It("should return an error if there was an error creating the job template", func() {
@@ -285,7 +284,7 @@ var _ = Describe("Sync", func() {
 		Expect(
 			mgr.Sync(ctx, mod, km, kernelVersion, true, &mod),
 		).To(
-			Equal(build.Result{Requeue: true, Status: build.StatusCreated}),
+			Equal(utils.Status(utils.StatusCreated)),
 		)
 	})
 
@@ -328,7 +327,7 @@ var _ = Describe("Sync", func() {
 		Expect(
 			mgr.Sync(ctx, mod, km, kernelVersion, true, &mod),
 		).To(
-			Equal(build.Result{Requeue: true, Status: build.StatusInProgress}),
+			Equal(utils.Status(utils.StatusInProgress)),
 		)
 	})
 })

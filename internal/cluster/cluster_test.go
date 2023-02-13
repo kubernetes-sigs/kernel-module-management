@@ -234,9 +234,9 @@ var _ = Describe("ClusterAPI", func() {
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
-			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
-			Expect(requeue).To(BeFalse())
+			Expect(completed).To(BeFalse())
 		})
 
 		It("should return an error when ClusterClaims are not found or empty", func() {
@@ -253,9 +253,9 @@ var _ = Describe("ClusterAPI", func() {
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
-			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).To(HaveOccurred())
-			Expect(requeue).To(BeFalse())
+			Expect(completed).To(BeFalse())
 		})
 
 		It("should do nothing when Build and Sign are not needed", func() {
@@ -267,56 +267,53 @@ var _ = Describe("ClusterAPI", func() {
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
-			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
-			Expect(requeue).To(BeFalse())
+			Expect(completed).To(BeTrue())
 		})
 
 		It("should run build sync if needed", func() {
 			gomock.InOrder(
 				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm),
+				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
-			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
-			Expect(requeue).To(BeFalse())
+			Expect(completed).To(BeTrue())
 		})
 
 		It("should return an error when build sync errors", func() {
 			gomock.InOrder(
 				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(build.Result{}, errors.New("test-error")),
+				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(utils.Status(""), errors.New("test-error")),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
-			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).To(HaveOccurred())
-			Expect(requeue).To(BeFalse())
+			Expect(completed).To(BeFalse())
 		})
 
 		It("should run sign sync if needed", func() {
-
-			signResult := utils.Result{Requeue: true}
-
 			gomock.InOrder(
 				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm).Return(signResult, nil),
+				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
-			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
-			Expect(requeue).To(Equal(signResult.Requeue))
+			Expect(completed).To(BeFalse())
 		})
 
 		It("should return an error when sign sync errors", func() {
@@ -324,44 +321,44 @@ var _ = Describe("ClusterAPI", func() {
 				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(false, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm).Return(utils.Result{}, errors.New("test-error")),
+				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm).Return(utils.Status(""), errors.New("test-error")),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
-			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).To(HaveOccurred())
-			Expect(requeue).To(BeFalse())
+			Expect(completed).To(BeFalse())
 		})
 
-		It("should not run sign sync when build sync requires a requeue", func() {
+		It("should not run sign sync when build sync does not complete", func() {
 			gomock.InOrder(
 				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(build.Result{Requeue: true}, nil),
+				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
-			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
-			Expect(requeue).To(BeTrue())
+			Expect(completed).To(BeFalse())
 		})
 
-		It("should run both build sync and sign sync when build does not require a requeue", func() {
+		It("should run both build sync and sign sync when build is completed", func() {
 			gomock.InOrder(
 				mockKM.EXPECT().GetMergedMappingForKernel(&mcm.Spec.ModuleSpec, kernelVersion).Return(&mappings[0], nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(build.Result{Requeue: false}, nil),
+				mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm),
+				mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 
-			requeue, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 			Expect(err).ToNot(HaveOccurred())
-			Expect(requeue).To(BeFalse())
+			Expect(completed).To(BeTrue())
 		})
 	})
 
