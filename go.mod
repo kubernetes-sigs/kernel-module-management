@@ -3,7 +3,7 @@ module github.com/kubernetes-sigs/kernel-module-management
 go 1.18
 
 require (
-	github.com/a8m/envsubst v1.4.1
+	github.com/a8m/envsubst v1.4.2
 	github.com/go-logr/logr v1.2.3
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.9
