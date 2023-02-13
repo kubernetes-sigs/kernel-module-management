@@ -3,6 +3,7 @@
 resources:
 - bases/kernel-module-management-hub.clusterserviceversion.yaml
 - ../default-hub
+- ../samples-hub
 - ../scorecard
 
 # [WEBHOOK] To enable webhooks, uncomment all the sections with [WEBHOOK] prefix.

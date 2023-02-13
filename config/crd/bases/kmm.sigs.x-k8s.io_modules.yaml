@@ -18,7 +18,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Module is the Schema for the modules API
+        description: Module describes how to load a module on different kernel versions
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

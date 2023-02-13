@@ -1,0 +1,5 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+  - kmm.sigs.x-k8s.io_modules.yaml
+  - kmm.sigs.x-k8s.io_preflightvalidations.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

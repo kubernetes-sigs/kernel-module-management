@@ -1,0 +1,12 @@
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: Module
+metadata:
+  name: module-sample
+spec:
+  moduleLoader:
+    container:
+      kernelMappings: []
+      modprobe:
+        moduleName: sample
+  selector:
+    node-role.kubernetes.io/worker: ""

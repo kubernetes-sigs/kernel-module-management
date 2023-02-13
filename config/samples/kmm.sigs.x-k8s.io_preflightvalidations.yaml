@@ -1,0 +1,7 @@
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: PreflightValidation
+metadata:
+  name: preflightvalidation-sample
+spec:
+  kernelVersion: 4.18.0-372.32.1.el8_6.x86_64
+  pushBuiltImage: true
