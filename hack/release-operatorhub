@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+# This script generates bundle directories to be imported into OperatorHub.io.s
+
+set -euo pipefail
+
+make_output_dir () {
+  local -r dir=$1
+
+  if ! [ -d "$dir" ]; then
+    mkdir "$dir"
+  else
+    rm -fr "${dir:?}"/*
+  fi
+}
+
+created_at=$(date +'%Y-%m-%d %H:%M:%S')
+readonly created_at
+
+replace_csv () {
+  local -r container_image=$1
+  local -r csv_path=$2
+
+  yq -i "
+    .metadata.annotations.containerImage = \"$container_image\" |
+    .metadata.annotations.createdAt = \"$created_at\"" \
+    "$csv_path"
+}
+
+: "$IMG"
+: "$HUB_IMG"
+: "$VERSION"
+
+# KMM
+
+output_dir="kmm-operatorhub-$VERSION"
+
+echo "Generating KMM bundle files for OperatorHub in $output_dir"
+
+make bundle VERSION="$VERSION"
+
+make_output_dir "$output_dir"
+
+cp -r bundle/* "$output_dir"
+
+replace_csv "$IMG" "$output_dir/manifests/kernel-module-management.clusterserviceversion.yaml"
+
+# KMM-Hub
+
+output_dir="kmm-hub-operatorhub-$VERSION"
+
+echo "Generating KMM-Hub bundle files for OperatorHub in $output_dir"
+
+make bundle-hub VERSION="$VERSION"
+
+make_output_dir "$output_dir"
+
+cp -r bundle/* "$output_dir"
+
+replace_csv "$HUB_IMG" "$output_dir/manifests/kernel-module-management-hub.clusterserviceversion.yaml"
+
+echo 'Done.'

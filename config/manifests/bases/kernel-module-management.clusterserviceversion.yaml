@@ -3,19 +3,15 @@ kind: ClusterServiceVersion
 metadata:
   annotations:
     alm-examples: '[]'
-    capabilities: Basic Install
+    capabilities: Seamless Upgrades
     categories: Drivers and plugins
-  name: kmm-operator.v0.0.0
+    repository: https://github.com/kubernetes-sigs/kernel-module-management
+  name: kernel-module-management.v0.0.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: Module is the Schema for the modules API
-      displayName: Module
-      kind: Module
-      name: modules.kmm.sigs.x-k8s.io
-      version: v1alpha1
     - description: Module describes how to load a module on different kernel versions
       displayName: Module
       kind: Module
@@ -52,8 +48,6 @@ spec:
   - module
   - modules
   links:
-  - name: GitHub repository
-    url: https://github.com/kubernetes-sigs/kernel-module-management
   - name: Documentation
     url: https://kmm.sigs.k8s.io
   - name: Slack
@@ -62,6 +56,7 @@ spec:
   - email: kubernetes-kmm@googlegroups.com
     name: Kernel Module Management
   maturity: stable
+  minKubeVersion: 1.24.0
   provider:
     name: Kubernetes SIG Node
     url: https://github.com/kubernetes-sigs/kernel-module-management

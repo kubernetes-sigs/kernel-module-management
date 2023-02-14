@@ -48,6 +48,26 @@ If several `It` sections are similar, consider refactoring them in a `DescribeTa
 - [Kubernetes Contributor Guide](https://git.k8s.io/community/contributors/guide) - Main contributor documentation, or you can just jump directly to the [contributing section](https://git.k8s.io/community/contributors/guide#contributing)
 - [Contributor Cheat Sheet](https://git.k8s.io/community/contributors/guide/contributor-cheatsheet) - Common resources for existing developers
 
+## Managing releases
+
+### OperatorHub.io
+
+After a new version is released, it must be added manually to the
+[k8s-operatorhub/community-operators](https://github.com/k8s-operatorhub/community-operators) repo to be available on
+OperatorHub.io.
+
+First, generate all manifests:
+
+```shell
+make operatorhub-release IMAGE_TAG=<RELEASE_TAG> VERSION=<VERSION_NUMBER>
+```
+
+This will create two directories, `kmm-operatorhub-<VERSION>` and `kmm-hub-operatorhub-<VERSION>`.
+
+Then, use the contents of those directories to create new versions in
+[k8s-operatorhub/community-operators](https://github.com/k8s-operatorhub/community-operators).
+Only one operator should be affected per pull request; create separate PRs if you want to update both KMM bundles.
+
 ## Mentorship
 
 - [Mentoring Initiatives](https://git.k8s.io/community/mentoring) - We have a diverse set of mentorship programs available that are always looking for volunteers!
