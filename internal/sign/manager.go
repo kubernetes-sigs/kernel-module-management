@@ -5,7 +5,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
@@ -14,16 +14,11 @@ import (
 type SignManager interface {
 	GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error)
 
-	ShouldSync(
-		ctx context.Context,
-		mod kmmv1beta1.Module,
-		m kmmv1beta1.KernelMapping) (bool, error)
+	ShouldSync(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
 
 	Sync(
 		ctx context.Context,
-		mod kmmv1beta1.Module,
-		m kmmv1beta1.KernelMapping,
-		targetKernel string,
+		mld *api.ModuleLoaderData,
 		imageToSign string,
 		pushImage bool,
 		owner metav1.Object) (utils.Status, error)

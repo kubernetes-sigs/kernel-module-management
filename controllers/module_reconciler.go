@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
@@ -120,7 +121,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("could get targeted nodes for module %s: %w", mod.Name, err)
 	}
 
-	mappings, nodesWithMapping, err := r.getRelevantKernelMappingsAndNodes(ctx, mod, targetedNodes)
+	mldMappings, nodesWithMapping, err := r.getRelevantKernelMappingsAndNodes(ctx, mod, targetedNodes)
 	if err != nil {
 		return res, fmt.Errorf("could get kernel mappings and nodes for modules %s: %w", mod.Name, err)
 	}
@@ -130,26 +131,30 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("could get DaemonSets for module %s: %v", mod.Name, err)
 	}
 
-	for kernelVersion, m := range mappings {
-		completedSuccessfully, err := r.handleBuild(ctx, mod, m, kernelVersion)
+	for kernelVersion, mld := range mldMappings {
+		completedSuccessfully, err := r.handleBuild(ctx, mld)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle build for kernel version %s: %v", kernelVersion, err)
 		}
+		mldLogger := logger.WithValues(
+			"kernel version", kernelVersion,
+			"mld", mld,
+		)
 		if !completedSuccessfully {
-			logger.Info("Build has not finished successfully yet:skipping handling signing and driver container for now", "kernelVersion", kernelVersion, "image", m)
+			mldLogger.Info("Build has not finished successfully yet:skipping handling signing and driver container for now")
 			continue
 		}
 
-		completedSuccessfully, err = r.handleSigning(ctx, mod, m, kernelVersion)
+		completedSuccessfully, err = r.handleSigning(ctx, mld)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle signing for kernel version %s: %v", kernelVersion, err)
 		}
 		if !completedSuccessfully {
-			logger.Info("Signing has not finished successfully yet; skipping handling driver container for now", "kernelVersion", kernelVersion, "image", m)
+			mldLogger.Info("Signing has not finished successfully yet; skipping handling driver container for now")
 			continue
 		}
 
-		err = r.handleDriverContainer(ctx, mod, m, dsByKernelVersion, kernelVersion)
+		err = r.handleDriverContainer(ctx, mld, dsByKernelVersion)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle driver container for kernel version %s: %v", kernelVersion, err)
 		}
@@ -162,7 +167,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	logger.Info("Run garbage collection")
-	err = r.garbageCollect(ctx, mod, mappings, dsByKernelVersion)
+	err = r.garbageCollect(ctx, mod, mldMappings, dsByKernelVersion)
 	if err != nil {
 		return res, fmt.Errorf("failed to run garbage collection: %v", err)
 	}
@@ -179,9 +184,9 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context,
 	mod *kmmv1beta1.Module,
-	targetedNodes []v1.Node) (map[string]*kmmv1beta1.KernelMapping, []v1.Node, error) {
+	targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, []v1.Node, error) {
 
-	mappings := make(map[string]*kmmv1beta1.KernelMapping)
+	mldMappings := make(map[string]*api.ModuleLoaderData)
 	logger := log.FromContext(ctx)
 
 	nodes := make([]v1.Node, 0, len(targetedNodes))
@@ -194,27 +199,27 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 			"kernel version", kernelVersion,
 		)
 
-		if image, ok := mappings[kernelVersion]; ok {
+		if mld, ok := mldMappings[kernelVersion]; ok {
 			nodes = append(nodes, node)
-			nodeLogger.V(1).Info("Using cached image", "image", image)
+			nodeLogger.V(1).Info("Using cached mld mapping", "mld", mld)
 			continue
 		}
 
-		m, err := r.kernelAPI.GetMergedMappingForKernel(&mod.Spec, kernelVersion)
+		mld, err := r.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
 		if err != nil {
 			nodeLogger.Error(err, "failed to get and process kernel mapping")
 			continue
 		}
 
 		nodeLogger.V(1).Info("Found a valid mapping",
-			"image", m.ContainerImage,
-			"build", m.Build != nil,
+			"image", mld.ContainerImage,
+			"build", mld.Build != nil,
 		)
 
-		mappings[kernelVersion] = m
+		mldMappings[kernelVersion] = mld
 		nodes = append(nodes, node)
 	}
-	return mappings, nodes, nil
+	return mldMappings, nodes, nil
 }
 
 func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error) {
@@ -238,12 +243,9 @@ func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *kmmv
 }
 
 // handleBuild returns true if build is not needed or finished successfully
-func (r *ModuleReconciler) handleBuild(ctx context.Context,
-	mod *kmmv1beta1.Module,
-	km *kmmv1beta1.KernelMapping,
-	kernelVersion string) (bool, error) {
+func (r *ModuleReconciler) handleBuild(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
 
-	shouldSync, err := r.buildAPI.ShouldSync(ctx, *mod, *km)
+	shouldSync, err := r.buildAPI.ShouldSync(ctx, mld)
 	if err != nil {
 		return false, fmt.Errorf("could not check if build synchronization is needed: %w", err)
 	}
@@ -251,10 +253,10 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 		return true, nil
 	}
 
-	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
+	logger := log.FromContext(ctx).WithValues("kernel version", mld.KernelVersion, "image", mld.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildStatus, err := r.buildAPI.Sync(buildCtx, *mod, *km, kernelVersion, true, mod)
+	buildStatus, err := r.buildAPI.Sync(buildCtx, mld, true, mld.Owner)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
@@ -262,10 +264,10 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 	completedSuccessfully := false
 	switch buildStatus {
 	case utils.StatusCreated:
-		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, false)
+		r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.BuildStage, false)
 	case utils.StatusCompleted:
 		completedSuccessfully = true
-		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, true)
+		r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.BuildStage, true)
 	case utils.StatusFailed:
 		logger.Info(utils.WarnString("Build job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
@@ -274,12 +276,8 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context,
 }
 
 // handleSigning returns true if signing is not needed or finished successfully
-func (r *ModuleReconciler) handleSigning(ctx context.Context,
-	mod *kmmv1beta1.Module,
-	km *kmmv1beta1.KernelMapping,
-	kernelVersion string) (bool, error) {
-
-	shouldSync, err := r.signAPI.ShouldSync(ctx, *mod, *km)
+func (r *ModuleReconciler) handleSigning(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
+	shouldSync, err := r.signAPI.ShouldSync(ctx, mld)
 	if err != nil {
 		return false, fmt.Errorf("cound not check if synchronization is needed: %w", err)
 	}
@@ -289,14 +287,14 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context,
 
 	// if we need to sign AND we've built, then we must have built the intermediate image so must figure out its name
 	previousImage := ""
-	if module.ShouldBeBuilt(*km) {
-		previousImage = module.IntermediateImageName(mod.Name, mod.Namespace, km.ContainerImage)
+	if module.ShouldBeBuilt(mld) {
+		previousImage = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
 	}
 
-	logger := log.FromContext(ctx).WithValues("kernel version", kernelVersion, "image", km.ContainerImage)
+	logger := log.FromContext(ctx).WithValues("kernel version", mld.KernelVersion, "image", mld.ContainerImage)
 	signCtx := log.IntoContext(ctx, logger)
 
-	signStatus, err := r.signAPI.Sync(signCtx, *mod, *km, kernelVersion, previousImage, true, mod)
+	signStatus, err := r.signAPI.Sync(signCtx, mld, previousImage, true, mld.Owner)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the signing: %w", err)
 	}
@@ -304,10 +302,10 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context,
 	completedSuccessfully := false
 	switch signStatus {
 	case utils.StatusCreated:
-		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, false)
+		r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.SignStage, false)
 	case utils.StatusCompleted:
 		completedSuccessfully = true
-		r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, true)
+		r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.SignStage, true)
 	case utils.StatusFailed:
 		logger.Info(utils.WarnString("Sign job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
@@ -316,30 +314,28 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context,
 }
 
 func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
-	mod *kmmv1beta1.Module,
-	km *kmmv1beta1.KernelMapping,
-	dsByKernelVersion map[string]*appsv1.DaemonSet,
-	kernelVersion string) error {
+	mld *api.ModuleLoaderData,
+	dsByKernelVersion map[string]*appsv1.DaemonSet) error {
 	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace},
+		ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace},
 	}
 
 	logger := log.FromContext(ctx)
-	if existingDS := dsByKernelVersion[kernelVersion]; existingDS != nil {
-		logger.Info("updating existing driver container DS", "kernel version", kernelVersion, "image", km, "name", ds.Name)
+	if existingDS := dsByKernelVersion[mld.KernelVersion]; existingDS != nil {
+		logger.Info("updating existing driver container DS", "kernel version", mld.KernelVersion, "image", mld.ContainerImage, "name", ds.Name)
 		ds = existingDS
 	} else {
-		logger.Info("creating new driver container DS", "kernel version", kernelVersion, "image", km)
-		ds.GenerateName = mod.Name + "-"
+		logger.Info("creating new driver container DS", "kernel version", mld.KernelVersion, "image", mld.ContainerImage)
+		ds.GenerateName = mld.Name + "-"
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-		return r.daemonAPI.SetDriverContainerAsDesired(ctx, ds, km.ContainerImage, *mod, kernelVersion)
+		return r.daemonAPI.SetDriverContainerAsDesired(ctx, ds, mld)
 	})
 
 	if err == nil {
 		if opRes == controllerutil.OperationResultCreated {
-			r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.ModuleLoaderStage, false)
+			r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.ModuleLoaderStage, false)
 		}
 		logger.Info("Reconciled Driver Container", "name", ds.Name, "result", opRes)
 	}
@@ -379,11 +375,11 @@ func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *kmmv1bet
 
 func (r *ModuleReconciler) garbageCollect(ctx context.Context,
 	mod *kmmv1beta1.Module,
-	mappings map[string]*kmmv1beta1.KernelMapping,
+	mldMappings map[string]*api.ModuleLoaderData,
 	existingDS map[string]*appsv1.DaemonSet) error {
 	logger := log.FromContext(ctx)
 	// Garbage collect old DaemonSets for which there are no nodes.
-	validKernels := sets.KeySet[string](mappings)
+	validKernels := sets.KeySet[string](mldMappings)
 
 	deleted, err := r.daemonAPI.GarbageCollect(ctx, existingDS, validKernels)
 	if err != nil {

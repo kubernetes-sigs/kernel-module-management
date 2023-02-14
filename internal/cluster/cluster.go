@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
@@ -88,16 +89,6 @@ func (c *clusterAPI) BuildAndSign(
 	cluster clusterv1.ManagedCluster) (bool, error) {
 
 	modSpec := mcm.Spec.ModuleSpec
-	mappings, err := c.kernelMappingsByKernelVersion(ctx, &modSpec, cluster)
-	if err != nil {
-		return false, err
-	}
-
-	// if no mappings were found, return not completed
-	if len(mappings) == 0 {
-		return false, nil
-	}
-
 	mod := kmmv1beta1.Module{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mcm.Name,
@@ -105,12 +96,21 @@ func (c *clusterAPI) BuildAndSign(
 		},
 		Spec: modSpec,
 	}
+	mldMappings, err := c.kernelMappingsByKernelVersion(ctx, &mod, cluster)
+	if err != nil {
+		return false, err
+	}
+
+	// if no mappings were found, return not completed
+	if len(mldMappings) == 0 {
+		return false, nil
+	}
 
 	logger := log.FromContext(ctx)
 
 	completedSuccessfully := true
-	for kernelVersion, m := range mappings {
-		buildCompleted, err := c.build(ctx, mod, &mcm, m, kernelVersion)
+	for kernelVersion, mld := range mldMappings {
+		buildCompleted, err := c.build(ctx, mld, &mcm)
 		if err != nil {
 			return false, err
 		}
@@ -125,7 +125,7 @@ func (c *clusterAPI) BuildAndSign(
 			continue
 		}
 
-		signCompleted, err := c.sign(ctx, mod, &mcm, m, kernelVersion)
+		signCompleted, err := c.sign(ctx, mld, &mcm)
 		if err != nil {
 			return false, err
 		}
@@ -146,15 +146,15 @@ func (c *clusterAPI) GarbageCollectBuilds(ctx context.Context, mcm hubv1beta1.Ma
 
 func (c *clusterAPI) kernelMappingsByKernelVersion(
 	ctx context.Context,
-	modSpec *kmmv1beta1.ModuleSpec,
-	cluster clusterv1.ManagedCluster) (map[string]*kmmv1beta1.KernelMapping, error) {
+	mod *kmmv1beta1.Module,
+	cluster clusterv1.ManagedCluster) (map[string]*api.ModuleLoaderData, error) {
 
 	kernelVersions, err := c.kernelVersions(cluster)
 	if err != nil {
 		return nil, err
 	}
 
-	mappings := make(map[string]*kmmv1beta1.KernelMapping)
+	mldMappings := make(map[string]*api.ModuleLoaderData)
 	logger := log.FromContext(ctx)
 
 	for _, kernelVersion := range kernelVersions {
@@ -164,26 +164,26 @@ func (c *clusterAPI) kernelMappingsByKernelVersion(
 			"kernel version", kernelVersion,
 		)
 
-		if image, ok := mappings[kernelVersion]; ok {
-			kernelVersionLogger.V(1).Info("Using cached image", "image", image)
+		if mld, ok := mldMappings[kernelVersion]; ok {
+			kernelVersionLogger.V(1).Info("Using cached mld mapping", "mld", mld)
 			continue
 		}
 
-		m, err := c.kernelAPI.GetMergedMappingForKernel(modSpec, kernelVersion)
+		mld, err := c.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
 		if err != nil {
 			kernelVersionLogger.Info("no suitable container image found; skipping kernel version")
 			continue
 		}
 
 		kernelVersionLogger.V(1).Info("Found a valid mapping",
-			"image", m.ContainerImage,
-			"build", m.Build != nil,
+			"image", mld.ContainerImage,
+			"build", mld.Build != nil,
 		)
 
-		mappings[kernelVersion] = m
+		mldMappings[kernelVersion] = mld
 	}
 
-	return mappings, nil
+	return mldMappings, nil
 }
 
 func (c *clusterAPI) kernelVersions(cluster clusterv1.ManagedCluster) ([]string, error) {
@@ -198,12 +198,10 @@ func (c *clusterAPI) kernelVersions(cluster clusterv1.ManagedCluster) ([]string,
 
 func (c *clusterAPI) build(
 	ctx context.Context,
-	mod kmmv1beta1.Module,
-	mcm *hubv1beta1.ManagedClusterModule,
-	kernelMapping *kmmv1beta1.KernelMapping,
-	kernelVersion string) (bool, error) {
+	mld *api.ModuleLoaderData,
+	mcm *hubv1beta1.ManagedClusterModule) (bool, error) {
 
-	shouldSync, err := c.buildAPI.ShouldSync(ctx, mod, *kernelMapping)
+	shouldSync, err := c.buildAPI.ShouldSync(ctx, mld)
 	if err != nil {
 		return false, fmt.Errorf("could not check if build synchronization is needed: %v", err)
 	}
@@ -212,11 +210,11 @@ func (c *clusterAPI) build(
 	}
 
 	logger := log.FromContext(ctx).WithValues(
-		"kernel version", kernelVersion,
-		"image", kernelMapping.ContainerImage)
+		"kernel version", mld.KernelVersion,
+		"image", mld.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildStatus, err := c.buildAPI.Sync(buildCtx, mod, *kernelMapping, kernelVersion, true, mcm)
+	buildStatus, err := c.buildAPI.Sync(buildCtx, mld, true, mcm)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
@@ -229,12 +227,10 @@ func (c *clusterAPI) build(
 
 func (c *clusterAPI) sign(
 	ctx context.Context,
-	mod kmmv1beta1.Module,
-	mcm *hubv1beta1.ManagedClusterModule,
-	kernelMapping *kmmv1beta1.KernelMapping,
-	kernelVersion string) (bool, error) {
+	mld *api.ModuleLoaderData,
+	mcm *hubv1beta1.ManagedClusterModule) (bool, error) {
 
-	shouldSync, err := c.signAPI.ShouldSync(ctx, mod, *kernelMapping)
+	shouldSync, err := c.signAPI.ShouldSync(ctx, mld)
 	if err != nil {
 		return false, fmt.Errorf("could not check if signing synchronization is needed: %v", err)
 	}
@@ -245,16 +241,16 @@ func (c *clusterAPI) sign(
 	// if we need to sign AND we've built, then we must have built
 	// the intermediate image so must figure out its name
 	previousImage := ""
-	if module.ShouldBeBuilt(*kernelMapping) {
-		previousImage = module.IntermediateImageName(mod.Name, mod.Namespace, kernelMapping.ContainerImage)
+	if module.ShouldBeBuilt(mld) {
+		previousImage = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
 	}
 
 	logger := log.FromContext(ctx).WithValues(
-		"kernel version", kernelVersion,
-		"image", kernelMapping.ContainerImage)
+		"kernel version", mld.KernelVersion,
+		"image", mld.ContainerImage)
 	signCtx := log.IntoContext(ctx, logger)
 
-	signStatus, err := c.signAPI.Sync(signCtx, mod, *kernelMapping, kernelVersion, previousImage, true, mcm)
+	signStatus, err := c.signAPI.Sync(signCtx, mld, previousImage, true, mcm)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the signing: %w", err)
 	}

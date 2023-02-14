@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	utils "github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -53,31 +53,31 @@ func (mr *MockSignManagerMockRecorder) GarbageCollect(ctx, modName, namespace, o
 }
 
 // ShouldSync mocks base method.
-func (m_2 *MockSignManager) ShouldSync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping) (bool, error) {
-	m_2.ctrl.T.Helper()
-	ret := m_2.ctrl.Call(m_2, "ShouldSync", ctx, mod, m)
+func (m *MockSignManager) ShouldSync(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ShouldSync", ctx, mld)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ShouldSync indicates an expected call of ShouldSync.
-func (mr *MockSignManagerMockRecorder) ShouldSync(ctx, mod, m interface{}) *gomock.Call {
+func (mr *MockSignManagerMockRecorder) ShouldSync(ctx, mld interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldSync", reflect.TypeOf((*MockSignManager)(nil).ShouldSync), ctx, mod, m)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldSync", reflect.TypeOf((*MockSignManager)(nil).ShouldSync), ctx, mld)
 }
 
 // Sync mocks base method.
-func (m_2 *MockSignManager) Sync(ctx context.Context, mod v1beta1.Module, m v1beta1.KernelMapping, targetKernel, imageToSign string, pushImage bool, owner v1.Object) (utils.Status, error) {
-	m_2.ctrl.T.Helper()
-	ret := m_2.ctrl.Call(m_2, "Sync", ctx, mod, m, targetKernel, imageToSign, pushImage, owner)
+func (m *MockSignManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, imageToSign string, pushImage bool, owner v1.Object) (utils.Status, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Sync", ctx, mld, imageToSign, pushImage, owner)
 	ret0, _ := ret[0].(utils.Status)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Sync indicates an expected call of Sync.
-func (mr *MockSignManagerMockRecorder) Sync(ctx, mod, m, targetKernel, imageToSign, pushImage, owner interface{}) *gomock.Call {
+func (mr *MockSignManagerMockRecorder) Sync(ctx, mld, imageToSign, pushImage, owner interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockSignManager)(nil).Sync), ctx, mod, m, targetKernel, imageToSign, pushImage, owner)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockSignManager)(nil).Sync), ctx, mld, imageToSign, pushImage, owner)
 }

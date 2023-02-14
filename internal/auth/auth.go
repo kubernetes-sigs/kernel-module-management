@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/kubernetes"
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,11 +45,11 @@ func (rsag *registrySecretAuthGetter) GetKeyChain(ctx context.Context) (authn.Ke
 	return keychain, nil
 }
 
-func NewRegistryAuthGetterFrom(client client.Client, mod *kmmv1beta1.Module) RegistryAuthGetter {
-	if mod.Spec.ImageRepoSecret != nil {
+func NewRegistryAuthGetterFrom(client client.Client, mld *api.ModuleLoaderData) RegistryAuthGetter {
+	if mld.ImageRepoSecret != nil {
 		namespacedName := types.NamespacedName{
-			Name:      mod.Spec.ImageRepoSecret.Name,
-			Namespace: mod.Namespace,
+			Name:      mld.ImageRepoSecret.Name,
+			Namespace: mld.Namespace,
 		}
 		return NewRegistryAuthGetter(client, namespacedName)
 	}

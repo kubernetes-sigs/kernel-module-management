@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
@@ -41,12 +42,11 @@ var _ = Describe("ShouldSync", func() {
 	It("should return false if there was not build section", func() {
 		ctx := context.Background()
 
-		mod := kmmv1beta1.Module{}
-		km := kmmv1beta1.KernelMapping{}
+		mld := &api.ModuleLoaderData{}
 
 		mgr := NewBuildManager(clnt, nil, nil, reg)
 
-		shouldSync, err := mgr.ShouldSync(ctx, mod, km)
+		shouldSync, err := mgr.ShouldSync(ctx, mld)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(shouldSync).To(BeFalse())
@@ -55,28 +55,21 @@ var _ = Describe("ShouldSync", func() {
 	It("should return false if image already exists", func() {
 		ctx := context.Background()
 
-		km := kmmv1beta1.KernelMapping{
-			Build:          &kmmv1beta1.Build{},
-			ContainerImage: imageName,
-		}
-
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-			Spec: kmmv1beta1.ModuleSpec{
-				ImageRepoSecret: &v1.LocalObjectReference{Name: "pull-push-secret"},
-			},
+		mld := &api.ModuleLoaderData{
+			Name:            moduleName,
+			Namespace:       namespace,
+			Build:           &kmmv1beta1.Build{},
+			ContainerImage:  imageName,
+			ImageRepoSecret: &v1.LocalObjectReference{Name: "pull-push-secret"},
 		}
 
 		gomock.InOrder(
-			reg.EXPECT().ImageExists(ctx, imageName, gomock.Any(), gomock.Any()).Return(true, nil),
+			reg.EXPECT().ImageExists(ctx, imageName, nil, gomock.Any()).Return(true, nil),
 		)
 
 		mgr := NewBuildManager(clnt, nil, nil, reg)
 
-		shouldSync, err := mgr.ShouldSync(ctx, mod, km)
+		shouldSync, err := mgr.ShouldSync(ctx, mld)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(shouldSync).To(BeFalse())
@@ -85,28 +78,21 @@ var _ = Describe("ShouldSync", func() {
 	It("should return false and an error if image check fails", func() {
 		ctx := context.Background()
 
-		km := kmmv1beta1.KernelMapping{
-			Build:          &kmmv1beta1.Build{},
-			ContainerImage: imageName,
-		}
-
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-			Spec: kmmv1beta1.ModuleSpec{
-				ImageRepoSecret: &v1.LocalObjectReference{Name: "pull-push-secret"},
-			},
+		mld := &api.ModuleLoaderData{
+			Name:            moduleName,
+			Namespace:       namespace,
+			Build:           &kmmv1beta1.Build{},
+			ContainerImage:  imageName,
+			ImageRepoSecret: &v1.LocalObjectReference{Name: "pull-push-secret"},
 		}
 
 		gomock.InOrder(
-			reg.EXPECT().ImageExists(ctx, imageName, gomock.Any(), gomock.Any()).Return(false, errors.New("generic-registry-error")),
+			reg.EXPECT().ImageExists(ctx, imageName, nil, gomock.Any()).Return(false, errors.New("generic-registry-error")),
 		)
 
 		mgr := NewBuildManager(clnt, nil, nil, reg)
 
-		shouldSync, err := mgr.ShouldSync(ctx, mod, km)
+		shouldSync, err := mgr.ShouldSync(ctx, mld)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("generic-registry-error"))
@@ -116,28 +102,21 @@ var _ = Describe("ShouldSync", func() {
 	It("should return true if image does not exist", func() {
 		ctx := context.Background()
 
-		km := kmmv1beta1.KernelMapping{
-			Build:          &kmmv1beta1.Build{},
-			ContainerImage: imageName,
-		}
-
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-			Spec: kmmv1beta1.ModuleSpec{
-				ImageRepoSecret: &v1.LocalObjectReference{Name: "pull-push-secret"},
-			},
+		mld := &api.ModuleLoaderData{
+			Name:            moduleName,
+			Namespace:       namespace,
+			Build:           &kmmv1beta1.Build{},
+			ContainerImage:  imageName,
+			ImageRepoSecret: &v1.LocalObjectReference{Name: "pull-push-secret"},
 		}
 
 		gomock.InOrder(
-			reg.EXPECT().ImageExists(ctx, imageName, gomock.Any(), gomock.Any()).Return(false, nil),
+			reg.EXPECT().ImageExists(ctx, imageName, nil, gomock.Any()).Return(false, nil),
 		)
 
 		mgr := NewBuildManager(clnt, nil, nil, reg)
 
-		shouldSync, err := mgr.ShouldSync(ctx, mod, km)
+		shouldSync, err := mgr.ShouldSync(ctx, mld)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(shouldSync).To(BeTrue())
@@ -166,11 +145,6 @@ var _ = Describe("Sync", func() {
 		reg = registry.NewMockRegistry(ctrl)
 	})
 
-	km := kmmv1beta1.KernelMapping{
-		Build:          &kmmv1beta1.Build{},
-		ContainerImage: imageName,
-	}
-
 	const (
 		moduleName    = "module-name"
 		kernelVersion = "1.2.3"
@@ -179,6 +153,14 @@ var _ = Describe("Sync", func() {
 
 	mod := kmmv1beta1.Module{
 		ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+	}
+
+	mld := &api.ModuleLoaderData{
+		Name:           moduleName,
+		Build:          &kmmv1beta1.Build{},
+		ContainerImage: imageName,
+		Owner:          &mod,
+		KernelVersion:  kernelVersion,
 	}
 
 	DescribeTable("should return the correct status depending on the job status",
@@ -193,15 +175,15 @@ var _ = Describe("Sync", func() {
 			ctx := context.Background()
 
 			gomock.InOrder(
-				maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(&j, nil),
-				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild, &mod).Return(&j, nil),
+				maker.EXPECT().MakeJobTemplate(ctx, mld, mld.Owner, true).Return(&j, nil),
+				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.JobTypeBuild, mld.Owner).Return(&j, nil),
 				jobhelper.EXPECT().IsJobChanged(&j, &j).Return(false, nil),
 				jobhelper.EXPECT().GetJobStatus(&j).Return(jobStatus, nil),
 			)
 
 			mgr := NewBuildManager(clnt, maker, jobhelper, reg)
 
-			res, err := mgr.Sync(ctx, mod, km, kernelVersion, true, &mod)
+			res, err := mgr.Sync(ctx, mld, true, mld.Owner)
 
 			if expectsErr {
 				Expect(err).To(HaveOccurred())
@@ -219,13 +201,13 @@ var _ = Describe("Sync", func() {
 		ctx := context.Background()
 
 		gomock.InOrder(
-			maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(nil, errors.New("random error")),
+			maker.EXPECT().MakeJobTemplate(ctx, mld, mld.Owner, true).Return(nil, errors.New("random error")),
 		)
 
 		mgr := NewBuildManager(clnt, maker, jobhelper, reg)
 
 		Expect(
-			mgr.Sync(ctx, mod, km, kernelVersion, true, &mod),
+			mgr.Sync(ctx, mld, true, mld.Owner),
 		).Error().To(
 			HaveOccurred(),
 		)
@@ -245,15 +227,15 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(&j, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild, &mod).Return(nil, utils.ErrNoMatchingJob),
+			maker.EXPECT().MakeJobTemplate(ctx, mld, mld.Owner, true).Return(&j, nil),
+			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.JobTypeBuild, mld.Owner).Return(nil, utils.ErrNoMatchingJob),
 			jobhelper.EXPECT().CreateJob(ctx, &j).Return(errors.New("some error")),
 		)
 
 		mgr := NewBuildManager(clnt, maker, jobhelper, reg)
 
 		Expect(
-			mgr.Sync(ctx, mod, km, kernelVersion, true, &mod),
+			mgr.Sync(ctx, mld, true, mld.Owner),
 		).Error().To(
 			HaveOccurred(),
 		)
@@ -274,15 +256,15 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(&j, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild, &mod).Return(nil, utils.ErrNoMatchingJob),
+			maker.EXPECT().MakeJobTemplate(ctx, mld, mld.Owner, true).Return(&j, nil),
+			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.JobTypeBuild, mld.Owner).Return(nil, utils.ErrNoMatchingJob),
 			jobhelper.EXPECT().CreateJob(ctx, &j).Return(nil),
 		)
 
 		mgr := NewBuildManager(clnt, maker, jobhelper, reg)
 
 		Expect(
-			mgr.Sync(ctx, mod, km, kernelVersion, true, &mod),
+			mgr.Sync(ctx, mld, true, mld.Owner),
 		).To(
 			Equal(utils.Status(utils.StatusCreated)),
 		)
@@ -316,8 +298,8 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			maker.EXPECT().MakeJobTemplate(ctx, mod, km, kernelVersion, &mod, true).Return(&newJob, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, kernelVersion, utils.JobTypeBuild, &mod).Return(&j, nil),
+			maker.EXPECT().MakeJobTemplate(ctx, mld, mld.Owner, true).Return(&newJob, nil),
+			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.JobTypeBuild, mld.Owner).Return(&j, nil),
 			jobhelper.EXPECT().IsJobChanged(&j, &newJob).Return(true, nil),
 			jobhelper.EXPECT().DeleteJob(ctx, &j).Return(nil),
 		)
@@ -325,7 +307,7 @@ var _ = Describe("Sync", func() {
 		mgr := NewBuildManager(clnt, maker, jobhelper, reg)
 
 		Expect(
-			mgr.Sync(ctx, mod, km, kernelVersion, true, &mod),
+			mgr.Sync(ctx, mld, true, mld.Owner),
 		).To(
 			Equal(utils.Status(utils.StatusInProgress)),
 		)

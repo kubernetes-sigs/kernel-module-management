@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 )
@@ -28,36 +28,35 @@ func IntermediateImageName(name, namespace, targetImage string) string {
 	return AppendToTag(targetImage, namespace+"_"+name+"_kmm_unsigned")
 }
 
-// ShouldBeBuilt indicates whether the specified KernelMapping of the
+// ShouldBeBuilt indicates whether the specified ModuleLoaderData of the
 // Module should be built or not.
-func ShouldBeBuilt(km kmmv1beta1.KernelMapping) bool {
-	return km.Build != nil
+func ShouldBeBuilt(mld *api.ModuleLoaderData) bool {
+	return mld.Build != nil
 }
 
-// ShouldBeSigned indicates whether the specified KernelMapping of the
+// ShouldBeSigned indicates whether the specified ModuleLoaderData of the
 // Module should be signed or not.
-func ShouldBeSigned(km kmmv1beta1.KernelMapping) bool {
-	return km.Sign != nil
+func ShouldBeSigned(mld *api.ModuleLoaderData) bool {
+	return mld.Sign != nil
 }
 
 func ImageExists(
 	ctx context.Context,
 	client client.Client,
 	reg registry.Registry,
-	modSpec kmmv1beta1.ModuleSpec,
+	mld *api.ModuleLoaderData,
 	namespace string,
-	km kmmv1beta1.KernelMapping,
 	imageName string) (bool, error) {
 
 	var registryAuthGetter auth.RegistryAuthGetter
-	if modSpec.ImageRepoSecret != nil {
+	if mld.ImageRepoSecret != nil {
 		registryAuthGetter = auth.NewRegistryAuthGetter(client, types.NamespacedName{
-			Name:      modSpec.ImageRepoSecret.Name,
+			Name:      mld.ImageRepoSecret.Name,
 			Namespace: namespace,
 		})
 	}
 
-	tlsOptions := km.RegistryTLS
+	tlsOptions := mld.RegistryTLS
 	exists, err := reg.ImageExists(ctx, imageName, tlsOptions, registryAuthGetter)
 	if err != nil {
 		return false, fmt.Errorf("could not check if the image is available: %v", err)

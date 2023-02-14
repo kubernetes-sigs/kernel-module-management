@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -54,28 +54,25 @@ func (jbm *jobManager) GarbageCollect(ctx context.Context, modName, namespace st
 	return deleteNames, nil
 }
 
-func (jbm *jobManager) ShouldSync(
-	ctx context.Context,
-	mod kmmv1beta1.Module,
-	m kmmv1beta1.KernelMapping) (bool, error) {
+func (jbm *jobManager) ShouldSync(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
 
 	// if there is no build specified skip
-	if !module.ShouldBeBuilt(m) {
+	if !module.ShouldBeBuilt(mld) {
 		return false, nil
 	}
 
-	targetImage := m.ContainerImage
+	targetImage := mld.ContainerImage
 
 	// if build AND sign are specified, then we will build an intermediate image
 	// and let sign produce the one specified in targetImage
-	if module.ShouldBeSigned(m) {
-		targetImage = module.IntermediateImageName(mod.Name, mod.Namespace, targetImage)
+	if module.ShouldBeSigned(mld) {
+		targetImage = module.IntermediateImageName(mld.Name, mld.Namespace, targetImage)
 	}
 
 	// build is specified and targetImage is either the final image or the intermediate image
 	// tag, depending on whether sign is specified or not. Either way, if targetImage exists
 	// we can skip building it
-	exists, err := module.ImageExists(ctx, jbm.client, jbm.registry, mod.Spec, mod.Namespace, m, targetImage)
+	exists, err := module.ImageExists(ctx, jbm.client, jbm.registry, mld, mld.Namespace, targetImage)
 	if err != nil {
 		return false, fmt.Errorf("failed to check existence of image %s: %w", targetImage, err)
 	}
@@ -85,9 +82,7 @@ func (jbm *jobManager) ShouldSync(
 
 func (jbm *jobManager) Sync(
 	ctx context.Context,
-	mod kmmv1beta1.Module,
-	m kmmv1beta1.KernelMapping,
-	targetKernel string,
+	mld *api.ModuleLoaderData,
 	pushImage bool,
 	owner metav1.Object) (utils.Status, error) {
 
@@ -95,12 +90,12 @@ func (jbm *jobManager) Sync(
 
 	logger.Info("Building in-cluster")
 
-	jobTemplate, err := jbm.maker.MakeJobTemplate(ctx, mod, m, targetKernel, owner, pushImage)
+	jobTemplate, err := jbm.maker.MakeJobTemplate(ctx, mld, owner, pushImage)
 	if err != nil {
 		return "", fmt.Errorf("could not make Job template: %v", err)
 	}
 
-	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, targetKernel, utils.JobTypeBuild, owner)
+	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, mld.KernelVersion, utils.JobTypeBuild, owner)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoMatchingJob) {
 			return "", fmt.Errorf("error getting the build: %v", err)
