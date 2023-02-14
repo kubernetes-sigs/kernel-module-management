@@ -10,7 +10,7 @@ require (
 	github.com/google/go-containerregistry v0.13.0
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20220630175030-4d7b65b04609
 	github.com/mitchellh/hashstructure v1.1.0
-	github.com/onsi/ginkgo/v2 v2.8.0
+	github.com/onsi/ginkgo/v2 v2.8.1
 	github.com/onsi/gomega v1.26.0
 	github.com/prometheus/client_golang v1.14.0
 	golang.org/x/exp v0.0.0-20220407100705-7b9b53b0aca4
@@ -64,12 +64,12 @@ require (
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
-	golang.org/x/net v0.5.0 // indirect
+	golang.org/x/net v0.6.0 // indirect
 	golang.org/x/oauth2 v0.1.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.4.0 // indirect
-	golang.org/x/term v0.4.0 // indirect
-	golang.org/x/text v0.6.0 // indirect
+	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/term v0.5.0 // indirect
+	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
