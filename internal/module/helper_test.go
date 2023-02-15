@@ -10,7 +10,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 )
@@ -61,8 +61,7 @@ var _ = Describe("ImageExists", func() {
 
 		mockRegistry *registry.MockRegistry
 
-		mod kmmv1beta1.Module
-		km  kmmv1beta1.KernelMapping
+		mld api.ModuleLoaderData
 		ctx context.Context
 	)
 
@@ -72,16 +71,7 @@ var _ = Describe("ImageExists", func() {
 
 		mockRegistry = registry.NewMockRegistry(ctrl)
 
-		mod = kmmv1beta1.Module{
-			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-					Container: kmmv1beta1.ModuleLoaderContainerSpec{},
-				},
-			},
-		}
-
-		km = kmmv1beta1.KernelMapping{}
-
+		mld = api.ModuleLoaderData{}
 		ctx = context.Background()
 	})
 
@@ -90,7 +80,7 @@ var _ = Describe("ImageExists", func() {
 			mockRegistry.EXPECT().ImageExists(ctx, imageName, gomock.Any(), nil).Return(true, nil),
 		)
 
-		exists, err := ImageExists(ctx, clnt, mockRegistry, mod.Spec, namespace, km, imageName)
+		exists, err := ImageExists(ctx, clnt, mockRegistry, &mld, namespace, imageName)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(exists).To(BeTrue())
@@ -101,7 +91,7 @@ var _ = Describe("ImageExists", func() {
 			mockRegistry.EXPECT().ImageExists(ctx, imageName, gomock.Any(), nil).Return(false, nil),
 		)
 
-		exists, err := ImageExists(ctx, clnt, mockRegistry, mod.Spec, namespace, km, imageName)
+		exists, err := ImageExists(ctx, clnt, mockRegistry, &mld, namespace, imageName)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(exists).To(BeFalse())
@@ -112,7 +102,7 @@ var _ = Describe("ImageExists", func() {
 			mockRegistry.EXPECT().ImageExists(ctx, imageName, gomock.Any(), nil).Return(false, errors.New("some-error")),
 		)
 
-		exists, err := ImageExists(ctx, clnt, mockRegistry, mod.Spec, namespace, km, imageName)
+		exists, err := ImageExists(ctx, clnt, mockRegistry, &mld, namespace, imageName)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("some-error"))
@@ -120,19 +110,15 @@ var _ = Describe("ImageExists", func() {
 	})
 
 	It("should use the ImageRepoSecret if one is specified", func() {
-		mod := kmmv1beta1.Module{
-			Spec: kmmv1beta1.ModuleSpec{
-				ImageRepoSecret: &v1.LocalObjectReference{
-					Name: "secret",
-				},
-			},
+		mld.ImageRepoSecret = &v1.LocalObjectReference{
+			Name: "secret",
 		}
 
 		gomock.InOrder(
 			mockRegistry.EXPECT().ImageExists(ctx, imageName, gomock.Any(), gomock.Not(gomock.Nil())).Return(false, nil),
 		)
 
-		exists, err := ImageExists(ctx, clnt, mockRegistry, mod.Spec, namespace, km, imageName)
+		exists, err := ImageExists(ctx, clnt, mockRegistry, &mld, namespace, imageName)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(exists).To(BeFalse())

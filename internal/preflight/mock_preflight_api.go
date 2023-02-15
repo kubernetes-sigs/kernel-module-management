@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 )
 
 // MockPreflightAPI is a mock of PreflightAPI interface.
@@ -74,46 +75,46 @@ func (m *MockpreflightHelperAPI) EXPECT() *MockpreflightHelperAPIMockRecorder {
 }
 
 // verifyBuild mocks base method.
-func (m *MockpreflightHelperAPI) verifyBuild(ctx context.Context, pv *v1beta1.PreflightValidation, mapping *v1beta1.KernelMapping, mod *v1beta1.Module) (bool, string) {
+func (m *MockpreflightHelperAPI) verifyBuild(ctx context.Context, pv *v1beta1.PreflightValidation, mld *api.ModuleLoaderData) (bool, string) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "verifyBuild", ctx, pv, mapping, mod)
+	ret := m.ctrl.Call(m, "verifyBuild", ctx, pv, mld)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(string)
 	return ret0, ret1
 }
 
 // verifyBuild indicates an expected call of verifyBuild.
-func (mr *MockpreflightHelperAPIMockRecorder) verifyBuild(ctx, pv, mapping, mod interface{}) *gomock.Call {
+func (mr *MockpreflightHelperAPIMockRecorder) verifyBuild(ctx, pv, mld interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyBuild", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifyBuild), ctx, pv, mapping, mod)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyBuild", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifyBuild), ctx, pv, mld)
 }
 
 // verifyImage mocks base method.
-func (m *MockpreflightHelperAPI) verifyImage(ctx context.Context, mapping *v1beta1.KernelMapping, mod *v1beta1.Module, kernelVersion string) (bool, string) {
+func (m *MockpreflightHelperAPI) verifyImage(ctx context.Context, mld *api.ModuleLoaderData) (bool, string) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "verifyImage", ctx, mapping, mod, kernelVersion)
+	ret := m.ctrl.Call(m, "verifyImage", ctx, mld)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(string)
 	return ret0, ret1
 }
 
 // verifyImage indicates an expected call of verifyImage.
-func (mr *MockpreflightHelperAPIMockRecorder) verifyImage(ctx, mapping, mod, kernelVersion interface{}) *gomock.Call {
+func (mr *MockpreflightHelperAPIMockRecorder) verifyImage(ctx, mld interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyImage", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifyImage), ctx, mapping, mod, kernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyImage", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifyImage), ctx, mld)
 }
 
 // verifySign mocks base method.
-func (m *MockpreflightHelperAPI) verifySign(ctx context.Context, pv *v1beta1.PreflightValidation, mapping *v1beta1.KernelMapping, mod *v1beta1.Module) (bool, string) {
+func (m *MockpreflightHelperAPI) verifySign(ctx context.Context, pv *v1beta1.PreflightValidation, mld *api.ModuleLoaderData) (bool, string) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "verifySign", ctx, pv, mapping, mod)
+	ret := m.ctrl.Call(m, "verifySign", ctx, pv, mld)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(string)
 	return ret0, ret1
 }
 
 // verifySign indicates an expected call of verifySign.
-func (mr *MockpreflightHelperAPIMockRecorder) verifySign(ctx, pv, mapping, mod interface{}) *gomock.Call {
+func (mr *MockpreflightHelperAPIMockRecorder) verifySign(ctx, pv, mld interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifySign", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifySign), ctx, pv, mapping, mod)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifySign", reflect.TypeOf((*MockpreflightHelperAPI)(nil).verifySign), ctx, pv, mld)
 }

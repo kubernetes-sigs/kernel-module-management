@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
@@ -26,9 +26,7 @@ import (
 type Signer interface {
 	MakeJobTemplate(
 		ctx context.Context,
-		mod kmmv1beta1.Module,
-		km kmmv1beta1.KernelMapping,
-		targetKernel string,
+		mld *api.ModuleLoaderData,
 		labels map[string]string,
 		imageToSign string,
 		pushImage bool,
@@ -61,25 +59,23 @@ func NewSigner(
 
 func (s *signer) MakeJobTemplate(
 	ctx context.Context,
-	mod kmmv1beta1.Module,
-	km kmmv1beta1.KernelMapping,
-	targetKernel string,
+	mld *api.ModuleLoaderData,
 	labels map[string]string,
 	imageToSign string,
 	pushImage bool,
 	owner metav1.Object) (*batchv1.Job, error) {
 
-	signConfig := km.Sign
+	signConfig := mld.Sign
 
 	args := make([]string, 0)
 
 	if pushImage {
-		args = append(args, "-signedimage", km.ContainerImage)
+		args = append(args, "-signedimage", mld.ContainerImage)
 
-		if km.RegistryTLS.Insecure {
+		if mld.RegistryTLS.Insecure {
 			args = append(args, "--insecure")
 		}
-		if km.RegistryTLS.InsecureSkipTLSVerify {
+		if mld.RegistryTLS.InsecureSkipTLSVerify {
 			args = append(args, "--skip-tls-verify")
 		}
 	} else {
@@ -118,7 +114,7 @@ func (s *signer) MakeJobTemplate(
 	}
 
 	args = append(args, "-secretdir", "/docker_config/")
-	imageSecret := mod.Spec.ImageRepoSecret
+	imageSecret := mld.ImageRepoSecret
 	if imageSecret != nil {
 		volumes = append(volumes, utils.MakeSecretVolume(imageSecret, "", ""))
 		volumeMounts = append(volumeMounts, utils.MakeSecretVolumeMount(imageSecret, "/docker_config/"+imageSecret.Name))
@@ -136,19 +132,19 @@ func (s *signer) MakeJobTemplate(
 			},
 			RestartPolicy: v1.RestartPolicyNever,
 			Volumes:       volumes,
-			NodeSelector:  mod.Spec.Selector,
+			NodeSelector:  mld.Selector,
 		},
 	}
 
-	specTemplateHash, err := s.getHashAnnotationValue(ctx, signConfig.KeySecret.Name, signConfig.CertSecret.Name, mod.Namespace, &specTemplate)
+	specTemplateHash, err := s.getHashAnnotationValue(ctx, signConfig.KeySecret.Name, signConfig.CertSecret.Name, mld.Namespace, &specTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("could not hash job's definitions: %v", err)
 	}
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: mod.Name + "-sign-",
-			Namespace:    mod.Namespace,
+			GenerateName: mld.Name + "-sign-",
+			Namespace:    mld.Namespace,
 			Labels:       labels,
 			Annotations:  map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
 		},

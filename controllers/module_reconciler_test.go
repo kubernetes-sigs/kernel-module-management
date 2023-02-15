@@ -5,6 +5,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
@@ -300,6 +301,15 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			},
 		}
 
+		returnedMld := api.ModuleLoaderData{
+			ContainerImage:     imageName,
+			Name:               mod.Name,
+			Namespace:          mod.Namespace,
+			ServiceAccountName: serviceAccountName,
+			Selector:           mod.Spec.Selector,
+			KernelVersion:      kernelVersion,
+		}
+
 		nodeList := v1.NodeList{
 			Items: []v1.Node{
 				{
@@ -345,16 +355,16 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 					return nil
 				},
 			),
-			mockKM.EXPECT().GetMergedMappingForKernel(&mod.Spec, kernelVersion).Return(&mappings[0], nil),
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&returnedMld, nil),
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-			mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, &mod).Return(utils.Status(utils.StatusCompleted), nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &returnedMld).Return(true, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &returnedMld, true, returnedMld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.BuildStage, true),
-			mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, &mod).Return(utils.Status(utils.StatusCompleted), nil),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), &returnedMld).Return(true, nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &returnedMld, "", true, returnedMld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.SignStage, true),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion),
+			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&returnedMld)),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.ModuleLoaderStage, false),
 			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.New[string](kernelVersion)),
@@ -398,6 +408,15 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 				},
 				Selector: nodeLabels,
 			},
+		}
+
+		returnedMld := api.ModuleLoaderData{
+			ContainerImage:     imageName,
+			Name:               mod.Name,
+			Namespace:          mod.Namespace,
+			ServiceAccountName: serviceAccountName,
+			Selector:           mod.Spec.Selector,
+			KernelVersion:      kernelVersion,
 		}
 
 		nodeList := v1.NodeList{
@@ -456,16 +475,16 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		dsByKernelVersion := map[string]*appsv1.DaemonSet{kernelVersion: &ds}
 
 		gomock.InOrder(
-			mockKM.EXPECT().GetMergedMappingForKernel(&mod.Spec, kernelVersion).Return(&mappings[0], nil),
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&returnedMld, nil),
 			mockDC.EXPECT().ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace).Return(dsByKernelVersion, nil),
-			mockBM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, true, &mod).Return(utils.Status(utils.StatusCompleted), nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &returnedMld).Return(true, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &returnedMld, true, returnedMld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.BuildStage, true),
-			mockSM.EXPECT().ShouldSync(gomock.Any(), mod, mappings[0]).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), mod, mappings[0], kernelVersion, "", true, &mod).Return(utils.Status(utils.StatusCompleted), nil),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), &returnedMld).Return(true, nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &returnedMld, "", true, returnedMld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
 			mockMetrics.EXPECT().SetCompletedStage(moduleName, namespace, kernelVersion, metrics.SignStage, true),
-			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, imageName, gomock.AssignableToTypeOf(mod), kernelVersion).Do(
-				func(ctx context.Context, d *appsv1.DaemonSet, _ string, _ kmmv1beta1.Module, _ string) {
+			mockDC.EXPECT().SetDriverContainerAsDesired(context.Background(), &ds, gomock.AssignableToTypeOf(&returnedMld)).Do(
+				func(ctx context.Context, d *appsv1.DaemonSet, _ *api.ModuleLoaderData) {
 					d.SetLabels(map[string]string{"test": "test"})
 				}),
 			mockDC.EXPECT().GarbageCollect(ctx, dsByKernelVersion, sets.New[string](kernelVersion)),
@@ -591,70 +610,57 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 	)
 
 	It("should do nothing when build is skipped", func() {
-		km := &kmmv1beta1.KernelMapping{
-			ContainerImage: imageName,
-			Literal:        kernelVersion,
-		}
-
-		mod := &kmmv1beta1.Module{}
+		mld := &api.ModuleLoaderData{KernelVersion: kernelVersion}
 
 		gomock.InOrder(
-			mockBM.EXPECT().ShouldSync(gomock.Any(), *mod, *km).Return(false, nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), mld).Return(false, nil),
 		)
 
 		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
-		completed, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
+		completed, err := mr.handleBuild(context.Background(), mld)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(completed).To(BeTrue())
 	})
 
 	It("should record that a job was created when the build sync returns StatusCreated", func() {
-		km := &kmmv1beta1.KernelMapping{
+		mld := api.ModuleLoaderData{
+			Name:           moduleName,
+			Namespace:      namespace,
 			ContainerImage: imageName,
-			Literal:        kernelVersion,
 			Build:          &kmmv1beta1.Build{},
+			KernelVersion:  kernelVersion,
 		}
-		mod := &kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-			Spec: kmmv1beta1.ModuleSpec{},
-		}
+
 		gomock.InOrder(
-			mockBM.EXPECT().ShouldSync(gomock.Any(), *mod, *km).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), *mod, *km, gomock.Any(), true, mod).Return(utils.Status(utils.StatusCreated), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, false),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mld.Owner).Return(utils.Status(utils.StatusCreated), nil),
+			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.BuildStage, false),
 		)
 
 		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
-		completed, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
+		completed, err := mr.handleBuild(context.Background(), &mld)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(completed).To(BeFalse())
 	})
 
 	It("should record that a job was completed, when the build sync returns StatusCompleted", func() {
-		km := &kmmv1beta1.KernelMapping{
+		mld := &api.ModuleLoaderData{
+			Name:           moduleName,
+			Namespace:      namespace,
 			ContainerImage: imageName,
-			Literal:        kernelVersion,
 			Build:          &kmmv1beta1.Build{},
-		}
-		mod := &kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-			Spec: kmmv1beta1.ModuleSpec{},
+			Owner:          &kmmv1beta1.Module{},
+			KernelVersion:  kernelVersion,
 		}
 		gomock.InOrder(
-			mockBM.EXPECT().ShouldSync(gomock.Any(), *mod, *km).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), *mod, *km, gomock.Any(), true, mod).Return(utils.Status(utils.StatusCompleted), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.BuildStage, true),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), mld).Return(true, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), mld, true, mld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
+			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.BuildStage, true),
 		)
 
 		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
-		completed, err := mr.handleBuild(context.Background(), mod, km, kernelVersion)
+		completed, err := mr.handleBuild(context.Background(), mld)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(completed).To(BeTrue())
 	})
@@ -690,105 +696,89 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 	)
 
 	It("should do nothing when build is skipped", func() {
-		km := &kmmv1beta1.KernelMapping{
+		mld := &api.ModuleLoaderData{
 			ContainerImage: imageName,
-			Literal:        kernelVersion,
+			KernelVersion:  kernelVersion,
 		}
 
-		mod := &kmmv1beta1.Module{}
-
 		gomock.InOrder(
-			mockSM.EXPECT().ShouldSync(gomock.Any(), *mod, *km).Return(false, nil),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), mld).Return(false, nil),
 		)
 
 		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
-		completed, err := mr.handleSigning(context.Background(), mod, km, kernelVersion)
+		completed, err := mr.handleSigning(context.Background(), mld)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(completed).To(BeTrue())
 	})
 
 	It("should record that a job was created when the sign sync returns StatusCreated", func() {
-		km := &kmmv1beta1.KernelMapping{
+		mld := api.ModuleLoaderData{
+			Name:           moduleName,
+			Namespace:      namespace,
 			ContainerImage: imageName,
-			Literal:        kernelVersion,
 			Sign:           &kmmv1beta1.Sign{},
-		}
-		mod := &kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-			Spec: kmmv1beta1.ModuleSpec{},
+			KernelVersion:  kernelVersion,
 		}
 
 		gomock.InOrder(
-			mockSM.EXPECT().ShouldSync(gomock.Any(), *mod, *km).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), *mod, *km, gomock.Any(), "", true, mod).Return(utils.Status(utils.StatusCreated), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, false),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mld.Owner).Return(utils.Status(utils.StatusCreated), nil),
+			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.SignStage, false),
 		)
 
 		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
-		completed, err := mr.handleSigning(context.Background(), mod, km, kernelVersion)
+		completed, err := mr.handleSigning(context.Background(), &mld)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(completed).To(BeFalse())
 	})
 
 	It("should record that a job was completed when the sign sync returns StatusCompleted", func() {
-		km := &kmmv1beta1.KernelMapping{
+		mld := api.ModuleLoaderData{
+			Name:           moduleName,
+			Namespace:      namespace,
 			ContainerImage: imageName,
-			Literal:        kernelVersion,
 			Sign:           &kmmv1beta1.Sign{},
-		}
-		mod := &kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-			Spec: kmmv1beta1.ModuleSpec{},
+			KernelVersion:  kernelVersion,
 		}
 
 		gomock.InOrder(
-			mockSM.EXPECT().ShouldSync(gomock.Any(), *mod, *km).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), *mod, *km, gomock.Any(), "", true, mod).Return(utils.Status(utils.StatusCompleted), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, true),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
+			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.SignStage, true),
 		)
 
 		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
-		completed, err := mr.handleSigning(context.Background(), mod, km, kernelVersion)
+		completed, err := mr.handleSigning(context.Background(), &mld)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(completed).To(BeTrue())
 	})
 
 	It("should run sign sync with the previous image as well when module build and sign are specified", func() {
-		km := &kmmv1beta1.KernelMapping{
+		mld := &api.ModuleLoaderData{
+			Name:           moduleName,
+			Namespace:      namespace,
 			ContainerImage: imageName,
-			Literal:        kernelVersion,
 			Sign:           &kmmv1beta1.Sign{},
 			Build:          &kmmv1beta1.Build{},
-		}
-		mod := &kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-			Spec: kmmv1beta1.ModuleSpec{},
+			Owner:          &kmmv1beta1.Module{},
+			KernelVersion:  kernelVersion,
 		}
 
 		gomock.InOrder(
-			mockSM.EXPECT().ShouldSync(gomock.Any(), *mod, *km).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), *mod, *km, gomock.Any(), imageName+":"+namespace+"_"+moduleName+"_kmm_unsigned", true, mod).
+			mockSM.EXPECT().ShouldSync(gomock.Any(), mld).Return(true, nil),
+			mockSM.EXPECT().Sync(gomock.Any(), mld, imageName+":"+namespace+"_"+moduleName+"_kmm_unsigned", true, mld.Owner).
 				Return(utils.Status(utils.StatusCompleted), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, kernelVersion, metrics.SignStage, true),
+			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.SignStage, true),
 		)
 
 		mr := NewModuleReconciler(clnt, mockBM, mockSM, mockDC, mockKM, mockMetrics, nil, mockSU, namespace)
 
-		completed, err := mr.handleSigning(context.Background(), mod, km, kernelVersion)
+		completed, err := mr.handleSigning(context.Background(), mld)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(completed).To(BeTrue())

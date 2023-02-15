@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -54,19 +54,16 @@ func (jbm *signJobManager) GarbageCollect(ctx context.Context, modName, namespac
 	return deleteNames, nil
 }
 
-func (jbm *signJobManager) ShouldSync(
-	ctx context.Context,
-	mod kmmv1beta1.Module,
-	m kmmv1beta1.KernelMapping) (bool, error) {
+func (jbm *signJobManager) ShouldSync(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
 
 	// if there is no sign specified skip
-	if !module.ShouldBeSigned(m) {
+	if !module.ShouldBeSigned(mld) {
 		return false, nil
 	}
 
-	exists, err := module.ImageExists(ctx, jbm.client, jbm.registry, mod.Spec, mod.Namespace, m, m.ContainerImage)
+	exists, err := module.ImageExists(ctx, jbm.client, jbm.registry, mld, mld.Namespace, mld.ContainerImage)
 	if err != nil {
-		return false, fmt.Errorf("failed to check existence of image %s: %w", m.ContainerImage, err)
+		return false, fmt.Errorf("failed to check existence of image %s: %w", mld.ContainerImage, err)
 	}
 
 	return !exists, nil
@@ -74,9 +71,7 @@ func (jbm *signJobManager) ShouldSync(
 
 func (jbm *signJobManager) Sync(
 	ctx context.Context,
-	mod kmmv1beta1.Module,
-	m kmmv1beta1.KernelMapping,
-	targetKernel string,
+	mld *api.ModuleLoaderData,
 	imageToSign string,
 	pushImage bool,
 	owner metav1.Object) (utils.Status, error) {
@@ -85,14 +80,14 @@ func (jbm *signJobManager) Sync(
 
 	logger.Info("Signing in-cluster")
 
-	labels := jbm.jobHelper.JobLabels(mod.Name, targetKernel, "sign")
+	labels := jbm.jobHelper.JobLabels(mld.Name, mld.KernelVersion, "sign")
 
-	jobTemplate, err := jbm.signer.MakeJobTemplate(ctx, mod, m, targetKernel, labels, imageToSign, pushImage, owner)
+	jobTemplate, err := jbm.signer.MakeJobTemplate(ctx, mld, labels, imageToSign, pushImage, owner)
 	if err != nil {
 		return "", fmt.Errorf("could not make Job template: %v", err)
 	}
 
-	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, targetKernel, utils.JobTypeSign, owner)
+	job, err := jbm.jobHelper.GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, mld.KernelVersion, utils.JobTypeSign, owner)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoMatchingJob) {
 			return "", fmt.Errorf("error getting the signing job: %v", err)

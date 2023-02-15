@@ -8,6 +8,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	. "github.com/onsi/ginkgo/v2"
@@ -43,7 +44,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should return an error if the DaemonSet is nil", func() {
 		Expect(
-			dg.SetDriverContainerAsDesired(context.Background(), nil, "", kmmv1beta1.Module{}, ""),
+			dg.SetDriverContainerAsDesired(context.Background(), nil, &api.ModuleLoaderData{}),
 		).To(
 			HaveOccurred(),
 		)
@@ -51,7 +52,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should return an error if the image is empty", func() {
 		Expect(
-			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, "", kmmv1beta1.Module{}, ""),
+			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, &api.ModuleLoaderData{}),
 		).To(
 			HaveOccurred(),
 		)
@@ -59,22 +60,23 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 	It("should return an error if the kernel version is empty", func() {
 		Expect(
-			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, "", kmmv1beta1.Module{}, ""),
+			dg.SetDriverContainerAsDesired(context.Background(), &appsv1.DaemonSet{}, &api.ModuleLoaderData{}),
 		).To(
 			HaveOccurred(),
 		)
 	})
 
-	It("should not add a device-plugin container if it is not set in the spec", func() {
-		mod := kmmv1beta1.Module{
-			Spec: kmmv1beta1.ModuleSpec{
-				Selector: map[string]string{"has-feature-x": "true"},
-			},
+	It("should have one container in the pod", func() {
+		mld := api.ModuleLoaderData{
+			Selector:       map[string]string{"has-feature-x": "true"},
+			Owner:          &kmmv1beta1.Module{},
+			ContainerImage: "some images",
+			KernelVersion:  kernelVersion,
 		}
 
 		ds := appsv1.DaemonSet{}
 
-		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, &mld)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(1))
@@ -97,24 +99,19 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			MountPath: "/var/lib/firmware",
 		}
 
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: moduleName,
+		mld := api.ModuleLoaderData{
+			Name: moduleName,
+			Modprobe: kmmv1beta1.ModprobeSpec{
+				FirmwarePath: "/opt/lib/firmware/example",
 			},
-			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-					Container: kmmv1beta1.ModuleLoaderContainerSpec{
-						Modprobe: kmmv1beta1.ModprobeSpec{
-							FirmwarePath: "/opt/lib/firmware/example",
-						},
-					},
-				},
-			},
+			Owner:          &kmmv1beta1.Module{},
+			ContainerImage: "some image",
+			KernelVersion:  kernelVersion,
 		}
 
 		ds := appsv1.DaemonSet{}
 
-		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, "test-image", mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, &mld)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		Expect(ds.Spec.Template.Spec.Volumes[1]).To(Equal(vol))
@@ -139,16 +136,17 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 				Name:      moduleName,
 				Namespace: namespace,
 			},
-			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
-					Container: kmmv1beta1.ModuleLoaderContainerSpec{
-						Modprobe: kmmv1beta1.ModprobeSpec{ModuleName: "some-kmod"},
-					},
-					ServiceAccountName: serviceAccountName,
-				},
-				ImageRepoSecret: &v1.LocalObjectReference{Name: imageRepoSecretName},
-				Selector:        map[string]string{"has-feature-x": "true"},
-			},
+		}
+		mld := api.ModuleLoaderData{
+			Name:               moduleName,
+			Namespace:          namespace,
+			ServiceAccountName: serviceAccountName,
+			ContainerImage:     moduleLoaderImage,
+			ImageRepoSecret:    &v1.LocalObjectReference{Name: imageRepoSecretName},
+			Selector:           map[string]string{"has-feature-x": "true"},
+			Modprobe:           kmmv1beta1.ModprobeSpec{ModuleName: "some-kmod"},
+			Owner:              &mod,
+			KernelVersion:      kernelVersion,
 		}
 
 		ds := appsv1.DaemonSet{
@@ -158,7 +156,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			},
 		}
 
-		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, moduleLoaderImage, mod, kernelVersion)
+		err := dg.SetDriverContainerAsDesired(context.Background(), &ds, &mld)
 		Expect(err).NotTo(HaveOccurred())
 
 		podLabels := map[string]string{
@@ -200,12 +198,12 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 								Lifecycle: &v1.Lifecycle{
 									PostStart: &v1.LifecycleHandler{
 										Exec: &v1.ExecAction{
-											Command: MakeLoadCommand(mod.Spec.ModuleLoader.Container.Modprobe, moduleName),
+											Command: MakeLoadCommand(mld.Modprobe, moduleName),
 										},
 									},
 									PreStop: &v1.LifecycleHandler{
 										Exec: &v1.ExecAction{
-											Command: MakeUnloadCommand(mod.Spec.ModuleLoader.Container.Modprobe, moduleName),
+											Command: MakeUnloadCommand(mld.Modprobe, moduleName),
 										},
 									},
 								},
@@ -267,14 +265,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 
 			dc := NewCreator(clnt, kernelLabel, scheme)
 
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      moduleName,
-					Namespace: namespace,
-				},
-			}
-
-			m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), mod.Name, mod.Namespace)
+			m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(m).To(BeEmpty())
 		})
@@ -283,14 +274,8 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).Return(errors.New("some error"))
 
 			dc := NewCreator(clnt, kernelLabel, scheme)
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      moduleName,
-					Namespace: namespace,
-				},
-			}
 
-			_, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), mod.Name, mod.Namespace)
+			_, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -328,14 +313,8 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			)
 
 			dc := NewCreator(clnt, kernelLabel, scheme)
-			mod := kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      moduleName,
-					Namespace: namespace,
-				},
-			}
 
-			m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), mod.Name, mod.Namespace)
+			m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(m).To(HaveLen(2))
 			Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
