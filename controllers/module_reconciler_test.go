@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/golang/mock/gomock"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -400,7 +401,6 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 		gomock.InOrder(
 			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
 			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mld.Owner).Return(utils.Status(utils.StatusCreated), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.BuildStage, false),
 		)
 
 		completed, err := mhr.handleBuild(context.Background(), &mld)
@@ -421,7 +421,6 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 		gomock.InOrder(
 			mockBM.EXPECT().ShouldSync(gomock.Any(), mld).Return(true, nil),
 			mockBM.EXPECT().Sync(gomock.Any(), mld, true, mld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.BuildStage, true),
 		)
 
 		completed, err := mhr.handleBuild(context.Background(), mld)
@@ -480,7 +479,6 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 		gomock.InOrder(
 			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
 			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mld.Owner).Return(utils.Status(utils.StatusCreated), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.SignStage, false),
 		)
 
 		completed, err := mhr.handleSigning(context.Background(), &mld)
@@ -501,7 +499,6 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 		gomock.InOrder(
 			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
 			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.SignStage, true),
 		)
 
 		completed, err := mhr.handleSigning(context.Background(), &mld)
@@ -525,7 +522,6 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 			mockSM.EXPECT().ShouldSync(gomock.Any(), mld).Return(true, nil),
 			mockSM.EXPECT().Sync(gomock.Any(), mld, imageName+":"+namespace+"_"+moduleName+"_kmm_unsigned", true, mld.Owner).
 				Return(utils.Status(utils.StatusCompleted), nil),
-			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, kernelVersion, metrics.SignStage, true),
 		)
 
 		completed, err := mhr.handleSigning(context.Background(), mld)
@@ -570,7 +566,6 @@ var _ = Describe("ModuleReconciler_handleDriverContainer", func() {
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
 			mockDC.EXPECT().SetDriverContainerAsDesired(ctx, newDS, &mld).Return(nil),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
-			mockMetrics.EXPECT().SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.ModuleLoaderStage, false),
 		)
 
 		err := mhr.handleDriverContainer(ctx, &mld, existingDS)
@@ -651,7 +646,6 @@ var _ = Describe("ModuleReconciler_handleDriverContainer", func() {
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
 			mockDC.EXPECT().SetDevicePluginAsDesired(ctx, newDS, &mod).Return(nil),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
-			mockMetrics.EXPECT().SetCompletedStage(mod.Name, mod.Namespace, "", metrics.DevicePluginStage, false),
 		)
 
 		err := mhr.handleDevicePlugin(ctx, &mod)
@@ -727,4 +721,102 @@ var _ = Describe("ModuleReconciler_garbageCollect", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 	})
+})
+
+var _ = Describe("ModuleReconciler_setKMMOMetrics", func() {
+	var (
+		ctrl        *gomock.Controller
+		clnt        *client.MockClient
+		mockMetrics *metrics.MockMetrics
+		mhr         moduleReconcilerHelperAPI
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mockMetrics = metrics.NewMockMetrics(ctrl)
+		mhr = newModuleReconcilerHelper(clnt, nil, nil, nil, nil, mockMetrics)
+	})
+
+	ctx := context.Background()
+
+	It("failed to list Modules", func() {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		mhr.setKMMOMetrics(ctx)
+	})
+
+	DescribeTable("getting metrics data", func(buildInContainer, buildInKM, signInContainer, signInKM, devicePlugin bool, modprobeArg, modprobeRawArg []string) {
+		km := kmmv1beta1.KernelMapping{}
+		mod1 := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "moduleName",
+				Namespace: "namespace",
+			},
+		}
+		mod2 := kmmv1beta1.Module{}
+		mod3 := kmmv1beta1.Module{}
+		numBuild := 0
+		numSign := 0
+		numDevicePlugin := 0
+		if buildInContainer {
+			mod1.Spec.ModuleLoader.Container.Build = &kmmv1beta1.Build{}
+			numBuild = 1
+		}
+		if buildInKM {
+			km.Build = &kmmv1beta1.Build{}
+			numBuild = 1
+		}
+		if signInContainer {
+			mod1.Spec.ModuleLoader.Container.Sign = &kmmv1beta1.Sign{}
+			numSign = 1
+		}
+		if signInKM {
+			km.Sign = &kmmv1beta1.Sign{}
+			numSign = 1
+		}
+		if devicePlugin {
+			mod1.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{}
+			numDevicePlugin = 1
+		}
+		if modprobeArg != nil {
+			mod1.Spec.ModuleLoader.Container.Modprobe.Args = &kmmv1beta1.ModprobeArgs{Load: modprobeArg}
+		}
+		if modprobeRawArg != nil {
+			mod1.Spec.ModuleLoader.Container.Modprobe.RawArgs = &kmmv1beta1.ModprobeArgs{Load: modprobeRawArg}
+		}
+		mod1.Spec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{km}
+
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+				list.Items = []kmmv1beta1.Module{mod1, mod2, mod3}
+				return nil
+			},
+		)
+
+		if modprobeArg != nil {
+			mockMetrics.EXPECT().SetKMMModprobeArgs(mod1.Name, mod1.Namespace, strings.Join(modprobeArg, ","))
+		}
+		if modprobeRawArg != nil {
+			mockMetrics.EXPECT().SetKMMModprobeRawArgs(mod1.Name, mod1.Namespace, strings.Join(modprobeRawArg, ","))
+		}
+
+		mockMetrics.EXPECT().SetKMMModulesNum(3)
+		mockMetrics.EXPECT().SetKMMInClusterBuildNum(numBuild)
+		mockMetrics.EXPECT().SetKMMInClusterSignNum(numSign)
+		mockMetrics.EXPECT().SetKMMDevicePluginNum(numDevicePlugin)
+
+		mhr.setKMMOMetrics(ctx)
+	},
+		Entry("build in container", true, false, false, false, false, nil, nil),
+		Entry("build in KM", false, true, false, false, false, nil, nil),
+		Entry("build in container and KM", true, true, false, false, false, nil, nil),
+		Entry("sign in container", false, false, true, false, false, nil, nil),
+		Entry("sign in KM", false, false, false, true, false, nil, nil),
+		Entry("sign in container and KM", false, false, true, true, false, nil, nil),
+		Entry("device plugin", false, false, false, false, true, nil, nil),
+		Entry("modprobe args", false, false, false, false, false, []string{"param1", "param2"}, nil),
+		Entry("modprobe raw args", false, false, false, false, false, nil, []string{"rawparam1", "rawparam2"}),
+		Entry("altogether", true, true, true, true, true, []string{"param1", "param2"}, []string{"rawparam1", "rawparam2"}),
+	)
 })

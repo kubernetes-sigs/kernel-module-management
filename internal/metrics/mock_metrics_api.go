@@ -45,26 +45,86 @@ func (mr *MockMetricsMockRecorder) Register() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockMetrics)(nil).Register))
 }
 
-// SetCompletedStage mocks base method.
-func (m *MockMetrics) SetCompletedStage(kmmoName, kmmoNamespace, kernelVersion, stage string, completed bool) {
+// SetKMMDevicePluginNum mocks base method.
+func (m *MockMetrics) SetKMMDevicePluginNum(value int) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetCompletedStage", kmmoName, kmmoNamespace, kernelVersion, stage, completed)
+	m.ctrl.Call(m, "SetKMMDevicePluginNum", value)
 }
 
-// SetCompletedStage indicates an expected call of SetCompletedStage.
-func (mr *MockMetricsMockRecorder) SetCompletedStage(kmmoName, kmmoNamespace, kernelVersion, stage, completed interface{}) *gomock.Call {
+// SetKMMDevicePluginNum indicates an expected call of SetKMMDevicePluginNum.
+func (mr *MockMetricsMockRecorder) SetKMMDevicePluginNum(value interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCompletedStage", reflect.TypeOf((*MockMetrics)(nil).SetCompletedStage), kmmoName, kmmoNamespace, kernelVersion, stage, completed)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetKMMDevicePluginNum", reflect.TypeOf((*MockMetrics)(nil).SetKMMDevicePluginNum), value)
 }
 
-// SetExistingKMMOModules mocks base method.
-func (m *MockMetrics) SetExistingKMMOModules(value int) {
+// SetKMMInClusterBuildNum mocks base method.
+func (m *MockMetrics) SetKMMInClusterBuildNum(value int) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetExistingKMMOModules", value)
+	m.ctrl.Call(m, "SetKMMInClusterBuildNum", value)
 }
 
-// SetExistingKMMOModules indicates an expected call of SetExistingKMMOModules.
-func (mr *MockMetricsMockRecorder) SetExistingKMMOModules(value interface{}) *gomock.Call {
+// SetKMMInClusterBuildNum indicates an expected call of SetKMMInClusterBuildNum.
+func (mr *MockMetricsMockRecorder) SetKMMInClusterBuildNum(value interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetExistingKMMOModules", reflect.TypeOf((*MockMetrics)(nil).SetExistingKMMOModules), value)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetKMMInClusterBuildNum", reflect.TypeOf((*MockMetrics)(nil).SetKMMInClusterBuildNum), value)
+}
+
+// SetKMMInClusterSignNum mocks base method.
+func (m *MockMetrics) SetKMMInClusterSignNum(value int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetKMMInClusterSignNum", value)
+}
+
+// SetKMMInClusterSignNum indicates an expected call of SetKMMInClusterSignNum.
+func (mr *MockMetricsMockRecorder) SetKMMInClusterSignNum(value interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetKMMInClusterSignNum", reflect.TypeOf((*MockMetrics)(nil).SetKMMInClusterSignNum), value)
+}
+
+// SetKMMModprobeArgs mocks base method.
+func (m *MockMetrics) SetKMMModprobeArgs(modName, namespace, modprobeArgs string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetKMMModprobeArgs", modName, namespace, modprobeArgs)
+}
+
+// SetKMMModprobeArgs indicates an expected call of SetKMMModprobeArgs.
+func (mr *MockMetricsMockRecorder) SetKMMModprobeArgs(modName, namespace, modprobeArgs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetKMMModprobeArgs", reflect.TypeOf((*MockMetrics)(nil).SetKMMModprobeArgs), modName, namespace, modprobeArgs)
+}
+
+// SetKMMModprobeRawArgs mocks base method.
+func (m *MockMetrics) SetKMMModprobeRawArgs(modName, namespace, modprobeArgs string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetKMMModprobeRawArgs", modName, namespace, modprobeArgs)
+}
+
+// SetKMMModprobeRawArgs indicates an expected call of SetKMMModprobeRawArgs.
+func (mr *MockMetricsMockRecorder) SetKMMModprobeRawArgs(modName, namespace, modprobeArgs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetKMMModprobeRawArgs", reflect.TypeOf((*MockMetrics)(nil).SetKMMModprobeRawArgs), modName, namespace, modprobeArgs)
+}
+
+// SetKMMModulesNum mocks base method.
+func (m *MockMetrics) SetKMMModulesNum(value int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetKMMModulesNum", value)
+}
+
+// SetKMMModulesNum indicates an expected call of SetKMMModulesNum.
+func (mr *MockMetricsMockRecorder) SetKMMModulesNum(value interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetKMMModulesNum", reflect.TypeOf((*MockMetrics)(nil).SetKMMModulesNum), value)
+}
+
+// SetKMMPreflightsNum mocks base method.
+func (m *MockMetrics) SetKMMPreflightsNum(value int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetKMMPreflightsNum", value)
+}
+
+// SetKMMPreflightsNum indicates an expected call of SetKMMPreflightsNum.
+func (mr *MockMetricsMockRecorder) SetKMMPreflightsNum(value interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetKMMPreflightsNum", reflect.TypeOf((*MockMetrics)(nil).SetKMMPreflightsNum), value)
 }

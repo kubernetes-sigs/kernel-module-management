@@ -295,11 +295,8 @@ func (mrh *moduleReconcilerHelper) handleBuild(ctx context.Context, mld *api.Mod
 
 	completedSuccessfully := false
 	switch buildStatus {
-	case utils.StatusCreated:
-		mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.BuildStage, false)
 	case utils.StatusCompleted:
 		completedSuccessfully = true
-		mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.BuildStage, true)
 	case utils.StatusFailed:
 		logger.Info(utils.WarnString("Build job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
@@ -333,11 +330,8 @@ func (mrh *moduleReconcilerHelper) handleSigning(ctx context.Context, mld *api.M
 
 	completedSuccessfully := false
 	switch signStatus {
-	case utils.StatusCreated:
-		mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.SignStage, false)
 	case utils.StatusCompleted:
 		completedSuccessfully = true
-		mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.SignStage, true)
 	case utils.StatusFailed:
 		logger.Info(utils.WarnString("Sign job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
@@ -366,9 +360,6 @@ func (mrh *moduleReconcilerHelper) handleDriverContainer(ctx context.Context,
 	})
 
 	if err == nil {
-		if opRes == controllerutil.OperationResultCreated {
-			mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.ModuleLoaderStage, false)
-		}
 		logger.Info("Reconciled Driver Container", "name", ds.Name, "result", opRes)
 	}
 
@@ -390,9 +381,6 @@ func (mrh *moduleReconcilerHelper) handleDevicePlugin(ctx context.Context, mod *
 	})
 
 	if err == nil {
-		if opRes == controllerutil.OperationResultCreated {
-			mrh.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, "", metrics.DevicePluginStage, false)
-		}
 		logger.Info("Reconciled Device Plugin", "name", ds.Name, "result", opRes)
 	}
 
@@ -440,9 +428,38 @@ func (mrh *moduleReconcilerHelper) setKMMOMetrics(ctx context.Context) {
 	err := mrh.client.List(ctx, &mods)
 	if err != nil {
 		logger.V(1).Info("failed to list KMMomodules for metrics", "error", err)
+		return
 	}
 
-	mrh.metricsAPI.SetExistingKMMOModules(len(mods.Items))
+	numModules := len(mods.Items)
+	numModulesWithBuild := 0
+	numModulesWithSign := 0
+	numModulesWithDevicePlugin := 0
+	for _, mod := range mods.Items {
+		if mod.Spec.DevicePlugin != nil {
+			numModulesWithDevicePlugin += 1
+		}
+		buildCapable, signCapable := isModuleBuildAndSignCapable(&mod)
+		if buildCapable {
+			numModulesWithBuild += 1
+		}
+		if signCapable {
+			numModulesWithSign += 1
+		}
+
+		if mod.Spec.ModuleLoader.Container.Modprobe.Args != nil {
+			modprobeArgs := strings.Join(mod.Spec.ModuleLoader.Container.Modprobe.Args.Load, ",")
+			mrh.metricsAPI.SetKMMModprobeArgs(mod.Name, mod.Namespace, modprobeArgs)
+		}
+		if mod.Spec.ModuleLoader.Container.Modprobe.RawArgs != nil {
+			modprobeRawArgs := strings.Join(mod.Spec.ModuleLoader.Container.Modprobe.RawArgs.Load, ",")
+			mrh.metricsAPI.SetKMMModprobeRawArgs(mod.Name, mod.Namespace, modprobeRawArgs)
+		}
+	}
+	mrh.metricsAPI.SetKMMModulesNum(numModules)
+	mrh.metricsAPI.SetKMMInClusterBuildNum(numModulesWithBuild)
+	mrh.metricsAPI.SetKMMInClusterSignNum(numModulesWithSign)
+	mrh.metricsAPI.SetKMMDevicePluginNum(numModulesWithDevicePlugin)
 }
 
 func (mrh *moduleReconcilerHelper) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error) {
@@ -478,4 +495,21 @@ func isNodeSchedulable(node *v1.Node) bool {
 		}
 	}
 	return true
+}
+
+func isModuleBuildAndSignCapable(mod *kmmv1beta1.Module) (bool, bool) {
+	buildCapable := mod.Spec.ModuleLoader.Container.Build != nil
+	signCapable := mod.Spec.ModuleLoader.Container.Sign != nil
+	if buildCapable && signCapable {
+		return true, true
+	}
+	for _, mapping := range mod.Spec.ModuleLoader.Container.KernelMappings {
+		if mapping.Sign != nil {
+			signCapable = true
+		}
+		if mapping.Build != nil {
+			buildCapable = true
+		}
+	}
+	return buildCapable, signCapable
 }

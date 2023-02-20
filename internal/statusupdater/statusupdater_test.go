@@ -19,7 +19,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 )
 
 type daemonSetConfig struct {
@@ -35,19 +34,17 @@ var _ = Describe("module status update", func() {
 	)
 
 	var (
-		ctrl        *gomock.Controller
-		clnt        *client.MockClient
-		mockMetrics *metrics.MockMetrics
-		mod         *kmmv1beta1.Module
-		su          ModuleStatusUpdater
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		mod  *kmmv1beta1.Module
+		su   ModuleStatusUpdater
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockMetrics = metrics.NewMockMetrics(ctrl)
 		mod = &kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
-		su = NewModuleStatusUpdater(clnt, mockMetrics)
+		su = NewModuleStatusUpdater(clnt)
 	})
 
 	DescribeTable("checking status updater based on module",
@@ -61,18 +58,8 @@ var _ = Describe("module status update", func() {
 			for kernelVersion, ds := range dsMap {
 				if daemonset.IsDevicePluginKernelVersion(kernelVersion) {
 					devicePluginAvailable = ds.Status.NumberAvailable
-					mockMetrics.EXPECT().SetCompletedStage(name,
-						namespace,
-						daemonset.GetDevicePluginKernelVersion(),
-						metrics.DevicePluginStage,
-						ds.Status.NumberAvailable == ds.Status.DesiredNumberScheduled)
 				} else {
 					moduleLoaderAvailable += ds.Status.NumberAvailable
-					mockMetrics.EXPECT().SetCompletedStage(name,
-						namespace,
-						kernelVersion,
-						metrics.ModuleLoaderStage,
-						ds.Status.NumberAvailable == ds.Status.DesiredNumberScheduled)
 				}
 			}
 			statusWrite := client.NewMockStatusWriter(ctrl)
