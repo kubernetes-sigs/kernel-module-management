@@ -34,7 +34,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -54,14 +53,11 @@ const ModuleReconcilerName = "Module"
 type ModuleReconciler struct {
 	client.Client
 
-	buildAPI          build.Manager
-	signAPI           sign.SignManager
 	daemonAPI         daemonset.DaemonSetCreator
-	kernelAPI         module.KernelMapper
-	metricsAPI        metrics.Metrics
 	operatorNamespace string
 	filter            *filter.Filter
 	statusUpdaterAPI  statusupdater.ModuleStatusUpdater
+	reconHelperAPI    moduleReconcilerHelperAPI
 }
 
 func NewModuleReconciler(
@@ -75,13 +71,10 @@ func NewModuleReconciler(
 	statusUpdaterAPI statusupdater.ModuleStatusUpdater,
 	operatorNamespace string,
 ) *ModuleReconciler {
+	reconHelperAPI := newModuleReconcilerHelper(client, buildAPI, signAPI, daemonAPI, kernelAPI, metricsAPI)
 	return &ModuleReconciler{
-		Client:            client,
-		buildAPI:          buildAPI,
-		signAPI:           signAPI,
 		daemonAPI:         daemonAPI,
-		kernelAPI:         kernelAPI,
-		metricsAPI:        metricsAPI,
+		reconHelperAPI:    reconHelperAPI,
 		filter:            filter,
 		statusUpdaterAPI:  statusUpdaterAPI,
 		operatorNamespace: operatorNamespace,
@@ -104,7 +97,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	logger := log.FromContext(ctx)
 
-	mod, err := r.getRequestedModule(ctx, req.NamespacedName)
+	mod, err := r.reconHelperAPI.getRequestedModule(ctx, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Module deleted")
@@ -114,14 +107,14 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("failed to get the requested %s KMMO CR: %w", req.NamespacedName, err)
 	}
 
-	r.setKMMOMetrics(ctx)
+	r.reconHelperAPI.setKMMOMetrics(ctx)
 
-	targetedNodes, err := r.getNodesListBySelector(ctx, mod)
+	targetedNodes, err := r.reconHelperAPI.getNodesListBySelector(ctx, mod)
 	if err != nil {
 		return res, fmt.Errorf("could get targeted nodes for module %s: %w", mod.Name, err)
 	}
 
-	mldMappings, nodesWithMapping, err := r.getRelevantKernelMappingsAndNodes(ctx, mod, targetedNodes)
+	mldMappings, nodesWithMapping, err := r.reconHelperAPI.getRelevantKernelMappingsAndNodes(ctx, mod, targetedNodes)
 	if err != nil {
 		return res, fmt.Errorf("could get kernel mappings and nodes for modules %s: %w", mod.Name, err)
 	}
@@ -132,7 +125,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	for kernelVersion, mld := range mldMappings {
-		completedSuccessfully, err := r.handleBuild(ctx, mld)
+		completedSuccessfully, err := r.reconHelperAPI.handleBuild(ctx, mld)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle build for kernel version %s: %v", kernelVersion, err)
 		}
@@ -145,7 +138,7 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			continue
 		}
 
-		completedSuccessfully, err = r.handleSigning(ctx, mld)
+		completedSuccessfully, err = r.reconHelperAPI.handleSigning(ctx, mld)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle signing for kernel version %s: %v", kernelVersion, err)
 		}
@@ -154,20 +147,20 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			continue
 		}
 
-		err = r.handleDriverContainer(ctx, mld, dsByKernelVersion)
+		err = r.reconHelperAPI.handleDriverContainer(ctx, mld, dsByKernelVersion)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle driver container for kernel version %s: %v", kernelVersion, err)
 		}
 	}
 
 	logger.Info("Handle device plugin")
-	err = r.handleDevicePlugin(ctx, mod)
+	err = r.reconHelperAPI.handleDevicePlugin(ctx, mod)
 	if err != nil {
 		return res, fmt.Errorf("could handle device plugin: %w", err)
 	}
 
 	logger.Info("Run garbage collection")
-	err = r.garbageCollect(ctx, mod, mldMappings, dsByKernelVersion)
+	err = r.reconHelperAPI.garbageCollect(ctx, mod, mldMappings, dsByKernelVersion)
 	if err != nil {
 		return res, fmt.Errorf("failed to run garbage collection: %v", err)
 	}
@@ -182,7 +175,46 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return res, nil
 }
 
-func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context,
+//go:generate mockgen -source=module_reconciler.go -package=controllers -destination=mock_module_reconciler.go moduleReconcilerHelperAPI
+
+type moduleReconcilerHelperAPI interface {
+	getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error)
+	setKMMOMetrics(ctx context.Context)
+	getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error)
+	getRelevantKernelMappingsAndNodes(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, []v1.Node, error)
+	handleBuild(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
+	handleSigning(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
+	handleDriverContainer(ctx context.Context, mld *api.ModuleLoaderData, dsByKernelVersion map[string]*appsv1.DaemonSet) error
+	handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module) error
+	garbageCollect(ctx context.Context, mod *kmmv1beta1.Module, mldMappings map[string]*api.ModuleLoaderData, existingDS map[string]*appsv1.DaemonSet) error
+}
+
+type moduleReconcilerHelper struct {
+	client     client.Client
+	buildAPI   build.Manager
+	signAPI    sign.SignManager
+	daemonAPI  daemonset.DaemonSetCreator
+	kernelAPI  module.KernelMapper
+	metricsAPI metrics.Metrics
+}
+
+func newModuleReconcilerHelper(client client.Client,
+	buildAPI build.Manager,
+	signAPI sign.SignManager,
+	daemonAPI daemonset.DaemonSetCreator,
+	kernelAPI module.KernelMapper,
+	metricsAPI metrics.Metrics) moduleReconcilerHelperAPI {
+	return &moduleReconcilerHelper{
+		client:     client,
+		buildAPI:   buildAPI,
+		signAPI:    signAPI,
+		daemonAPI:  daemonAPI,
+		kernelAPI:  kernelAPI,
+		metricsAPI: metricsAPI,
+	}
+}
+
+func (mrh *moduleReconcilerHelper) getRelevantKernelMappingsAndNodes(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, []v1.Node, error) {
 
@@ -205,7 +237,7 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 			continue
 		}
 
-		mld, err := r.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
+		mld, err := mrh.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
 		if err != nil {
 			nodeLogger.Error(err, "failed to get and process kernel mapping")
 			continue
@@ -222,13 +254,13 @@ func (r *ModuleReconciler) getRelevantKernelMappingsAndNodes(ctx context.Context
 	return mldMappings, nodes, nil
 }
 
-func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error) {
+func (mrh *moduleReconcilerHelper) getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error) {
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("Listing nodes", "selector", mod.Spec.Selector)
 
 	selectedNodes := v1.NodeList{}
 	opt := client.MatchingLabels(mod.Spec.Selector)
-	if err := r.Client.List(ctx, &selectedNodes, opt); err != nil {
+	if err := mrh.client.List(ctx, &selectedNodes, opt); err != nil {
 		logger.Error(err, "Could not list nodes")
 		return nil, fmt.Errorf("could not list nodes: %v", err)
 	}
@@ -243,9 +275,9 @@ func (r *ModuleReconciler) getNodesListBySelector(ctx context.Context, mod *kmmv
 }
 
 // handleBuild returns true if build is not needed or finished successfully
-func (r *ModuleReconciler) handleBuild(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
+func (mrh *moduleReconcilerHelper) handleBuild(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
 
-	shouldSync, err := r.buildAPI.ShouldSync(ctx, mld)
+	shouldSync, err := mrh.buildAPI.ShouldSync(ctx, mld)
 	if err != nil {
 		return false, fmt.Errorf("could not check if build synchronization is needed: %w", err)
 	}
@@ -256,7 +288,7 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context, mld *api.ModuleLoade
 	logger := log.FromContext(ctx).WithValues("kernel version", mld.KernelVersion, "image", mld.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildStatus, err := r.buildAPI.Sync(buildCtx, mld, true, mld.Owner)
+	buildStatus, err := mrh.buildAPI.Sync(buildCtx, mld, true, mld.Owner)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
@@ -264,10 +296,10 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context, mld *api.ModuleLoade
 	completedSuccessfully := false
 	switch buildStatus {
 	case utils.StatusCreated:
-		r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.BuildStage, false)
+		mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.BuildStage, false)
 	case utils.StatusCompleted:
 		completedSuccessfully = true
-		r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.BuildStage, true)
+		mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.BuildStage, true)
 	case utils.StatusFailed:
 		logger.Info(utils.WarnString("Build job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
@@ -276,8 +308,8 @@ func (r *ModuleReconciler) handleBuild(ctx context.Context, mld *api.ModuleLoade
 }
 
 // handleSigning returns true if signing is not needed or finished successfully
-func (r *ModuleReconciler) handleSigning(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
-	shouldSync, err := r.signAPI.ShouldSync(ctx, mld)
+func (mrh *moduleReconcilerHelper) handleSigning(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
+	shouldSync, err := mrh.signAPI.ShouldSync(ctx, mld)
 	if err != nil {
 		return false, fmt.Errorf("cound not check if synchronization is needed: %w", err)
 	}
@@ -294,7 +326,7 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context, mld *api.ModuleLoa
 	logger := log.FromContext(ctx).WithValues("kernel version", mld.KernelVersion, "image", mld.ContainerImage)
 	signCtx := log.IntoContext(ctx, logger)
 
-	signStatus, err := r.signAPI.Sync(signCtx, mld, previousImage, true, mld.Owner)
+	signStatus, err := mrh.signAPI.Sync(signCtx, mld, previousImage, true, mld.Owner)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the signing: %w", err)
 	}
@@ -302,10 +334,10 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context, mld *api.ModuleLoa
 	completedSuccessfully := false
 	switch signStatus {
 	case utils.StatusCreated:
-		r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.SignStage, false)
+		mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.SignStage, false)
 	case utils.StatusCompleted:
 		completedSuccessfully = true
-		r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.SignStage, true)
+		mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.SignStage, true)
 	case utils.StatusFailed:
 		logger.Info(utils.WarnString("Sign job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
@@ -313,7 +345,7 @@ func (r *ModuleReconciler) handleSigning(ctx context.Context, mld *api.ModuleLoa
 	return completedSuccessfully, nil
 }
 
-func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
+func (mrh *moduleReconcilerHelper) handleDriverContainer(ctx context.Context,
 	mld *api.ModuleLoaderData,
 	dsByKernelVersion map[string]*appsv1.DaemonSet) error {
 	ds := &appsv1.DaemonSet{
@@ -329,13 +361,13 @@ func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
 		ds.GenerateName = mld.Name + "-"
 	}
 
-	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-		return r.daemonAPI.SetDriverContainerAsDesired(ctx, ds, mld)
+	opRes, err := controllerutil.CreateOrPatch(ctx, mrh.client, ds, func() error {
+		return mrh.daemonAPI.SetDriverContainerAsDesired(ctx, ds, mld)
 	})
 
 	if err == nil {
 		if opRes == controllerutil.OperationResultCreated {
-			r.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.ModuleLoaderStage, false)
+			mrh.metricsAPI.SetCompletedStage(mld.Name, mld.Namespace, mld.KernelVersion, metrics.ModuleLoaderStage, false)
 		}
 		logger.Info("Reconciled Driver Container", "name", ds.Name, "result", opRes)
 	}
@@ -343,29 +375,23 @@ func (r *ModuleReconciler) handleDriverContainer(ctx context.Context,
 	return err
 }
 
-func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module) error {
+func (mrh *moduleReconcilerHelper) handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module) error {
 	if mod.Spec.DevicePlugin == nil {
 		return nil
 	}
 
 	logger := log.FromContext(ctx)
 	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace},
-	}
-	name := mod.Name + "-device-plugin"
-	ds.Name = name
-	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: mod.Namespace}, ds)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to get the device plugin daemonset %s/%s: %w", name, mod.Namespace, err)
+		ObjectMeta: metav1.ObjectMeta{Name: mod.Name + "-device-plugin", Namespace: mod.Namespace},
 	}
 
-	opRes, err := controllerutil.CreateOrPatch(ctx, r.Client, ds, func() error {
-		return r.daemonAPI.SetDevicePluginAsDesired(ctx, ds, mod)
+	opRes, err := controllerutil.CreateOrPatch(ctx, mrh.client, ds, func() error {
+		return mrh.daemonAPI.SetDevicePluginAsDesired(ctx, ds, mod)
 	})
 
 	if err == nil {
 		if opRes == controllerutil.OperationResultCreated {
-			r.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, "", metrics.DevicePluginStage, false)
+			mrh.metricsAPI.SetCompletedStage(mod.Name, mod.Namespace, "", metrics.DevicePluginStage, false)
 		}
 		logger.Info("Reconciled Device Plugin", "name", ds.Name, "result", opRes)
 	}
@@ -373,7 +399,7 @@ func (r *ModuleReconciler) handleDevicePlugin(ctx context.Context, mod *kmmv1bet
 	return err
 }
 
-func (r *ModuleReconciler) garbageCollect(ctx context.Context,
+func (mrh *moduleReconcilerHelper) garbageCollect(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	mldMappings map[string]*api.ModuleLoaderData,
 	existingDS map[string]*appsv1.DaemonSet) error {
@@ -381,7 +407,7 @@ func (r *ModuleReconciler) garbageCollect(ctx context.Context,
 	// Garbage collect old DaemonSets for which there are no nodes.
 	validKernels := sets.KeySet[string](mldMappings)
 
-	deleted, err := r.daemonAPI.GarbageCollect(ctx, existingDS, validKernels)
+	deleted, err := mrh.daemonAPI.GarbageCollect(ctx, existingDS, validKernels)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect DaemonSets: %v", err)
 	}
@@ -389,7 +415,7 @@ func (r *ModuleReconciler) garbageCollect(ctx context.Context,
 	logger.Info("Garbage-collected DaemonSets", "names", deleted)
 
 	// Garbage collect for successfully finished build jobs
-	deleted, err = r.buildAPI.GarbageCollect(ctx, mod.Name, mod.Namespace, mod)
+	deleted, err = mrh.buildAPI.GarbageCollect(ctx, mod.Name, mod.Namespace, mod)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect build objects: %v", err)
 	}
@@ -397,7 +423,7 @@ func (r *ModuleReconciler) garbageCollect(ctx context.Context,
 	logger.Info("Garbage-collected Build objects", "names", deleted)
 
 	// Garbage collect for successfully finished sign jobs
-	deleted, err = r.signAPI.GarbageCollect(ctx, mod.Name, mod.Namespace, mod)
+	deleted, err = mrh.signAPI.GarbageCollect(ctx, mod.Name, mod.Namespace, mod)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect sign objects: %v", err)
 	}
@@ -407,22 +433,22 @@ func (r *ModuleReconciler) garbageCollect(ctx context.Context,
 	return nil
 }
 
-func (r *ModuleReconciler) setKMMOMetrics(ctx context.Context) {
+func (mrh *moduleReconcilerHelper) setKMMOMetrics(ctx context.Context) {
 	logger := log.FromContext(ctx)
 
 	mods := kmmv1beta1.ModuleList{}
-	err := r.Client.List(ctx, &mods)
+	err := mrh.client.List(ctx, &mods)
 	if err != nil {
 		logger.V(1).Info("failed to list KMMomodules for metrics", "error", err)
 	}
 
-	r.metricsAPI.SetExistingKMMOModules(len(mods.Items))
+	mrh.metricsAPI.SetExistingKMMOModules(len(mods.Items))
 }
 
-func (r *ModuleReconciler) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error) {
+func (mrh *moduleReconcilerHelper) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error) {
 	mod := kmmv1beta1.Module{}
 
-	if err := r.Client.Get(ctx, namespacedName, &mod); err != nil {
+	if err := mrh.client.Get(ctx, namespacedName, &mod); err != nil {
 		return nil, fmt.Errorf("failed to get the kmmo module %s: %w", namespacedName, err)
 	}
 	return &mod, nil
