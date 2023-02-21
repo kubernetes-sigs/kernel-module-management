@@ -175,7 +175,7 @@ metadata:
   name: example-module-dockerfile
   namespace: default
 data:
-  Dockerfile: |
+  dockerfile: |
     ARG DTK_AUTO
     ARG KERNEL_VERSION
     FROM ${DTK_AUTO} as builder
