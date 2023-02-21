@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -49,6 +50,7 @@ const (
 type PreflightValidationReconciler struct {
 	client        client.Client
 	filter        *filter.Filter
+	metricsAPI    metrics.Metrics
 	statusUpdater statusupdater.PreflightStatusUpdater
 	preflight     preflight.PreflightAPI
 }
@@ -56,11 +58,13 @@ type PreflightValidationReconciler struct {
 func NewPreflightValidationReconciler(
 	client client.Client,
 	filter *filter.Filter,
+	metricsAPI metrics.Metrics,
 	statusUpdater statusupdater.PreflightStatusUpdater,
 	preflight preflight.PreflightAPI) *PreflightValidationReconciler {
 	return &PreflightValidationReconciler{
 		client:        client,
 		filter:        filter,
+		metricsAPI:    metricsAPI,
 		statusUpdater: statusUpdater,
 		preflight:     preflight}
 }
@@ -100,6 +104,9 @@ func (r *PreflightValidationReconciler) Reconcile(ctx context.Context, req ctrl.
 		log.Error(err, "preflight validation reconcile failed to find object")
 		return ctrl.Result{}, err
 	}
+
+	// we want the metric just to signal that this customer uses preflight
+	r.metricsAPI.SetKMMPreflightsNum(1)
 
 	reconCompleted, err := r.runPreflightValidation(ctx, &pv)
 	if err != nil {

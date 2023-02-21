@@ -141,7 +141,7 @@ func main() {
 		kernelAPI,
 		metricsAPI,
 		filterAPI,
-		statusupdater.NewModuleStatusUpdater(client, metricsAPI),
+		statusupdater.NewModuleStatusUpdater(client),
 		operatorNamespace,
 	)
 
@@ -162,7 +162,7 @@ func main() {
 	preflightStatusUpdaterAPI := statusupdater.NewPreflightStatusUpdater(client)
 	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
 
-	if err = controllers.NewPreflightValidationReconciler(client, filterAPI, preflightStatusUpdaterAPI, preflightAPI).SetupWithManager(mgr); err != nil {
+	if err = controllers.NewPreflightValidationReconciler(client, filterAPI, metricsAPI, preflightStatusUpdaterAPI, preflightAPI).SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PreflightValidationReconcilerName)
 	}
 

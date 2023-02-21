@@ -15,7 +15,6 @@ import (
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 )
 
 //go:generate mockgen -source=statusupdater.go -package=statusupdater -destination=mock_statusupdater.go
@@ -44,8 +43,7 @@ type PreflightStatusUpdater interface {
 }
 
 type moduleStatusUpdater struct {
-	client     client.Client
-	metricsAPI metrics.Metrics
+	client client.Client
 }
 
 type managedClusterModuleStatusUpdater struct {
@@ -56,10 +54,9 @@ type preflightStatusUpdater struct {
 	client client.Client
 }
 
-func NewModuleStatusUpdater(client client.Client, metricsAPI metrics.Metrics) ModuleStatusUpdater {
+func NewModuleStatusUpdater(client client.Client) ModuleStatusUpdater {
 	return &moduleStatusUpdater{
-		client:     client,
-		metricsAPI: metricsAPI,
+		client: client,
 	}
 }
 
@@ -100,7 +97,6 @@ func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
 		mod.Status.DevicePlugin.DesiredNumber = numDesired
 		mod.Status.DevicePlugin.AvailableNumber = numAvailableDevicePlugin
 	}
-	m.updateMetrics(ctx, mod, dsByKernelVersion)
 	return m.client.Status().Update(ctx, mod)
 }
 
@@ -169,18 +165,4 @@ func (p *preflightStatusUpdater) PreflightSetVerificationStage(ctx context.Conte
 	pv.Status.CRStatuses[moduleName].VerificationStage = stage
 	pv.Status.CRStatuses[moduleName].LastTransitionTime = metav1.NewTime(time.Now())
 	return p.client.Status().Update(ctx, pv)
-}
-
-func (m *moduleStatusUpdater) updateMetrics(ctx context.Context, mod *kmmv1beta1.Module, dsByKernelVersion map[string]*appsv1.DaemonSet) {
-	for kernelVersion, ds := range dsByKernelVersion {
-		stage := metrics.ModuleLoaderStage
-		if daemonset.IsDevicePluginKernelVersion(kernelVersion) {
-			stage = metrics.DevicePluginStage
-		}
-		m.metricsAPI.SetCompletedStage(mod.Name,
-			mod.Namespace,
-			kernelVersion,
-			stage,
-			ds.Status.DesiredNumberScheduled == ds.Status.NumberAvailable)
-	}
 }
