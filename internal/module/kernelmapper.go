@@ -127,6 +127,8 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 
 func (kh *kernelMapperHelper) replaceTemplates(mld *api.ModuleLoaderData) error {
 	osConfigEnvVars := utils.KernelComponentsAsEnvVars(mld.KernelVersion)
+	osConfigEnvVars = append(osConfigEnvVars, "MOD_NAME="+mld.Name, "MOD_NAMESPACE="+mld.Namespace)
+
 	replacedContainerImage, err := utils.ReplaceInTemplates(osConfigEnvVars, mld.ContainerImage)
 	if err != nil {
 		return fmt.Errorf("failed to substitute templates in the ContainerImage field: %v", err)

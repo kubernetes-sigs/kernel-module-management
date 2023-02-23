@@ -120,7 +120,7 @@ vet: ## Run go vet against code.
 
 TEST ?= ./...
 
-.PHONY: test
+.PHONY: unit-test
 unit-test: vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $(TEST) -coverprofile cover.out
 

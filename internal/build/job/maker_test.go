@@ -122,6 +122,8 @@ var _ = Describe("MakeJobTemplate", func() {
 									"--destination", image,
 									"--build-arg", "name1=value1",
 									"--build-arg", "KERNEL_VERSION=" + kernelVersion,
+									"--build-arg", "MOD_NAME=" + moduleName,
+									"--build-arg", "MOD_NAMESPACE=" + namespace,
 								},
 								Name:  "kaniko",
 								Image: kanikoImage,
@@ -218,9 +220,14 @@ var _ = Describe("MakeJobTemplate", func() {
 		annotations := map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", hash)}
 		expected.SetAnnotations(annotations)
 
-		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
+		overrides := []kmmv1beta1.BuildArg{
+			{Name: "KERNEL_VERSION", Value: kernelVersion},
+			{Name: "MOD_NAME", Value: moduleName},
+			{Name: "MOD_NAMESPACE", Value: namespace},
+		}
+
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override).Return(append(slices.Clone(buildArgs), override)),
+			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, overrides).Return(append(slices.Clone(buildArgs), overrides...)),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData

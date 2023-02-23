@@ -70,23 +70,20 @@ func (m *maker) MakeJobTemplate(
 	owner metav1.Object,
 	pushImage bool) (*batchv1.Job, error) {
 
-	buildConfig := mld.Build
-	containerImage := mld.ContainerImage
-
 	// if build AND sign are specified, then we will build an intermediate image
 	// and let sign produce the one specified in its targetImage
+	containerImage := mld.ContainerImage
 	if module.ShouldBeSigned(mld) {
 		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
 	}
 
-	specTemplate := m.specTemplate(
-		mld,
-		buildConfig,
-		containerImage,
-		mld.RegistryTLS,
-		pushImage)
-
-	specTemplateHash, err := m.getHashAnnotationValue(ctx, buildConfig.DockerfileConfigMap.Name, mld.Namespace, &specTemplate)
+	specTemplate := m.specTemplate(mld, containerImage, pushImage)
+	specTemplateHash, err := m.getHashAnnotationValue(
+		ctx,
+		mld.Build.DockerfileConfigMap.Name,
+		mld.Namespace,
+		&specTemplate,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("could not hash job's definitions: %v", err)
 	}
@@ -112,13 +109,9 @@ func (m *maker) MakeJobTemplate(
 	return job, nil
 }
 
-func (m *maker) specTemplate(
-	mld *api.ModuleLoaderData,
-	buildConfig *kmmv1beta1.Build,
-	containerImage string,
-	registryTLS *kmmv1beta1.TLSOptions,
-	pushImage bool) v1.PodTemplateSpec {
+func (m *maker) specTemplate(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodTemplateSpec {
 
+	buildConfig := mld.Build
 	kanikoImage := os.Getenv("RELATED_IMAGES_BUILD")
 
 	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
@@ -133,7 +126,7 @@ func (m *maker) specTemplate(
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
-					Args:         m.containerArgs(buildConfig, mld.KernelVersion, containerImage, registryTLS, pushImage),
+					Args:         m.containerArgs(buildConfig, mld, containerImage, pushImage),
 					Name:         "kaniko",
 					Image:        kanikoImage,
 					VolumeMounts: volumeMounts(mld.ImageRepoSecret, buildConfig),
@@ -148,9 +141,8 @@ func (m *maker) specTemplate(
 
 func (m *maker) containerArgs(
 	buildConfig *kmmv1beta1.Build,
-	targetKernel string,
+	mld *api.ModuleLoaderData,
 	containerImage string,
-	registryTLS *kmmv1beta1.TLSOptions,
 	pushImage bool) []string {
 
 	args := []string{}
@@ -160,9 +152,14 @@ func (m *maker) containerArgs(
 		args = append(args, "--no-push")
 	}
 
+	overrides := []kmmv1beta1.BuildArg{
+		{Name: "KERNEL_VERSION", Value: mld.KernelVersion},
+		{Name: "MOD_NAME", Value: mld.Name},
+		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
+	}
 	buildArgs := m.helper.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
-		kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: targetKernel},
+		overrides...,
 	)
 
 	for _, ba := range buildArgs {
@@ -178,11 +175,11 @@ func (m *maker) containerArgs(
 	}
 
 	if pushImage {
-		if registryTLS.Insecure {
+		if mld.RegistryTLS.Insecure {
 			args = append(args, "--insecure")
 		}
 
-		if registryTLS.InsecureSkipTLSVerify {
+		if mld.RegistryTLS.InsecureSkipTLSVerify {
 			args = append(args, "--skip-tls-verify")
 		}
 	}
