@@ -5,15 +5,11 @@
 package registry
 
 import (
-	tar "archive/tar"
 	context "context"
-	io "io"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	authn "github.com/google/go-containerregistry/pkg/authn"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	types "github.com/google/go-containerregistry/pkg/v1/types"
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	auth "github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 )
@@ -41,65 +37,6 @@ func (m *MockRegistry) EXPECT() *MockRegistryMockRecorder {
 	return m.recorder
 }
 
-// AddLayerToImage mocks base method.
-func (m *MockRegistry) AddLayerToImage(tarfile string, image v1.Image) (v1.Image, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddLayerToImage", tarfile, image)
-	ret0, _ := ret[0].(v1.Image)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddLayerToImage indicates an expected call of AddLayerToImage.
-func (mr *MockRegistryMockRecorder) AddLayerToImage(tarfile, image interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLayerToImage", reflect.TypeOf((*MockRegistry)(nil).AddLayerToImage), tarfile, image)
-}
-
-// ExtractBytesFromTar mocks base method.
-func (m *MockRegistry) ExtractBytesFromTar(size int64, tarreader io.Reader) ([]byte, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExtractBytesFromTar", size, tarreader)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ExtractBytesFromTar indicates an expected call of ExtractBytesFromTar.
-func (mr *MockRegistryMockRecorder) ExtractBytesFromTar(size, tarreader interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtractBytesFromTar", reflect.TypeOf((*MockRegistry)(nil).ExtractBytesFromTar), size, tarreader)
-}
-
-// ExtractFileToFile mocks base method.
-func (m *MockRegistry) ExtractFileToFile(destination string, header *tar.Header, tarreader io.Reader) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExtractFileToFile", destination, header, tarreader)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ExtractFileToFile indicates an expected call of ExtractFileToFile.
-func (mr *MockRegistryMockRecorder) ExtractFileToFile(destination, header, tarreader interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtractFileToFile", reflect.TypeOf((*MockRegistry)(nil).ExtractFileToFile), destination, header, tarreader)
-}
-
-// GetImageByName mocks base method.
-func (m *MockRegistry) GetImageByName(imageName string, auth authn.Authenticator, insecure, skipTLSVerify bool) (v1.Image, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetImageByName", imageName, auth, insecure, skipTLSVerify)
-	ret0, _ := ret[0].(v1.Image)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetImageByName indicates an expected call of GetImageByName.
-func (mr *MockRegistryMockRecorder) GetImageByName(imageName, auth, insecure, skipTLSVerify interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetImageByName", reflect.TypeOf((*MockRegistry)(nil).GetImageByName), imageName, auth, insecure, skipTLSVerify)
-}
-
 // GetLayerByDigest mocks base method.
 func (m *MockRegistry) GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error) {
 	m.ctrl.T.Helper()
@@ -113,21 +50,6 @@ func (m *MockRegistry) GetLayerByDigest(digest string, pullConfig *RepoPullConfi
 func (mr *MockRegistryMockRecorder) GetLayerByDigest(digest, pullConfig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLayerByDigest", reflect.TypeOf((*MockRegistry)(nil).GetLayerByDigest), digest, pullConfig)
-}
-
-// GetLayerMediaType mocks base method.
-func (m *MockRegistry) GetLayerMediaType(image v1.Image) (types.MediaType, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLayerMediaType", image)
-	ret0, _ := ret[0].(types.MediaType)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetLayerMediaType indicates an expected call of GetLayerMediaType.
-func (mr *MockRegistryMockRecorder) GetLayerMediaType(image interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLayerMediaType", reflect.TypeOf((*MockRegistry)(nil).GetLayerMediaType), image)
 }
 
 // GetLayersDigests mocks base method.
@@ -173,37 +95,4 @@ func (m *MockRegistry) VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVers
 func (mr *MockRegistryMockRecorder) VerifyModuleExists(layer, pathPrefix, kernelVersion, moduleFileName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyModuleExists", reflect.TypeOf((*MockRegistry)(nil).VerifyModuleExists), layer, pathPrefix, kernelVersion, moduleFileName)
-}
-
-// WalkFilesInImage mocks base method.
-func (m *MockRegistry) WalkFilesInImage(image v1.Image, fn func(string, *tar.Header, io.Reader, []interface{}) error, data ...interface{}) error {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{image, fn}
-	for _, a := range data {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "WalkFilesInImage", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// WalkFilesInImage indicates an expected call of WalkFilesInImage.
-func (mr *MockRegistryMockRecorder) WalkFilesInImage(image, fn interface{}, data ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{image, fn}, data...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WalkFilesInImage", reflect.TypeOf((*MockRegistry)(nil).WalkFilesInImage), varargs...)
-}
-
-// WriteImageByName mocks base method.
-func (m *MockRegistry) WriteImageByName(imageName string, image v1.Image, auth authn.Authenticator, insecure, skipTLSVerify bool) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WriteImageByName", imageName, image, auth, insecure, skipTLSVerify)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// WriteImageByName indicates an expected call of WriteImageByName.
-func (mr *MockRegistryMockRecorder) WriteImageByName(imageName, image, auth, insecure, skipTLSVerify interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteImageByName", reflect.TypeOf((*MockRegistry)(nil).WriteImageByName), imageName, image, auth, insecure, skipTLSVerify)
 }

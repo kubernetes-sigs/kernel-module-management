@@ -34,8 +34,7 @@ IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-operator
 # SIGNER_IMAGE_TAG_BASE and SIGNER_IMAGE_TAG together define SIGNER_IMG
 # SIGNER_IMG is the name given to the signer job image that is used to sign kernel modules
 # to implement the escureboot signing functionality
-PODMAN=podman
-SIGNER_IMAGE_TAG_BASE ?= quay.io/chrisp262/kmod-signer
+SIGNER_IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-signimage
 SIGNER_IMAGE_TAG ?= $(shell  git log --format="%H" -n 1)
 SIGNER_IMG ?= $(SIGNER_IMAGE_TAG_BASE):$(SIGNER_IMAGE_TAG)
 
@@ -311,13 +310,9 @@ catalog-build: opm ## Build a catalog image.
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
-.PHONY: signimage
-signimage: ## Build signer binary.
-	go build -o $@ cmd/signimage/signimage.go
-
 .PHONY: signimage-build 
 signimage-build: ## Build docker image with the signer.
-	$(PODMAN) build -f Dockerfile.signimage -t $(SIGNER_IMG)
+	docker build -f Dockerfile.signimage -t $(SIGNER_IMG)
 
 include docs.mk
 

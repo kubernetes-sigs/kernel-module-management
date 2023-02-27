@@ -1,10 +1,12 @@
 package signjob
 
 import (
+	"bytes"
 	"context"
+	"embed"
 	"fmt"
 	"os"
-	"strings"
+	"text/template"
 
 	"github.com/mitchellh/hashstructure"
 	batchv1 "k8s.io/api/batch/v1"
@@ -19,6 +21,19 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+)
+
+type TemplateData struct {
+	FilesToSign   []string
+	SignImage     string
+	UnsignedImage string
+}
+
+//go:embed templates
+var templateFS embed.FS
+
+var tmpl = template.Must(
+	template.ParseFS(templateFS, "templates/Dockerfile.gotmpl"),
 )
 
 //go:generate mockgen -source=signer.go -package=signjob -destination=mock_signer.go
@@ -67,10 +82,17 @@ func (s *signer) MakeJobTemplate(
 
 	signConfig := mld.Sign
 
+	var buf bytes.Buffer
+
+	td := TemplateData{
+		FilesToSign: mld.Sign.FilesToSign,
+		SignImage:   os.Getenv("RELATED_IMAGES_SIGN"),
+	}
+
 	args := make([]string, 0)
 
 	if pushImage {
-		args = append(args, "-signedimage", mld.ContainerImage)
+		args = append(args, "--destination", mld.ContainerImage)
 
 		if mld.RegistryTLS.Insecure {
 			args = append(args, "--insecure")
@@ -83,17 +105,11 @@ func (s *signer) MakeJobTemplate(
 	}
 
 	if imageToSign != "" {
-		args = append(args, "-unsignedimage", imageToSign)
+		td.UnsignedImage = imageToSign
 	} else if signConfig.UnsignedImage != "" {
-		args = append(args, "-unsignedimage", signConfig.UnsignedImage)
+		td.UnsignedImage = signConfig.UnsignedImage
 	} else {
 		return nil, fmt.Errorf("no image to sign given")
-	}
-	args = append(args, "-key", "/signingkey/key.priv")
-	args = append(args, "-cert", "/signingcert/public.der")
-
-	if len(signConfig.FilesToSign) > 0 {
-		args = append(args, "-filestosign", strings.Join(signConfig.FilesToSign, ":"))
 	}
 
 	if signConfig.UnsignedImageRegistryTLS.Insecure {
@@ -105,27 +121,72 @@ func (s *signer) MakeJobTemplate(
 	}
 
 	volumes := []v1.Volume{
-		utils.MakeSecretVolume(signConfig.KeySecret, "key", "key.priv"),
-		utils.MakeSecretVolume(signConfig.CertSecret, "cert", "public.der"),
-	}
-	volumeMounts := []v1.VolumeMount{
-		utils.MakeSecretVolumeMount(signConfig.CertSecret, "/signingcert"),
-		utils.MakeSecretVolumeMount(signConfig.KeySecret, "/signingkey"),
+		utils.MakeSecretVolume(signConfig.KeySecret, "key", "key.pem"),
+		utils.MakeSecretVolume(signConfig.CertSecret, "cert", "cert.pem"),
 	}
 
-	args = append(args, "-secretdir", "/docker_config/")
-	imageSecret := mld.ImageRepoSecret
-	if imageSecret != nil {
-		volumes = append(volumes, utils.MakeSecretVolume(imageSecret, "", ""))
-		volumeMounts = append(volumeMounts, utils.MakeSecretVolumeMount(imageSecret, "/docker_config/"+imageSecret.Name))
+	volumeMounts := []v1.VolumeMount{
+		utils.MakeSecretVolumeMount(signConfig.CertSecret, "/run/secrets/cert", true),
+		utils.MakeSecretVolumeMount(signConfig.KeySecret, "/run/secrets/key", true),
+	}
+
+	const (
+		dockerfileAnnotationKey = "dockerfile"
+		dockerfileVolumeName    = "dockerfile"
+	)
+
+	dockerfileVolume := v1.Volume{
+		Name: dockerfileVolumeName,
+		VolumeSource: v1.VolumeSource{
+			DownwardAPI: &v1.DownwardAPIVolumeSource{
+				Items: []v1.DownwardAPIVolumeFile{
+					{
+						Path: "Dockerfile",
+						FieldRef: &v1.ObjectFieldSelector{
+							FieldPath: fmt.Sprintf("metadata.annotations['%s']", dockerfileAnnotationKey),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	volumes = append(volumes, dockerfileVolume)
+
+	volumeMounts = append(
+		volumeMounts,
+		v1.VolumeMount{
+			Name:      dockerfileVolumeName,
+			ReadOnly:  true,
+			MountPath: "/workspace",
+		},
+	)
+
+	if secretRef := mld.ImageRepoSecret; secretRef != nil {
+		volumes = append(
+			volumes,
+			utils.MakeSecretVolume(secretRef, ".dockerconfigjson", "config.json"),
+		)
+
+		volumeMounts = append(
+			volumeMounts,
+			utils.MakeSecretVolumeMount(secretRef, "/kaniko/.docker", true),
+		)
+	}
+
+	if err := tmpl.Execute(&buf, td); err != nil {
+		return nil, fmt.Errorf("could not execute template: %v", err)
 	}
 
 	specTemplate := v1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{dockerfileAnnotationKey: buf.String()},
+		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
-					Name:         "signimage",
-					Image:        os.Getenv("RELATED_IMAGES_SIGN"),
+					Name:         "kaniko",
+					Image:        os.Getenv("RELATED_IMAGES_BUILD"),
 					Args:         args,
 					VolumeMounts: volumeMounts,
 				},
@@ -155,7 +216,7 @@ func (s *signer) MakeJobTemplate(
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(owner, job, s.scheme); err != nil {
+	if err = controllerutil.SetControllerReference(owner, job, s.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner reference: %v", err)
 	}
 

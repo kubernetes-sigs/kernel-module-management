@@ -1,29 +1,9 @@
 FROM alpine:3.17 as ksource
-RUN apk add linux-virt-dev
 
-FROM golang:1.20-alpine3.17 as builder
-
-WORKDIR /workspace
-
-# Download dependencies
-COPY go.mod go.mod
-COPY go.sum go.sum
-RUN go mod download
-
-RUN apk add bash make
-
-COPY cmd cmd
-COPY api api
-COPY internal internal
-COPY Makefile Makefile
-COPY docs.mk docs.mk
-
-# Build
-RUN make signimage
+RUN ["apk", "add", "linux-virt-dev"]
 
 FROM alpine:3.17
 
-COPY --from=builder /workspace/signimage /
-COPY --from=ksource /usr/src/linux-headers-*-virt/scripts/sign-file /sign-file
+COPY --from=ksource /usr/src/linux-headers-*-virt/scripts/sign-file /usr/local/bin/sign-file
 
-ENTRYPOINT ["/signimage"]
+ENTRYPOINT ["/usr/local/bin/sign-file"]

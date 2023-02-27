@@ -16,5 +16,5 @@ func TestSuite(t *testing.T) {
 	_, err = test.TestScheme()
 	Expect(err).NotTo(HaveOccurred())
 
-	RunSpecs(t, "Build Suite")
+	RunSpecs(t, "Sign Suite")
 }

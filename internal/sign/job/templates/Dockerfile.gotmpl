@@ -1,0 +1,17 @@
+{{- /*gotype: github.com/rh-ecosystem-edge/kernel-module-management/internal/sign/job.TemplateData */ -}}
+FROM {{ .UnsignedImage }} as source
+
+FROM {{ .SignImage }} AS signimage
+
+USER 0
+
+RUN ["mkdir", "/signroot"]
+{{ range .FilesToSign }}
+COPY --from=source {{ . }} /signroot{{ . }}
+RUN /sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /signroot{{ . }}
+{{- end }}
+
+FROM source
+{{ range .FilesToSign }}
+COPY --from=signimage /signroot{{ . }} {{ . }}
+{{- end }}
