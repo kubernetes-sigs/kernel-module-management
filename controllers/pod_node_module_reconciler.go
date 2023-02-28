@@ -13,6 +13,7 @@ import (
 	"k8s.io/kubectl/pkg/util/podutils"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -53,7 +54,8 @@ func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, fmt.Errorf("pod %s has no %q label", podNamespacedName, constants.ModuleNameLabel)
 	}
 
-	labelName := pnmr.daemonAPI.GetNodeLabelFromPod(&pod, moduleName)
+	labelName := pnmr.daemonAPI.GetNodeLabelFromPod(&pod, moduleName, false)
+	deprecatedLabelName := pnmr.daemonAPI.GetNodeLabelFromPod(&pod, moduleName, true)
 
 	logger = logger.WithValues(
 		"node name", nodeName,
@@ -70,8 +72,26 @@ func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if !podutils.IsPodReady(&pod) || !pod.DeletionTimestamp.IsZero() {
 		logger.Info("Unlabeling node")
 
-		if err := pnmr.deleteLabel(ctx, nodeName, labelName); err != nil {
-			return ctrl.Result{}, fmt.Errorf("could not unlabel node %s: %v", nodeName, err)
+		// Make sure we don't already have a new running pod before unlabeling the node
+		labelSelector := client.MatchingLabels{constants.ModuleNameLabel: moduleName}
+		fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
+		var modulePodsList v1.PodList
+		err := pnmr.client.List(ctx, &modulePodsList, labelSelector, fieldSelector)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to get list of all pods for module %s on node %s: %v", moduleName, nodeName, err)
+		}
+		var foundRunningPod bool
+		for _, p := range modulePodsList.Items {
+			if podutils.IsPodReady(&p) && p.DeletionTimestamp.IsZero() {
+				foundRunningPod = true
+				break
+			}
+		}
+		if !foundRunningPod {
+			if err := pnmr.deleteLabel(ctx, nodeName, labelName, deprecatedLabelName); err != nil {
+				return ctrl.Result{}, fmt.Errorf("could not unlabel node %s with label {%q, %q}: %v",
+					nodeName, labelName, deprecatedLabelName, err)
+			}
 		}
 
 		if !pod.DeletionTimestamp.IsZero() {
@@ -91,8 +111,8 @@ func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	logger.Info("Labeling node")
 
-	if err := pnmr.addLabel(ctx, nodeName, labelName); err != nil {
-		return ctrl.Result{}, fmt.Errorf("could not label node %s with %q: %v", nodeName, labelName, err)
+	if err := pnmr.addLabel(ctx, nodeName, labelName, deprecatedLabelName); err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not label node %s with {%q, %q}: %v", nodeName, labelName, deprecatedLabelName, err)
 	}
 
 	return ctrl.Result{}, nil
@@ -100,6 +120,14 @@ func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 // SetupWithManager sets up the controller with the Manager.
 func (pnmr *PodNodeModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.Pod{}, "spec.nodeName", func(rawObj client.Object) []string {
+		pod := rawObj.(*v1.Pod)
+		return []string{pod.Spec.NodeName}
+	}); err != nil {
+		return err
+	}
+
 	p := predicate.And(
 		predicate.Or(
 			filter.PodReadinessChangedPredicate(
@@ -119,7 +147,7 @@ func (pnmr *PodNodeModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(pnmr)
 }
 
-func (pnmr *PodNodeModuleReconciler) addLabel(ctx context.Context, nodeName, labelName string) error {
+func (pnmr *PodNodeModuleReconciler) addLabel(ctx context.Context, nodeName string, labelNames ...string) error {
 	node := v1.Node{}
 
 	if err := pnmr.client.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
@@ -129,10 +157,12 @@ func (pnmr *PodNodeModuleReconciler) addLabel(ctx context.Context, nodeName, lab
 	nodeCopy := node.DeepCopy()
 
 	if node.Labels == nil {
-		node.Labels = make(map[string]string, 1)
+		node.Labels = make(map[string]string, len(labelNames))
 	}
 
-	node.Labels[labelName] = ""
+	for _, ln := range labelNames {
+		node.Labels[ln] = ""
+	}
 
 	return pnmr.client.Patch(ctx, &node, client.MergeFrom(nodeCopy))
 }
@@ -145,7 +175,7 @@ func (pnmr *PodNodeModuleReconciler) deleteFinalizer(ctx context.Context, pod *v
 	return pnmr.client.Patch(ctx, pod, client.MergeFrom(podCopy))
 }
 
-func (pnmr *PodNodeModuleReconciler) deleteLabel(ctx context.Context, nodeName, labelName string) error {
+func (pnmr *PodNodeModuleReconciler) deleteLabel(ctx context.Context, nodeName string, labelNames ...string) error {
 	node := v1.Node{}
 
 	if err := pnmr.client.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
@@ -154,7 +184,9 @@ func (pnmr *PodNodeModuleReconciler) deleteLabel(ctx context.Context, nodeName, 
 
 	nodeCopy := node.DeepCopy()
 
-	delete(node.Labels, labelName)
+	for _, ln := range labelNames {
+		delete(node.Labels, ln)
+	}
 
 	return pnmr.client.Patch(ctx, &node, client.MergeFrom(nodeCopy))
 }

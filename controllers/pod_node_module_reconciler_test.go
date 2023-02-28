@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 
 	"github.com/golang/mock/gomock"
 	mock_client "github.com/kubernetes-sigs/kernel-module-management/internal/client"
@@ -19,11 +20,12 @@ import (
 var _ = Describe("PodNodeModuleReconciler", func() {
 	Describe("Reconcile", func() {
 		const (
-			moduleName   = "module-name"
-			nodeName     = "node-name"
-			podName      = "pod-name"
-			podNamespace = "pod-namespace"
-			nodeLabel    = "some node label"
+			moduleName          = "module-name"
+			nodeName            = "node-name"
+			podName             = "pod-name"
+			podNamespace        = "pod-namespace"
+			nodeLabel           = "some node label"
+			deprecatedNodeLabel = "some deprecated node label"
 		)
 
 		var (
@@ -55,43 +57,93 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("should unlabel the node when a Pod is not ready", func() {
-			pod := v1.Pod{}
-			podWithModuleName := v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{constants.ModuleNameLabel: moduleName}},
-				Spec:       v1.PodSpec{NodeName: nodeName},
-			}
-			node := v1.Node{}
-			nodeWithEmptyLabels := v1.Node{
-				ObjectMeta: metav1.ObjectMeta{Labels: make(map[string]string)},
-			}
+		It("should return an error if we failed to get the list of pods", func() {
 
 			gomock.InOrder(
-				kubeClient.
-					EXPECT().
-					Get(ctx, nn, &pod).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
-						o.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-						o.(*v1.Pod).Spec.NodeName = nodeName
-					}),
-				mockDC.EXPECT().GetNodeLabelFromPod(&podWithModuleName, moduleName).Return(nodeLabel),
-				kubeClient.
-					EXPECT().
-					Get(ctx, types.NamespacedName{Name: nodeName}, &node).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
-						o.SetLabels(map[string]string{nodeLabel: ""})
-					}),
-				kubeClient.
-					EXPECT().
-					Patch(ctx, &nodeWithEmptyLabels, gomock.Any()).
-					Do(func(_ context.Context, n client.Object, p client.Patch, _ ...client.PatchOption) {
+				kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
+					func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
+						pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
+						pod.Spec.NodeName = nodeName
+						pod.Name = podName
+					},
+				),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
+				kubeClient.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some error")),
+			)
+
+			_, err := r.Reconcile(ctx, req)
+			Expect(err).To(HaveOccurred())
+
+		})
+
+		It("should unlabel the node when a Pod is not ready", func() {
+
+			var (
+				labelSelector = client.MatchingLabels{constants.ModuleNameLabel: moduleName}
+				fieldSelector = client.MatchingFields{"spec.nodeName": nodeName}
+			)
+
+			gomock.InOrder(
+				kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
+					func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
+						pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
+						pod.Spec.NodeName = nodeName
+						pod.Name = podName
+					},
+				),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
+				kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Return(nil),
+				kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Do(
+					func(_ interface{}, _ interface{}, node *v1.Node, _ ...client.GetOption) {
+						node.SetLabels(map[string]string{nodeLabel: "", deprecatedNodeLabel: ""})
+					},
+				),
+				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(
+					func(_ interface{}, node *v1.Node, p client.Patch, _ ...client.GetOption) {
 						Expect(p.Type()).To(Equal(types.MergePatchType))
-						Expect(p.Data(n)).To(
-							Equal(
-								[]byte(`{"metadata":{"labels":null}}`),
-							),
-						)
-					}),
+						Expect(p.Data(node)).To(Equal([]byte(`{"metadata":{"labels":null}}`)))
+					},
+				),
+			)
+
+			_, err := r.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should NOT unlabel the node when a Pod is not ready but there is a new running pod", func() {
+
+			var (
+				labelSelector = client.MatchingLabels{constants.ModuleNameLabel: moduleName}
+				fieldSelector = client.MatchingFields{"spec.nodeName": nodeName}
+			)
+
+			gomock.InOrder(kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
+				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
+					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
+					pod.Spec.NodeName = nodeName
+					pod.Name = podName
+				},
+			),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
+				kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Do(
+					func(_ interface{}, modulePodsList *v1.PodList, _ ...client.ListOption) {
+						modulePodsList.Items = []v1.Pod{
+							{
+								Status: v1.PodStatus{
+									Conditions: []v1.PodCondition{
+										{
+											Type:   v1.PodReady,
+											Status: v1.ConditionTrue,
+										},
+									},
+								},
+							},
+						}
+					},
+				),
 			)
 
 			_, err := r.Reconcile(ctx, req)
@@ -99,122 +151,75 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 		})
 
 		It("should label the node when a Pod is ready", func() {
-			pod := v1.Pod{}
-			readyPod := v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{constants.ModuleNameLabel: moduleName}},
-				Spec:       v1.PodSpec{NodeName: nodeName},
-				Status: v1.PodStatus{
-					Conditions: []v1.PodCondition{
-						{
-							Type:   v1.PodReady,
-							Status: v1.ConditionTrue,
-						},
-					},
-				},
-			}
-			node := v1.Node{}
-			nodeWithLabel := node
-			nodeWithLabel.SetLabels(map[string]string{nodeLabel: ""})
-			patch := client.MergeFrom(&node)
 
 			gomock.InOrder(
-				kubeClient.
-					EXPECT().
-					Get(ctx, nn, &pod).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
-						o.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-						o.(*v1.Pod).Spec.NodeName = nodeName
-						o.(*v1.Pod).Status.Conditions = []v1.PodCondition{
-							{
-								Type:   v1.PodReady,
-								Status: v1.ConditionTrue,
+				kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
+					func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
+						pod.Name = podName
+						pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
+						pod.Spec.NodeName = nodeName
+						pod.Status = v1.PodStatus{
+							Conditions: []v1.PodCondition{
+								{
+									Type:   v1.PodReady,
+									Status: v1.ConditionTrue,
+								},
 							},
 						}
-					}),
-				mockDC.EXPECT().GetNodeLabelFromPod(&readyPod, moduleName).Return(nodeLabel),
-				kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nodeName}, &node),
-				kubeClient.
-					EXPECT().
-					Patch(ctx, &nodeWithLabel, gomock.AssignableToTypeOf(patch)).
-					Do(func(_ context.Context, n client.Object, p client.Patch, _ ...client.PatchOption) {
+					},
+				),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
+				kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil),
+				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(
+					func(_ interface{}, node *v1.Node, p client.Patch, _ ...client.GetOption) {
 						Expect(p.Type()).To(Equal(types.MergePatchType))
-						Expect(p.Data(n)).To(
-							Equal(
-								[]byte(`{"metadata":{"labels":{"some node label":""}}}`),
-							),
-						)
-					}),
+						data, err := p.Data(node)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(data).To(ContainSubstring("labels"))
+						Expect(data).To(ContainSubstring(nodeLabel))
+						Expect(data).To(ContainSubstring(deprecatedNodeLabel))
+					},
+				),
 			)
 
 			_, err := r.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should unlabel the node and remove the pod finalizer when the pod is being deleted", func() {
-			now := metav1.Now()
+		It("should remove the pod finalizer when the pod is being deleted", func() {
 
-			pod := v1.Pod{}
-			deletedPod := v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					DeletionTimestamp: &now,
-					Finalizers:        []string{constants.NodeLabelerFinalizer},
-					Labels:            map[string]string{constants.ModuleNameLabel: moduleName},
-				},
-				Spec: v1.PodSpec{NodeName: nodeName},
-			}
-			podWithoutFinalizer := v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					DeletionTimestamp: &now,
-					Finalizers:        make([]string, 0),
-					Labels:            map[string]string{constants.ModuleNameLabel: moduleName},
-				},
-				Spec: v1.PodSpec{NodeName: nodeName},
-			}
-
-			node := v1.Node{}
-			nodeWithEmptyLabels := v1.Node{
-				ObjectMeta: metav1.ObjectMeta{Labels: make(map[string]string)},
-			}
+			var (
+				now           = metav1.Now()
+				labelSelector = client.MatchingLabels{constants.ModuleNameLabel: moduleName}
+				fieldSelector = client.MatchingFields{"spec.nodeName": nodeName}
+			)
 
 			gomock.InOrder(
-				kubeClient.
-					EXPECT().
-					Get(ctx, nn, &pod).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
-						o.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-						o.(*v1.Pod).Spec.NodeName = nodeName
-						o.SetDeletionTimestamp(&now)
-						o.SetFinalizers([]string{constants.NodeLabelerFinalizer})
-					}),
-				mockDC.EXPECT().GetNodeLabelFromPod(&deletedPod, moduleName).Return(nodeLabel),
-				kubeClient.
-					EXPECT().
-					Get(ctx, types.NamespacedName{Name: nodeName}, &node).
-					Do(func(_ context.Context, _ types.NamespacedName, o client.Object, _ ...client.GetOption) {
-						o.SetLabels(map[string]string{nodeLabel: ""})
-					}),
-				kubeClient.
-					EXPECT().
-					Patch(ctx, &nodeWithEmptyLabels, gomock.Any()).
-					Do(func(_ context.Context, n client.Object, p client.Patch, _ ...client.PatchOption) {
+				kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
+					func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
+						pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
+						pod.DeletionTimestamp = &now
+						pod.Finalizers = []string{constants.NodeLabelerFinalizer}
+						pod.Spec.NodeName = nodeName
+						pod.Name = podName
+					},
+				),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
+				kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Return(nil),
+				kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Do(
+					func(_ interface{}, _ interface{}, node *v1.Node, _ ...client.GetOption) {
+						node.SetLabels(map[string]string{nodeLabel: "", deprecatedNodeLabel: ""})
+					},
+				),
+				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil),
+				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(
+					func(_ interface{}, pod *v1.Pod, p client.Patch, _ ...client.GetOption) {
 						Expect(p.Type()).To(Equal(types.MergePatchType))
-						Expect(p.Data(n)).To(
-							Equal(
-								[]byte(`{"metadata":{"labels":null}}`),
-							),
-						)
-					}),
-				kubeClient.
-					EXPECT().
-					Patch(ctx, &podWithoutFinalizer, gomock.Any()).
-					Do(func(_ context.Context, po client.Object, p client.Patch, _ ...client.PatchOption) {
-						Expect(p.Type()).To(Equal(types.MergePatchType))
-						Expect(p.Data(po)).To(
-							Equal(
-								[]byte(`{"metadata":{"finalizers":null}}`),
-							),
-						)
-					}),
+						Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null}}`)))
+					},
+				),
 			)
 
 			_, err := r.Reconcile(ctx, req)

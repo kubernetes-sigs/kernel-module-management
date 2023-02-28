@@ -70,17 +70,17 @@ func (mr *MockDaemonSetCreatorMockRecorder) GetModuleDaemonSets(ctx, name, names
 }
 
 // GetNodeLabelFromPod mocks base method.
-func (m *MockDaemonSetCreator) GetNodeLabelFromPod(pod *v10.Pod, moduleName string) string {
+func (m *MockDaemonSetCreator) GetNodeLabelFromPod(pod *v10.Pod, moduleName string, useDeprecatedLabel bool) string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNodeLabelFromPod", pod, moduleName)
+	ret := m.ctrl.Call(m, "GetNodeLabelFromPod", pod, moduleName, useDeprecatedLabel)
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
 // GetNodeLabelFromPod indicates an expected call of GetNodeLabelFromPod.
-func (mr *MockDaemonSetCreatorMockRecorder) GetNodeLabelFromPod(pod, moduleName interface{}) *gomock.Call {
+func (mr *MockDaemonSetCreatorMockRecorder) GetNodeLabelFromPod(pod, moduleName, useDeprecatedLabel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeLabelFromPod", reflect.TypeOf((*MockDaemonSetCreator)(nil).GetNodeLabelFromPod), pod, moduleName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeLabelFromPod", reflect.TypeOf((*MockDaemonSetCreator)(nil).GetNodeLabelFromPod), pod, moduleName, useDeprecatedLabel)
 }
 
 // SetDevicePluginAsDesired mocks base method.
