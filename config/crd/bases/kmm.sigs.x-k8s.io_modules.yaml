@@ -2012,6 +2012,12 @@ spec:
                               type: object
                               x-kubernetes-map-type: atomic
                             type: array
+                          selector:
+                            additionalProperties:
+                              type: string
+                            description: Selector describes on which nodes will run
+                              the building process.
+                            type: object
                         required:
                         - dockerfileConfigMap
                         type: object
@@ -2115,6 +2121,12 @@ spec:
                                     type: object
                                     x-kubernetes-map-type: atomic
                                   type: array
+                                selector:
+                                  additionalProperties:
+                                    type: string
+                                  description: Selector describes on which nodes will
+                                    run the building process.
+                                  type: object
                               required:
                               - dockerfileConfigMap
                               type: object
