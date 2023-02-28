@@ -2493,10 +2493,6 @@ spec:
                 description: Number of ManifestWorks to be applied.
                 format: int32
                 type: integer
-            required:
-            - numberApplied
-            - numberDegraded
-            - numberDesired
             type: object
         type: object
     served: true
