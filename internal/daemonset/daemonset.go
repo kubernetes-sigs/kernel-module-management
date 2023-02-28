@@ -279,7 +279,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 				},
 				PriorityClassName:  "system-node-critical",
 				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
-				NodeSelector:       map[string]string{getDriverContainerNodeLabel(mod.Name): ""},
+				NodeSelector:       map[string]string{getDriverContainerNodeLabel(mod.Namespace, mod.Name): ""},
 				ServiceAccountName: mod.Spec.DevicePlugin.ServiceAccountName,
 				Volumes:            append([]v1.Volume{devicePluginVolume}, mod.Spec.DevicePlugin.Volumes...),
 			},
@@ -292,9 +292,9 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 func (dc *daemonSetGenerator) GetNodeLabelFromPod(pod *v1.Pod, moduleName string) string {
 	kernelVersion := pod.Labels[dc.kernelLabel]
 	if kernelVersion == devicePluginKernelVersion {
-		return getDevicePluginNodeLabel(moduleName)
+		return getDevicePluginNodeLabel(pod.Namespace, moduleName)
 	}
-	return getDriverContainerNodeLabel(moduleName)
+	return getDriverContainerNodeLabel(pod.Namespace, moduleName)
 }
 
 func (dc *daemonSetGenerator) moduleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
@@ -324,12 +324,12 @@ func CopyMapStringString(m map[string]string) map[string]string {
 	return n
 }
 
-func getDriverContainerNodeLabel(moduleName string) string {
-	return fmt.Sprintf("kmm.node.kubernetes.io/%s.ready", moduleName)
+func getDriverContainerNodeLabel(namespace, moduleName string) string {
+	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.ready", namespace, moduleName)
 }
 
-func getDevicePluginNodeLabel(moduleName string) string {
-	return fmt.Sprintf("kmm.node.kubernetes.io/%s.device-plugin-ready", moduleName)
+func getDevicePluginNodeLabel(namespace, moduleName string) string {
+	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-ready", namespace, moduleName)
 }
 
 func IsDevicePluginKernelVersion(kernelVersion string) bool {

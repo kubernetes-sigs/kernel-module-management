@@ -496,7 +496,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 						},
 						ImagePullSecrets: []v1.LocalObjectReference{repoSecret},
 						NodeSelector: map[string]string{
-							getDriverContainerNodeLabel(mod.Name): "",
+							getDriverContainerNodeLabel(mod.Namespace, mod.Name): "",
 						},
 						PriorityClassName:  "system-node-critical",
 						ServiceAccountName: serviceAccountName,
@@ -762,6 +762,8 @@ var _ = Describe("OverrideLabels", func() {
 })
 
 var _ = Describe("GetNodeLabelFromPod", func() {
+
+	const namespace = "some-namespace"
 	var dc DaemonSetCreator
 
 	BeforeEach(func() {
@@ -775,10 +777,11 @@ var _ = Describe("GetNodeLabelFromPod", func() {
 					constants.ModuleNameLabel: moduleName,
 					kernelLabel:               "some kernel",
 				},
+				Namespace: namespace,
 			},
 		}
 		res := dc.GetNodeLabelFromPod(&pod, "module-name")
-		Expect(res).To(Equal(getDriverContainerNodeLabel("module-name")))
+		Expect(res).To(Equal(getDriverContainerNodeLabel(namespace, "module-name")))
 	})
 
 	It("should return a device plugin label", func() {
@@ -787,10 +790,11 @@ var _ = Describe("GetNodeLabelFromPod", func() {
 				Labels: map[string]string{
 					constants.ModuleNameLabel: moduleName,
 				},
+				Namespace: namespace,
 			},
 		}
 		res := dc.GetNodeLabelFromPod(&pod, "module-name")
-		Expect(res).To(Equal(getDevicePluginNodeLabel("module-name")))
+		Expect(res).To(Equal(getDevicePluginNodeLabel(namespace, "module-name")))
 	})
 })
 
