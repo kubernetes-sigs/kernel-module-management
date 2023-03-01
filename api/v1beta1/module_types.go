@@ -288,11 +288,11 @@ type ModuleSpec struct {
 // reconciliation loop
 type DaemonSetStatus struct {
 	// number of nodes that are targeted by the module selector
-	NodesMatchingSelectorNumber int32 `json:"nodesMatchingSelectorNumber"`
+	NodesMatchingSelectorNumber int32 `json:"nodesMatchingSelectorNumber,omitempty"`
 	// number of the pods that should be deployed for daemonset
-	DesiredNumber int32 `json:"desiredNumber"`
+	DesiredNumber int32 `json:"desiredNumber,omitempty"`
 	// number of the actually deployed and running pods
-	AvailableNumber int32 `json:"availableNumber"`
+	AvailableNumber int32 `json:"availableNumber,omitempty"`
 }
 
 // ModuleStatus defines the observed state of Module.

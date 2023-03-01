@@ -89,6 +89,9 @@ func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
 			numAvailableKernelModule += ds.Status.NumberAvailable
 		}
 	}
+
+	unmodifiedMod := mod.DeepCopy()
+
 	mod.Status.ModuleLoader.NodesMatchingSelectorNumber = nodesMatchingSelectorNumber
 	mod.Status.ModuleLoader.DesiredNumber = numDesired
 	mod.Status.ModuleLoader.AvailableNumber = numAvailableKernelModule
@@ -97,7 +100,7 @@ func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
 		mod.Status.DevicePlugin.DesiredNumber = numDesired
 		mod.Status.DevicePlugin.AvailableNumber = numAvailableDevicePlugin
 	}
-	return m.client.Status().Update(ctx, mod)
+	return m.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
 }
 
 func (m *managedClusterModuleStatusUpdater) ManagedClusterModuleUpdateStatus(ctx context.Context,
@@ -120,11 +123,14 @@ func (m *managedClusterModuleStatusUpdater) ManagedClusterModuleUpdateStatus(ctx
 			}
 		}
 	}
+
+	unmodifiedMCM := mcm.DeepCopy()
+
 	mcm.Status.NumberDesired = int32(len(ownedManifestWorks))
 	mcm.Status.NumberApplied = numApplied
 	mcm.Status.NumberDegraded = numDegraded
 
-	return m.client.Status().Update(ctx, mcm)
+	return m.client.Status().Patch(ctx, mcm, client.MergeFrom(unmodifiedMCM))
 }
 
 func (p *preflightStatusUpdater) PreflightPresetStatuses(ctx context.Context,

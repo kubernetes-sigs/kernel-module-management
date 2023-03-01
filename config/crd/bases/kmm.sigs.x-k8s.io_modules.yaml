@@ -2381,10 +2381,6 @@ spec:
                     description: number of nodes that are targeted by the module selector
                     format: int32
                     type: integer
-                required:
-                - availableNumber
-                - desiredNumber
-                - nodesMatchingSelectorNumber
                 type: object
               moduleLoader:
                 description: ModuleLoader contains the status of the ModuleLoader
@@ -2402,10 +2398,6 @@ spec:
                     description: number of nodes that are targeted by the module selector
                     format: int32
                     type: integer
-                required:
-                - availableNumber
-                - desiredNumber
-                - nodesMatchingSelectorNumber
                 type: object
             required:
             - moduleLoader

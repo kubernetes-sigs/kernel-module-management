@@ -36,13 +36,13 @@ type ManagedClusterModuleSpec struct {
 // ManagedClusterModuleStatus defines the observed state of ManagedClusterModule.
 type ManagedClusterModuleStatus struct {
 	// Number of ManifestWorks to be applied.
-	NumberDesired int32 `json:"numberDesired"`
+	NumberDesired int32 `json:"numberDesired,omitempty"`
 
 	// Number of ManifestWorks that have been successfully applied.
-	NumberApplied int32 `json:"numberApplied"`
+	NumberApplied int32 `json:"numberApplied,omitempty"`
 
 	// Number of ManifestWorks that could not be successfully applied.
-	NumberDegraded int32 `json:"numberDegraded"`
+	NumberDegraded int32 `json:"numberDegraded,omitempty"`
 }
 
 //+kubebuilder:object:root=true
