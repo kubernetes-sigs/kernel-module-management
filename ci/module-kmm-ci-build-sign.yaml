@@ -10,7 +10,7 @@ spec:
         moduleName: kmm_ci_a
       kernelMappings:
         - regexp: '^.+$'
-          containerImage: host.minikube.internal:5000/kmm-kmod:$KERNEL_FULL_VERSION
+          containerImage: host.minikube.internal:5000/$MOD_NAMESPACE/$MOD_NAME:$KERNEL_FULL_VERSION
           registryTLS:
             insecure: true
           build:
