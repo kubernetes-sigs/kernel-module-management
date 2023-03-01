@@ -30,15 +30,14 @@ func MakeSecretVolume(secretRef *v1.LocalObjectReference, key string, path strin
 	return vol
 }
 
-func MakeSecretVolumeMount(secretRef *v1.LocalObjectReference, mountPath string) v1.VolumeMount {
-
+func MakeSecretVolumeMount(secretRef *v1.LocalObjectReference, mountPath string, readOnly bool) v1.VolumeMount {
 	if secretRef == nil {
 		return v1.VolumeMount{}
 	}
 
 	return v1.VolumeMount{
 		Name:      volumeNameFromSecretRef(*secretRef),
-		ReadOnly:  true,
+		ReadOnly:  readOnly,
 		MountPath: mountPath,
 	}
 }

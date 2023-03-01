@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -21,11 +20,6 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/v1/mutate"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
-	"github.com/google/go-containerregistry/pkg/v1/types"
 )
 
 const (
@@ -51,13 +45,6 @@ type Registry interface {
 	VerifyModuleExists(layer v1.Layer, pathPrefix, kernelVersion, moduleFileName string) bool
 	GetLayersDigests(ctx context.Context, image string, tlsOptions *kmmv1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) ([]string, *RepoPullConfig, error)
 	GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error)
-	WalkFilesInImage(image v1.Image, fn func(filename string, header *tar.Header, tarreader io.Reader, data []interface{}) error, data ...interface{}) error
-	GetLayerMediaType(image v1.Image) (types.MediaType, error)
-	AddLayerToImage(tarfile string, image v1.Image) (v1.Image, error)
-	ExtractBytesFromTar(size int64, tarreader io.Reader) ([]byte, error)
-	ExtractFileToFile(destination string, header *tar.Header, tarreader io.Reader) error
-	WriteImageByName(imageName string, image v1.Image, auth authn.Authenticator, insecure bool, skipTLSVerify bool) error
-	GetImageByName(imageName string, auth authn.Authenticator, insecure bool, skipTLSVerify bool) (v1.Image, error)
 }
 
 type registry struct {
@@ -258,174 +245,4 @@ func (r *registry) getImageDigestFromMultiImage(manifestListStream []byte) (stri
 		}
 	}
 	return "", fmt.Errorf("Failed to find manifest for architecture %s", arch)
-}
-
-func (r *registry) AddLayerToImage(tarfile string, image v1.Image) (v1.Image, error) {
-
-	//turn our tar archive into a layer
-	mt, err := r.GetLayerMediaType(image)
-	if err != nil {
-		return nil, err
-	}
-
-	signedLayer, err := tarball.LayerFromFile(tarfile, tarball.WithMediaType(mt))
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate layer from tar: %v", err)
-	}
-
-	// add the layer to the unsigned image
-	newImage, err := mutate.AppendLayers(image, signedLayer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to append layer: %v", err)
-	}
-
-	// this is needde because mutate.AppendLayers loses the image mediatype
-	// without it the controller refuses to run the resulting images
-	imageMediaType, _ := image.MediaType()
-	newImageWithMT := mutate.MediaType(newImage, imageMediaType)
-	if err != nil {
-		return nil, fmt.Errorf("failed to change medaitype of image: %v", err)
-	}
-	return newImageWithMT, nil
-}
-
-func (r *registry) GetLayerMediaType(image v1.Image) (types.MediaType, error) {
-	layers, err := image.Layers()
-	if err != nil {
-		return types.OCILayer, fmt.Errorf("could not get the layers from image: %v", err)
-	}
-	return layers[len(layers)-1].MediaType()
-}
-
-/*
-** generic function to loop through all the files in an image and run
-** a function on them, based loosly on ftw() or filepath.Walk().
-** image   - the image to examine
-** fn	   - the function to call on each file
-** ...data - all other arguments are passed through to the helper function
-**	     to provide any additional data needed.
- */
-func (r *registry) WalkFilesInImage(image v1.Image, fn func(filename string, header *tar.Header, tarreader io.Reader, data []interface{}) error, data ...interface{}) error {
-	layers, err := image.Layers()
-	if err != nil {
-		return fmt.Errorf("could not get the layers from the fetched image: %v", err)
-	}
-	for i := len(layers) - 1; i >= 0; i-- {
-		currentlayer := layers[i]
-
-		layerreader, err := currentlayer.Uncompressed()
-		if err != nil {
-			return fmt.Errorf("could not get layer: %v", err)
-		}
-
-		/*
-		** call fn on all the files in the layer
-		 */
-		tarreader := tar.NewReader(layerreader)
-		for {
-			header, err := tarreader.Next()
-			if err == io.EOF || header == nil {
-				break // End of archive
-			}
-			err = fn(header.Name, header, tarreader, data)
-			if err != nil {
-				return fmt.Errorf("died processing file %s: %v", header.Name, err)
-			}
-		}
-	}
-
-	return err
-}
-
-/*
-** extract size bytes from the start of an io.Reader
- */
-func (r *registry) ExtractBytesFromTar(size int64, tarreader io.Reader) ([]byte, error) {
-
-	contents := make([]byte, size)
-	offset := 0
-	for {
-		rc, err := tarreader.Read(contents[offset:])
-		if err != nil && err != io.EOF {
-			return nil, fmt.Errorf("could not read from tar: %v ", err)
-		}
-		offset += rc
-		if err == io.EOF {
-			break
-		}
-	}
-	return contents, nil
-}
-
-/*
-** extract the next file from a pre-positioned io.Reader to destination
- */
-func (r *registry) ExtractFileToFile(destination string, header *tar.Header, tarreader io.Reader) error {
-
-	contents, err := r.ExtractBytesFromTar(header.Size, tarreader)
-	if err != nil {
-		return fmt.Errorf("could not read file %s: %v", destination, err)
-	}
-
-	dirname := filepath.Dir(destination)
-
-	// I hope you've set your umask to something sensible!
-	err = os.MkdirAll(dirname, 0770)
-	if err != nil {
-		return fmt.Errorf("could not create directory structure for %s: %v", destination, err)
-	}
-	err = os.WriteFile(destination, contents, 0700)
-	if err != nil {
-		return fmt.Errorf("could not create temp %s: %v", destination, err)
-	}
-	return nil
-
-}
-
-func (r *registry) getTransportOptions(insecure bool, skipTLSVerify bool) []crane.Option {
-	options := []crane.Option{}
-
-	if insecure {
-		options = append(options, crane.Insecure)
-	}
-
-	if skipTLSVerify {
-		rt := http.DefaultTransport.(*http.Transport).Clone()
-		rt.TLSClientConfig.InsecureSkipVerify = true
-		options = append(
-			options,
-			crane.WithTransport(rt),
-		)
-	}
-
-	return options
-}
-
-func (r *registry) WriteImageByName(imageName string, image v1.Image, auth authn.Authenticator, insecure bool, skipTLSVerify bool) error {
-	options := r.getTransportOptions(insecure, skipTLSVerify)
-	options = append(
-		options,
-		crane.WithAuth(auth),
-	)
-
-	err := crane.Push(image, imageName, options...)
-	if err != nil {
-		return fmt.Errorf("failed to push signed image: %v", err)
-	}
-	return nil
-}
-
-func (r *registry) GetImageByName(imageName string, auth authn.Authenticator, insecure bool, skipTLSVerify bool) (v1.Image, error) {
-	options := r.getTransportOptions(insecure, skipTLSVerify)
-	options = append(
-		options,
-		crane.WithAuth(auth),
-	)
-
-	img, err := crane.Pull(imageName, options...)
-	if err != nil {
-		return nil, fmt.Errorf("could not get image: %v", err)
-	}
-
-	return img, nil
 }

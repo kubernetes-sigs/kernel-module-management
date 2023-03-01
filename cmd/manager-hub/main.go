@@ -19,10 +19,6 @@ package main
 import (
 	"flag"
 
-	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/controllers/hub"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -37,9 +33,13 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/controllers/hub"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build/job"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"

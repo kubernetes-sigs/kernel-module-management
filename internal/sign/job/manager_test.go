@@ -28,10 +28,9 @@ var _ = Describe("ShouldSync", func() {
 	)
 
 	const (
-		moduleName    = "module-name"
-		imageName     = "image-name"
-		namespace     = "some-namespace"
-		kernelVersion = "1.2.3"
+		moduleName = "module-name"
+		imageName  = "image-name"
+		namespace  = "some-namespace"
 	)
 
 	BeforeEach(func() {
