@@ -158,19 +158,17 @@ var _ = Describe("MakeJobTemplate", func() {
 
 FROM some-sign-image:some-tag AS signimage
 
-USER 0
+RUN mkdir -p /tmp/signroot
 
-RUN ["mkdir", "/signroot"]
-
-COPY --from=source /modules/simple-kmod.ko /signroot/modules/simple-kmod.ko
-RUN /sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /signroot/modules/simple-kmod.ko
-COPY --from=source /modules/simple-procfs-kmod.ko /signroot/modules/simple-procfs-kmod.ko
-RUN /sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /signroot/modules/simple-procfs-kmod.ko
+COPY --from=source /modules/simple-kmod.ko /tmp/signroot/modules/simple-kmod.ko
+RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-kmod.ko
+COPY --from=source /modules/simple-procfs-kmod.ko /tmp/signroot/modules/simple-procfs-kmod.ko
+RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-procfs-kmod.ko
 
 FROM source
 
-COPY --from=signimage /signroot/modules/simple-kmod.ko /modules/simple-kmod.ko
-COPY --from=signimage /signroot/modules/simple-procfs-kmod.ko /modules/simple-procfs-kmod.ko
+COPY --from=signimage /tmp/signroot/modules/simple-kmod.ko /modules/simple-kmod.ko
+COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simple-procfs-kmod.ko
 `,
 						},
 					},
