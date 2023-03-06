@@ -8,7 +8,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.9
 	github.com/google/go-containerregistry v0.13.0
-	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20230227161101-1b8dc2babc55
+	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20230303234324-67703048992e
 	github.com/mitchellh/hashstructure v1.1.0
 	github.com/onsi/ginkgo/v2 v2.8.4
 	github.com/onsi/gomega v1.27.2
@@ -17,7 +17,7 @@ require (
 	k8s.io/api v0.26.2
 	k8s.io/apimachinery v0.26.2
 	k8s.io/client-go v0.26.2
-	k8s.io/klog/v2 v2.90.0
+	k8s.io/klog/v2 v2.90.1
 	k8s.io/kubectl v0.26.1
 	k8s.io/utils v0.0.0-20221128185143-99ec85e7a448
 	open-cluster-management.io/api v0.10.0
