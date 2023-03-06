@@ -165,6 +165,11 @@ type ModuleLoaderContainerSpec struct {
 	// Sign provides default kmod signing settings
 	Sign *Sign `json:"sign,omitempty"`
 
+	// Version defines the current version of the kernel module being used
+	// Used for upgrading the currently loaded kernel module to a new version
+	// +optional
+	Version string `json:"version,omitempty"`
+
 	// ContainerImage is a top-level field
 	// +optional
 	ContainerImage string `json:"containerImage,omitempty"`

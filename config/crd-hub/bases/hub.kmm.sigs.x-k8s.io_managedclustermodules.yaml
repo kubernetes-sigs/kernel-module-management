@@ -2442,6 +2442,11 @@ spec:
                             - certSecret
                             - keySecret
                             type: object
+                          version:
+                            description: Version defines the current version of the
+                              kernel module being used Used for upgrading the currently
+                              loaded kernel module to a new version
+                            type: string
                         required:
                         - kernelMappings
                         - modprobe
