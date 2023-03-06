@@ -312,7 +312,7 @@ catalog-push: ## Push a catalog image.
 
 .PHONY: signimage-build 
 signimage-build: ## Build docker image with the signer.
-	docker build -f Dockerfile.signimage -t $(SIGNER_IMG)
+	docker build -f Dockerfile.signimage -t $(SIGNER_IMG) .
 
 include docs.mk
 

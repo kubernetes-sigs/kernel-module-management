@@ -30,11 +30,34 @@ jobs:
           path: kmm_local.tar
           retention-days: 1
 
+  build-signing-image:
+    runs-on: ubuntu-latest
+
+    name: Build the signing image
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build the image
+        run:  make signimage-build SIGNER_IMG=kmm-signimage:local
+
+      - name: Export the image
+        run: docker save -o kmm-signimage_local.tar kmm-signimage:local
+
+      - name: Upload the image
+        uses: actions/upload-artifact@v3
+        with:
+          name: ci-images
+          if-no-files-found: error
+          path: kmm-signimage_local.tar
+          retention-days: 1
+
   in-cluster-build:
 
     runs-on: ubuntu-latest
     name: in-cluster-build
-    needs: [build-operator-image]
+    needs: [build-operator-image, build-signing-image]
 
     services:
       registry:
@@ -56,8 +79,14 @@ jobs:
         with:
           name: ci-images
 
-      - name: Import the KMMO image into minikube
+      - name: Import the KMM operator image into minikube
         run: minikube image load kmm_local.tar
+
+      - name: Copy the signing image to the registry
+        run: |
+          docker load -i kmm-signimage_local.tar
+          docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
+          docker push localhost:5000/kmm/signimage:local
 
       - name: Cache binaries needed by Makefile
         id: cache-bin
