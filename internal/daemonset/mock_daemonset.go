@@ -40,7 +40,7 @@ func (m *MockDaemonSetCreator) EXPECT() *MockDaemonSetCreatorMockRecorder {
 }
 
 // GarbageCollect mocks base method.
-func (m *MockDaemonSetCreator) GarbageCollect(ctx context.Context, existingDS map[string]*v1.DaemonSet, validKernels sets.Set[string]) ([]string, error) {
+func (m *MockDaemonSetCreator) GarbageCollect(ctx context.Context, existingDS []v1.DaemonSet, validKernels sets.Set[string]) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GarbageCollect", ctx, existingDS, validKernels)
 	ret0, _ := ret[0].([]string)
@@ -52,6 +52,21 @@ func (m *MockDaemonSetCreator) GarbageCollect(ctx context.Context, existingDS ma
 func (mr *MockDaemonSetCreatorMockRecorder) GarbageCollect(ctx, existingDS, validKernels interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockDaemonSetCreator)(nil).GarbageCollect), ctx, existingDS, validKernels)
+}
+
+// GetModuleDaemonSets mocks base method.
+func (m *MockDaemonSetCreator) GetModuleDaemonSets(ctx context.Context, name, namespace string) ([]v1.DaemonSet, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetModuleDaemonSets", ctx, name, namespace)
+	ret0, _ := ret[0].([]v1.DaemonSet)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetModuleDaemonSets indicates an expected call of GetModuleDaemonSets.
+func (mr *MockDaemonSetCreatorMockRecorder) GetModuleDaemonSets(ctx, name, namespace interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleDaemonSets", reflect.TypeOf((*MockDaemonSetCreator)(nil).GetModuleDaemonSets), ctx, name, namespace)
 }
 
 // GetNodeLabelFromPod mocks base method.
@@ -66,21 +81,6 @@ func (m *MockDaemonSetCreator) GetNodeLabelFromPod(pod *v10.Pod, moduleName stri
 func (mr *MockDaemonSetCreatorMockRecorder) GetNodeLabelFromPod(pod, moduleName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeLabelFromPod", reflect.TypeOf((*MockDaemonSetCreator)(nil).GetNodeLabelFromPod), pod, moduleName)
-}
-
-// ModuleDaemonSetsByKernelVersion mocks base method.
-func (m *MockDaemonSetCreator) ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*v1.DaemonSet, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ModuleDaemonSetsByKernelVersion", ctx, name, namespace)
-	ret0, _ := ret[0].(map[string]*v1.DaemonSet)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ModuleDaemonSetsByKernelVersion indicates an expected call of ModuleDaemonSetsByKernelVersion.
-func (mr *MockDaemonSetCreatorMockRecorder) ModuleDaemonSetsByKernelVersion(ctx, name, namespace interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModuleDaemonSetsByKernelVersion", reflect.TypeOf((*MockDaemonSetCreator)(nil).ModuleDaemonSetsByKernelVersion), ctx, name, namespace)
 }
 
 // SetDevicePluginAsDesired mocks base method.

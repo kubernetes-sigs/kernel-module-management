@@ -8,8 +8,8 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.9
 	github.com/google/go-containerregistry v0.13.0
-	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20230303234324-67703048992e
-	github.com/mitchellh/hashstructure v1.1.0
+	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20230307034325-57f010d26af8
+	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/onsi/ginkgo/v2 v2.9.0
 	github.com/onsi/gomega v1.27.2
 	github.com/prometheus/client_golang v1.14.0

@@ -258,69 +258,6 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 			BeTrue(), cmp.Diff(expected, ds),
 		)
 	})
-
-	Describe("ModuleDaemonSetsByKernelVersion", func() {
-		It("should return an empty map if no DaemonSets are present", func() {
-			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any())
-
-			dc := NewCreator(clnt, kernelLabel, scheme)
-
-			m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(m).To(BeEmpty())
-		})
-
-		It("should return an error if two DaemonSets are present for the same kernel", func() {
-			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).Return(errors.New("some error"))
-
-			dc := NewCreator(clnt, kernelLabel, scheme)
-
-			_, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("should return a map if two DaemonSets are present for different kernels", func() {
-			const otherKernelVersion = "4.5.6"
-
-			ds1 := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ds1",
-					Namespace: namespace,
-					Labels: map[string]string{
-						"kmm.node.kubernetes.io/module.name": moduleName,
-						kernelLabel:                          kernelVersion,
-					},
-				},
-			}
-
-			ds2 := appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ds2",
-					Namespace: namespace,
-					Labels: map[string]string{
-						"kmm.node.kubernetes.io/module.name": moduleName,
-						kernelLabel:                          otherKernelVersion,
-					},
-				},
-			}
-
-			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
-					list.Items = append(list.Items, ds1)
-					list.Items = append(list.Items, ds2)
-					return nil
-				},
-			)
-
-			dc := NewCreator(clnt, kernelLabel, scheme)
-
-			m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(m).To(HaveLen(2))
-			Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
-			Expect(m).To(HaveKeyWithValue(otherKernelVersion, &ds2))
-		})
-	})
 })
 
 var _ = Describe("SetDevicePluginAsDesired", func() {
@@ -551,10 +488,7 @@ var _ = Describe("GarbageCollect", func() {
 
 		dc := NewCreator(clnt, kernelLabel, scheme)
 
-		existingDS := map[string]*appsv1.DaemonSet{
-			legitKernelVersion:    &dsLegit,
-			notLegitKernelVersion: &dsNotLegit,
-		}
+		existingDS := []appsv1.DaemonSet{dsLegit, dsNotLegit}
 
 		validKernels := sets.New[string](legitKernelVersion)
 
@@ -574,16 +508,14 @@ var _ = Describe("GarbageCollect", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "namespace", Labels: map[string]string{kernelLabel: "kernel version"}},
 		}
 
-		existingDS := map[string]*appsv1.DaemonSet{
-			"some-kernel-version": &dsNotLegit,
-		}
+		existingDS := []appsv1.DaemonSet{dsNotLegit}
 
 		_, err := dc.GarbageCollect(context.Background(), existingDS, sets.New[string]())
 		Expect(err).To(HaveOccurred())
 	})
 })
 
-var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
+var _ = Describe("GetModuleDaemonSets", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
@@ -594,47 +526,12 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 
 		dc := NewCreator(clnt, kernelLabel, scheme)
 
-		m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
+		s, err := dc.GetModuleDaemonSets(context.Background(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(BeEmpty())
+		Expect(s).To(BeEmpty())
 	})
 
-	It("should return an error if two DaemonSets are present for the same kernel", func() {
-		dsLabels := map[string]string{
-			"kmm.node.kubernetes.io/module.name": moduleName,
-			kernelLabel:                          kernelVersion,
-		}
-
-		ds1 := appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "ds1",
-				Namespace: namespace,
-				Labels:    dsLabels,
-			},
-		}
-
-		ds2 := appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "ds2",
-				Namespace: namespace,
-				Labels:    dsLabels,
-			},
-		}
-
-		ctx := context.Background()
-		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
-				list.Items = []appsv1.DaemonSet{ds1, ds2}
-				return nil
-			},
-		)
-		dc := NewCreator(clnt, kernelLabel, scheme)
-
-		_, err := dc.ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace)
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("should return a map if two DaemonSets are present for different kernels", func() {
+	It("should return all daemonsets return by client", func() {
 		const otherKernelVersion = "4.5.6"
 
 		ds1 := appsv1.DaemonSet{
@@ -659,63 +556,23 @@ var _ = Describe("ModuleDaemonSetsByKernelVersion", func() {
 			},
 		}
 
-		ctx := context.Background()
-
-		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
-				list.Items = []appsv1.DaemonSet{ds1, ds2}
+				list.Items = append(list.Items, ds1)
+				list.Items = append(list.Items, ds2)
 				return nil
 			},
 		)
+		expectSlice := []appsv1.DaemonSet{ds1, ds2}
 
 		dc := NewCreator(clnt, kernelLabel, scheme)
 
-		m, err := dc.ModuleDaemonSetsByKernelVersion(ctx, moduleName, namespace)
+		s, err := dc.GetModuleDaemonSets(context.Background(), moduleName, namespace)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(HaveLen(2))
-		Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
-		Expect(m).To(HaveKeyWithValue(otherKernelVersion, &ds2))
+		Expect(s).To(HaveLen(2))
+		Expect(s).To(Equal(expectSlice))
 	})
 
-	It("should include a map entry for device plugin", func() {
-		ds1 := appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "ds1",
-				Namespace: namespace,
-				Labels: map[string]string{
-					"kmm.node.kubernetes.io/module.name": moduleName,
-					kernelLabel:                          kernelVersion,
-				},
-			},
-		}
-
-		ds2 := appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "ds2",
-				Namespace: namespace,
-				Labels: map[string]string{
-					"kmm.node.kubernetes.io/module.name": moduleName,
-				},
-			},
-		}
-
-		ctx := context.Background()
-
-		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
-				list.Items = []appsv1.DaemonSet{ds1, ds2}
-				return nil
-			},
-		)
-
-		dc := NewCreator(clnt, kernelLabel, scheme)
-
-		m, err := dc.ModuleDaemonSetsByKernelVersion(context.Background(), moduleName, namespace)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(m).To(HaveLen(2))
-		Expect(m).To(HaveKeyWithValue(kernelVersion, &ds1))
-		Expect(m).To(HaveKeyWithValue(devicePluginKernelVersion, &ds2))
-	})
 })
 
 var _ = Describe("GetPodPullSecrets", func() {
@@ -773,7 +630,7 @@ var _ = Describe("GetNodeLabelFromPod", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
 					constants.ModuleNameLabel: moduleName,
-					kernelLabel:               "some kernel",
+					constants.DaemonSetRole:   "module-loader",
 				},
 			},
 		}
@@ -786,6 +643,7 @@ var _ = Describe("GetNodeLabelFromPod", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
 					constants.ModuleNameLabel: moduleName,
+					constants.DaemonSetRole:   "device-plugin",
 				},
 			},
 		}

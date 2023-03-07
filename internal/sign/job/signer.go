@@ -8,7 +8,7 @@ import (
 	"os"
 	"text/template"
 
-	"github.com/mitchellh/hashstructure"
+	"github.com/mitchellh/hashstructure/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -256,7 +256,7 @@ func getHashValue(podTemplate *v1.PodTemplateSpec, publicKeyData, privateKeyData
 		PublicKeyData:  publicKeyData,
 		PodTemplate:    podTemplate,
 	}
-	hashValue, err := hashstructure.Hash(dataToHash, nil)
+	hashValue, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
 	if err != nil {
 		return 0, fmt.Errorf("could not hash job's spec template and dockefile: %v", err)
 	}

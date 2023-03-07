@@ -41,17 +41,17 @@ func (m *MockModuleStatusUpdater) EXPECT() *MockModuleStatusUpdaterMockRecorder 
 }
 
 // ModuleUpdateStatus mocks base method.
-func (m *MockModuleStatusUpdater) ModuleUpdateStatus(ctx context.Context, mod *v1beta10.Module, kernelMappingNodes, targetedNodes []v10.Node, dsByKernelVersion map[string]*v1.DaemonSet) error {
+func (m *MockModuleStatusUpdater) ModuleUpdateStatus(ctx context.Context, mod *v1beta10.Module, kernelMappingNodes, targetedNodes []v10.Node, existingDS []v1.DaemonSet) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ModuleUpdateStatus", ctx, mod, kernelMappingNodes, targetedNodes, dsByKernelVersion)
+	ret := m.ctrl.Call(m, "ModuleUpdateStatus", ctx, mod, kernelMappingNodes, targetedNodes, existingDS)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ModuleUpdateStatus indicates an expected call of ModuleUpdateStatus.
-func (mr *MockModuleStatusUpdaterMockRecorder) ModuleUpdateStatus(ctx, mod, kernelMappingNodes, targetedNodes, dsByKernelVersion interface{}) *gomock.Call {
+func (mr *MockModuleStatusUpdaterMockRecorder) ModuleUpdateStatus(ctx, mod, kernelMappingNodes, targetedNodes, existingDS interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModuleUpdateStatus", reflect.TypeOf((*MockModuleStatusUpdater)(nil).ModuleUpdateStatus), ctx, mod, kernelMappingNodes, targetedNodes, dsByKernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModuleUpdateStatus", reflect.TypeOf((*MockModuleStatusUpdater)(nil).ModuleUpdateStatus), ctx, mod, kernelMappingNodes, targetedNodes, existingDS)
 }
 
 // MockManagedClusterModuleStatusUpdater is a mock of ManagedClusterModuleStatusUpdater interface.

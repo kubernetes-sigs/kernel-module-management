@@ -2,7 +2,6 @@ package statusupdater
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -48,15 +47,15 @@ var _ = Describe("module status update", func() {
 	})
 
 	DescribeTable("checking status updater based on module",
-		func(mappingsNodes []v1.Node, targetedNodes []v1.Node, dsMap map[string]*appsv1.DaemonSet, devicePluginPresent bool) {
+		func(mappingsNodes []v1.Node, targetedNodes []v1.Node, existingDS []appsv1.DaemonSet, devicePluginPresent bool) {
 			if devicePluginPresent {
 				mod.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{}
 			}
 			var moduleLoaderAvailable int32
 			var devicePluginAvailable int32
 
-			for kernelVersion, ds := range dsMap {
-				if daemonset.IsDevicePluginKernelVersion(kernelVersion) {
+			for _, ds := range existingDS {
+				if daemonset.IsDevicePluginDS(&ds) {
 					devicePluginAvailable = ds.Status.NumberAvailable
 				} else {
 					moduleLoaderAvailable += ds.Status.NumberAvailable
@@ -67,7 +66,7 @@ var _ = Describe("module status update", func() {
 			clnt.EXPECT().Status().Return(statusWrite)
 			statusWrite.EXPECT().Patch(context.Background(), mod, gomock.Any()).Return(nil)
 
-			res := su.ModuleUpdateStatus(context.Background(), mod, mappingsNodes, targetedNodes, dsMap)
+			res := su.ModuleUpdateStatus(context.Background(), mod, mappingsNodes, targetedNodes, existingDS)
 
 			Expect(res).To(BeNil())
 			Expect(mod.Status.ModuleLoader.NodesMatchingSelectorNumber).To(Equal(int32(len(targetedNodes))))
@@ -256,10 +255,10 @@ var _ = Describe("preflight status updates", func() {
 	})
 })
 
-func getDaemonSet(kernelNumber int, dsConfig daemonSetConfig) (string, *appsv1.DaemonSet) {
-	kernelVersion := fmt.Sprintf("kernel-version-%d", kernelNumber)
+func getDaemonSet(dsConfig daemonSetConfig) appsv1.DaemonSet {
+	roleLabel := map[string]string{constants.DaemonSetRole: "module-loader"}
 	if dsConfig.isDevicePlugin {
-		kernelVersion = daemonset.GetDevicePluginKernelVersion()
+		roleLabel[constants.DaemonSetRole] = "device-plugin"
 	}
 	ds := appsv1.DaemonSet{
 		Status: appsv1.DaemonSetStatus{
@@ -267,14 +266,15 @@ func getDaemonSet(kernelNumber int, dsConfig daemonSetConfig) (string, *appsv1.D
 			DesiredNumberScheduled: int32(dsConfig.numberAvailable),
 		},
 	}
-	return kernelVersion, &ds
+	ds.SetLabels(roleLabel)
+	return ds
 }
 
-func prepareDsByKernel(dsConfigs []daemonSetConfig) map[string]*appsv1.DaemonSet {
-	dsMap := make(map[string]*appsv1.DaemonSet)
-	for i, dsConfig := range dsConfigs {
-		kernelVersion, ds := getDaemonSet(i, dsConfig)
-		dsMap[kernelVersion] = ds
+func prepareDsByKernel(dsConfigs []daemonSetConfig) []appsv1.DaemonSet {
+	dsSlice := make([]appsv1.DaemonSet, 0, len(dsConfigs))
+	for _, dsConfig := range dsConfigs {
+		ds := getDaemonSet(dsConfig)
+		dsSlice = append(dsSlice, ds)
 	}
-	return dsMap
+	return dsSlice
 }
