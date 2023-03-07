@@ -9,6 +9,10 @@ const (
 	JobHashAnnotation    = "kmm.node.kubernetes.io/last-hash"
 	KernelLabel          = "kmm.node.kubernetes.io/kernel-version.full"
 
+	ModuleLoaderVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-module-loader"
+	DevicePluginVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-device-plugin"
+	ModuleVersionLabelPrefix       = "kmm.node.kubernetes.io/version-module"
+
 	ManagedClusterModuleNameLabel  = "kmm.node.kubernetes.io/managedclustermodule.name"
 	KernelVersionsClusterClaimName = "kernel-versions.kmm.node.kubernetes.io"
 	DockerfileCMKey                = "dockerfile"
