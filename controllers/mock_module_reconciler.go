@@ -40,7 +40,7 @@ func (m *MockmoduleReconcilerHelperAPI) EXPECT() *MockmoduleReconcilerHelperAPIM
 }
 
 // garbageCollect mocks base method.
-func (m *MockmoduleReconcilerHelperAPI) garbageCollect(ctx context.Context, mod *v1beta1.Module, mldMappings map[string]*api.ModuleLoaderData, existingDS map[string]*v1.DaemonSet) error {
+func (m *MockmoduleReconcilerHelperAPI) garbageCollect(ctx context.Context, mod *v1beta1.Module, mldMappings map[string]*api.ModuleLoaderData, existingDS []v1.DaemonSet) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "garbageCollect", ctx, mod, mldMappings, existingDS)
 	ret0, _ := ret[0].(error)
@@ -129,17 +129,17 @@ func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDevicePlugin(ctx, mod
 }
 
 // handleDriverContainer mocks base method.
-func (m *MockmoduleReconcilerHelperAPI) handleDriverContainer(ctx context.Context, mld *api.ModuleLoaderData, dsByKernelVersion map[string]*v1.DaemonSet) error {
+func (m *MockmoduleReconcilerHelperAPI) handleDriverContainer(ctx context.Context, mld *api.ModuleLoaderData) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "handleDriverContainer", ctx, mld, dsByKernelVersion)
+	ret := m.ctrl.Call(m, "handleDriverContainer", ctx, mld)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // handleDriverContainer indicates an expected call of handleDriverContainer.
-func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDriverContainer(ctx, mld, dsByKernelVersion interface{}) *gomock.Call {
+func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDriverContainer(ctx, mld interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDriverContainer", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDriverContainer), ctx, mld, dsByKernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDriverContainer", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDriverContainer), ctx, mld)
 }
 
 // handleSigning mocks base method.

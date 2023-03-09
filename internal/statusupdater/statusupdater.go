@@ -21,7 +21,7 @@ import (
 
 type ModuleStatusUpdater interface {
 	ModuleUpdateStatus(ctx context.Context, mod *kmmv1beta1.Module, kernelMappingNodes []v1.Node,
-		targetedNodes []v1.Node, dsByKernelVersion map[string]*appsv1.DaemonSet) error
+		targetedNodes []v1.Node, existingDS []appsv1.DaemonSet) error
 }
 
 //go:generate mockgen -source=statusupdater.go -package=statusupdater -destination=mock_statusupdater.go
@@ -76,14 +76,14 @@ func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	kernelMappingNodes []v1.Node,
 	targetedNodes []v1.Node,
-	dsByKernelVersion map[string]*appsv1.DaemonSet) error {
+	existingDS []appsv1.DaemonSet) error {
 
 	nodesMatchingSelectorNumber := int32(len(targetedNodes))
 	numDesired := int32(len(kernelMappingNodes))
 	var numAvailableDevicePlugin int32
 	var numAvailableKernelModule int32
-	for kernelVersion, ds := range dsByKernelVersion {
-		if daemonset.IsDevicePluginKernelVersion(kernelVersion) {
+	for _, ds := range existingDS {
+		if daemonset.IsDevicePluginDS(&ds) {
 			numAvailableDevicePlugin += ds.Status.NumberAvailable
 		} else {
 			numAvailableKernelModule += ds.Status.NumberAvailable

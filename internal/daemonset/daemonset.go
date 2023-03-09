@@ -25,14 +25,15 @@ const (
 	nodeLibModulesVolumeName       = "node-lib-modules"
 	nodeVarLibFirmwarePath         = "/var/lib/firmware"
 	nodeVarLibFirmwareVolumeName   = "node-var-lib-firmware"
-	devicePluginKernelVersion      = ""
+	devicePluginRoleLabelValue     = "device-plugin"
+	moduleLoaderRoleLabelValue     = "module-loader"
 )
 
 //go:generate mockgen -source=daemonset.go -package=daemonset -destination=mock_daemonset.go
 
 type DaemonSetCreator interface {
-	GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.Set[string]) ([]string, error)
-	ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error)
+	GarbageCollect(ctx context.Context, existingDS []appsv1.DaemonSet, validKernels sets.Set[string]) ([]string, error)
+	GetModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mld *api.ModuleLoaderData) error
 	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *kmmv1beta1.Module) error
 	GetNodeLabelFromPod(pod *v1.Pod, moduleName string) string
@@ -52,12 +53,12 @@ func NewCreator(client client.Client, kernelLabel string, scheme *runtime.Scheme
 	}
 }
 
-func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, existingDS map[string]*appsv1.DaemonSet, validKernels sets.Set[string]) ([]string, error) {
+func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, existingDS []appsv1.DaemonSet, validKernels sets.Set[string]) ([]string, error) {
 	deleted := make([]string, 0)
 
-	for kernelVersion, ds := range existingDS {
-		if !dc.isDevicePluginDaemonSet(ds) && !validKernels.Has(kernelVersion) {
-			if err := dc.client.Delete(ctx, ds); err != nil {
+	for _, ds := range existingDS {
+		if !IsDevicePluginDS(&ds) && !validKernels.Has(ds.Labels[dc.kernelLabel]) {
+			if err := dc.client.Delete(ctx, &ds); err != nil {
 				return nil, fmt.Errorf("could not delete DaemonSet %s: %v", ds.Name, err)
 			}
 
@@ -66,28 +67,6 @@ func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, existingDS map
 	}
 
 	return deleted, nil
-}
-
-func (dc *daemonSetGenerator) ModuleDaemonSetsByKernelVersion(ctx context.Context, name, namespace string) (map[string]*appsv1.DaemonSet, error) {
-	dsList, err := dc.moduleDaemonSets(ctx, name, namespace)
-	if err != nil {
-		return nil, fmt.Errorf("could not get all DaemonSets: %w", err)
-	}
-
-	dsByKernelVersion := make(map[string]*appsv1.DaemonSet, len(dsList))
-
-	for i := 0; i < len(dsList); i++ {
-		ds := dsList[i]
-
-		kernelVersion := ds.Labels[dc.kernelLabel]
-		if dsByKernelVersion[kernelVersion] != nil {
-			return nil, fmt.Errorf("multiple DaemonSets found for kernel %q", kernelVersion)
-		}
-
-		dsByKernelVersion[kernelVersion] = &ds
-	}
-
-	return dsByKernelVersion, nil
 }
 
 func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
@@ -111,7 +90,7 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 	standardLabels := map[string]string{
 		constants.ModuleNameLabel: mld.Name,
 		dc.kernelLabel:            kernelVersion,
-		constants.DaemonSetRole:   "module-loader",
+		constants.DaemonSetRole:   moduleLoaderRoleLabelValue,
 	}
 
 	ds.SetLabels(
@@ -249,7 +228,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 
 	standardLabels := map[string]string{
 		constants.ModuleNameLabel: mod.Name,
-		constants.DaemonSetRole:   "device-plugin",
+		constants.DaemonSetRole:   devicePluginRoleLabelValue,
 	}
 
 	ds.SetLabels(
@@ -290,14 +269,14 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 }
 
 func (dc *daemonSetGenerator) GetNodeLabelFromPod(pod *v1.Pod, moduleName string) string {
-	kernelVersion := pod.Labels[dc.kernelLabel]
-	if kernelVersion == devicePluginKernelVersion {
+	podRole := pod.Labels[constants.DaemonSetRole]
+	if podRole == devicePluginRoleLabelValue {
 		return getDevicePluginNodeLabel(moduleName)
 	}
 	return getDriverContainerNodeLabel(moduleName)
 }
 
-func (dc *daemonSetGenerator) moduleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
+func (dc *daemonSetGenerator) GetModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
 	dsList := appsv1.DaemonSetList{}
 	opts := []client.ListOption{
 		client.MatchingLabels(map[string]string{constants.ModuleNameLabel: name}),
@@ -307,10 +286,6 @@ func (dc *daemonSetGenerator) moduleDaemonSets(ctx context.Context, name, namesp
 		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
 	}
 	return dsList.Items, nil
-}
-
-func (dc *daemonSetGenerator) isDevicePluginDaemonSet(ds *appsv1.DaemonSet) bool {
-	return ds.Labels[dc.kernelLabel] == ""
 }
 
 // CopyMapStringString returns a deep copy of m.
@@ -332,12 +307,9 @@ func getDevicePluginNodeLabel(moduleName string) string {
 	return fmt.Sprintf("kmm.node.kubernetes.io/%s.device-plugin-ready", moduleName)
 }
 
-func IsDevicePluginKernelVersion(kernelVersion string) bool {
-	return kernelVersion == devicePluginKernelVersion
-}
-
-func GetDevicePluginKernelVersion() string {
-	return devicePluginKernelVersion
+func IsDevicePluginDS(ds *appsv1.DaemonSet) bool {
+	dsLabels := ds.GetLabels()
+	return dsLabels[constants.DaemonSetRole] == devicePluginRoleLabelValue
 }
 
 func GetPodPullSecrets(secret *v1.LocalObjectReference) []v1.LocalObjectReference {
