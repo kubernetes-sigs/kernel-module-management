@@ -36,6 +36,9 @@ type ModuleLoaderData struct {
 	// Sign provides default kmod signing settings
 	Sign *kmmv1beta1.Sign
 
+	// Module version
+	ModuleVersion string
+
 	// ContainerImage is a top-level field
 	ContainerImage string
 
