@@ -10,6 +10,10 @@ var _ = Describe("GetModuleVersionLabelName", func() {
 		res := GetModuleVersionLabelName("some-namespace", "some-name")
 		Expect(res).To(Equal("kmm.node.kubernetes.io/version-module.some-namespace.some-name"))
 	})
+	It("default namespace", func() {
+		res := GetModuleVersionLabelName("", "some-name")
+		Expect(res).To(Equal("kmm.node.kubernetes.io/version-module.default.some-name"))
+	})
 })
 
 var _ = Describe("GetModuleLoaderVersionLabelName", func() {
@@ -17,12 +21,20 @@ var _ = Describe("GetModuleLoaderVersionLabelName", func() {
 		res := GetModuleLoaderVersionLabelName("some-namespace", "some-name")
 		Expect(res).To(Equal("beta.kmm.node.kubernetes.io/version-module-loader.some-namespace.some-name"))
 	})
+	It("default namespace", func() {
+		res := GetModuleLoaderVersionLabelName("", "some-name")
+		Expect(res).To(Equal("beta.kmm.node.kubernetes.io/version-module-loader.default.some-name"))
+	})
 })
 
 var _ = Describe("GetDevicePluginVersionLabelName", func() {
 	It("should work as expected", func() {
 		res := GetDevicePluginVersionLabelName("some-namespace", "some-name")
 		Expect(res).To(Equal("beta.kmm.node.kubernetes.io/version-device-plugin.some-namespace.some-name"))
+	})
+	It("default namespace", func() {
+		res := GetDevicePluginVersionLabelName("", "some-name")
+		Expect(res).To(Equal("beta.kmm.node.kubernetes.io/version-device-plugin.default.some-name"))
 	})
 })
 

@@ -8,15 +8,22 @@ import (
 )
 
 func GetModuleVersionLabelName(namespace, name string) string {
-	return fmt.Sprintf("%s.%s.%s", constants.ModuleVersionLabelPrefix, namespace, name)
+	return getVersionLabelName(constants.ModuleVersionLabelPrefix, namespace, name)
 }
 
 func GetModuleLoaderVersionLabelName(namespace, name string) string {
-	return fmt.Sprintf("%s.%s.%s", constants.ModuleLoaderVersionLabelPrefix, namespace, name)
+	return getVersionLabelName(constants.ModuleLoaderVersionLabelPrefix, namespace, name)
 }
 
 func GetDevicePluginVersionLabelName(namespace, name string) string {
-	return fmt.Sprintf("%s.%s.%s", constants.DevicePluginVersionLabelPrefix, namespace, name)
+	return getVersionLabelName(constants.DevicePluginVersionLabelPrefix, namespace, name)
+}
+
+func getVersionLabelName(labelPrefix, namespace, name string) string {
+	if namespace == "" {
+		namespace = "default"
+	}
+	return fmt.Sprintf("%s.%s.%s", labelPrefix, namespace, name)
 }
 
 func GetNamespaceNameFromVersionLabel(label string) (string, string, error) {
