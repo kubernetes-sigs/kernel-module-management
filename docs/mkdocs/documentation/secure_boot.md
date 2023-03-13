@@ -1,6 +1,6 @@
 # Signing kernel modules with KMM
 
-For more details on using Secure-boot see [here](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html/managing_monitoring_and_updating_the_kernel/signing-kernel-modules-for-secure-boot_managing-monitoring-and-updating-the-kernel) or [here](https://wiki.debian.org/SecureBoot)
+For more details on using Secure-boot see [here](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html/managing_monitoring_and_updating_the_kernel/signing-a-kernel-and-modules-for-secure-boot_managing-monitoring-and-updating-the-kernel) or [here](https://wiki.debian.org/SecureBoot)
 
 ## Using Signing with KMM
 
@@ -27,7 +27,7 @@ If not, see [Common Issues](#debugging--troubleshooting).
 # Adding the Keys for secureboot
 
 To use KMM to sign kernel modules a certificate and private key are required.
-For details on how to create these see [here](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html/managing_monitoring_and_updating_the_kernel/signing-kernel-modules-for-secure-boot_managing-monitoring-and-updating-the-kernel#generating-a-public-and-private-key-pair_signing-kernel-modules-for-secure-boot)
+For details on how to create these see [here](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html/managing_monitoring_and_updating_the_kernel/signing-a-kernel-and-modules-for-secure-boot_managing-monitoring-and-updating-the-kernel#generating-a-public-and-private-key-pair_signing-a-kernel-and-modules-for-secure-boot)
 
 For example:
 ```shell
