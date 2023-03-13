@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/imgbuild"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,9 +19,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 //go:generate mockgen -source=cluster.go -package=cluster -destination=mock_cluster.go
@@ -33,25 +32,25 @@ type ClusterAPI interface {
 }
 
 type clusterAPI struct {
-	client    client.Client
-	kernelAPI module.KernelMapper
-	buildAPI  build.Manager
-	signAPI   sign.SignManager
-	namespace string
+	client       client.Client
+	kernelAPI    api.ModuleLoaderDataFactory
+	buildManager build.Manager
+	signManager  sign.Manager
+	namespace    string
 }
 
 func NewClusterAPI(
 	client client.Client,
-	kernelAPI module.KernelMapper,
+	kernelAPI api.ModuleLoaderDataFactory,
 	buildAPI build.Manager,
-	signAPI sign.SignManager,
+	signAPI sign.Manager,
 	defaultJobNamespace string) ClusterAPI {
 	return &clusterAPI{
-		client:    client,
-		kernelAPI: kernelAPI,
-		buildAPI:  buildAPI,
-		signAPI:   signAPI,
-		namespace: defaultJobNamespace,
+		client:       client,
+		kernelAPI:    kernelAPI,
+		buildManager: buildAPI,
+		signManager:  signAPI,
+		namespace:    defaultJobNamespace,
 	}
 }
 
@@ -141,7 +140,7 @@ func (c *clusterAPI) BuildAndSign(
 }
 
 func (c *clusterAPI) GarbageCollectBuilds(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error) {
-	return c.buildAPI.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm)
+	return c.buildManager.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm)
 }
 
 func (c *clusterAPI) kernelMappingsByKernelVersion(
@@ -169,7 +168,7 @@ func (c *clusterAPI) kernelMappingsByKernelVersion(
 			continue
 		}
 
-		mld, err := c.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
+		mld, err := c.kernelAPI.FromModule(mod, kernelVersion)
 		if err != nil {
 			kernelVersionLogger.Info("no suitable container image found; skipping kernel version")
 			continue
@@ -201,7 +200,7 @@ func (c *clusterAPI) build(
 	mld *api.ModuleLoaderData,
 	mcm *hubv1beta1.ManagedClusterModule) (bool, error) {
 
-	shouldSync, err := c.buildAPI.ShouldSync(ctx, mld)
+	shouldSync, err := c.buildManager.ShouldSync(ctx, mld)
 	if err != nil {
 		return false, fmt.Errorf("could not check if build synchronization is needed: %v", err)
 	}
@@ -214,12 +213,12 @@ func (c *clusterAPI) build(
 		"image", mld.ContainerImage)
 	buildCtx := log.IntoContext(ctx, logger)
 
-	buildStatus, err := c.buildAPI.Sync(buildCtx, mld, true, mcm)
+	buildStatus, err := c.buildManager.Sync(buildCtx, mld, true, mcm)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
 
-	if buildStatus == utils.StatusCompleted {
+	if buildStatus == imgbuild.StatusCompleted {
 		return true, nil
 	}
 	return false, nil
@@ -230,7 +229,7 @@ func (c *clusterAPI) sign(
 	mld *api.ModuleLoaderData,
 	mcm *hubv1beta1.ManagedClusterModule) (bool, error) {
 
-	shouldSync, err := c.signAPI.ShouldSync(ctx, mld)
+	shouldSync, err := c.signManager.ShouldSync(ctx, mld)
 	if err != nil {
 		return false, fmt.Errorf("could not check if signing synchronization is needed: %v", err)
 	}
@@ -238,24 +237,17 @@ func (c *clusterAPI) sign(
 		return true, nil
 	}
 
-	// if we need to sign AND we've built, then we must have built
-	// the intermediate image so must figure out its name
-	previousImage := ""
-	if module.ShouldBeBuilt(mld) {
-		previousImage = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
-	}
-
 	logger := log.FromContext(ctx).WithValues(
 		"kernel version", mld.KernelVersion,
 		"image", mld.ContainerImage)
 	signCtx := log.IntoContext(ctx, logger)
 
-	signStatus, err := c.signAPI.Sync(signCtx, mld, previousImage, true, mcm)
+	signStatus, err := c.signManager.Sync(signCtx, mld, true, mcm)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the signing: %w", err)
 	}
 
-	if signStatus == utils.StatusCompleted {
+	if signStatus == imgbuild.StatusCompleted {
 		return true, nil
 	}
 	return false, nil

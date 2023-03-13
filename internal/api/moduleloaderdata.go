@@ -1,7 +1,11 @@
 package api
 
 import (
+	"errors"
+	"fmt"
+
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils/image"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -24,7 +28,7 @@ type ModuleLoaderData struct {
 	// Name
 	Name string
 
-	// Namspace
+	// Namespace
 	Namespace string
 
 	// service account for DS
@@ -53,4 +57,44 @@ type ModuleLoaderData struct {
 
 	// used for setting the owner field of jobs/buildconfigs
 	Owner metav1.Object
+}
+
+func (mld *ModuleLoaderData) BuildConfigured() bool {
+	return mld.Build != nil
+}
+
+func (mld *ModuleLoaderData) BuildDestinationImage() (string, error) {
+	if !mld.BuildConfigured() {
+		return "", errors.New("no build configured")
+	}
+
+	if mld.Sign != nil {
+		return mld.IntermediateImageName()
+	}
+
+	return mld.ContainerImage, nil
+}
+
+func (mld *ModuleLoaderData) IntermediateImageName() (string, error) {
+	return image.SetOrAppendTag(
+		mld.ContainerImage,
+		fmt.Sprintf("%s_%s_kmm_unsigned", mld.Namespace, mld.Name),
+		"_",
+	)
+}
+
+func (mld *ModuleLoaderData) SignConfigured() bool {
+	return mld.Sign != nil
+}
+
+func (mld *ModuleLoaderData) UnsignedImage() (string, error) {
+	if !mld.SignConfigured() {
+		return "", errors.New("signing not configured")
+	}
+
+	if build := mld.Build; build != nil {
+		return mld.IntermediateImageName()
+	}
+
+	return mld.Sign.UnsignedImage, nil
 }

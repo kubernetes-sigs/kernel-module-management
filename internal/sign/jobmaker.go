@@ -1,13 +1,16 @@
-package signjob
+package sign
 
 import (
 	"bytes"
 	"context"
 	"embed"
 	"fmt"
-	"os"
 	"text/template"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/imgbuild"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/mitchellh/hashstructure/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -17,77 +20,48 @@ import (
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
-	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
-type TemplateData struct {
-	FilesToSign   []string
-	SignImage     string
-	UnsignedImage string
-}
+var (
+	//go:embed templates
+	templateFS embed.FS
 
-//go:embed templates
-var templateFS embed.FS
-
-var tmpl = template.Must(
-	template.ParseFS(templateFS, "templates/Dockerfile.gotmpl"),
+	tmpl = template.Must(
+		template.ParseFS(templateFS, "templates/Dockerfile.gotmpl"),
+	)
 )
 
-//go:generate mockgen -source=signer.go -package=signjob -destination=mock_signer.go
+type (
+	TemplateData struct {
+		FilesToSign   []string
+		SignImage     string
+		UnsignedImage string
+	}
 
-type Signer interface {
-	MakeJobTemplate(
-		ctx context.Context,
-		mld *api.ModuleLoaderData,
-		labels map[string]string,
-		imageToSign string,
-		pushImage bool,
-		owner metav1.Object,
-	) (*batchv1.Job, error)
-}
+	jobMaker struct {
+		buildImage string
+		client     client.Client
+		jobHelper  imgbuild.JobHelper
+		scheme     *runtime.Scheme
+		signImage  string
+	}
+)
 
-type hashData struct {
-	PrivateKeyData []byte
-	PublicKeyData  []byte
-	PodTemplate    *v1.PodTemplateSpec
-}
+var _ imgbuild.JobMaker = &jobMaker{}
 
-type signer struct {
-	client    client.Client
-	scheme    *runtime.Scheme
-	jobHelper utils.JobHelper
-}
-
-func NewSigner(
-	client client.Client,
-	scheme *runtime.Scheme,
-	jobHelper utils.JobHelper) Signer {
-	return &signer{
-		client:    client,
-		scheme:    scheme,
-		jobHelper: jobHelper,
+func NewJobMaker(client client.Client, jobHelper imgbuild.JobHelper, buildImage, signImage string, scheme *runtime.Scheme) imgbuild.JobMaker {
+	return &jobMaker{
+		buildImage: buildImage,
+		client:     client,
+		jobHelper:  jobHelper,
+		scheme:     scheme,
+		signImage:  signImage,
 	}
 }
 
-func (s *signer) MakeJobTemplate(
-	ctx context.Context,
-	mld *api.ModuleLoaderData,
-	labels map[string]string,
-	imageToSign string,
-	pushImage bool,
-	owner metav1.Object) (*batchv1.Job, error) {
+func (s *jobMaker) MakeJob(ctx context.Context, mld *api.ModuleLoaderData, owner metav1.Object, pushImage bool) (*batchv1.Job, error) {
 
 	signConfig := mld.Sign
-
-	var buf bytes.Buffer
-
-	td := TemplateData{
-		FilesToSign: mld.Sign.FilesToSign,
-		SignImage:   os.Getenv("RELATED_IMAGES_SIGN"),
-	}
 
 	args := make([]string, 0)
 
@@ -102,14 +76,6 @@ func (s *signer) MakeJobTemplate(
 		}
 	} else {
 		args = append(args, "-no-push")
-	}
-
-	if imageToSign != "" {
-		td.UnsignedImage = imageToSign
-	} else if signConfig.UnsignedImage != "" {
-		td.UnsignedImage = signConfig.UnsignedImage
-	} else {
-		return nil, fmt.Errorf("no image to sign given")
 	}
 
 	if signConfig.UnsignedImageRegistryTLS.Insecure {
@@ -174,6 +140,19 @@ func (s *signer) MakeJobTemplate(
 		)
 	}
 
+	var buf bytes.Buffer
+
+	unsignedImage, err := mld.UnsignedImage()
+	if err != nil {
+		return nil, fmt.Errorf("could not determine the unsigned image: %v", err)
+	}
+
+	td := TemplateData{
+		FilesToSign:   mld.Sign.FilesToSign,
+		SignImage:     s.signImage,
+		UnsignedImage: unsignedImage,
+	}
+
 	if err := tmpl.Execute(&buf, td); err != nil {
 		return nil, fmt.Errorf("could not execute template: %v", err)
 	}
@@ -186,7 +165,7 @@ func (s *signer) MakeJobTemplate(
 			Containers: []v1.Container{
 				{
 					Name:         "kaniko",
-					Image:        os.Getenv("RELATED_IMAGES_BUILD"),
+					Image:        s.buildImage,
 					Args:         args,
 					VolumeMounts: volumeMounts,
 				},
@@ -206,8 +185,8 @@ func (s *signer) MakeJobTemplate(
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-sign-",
 			Namespace:    mld.Namespace,
-			Labels:       labels,
-			Annotations:  map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
+			Labels:       s.jobHelper.JobLabels(mld.Name, mld.KernelVersion, imgbuild.JobTypeSign),
+			Annotations:  map[string]string{imgbuild.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
 		},
 		Spec: batchv1.JobSpec{
 			Completions:  pointer.Int32(1),
@@ -223,7 +202,7 @@ func (s *signer) MakeJobTemplate(
 	return job, nil
 }
 
-func (s *signer) getHashAnnotationValue(ctx context.Context, privateSecret, publicSecret, namespace string, podTemplate *v1.PodTemplateSpec) (uint64, error) {
+func (s *jobMaker) getHashAnnotationValue(ctx context.Context, privateSecret, publicSecret, namespace string, podTemplate *v1.PodTemplateSpec) (uint64, error) {
 	privateKeyData, err := s.getSecretData(ctx, privateSecret, constants.PrivateSignDataKey, namespace)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get private secret %s for signing: %v", privateSecret, err)
@@ -236,7 +215,7 @@ func (s *signer) getHashAnnotationValue(ctx context.Context, privateSecret, publ
 	return getHashValue(podTemplate, publicKeyData, privateKeyData)
 }
 
-func (s *signer) getSecretData(ctx context.Context, secretName, secretDataKey, namespace string) ([]byte, error) {
+func (s *jobMaker) getSecretData(ctx context.Context, secretName, secretDataKey, namespace string) ([]byte, error) {
 	secret := v1.Secret{}
 	namespacedName := types.NamespacedName{Name: secretName, Namespace: namespace}
 	err := s.client.Get(ctx, namespacedName, &secret)
@@ -248,6 +227,12 @@ func (s *signer) getSecretData(ctx context.Context, secretName, secretDataKey, n
 		return nil, fmt.Errorf("invalid Secret %s format, %s key is missing", namespacedName, secretDataKey)
 	}
 	return data, nil
+}
+
+type hashData struct {
+	PrivateKeyData []byte
+	PublicKeyData  []byte
+	PodTemplate    *v1.PodTemplateSpec
 }
 
 func getHashValue(podTemplate *v1.PodTemplateSpec, publicKeyData, privateKeyData []byte) (uint64, error) {

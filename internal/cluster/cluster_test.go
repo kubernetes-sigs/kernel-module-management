@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/golang/mock/gomock"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/imgbuild"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,29 +16,25 @@ import (
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 var _ = Describe("ClusterAPI", func() {
 	var (
 		ctrl   *gomock.Controller
 		clnt   *client.MockClient
-		mockKM *module.MockKernelMapper
-		mockBM *build.MockManager
-		mockSM *sign.MockSignManager
+		mockKM *api.MockModuleLoaderDataFactory
+		mockBM *imgbuild.MockJobManager
+		mockSM *imgbuild.MockJobManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockKM = module.NewMockKernelMapper(ctrl)
-		mockBM = build.NewMockManager(ctrl)
-		mockSM = sign.NewMockSignManager(ctrl)
+		mockKM = api.NewMockModuleLoaderDataFactory(ctrl)
+		mockBM = imgbuild.NewMockJobManager(ctrl)
+		mockSM = imgbuild.NewMockJobManager(ctrl)
 	})
 
 	const (
@@ -222,7 +219,7 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should do nothing when no kernel mappings are found", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, errors.New("generic-error")),
+				mockKM.EXPECT().FromModule(&mod, kernelVersion).Return(nil, errors.New("generic-error")),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
@@ -253,7 +250,7 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should do nothing when Build and Sign are not needed", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+				mockKM.EXPECT().FromModule(&mod, kernelVersion).Return(&mld, nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
 			)
@@ -267,9 +264,9 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should run build sync if needed", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+				mockKM.EXPECT().FromModule(&mod, kernelVersion).Return(&mld, nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
+				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(imgbuild.StatusCompleted, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
 			)
 
@@ -282,9 +279,9 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should return an error when build sync errors", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+				mockKM.EXPECT().FromModule(&mod, kernelVersion).Return(&mld, nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(""), errors.New("test-error")),
+				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(imgbuild.Status(""), errors.New("test-error")),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
@@ -296,10 +293,10 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should run sign sync if needed", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+				mockKM.EXPECT().FromModule(&mod, kernelVersion).Return(&mld, nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
+				mockSM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(imgbuild.StatusInProgress, nil),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
@@ -311,10 +308,10 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should return an error when sign sync errors", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+				mockKM.EXPECT().FromModule(&mod, kernelVersion).Return(&mld, nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(""), errors.New("test-error")),
+				mockSM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(imgbuild.Status(""), errors.New("test-error")),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
@@ -326,9 +323,9 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should not run sign sync when build sync does not complete", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+				mockKM.EXPECT().FromModule(&mod, kernelVersion).Return(&mld, nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
+				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(imgbuild.StatusInProgress, nil),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
@@ -340,11 +337,11 @@ var _ = Describe("ClusterAPI", func() {
 
 		It("should run both build sync and sign sync when build is completed", func() {
 			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+				mockKM.EXPECT().FromModule(&mod, kernelVersion).Return(&mld, nil),
 				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
+				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(imgbuild.StatusCompleted, nil),
 				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
+				mockSM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(imgbuild.StatusCompleted, nil),
 			)
 
 			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)

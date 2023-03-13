@@ -1,4 +1,4 @@
-package job
+package image_test
 
 import (
 	"testing"
@@ -19,5 +19,5 @@ func TestSuite(t *testing.T) {
 	scheme, err = test.TestScheme()
 	Expect(err).NotTo(HaveOccurred())
 
-	RunSpecs(t, "Job Suite")
+	RunSpecs(t, "Image Suite")
 }

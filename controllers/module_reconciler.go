@@ -26,8 +26,8 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/imgbuild"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -64,9 +64,9 @@ type ModuleReconciler struct {
 func NewModuleReconciler(
 	client client.Client,
 	buildAPI build.Manager,
-	signAPI sign.SignManager,
+	signAPI sign.Manager,
 	daemonAPI daemonset.DaemonSetCreator,
-	kernelAPI module.KernelMapper,
+	kernelAPI api.ModuleLoaderDataFactory,
 	metricsAPI metrics.Metrics,
 	filter *filter.Filter,
 	statusUpdaterAPI statusupdater.ModuleStatusUpdater,
@@ -198,17 +198,17 @@ type hashData struct {
 type moduleReconcilerHelper struct {
 	client     client.Client
 	buildAPI   build.Manager
-	signAPI    sign.SignManager
+	signAPI    sign.Manager
 	daemonAPI  daemonset.DaemonSetCreator
-	kernelAPI  module.KernelMapper
+	kernelAPI  api.ModuleLoaderDataFactory
 	metricsAPI metrics.Metrics
 }
 
 func newModuleReconcilerHelper(client client.Client,
 	buildAPI build.Manager,
-	signAPI sign.SignManager,
+	signAPI sign.Manager,
 	daemonAPI daemonset.DaemonSetCreator,
-	kernelAPI module.KernelMapper,
+	kernelAPI api.ModuleLoaderDataFactory,
 	metricsAPI metrics.Metrics) moduleReconcilerHelperAPI {
 	return &moduleReconcilerHelper{
 		client:     client,
@@ -243,7 +243,7 @@ func (mrh *moduleReconcilerHelper) getRelevantKernelMappingsAndNodes(ctx context
 			continue
 		}
 
-		mld, err := mrh.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
+		mld, err := mrh.kernelAPI.FromModule(mod, kernelVersion)
 		if err != nil {
 			nodeLogger.Error(err, "failed to get and process kernel mapping")
 			continue
@@ -301,9 +301,9 @@ func (mrh *moduleReconcilerHelper) handleBuild(ctx context.Context, mld *api.Mod
 
 	completedSuccessfully := false
 	switch buildStatus {
-	case utils.StatusCompleted:
+	case imgbuild.StatusCompleted:
 		completedSuccessfully = true
-	case utils.StatusFailed:
+	case imgbuild.StatusFailed:
 		logger.Info(utils.WarnString("Build job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
 
@@ -320,25 +320,19 @@ func (mrh *moduleReconcilerHelper) handleSigning(ctx context.Context, mld *api.M
 		return true, nil
 	}
 
-	// if we need to sign AND we've built, then we must have built the intermediate image so must figure out its name
-	previousImage := ""
-	if module.ShouldBeBuilt(mld) {
-		previousImage = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
-	}
-
 	logger := log.FromContext(ctx).WithValues("kernel version", mld.KernelVersion, "image", mld.ContainerImage)
 	signCtx := log.IntoContext(ctx, logger)
 
-	signStatus, err := mrh.signAPI.Sync(signCtx, mld, previousImage, true, mld.Owner)
+	signStatus, err := mrh.signAPI.Sync(signCtx, mld, true, mld.Owner)
 	if err != nil {
 		return false, fmt.Errorf("could not synchronize the signing: %w", err)
 	}
 
 	completedSuccessfully := false
 	switch signStatus {
-	case utils.StatusCompleted:
+	case imgbuild.StatusCompleted:
 		completedSuccessfully = true
-	case utils.StatusFailed:
+	case imgbuild.StatusFailed:
 		logger.Info(utils.WarnString("Sign job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
 	}
 

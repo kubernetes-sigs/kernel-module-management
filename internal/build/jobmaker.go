@@ -1,11 +1,11 @@
-package job
+package build
 
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/imgbuild"
 	"github.com/mitchellh/hashstructure/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,65 +19,50 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils/image"
 )
 
 const (
 	dockerfileVolumeName = "dockerfile"
+	kanikoContainerName  = "kaniko"
 )
 
-//go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
-
-type Maker interface {
-	MakeJobTemplate(
-		ctx context.Context,
-		mld *api.ModuleLoaderData,
-		owner metav1.Object,
-		pushImage bool) (*batchv1.Job, error)
+type buildMaker struct {
+	builderImage string
+	client       client.Client
+	jobHelper    imgbuild.JobHelper
+	scheme       *runtime.Scheme
 }
 
-type maker struct {
-	client    client.Client
-	helper    build.Helper
-	jobHelper utils.JobHelper
-	scheme    *runtime.Scheme
-}
+var _ imgbuild.JobMaker = &buildMaker{}
 
-type hashData struct {
-	Dockerfile  string
-	PodTemplate *v1.PodTemplateSpec
-}
-
-func NewMaker(
-	client client.Client,
-	helper build.Helper,
-	jobHelper utils.JobHelper,
-	scheme *runtime.Scheme) Maker {
-	return &maker{
-		client:    client,
-		helper:    helper,
-		jobHelper: jobHelper,
-		scheme:    scheme,
+func NewJobMaker(client client.Client, builderImage string, jobHelper imgbuild.JobHelper, scheme *runtime.Scheme) imgbuild.JobMaker {
+	return &buildMaker{
+		builderImage: builderImage,
+		client:       client,
+		jobHelper:    jobHelper,
+		scheme:       scheme,
 	}
 }
 
-func (m *maker) MakeJobTemplate(
+func (m *buildMaker) MakeJob(
 	ctx context.Context,
 	mld *api.ModuleLoaderData,
 	owner metav1.Object,
 	pushImage bool) (*batchv1.Job, error) {
-
 	// if build AND sign are specified, then we will build an intermediate image
 	// and let sign produce the one specified in its targetImage
-	containerImage := mld.ContainerImage
-	if module.ShouldBeSigned(mld) {
-		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
+	containerImage, err := mld.BuildDestinationImage()
+	if err != nil {
+		return nil, fmt.Errorf("could not generate the destination image for the build: %v", err)
 	}
 
-	specTemplate := m.specTemplate(mld, containerImage, pushImage)
+	specTemplate, err := m.specTemplate(mld, containerImage, pushImage)
+	if err != nil {
+		return nil, fmt.Errorf("could not generate then spec template: %v", err)
+	}
+
 	specTemplateHash, err := m.getHashAnnotationValue(
 		ctx,
 		mld.Build.DockerfileConfigMap.Name,
@@ -92,8 +77,8 @@ func (m *maker) MakeJobTemplate(
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-build-",
 			Namespace:    mld.Namespace,
-			Labels:       m.jobHelper.JobLabels(mld.Name, mld.KernelVersion, utils.JobTypeBuild),
-			Annotations:  map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
+			Labels:       m.jobHelper.JobLabels(mld.Name, mld.KernelVersion, imgbuild.JobTypeBuild),
+			Annotations:  map[string]string{imgbuild.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
 		},
 		Spec: batchv1.JobSpec{
 			Completions:  pointer.Int32(1),
@@ -102,32 +87,33 @@ func (m *maker) MakeJobTemplate(
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(owner, job, m.scheme); err != nil {
+	if err = controllerutil.SetControllerReference(owner, job, m.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner reference: %v", err)
 	}
 
 	return job, nil
 }
 
-func (m *maker) specTemplate(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodTemplateSpec {
+func (m *buildMaker) specTemplate(mld *api.ModuleLoaderData, containerImage string, pushImage bool) (v1.PodTemplateSpec, error) {
 
 	buildConfig := mld.Build
-	kanikoImage := os.Getenv("RELATED_IMAGES_BUILD")
+	kanikoImage := m.builderImage
 
 	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
-		if idx := strings.IndexAny(kanikoImage, "@:"); idx != -1 {
-			kanikoImage = kanikoImage[0:idx]
-		}
+		var err error
 
-		kanikoImage += ":" + buildConfig.KanikoParams.Tag
+		kanikoImage, err = image.SetTag(kanikoImage, buildConfig.KanikoParams.Tag)
+		if err != nil {
+			return v1.PodTemplateSpec{}, fmt.Errorf("could not generate the kaniko image name: %v", err)
+		}
 	}
 
-	return v1.PodTemplateSpec{
+	podSpec := v1.PodTemplateSpec{
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
 					Args:         m.containerArgs(buildConfig, mld, containerImage, pushImage),
-					Name:         "kaniko",
+					Name:         kanikoContainerName,
 					Image:        kanikoImage,
 					VolumeMounts: volumeMounts(mld.ImageRepoSecret, buildConfig),
 				},
@@ -137,9 +123,11 @@ func (m *maker) specTemplate(mld *api.ModuleLoaderData, containerImage string, p
 			Volumes:       volumes(mld.ImageRepoSecret, buildConfig),
 		},
 	}
+
+	return podSpec, nil
 }
 
-func (m *maker) containerArgs(
+func (m *buildMaker) containerArgs(
 	buildConfig *kmmv1beta1.Build,
 	mld *api.ModuleLoaderData,
 	containerImage string,
@@ -148,6 +136,14 @@ func (m *maker) containerArgs(
 	args := []string{}
 	if pushImage {
 		args = append(args, "--destination", containerImage)
+
+		if mld.RegistryTLS.Insecure {
+			args = append(args, "--insecure")
+		}
+
+		if mld.RegistryTLS.InsecureSkipTLSVerify {
+			args = append(args, "--skip-tls-verify")
+		}
 	} else {
 		args = append(args, "--no-push")
 	}
@@ -157,7 +153,7 @@ func (m *maker) containerArgs(
 		{Name: "MOD_NAME", Value: mld.Name},
 		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
 	}
-	buildArgs := m.helper.ApplyBuildArgOverrides(
+	buildArgs := utils.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
 		overrides...,
 	)
@@ -174,20 +170,10 @@ func (m *maker) containerArgs(
 		args = append(args, "--skip-tls-verify-pull")
 	}
 
-	if pushImage {
-		if mld.RegistryTLS.Insecure {
-			args = append(args, "--insecure")
-		}
-
-		if mld.RegistryTLS.InsecureSkipTLSVerify {
-			args = append(args, "--skip-tls-verify")
-		}
-	}
-
 	return args
 }
 
-func (m *maker) getHashAnnotationValue(ctx context.Context, configMapName, namespace string, podTemplate *v1.PodTemplateSpec) (uint64, error) {
+func (m *buildMaker) getHashAnnotationValue(ctx context.Context, configMapName, namespace string, podTemplate *v1.PodTemplateSpec) (uint64, error) {
 	dockerfileCM := &corev1.ConfigMap{}
 	namespacedName := types.NamespacedName{Name: configMapName, Namespace: namespace}
 	if err := m.client.Get(ctx, namespacedName, dockerfileCM); err != nil {
@@ -244,8 +230,13 @@ func dockerfileVolumeMount(name string) v1.VolumeMount {
 	}
 }
 
+type buildHashData struct {
+	Dockerfile  string
+	PodTemplate *v1.PodTemplateSpec
+}
+
 func getHashValue(podTemplate *v1.PodTemplateSpec, dockerfile string) (uint64, error) {
-	dataToHash := hashData{
+	dataToHash := buildHashData{
 		Dockerfile:  dockerfile,
 		PodTemplate: podTemplate,
 	}

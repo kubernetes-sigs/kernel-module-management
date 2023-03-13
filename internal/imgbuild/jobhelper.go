@@ -1,4 +1,4 @@
-package utils
+package imgbuild
 
 import (
 	"context"
@@ -12,27 +12,17 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 )
 
-type Status string
-
-const (
-	JobTypeBuild = "build"
-	JobTypeSign  = "sign"
-
-	StatusCompleted  = "completed"
-	StatusCreated    = "created"
-	StatusInProgress = "in progress"
-	StatusFailed     = "failed"
-)
+const JobHashAnnotation = "kmm.node.kubernetes.io/last-hash"
 
 var ErrNoMatchingJob = errors.New("no matching job")
 
-//go:generate mockgen -source=jobhelper.go -package=utils -destination=mock_jobhelper.go
+//go:generate mockgen -source=jobhelper.go -package=imgbuild -destination=mock_jobhelper.go
 
 type JobHelper interface {
 	IsJobChanged(existingJob *batchv1.Job, newJob *batchv1.Job) (bool, error)
-	JobLabels(modName string, targetKernel string, jobType string) map[string]string
-	GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel, jobType string, owner metav1.Object) (*batchv1.Job, error)
-	GetModuleJobs(ctx context.Context, modName, namespace, jobType string, owner metav1.Object) ([]batchv1.Job, error)
+	JobLabels(modName string, targetKernel string, jobType JobType) map[string]string
+	GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel string, jobType JobType, owner metav1.Object) (*batchv1.Job, error)
+	GetModuleJobs(ctx context.Context, modName, namespace string, jobType JobType, owner metav1.Object) ([]batchv1.Job, error)
 	DeleteJob(ctx context.Context, job *batchv1.Job) error
 	CreateJob(ctx context.Context, jobTemplate *batchv1.Job) error
 	GetJobStatus(job *batchv1.Job) (Status, error)
@@ -51,20 +41,19 @@ func NewJobHelper(client client.Client) JobHelper {
 func (jh *jobHelper) IsJobChanged(existingJob *batchv1.Job, newJob *batchv1.Job) (bool, error) {
 	existingAnnotations := existingJob.GetAnnotations()
 	newAnnotations := newJob.GetAnnotations()
+
 	if existingAnnotations == nil {
 		return false, fmt.Errorf("annotations are not present in the existing job %s", existingJob.Name)
 	}
-	if existingAnnotations[constants.JobHashAnnotation] == newAnnotations[constants.JobHashAnnotation] {
-		return false, nil
-	}
-	return true, nil
+
+	return existingAnnotations[JobHashAnnotation] != newAnnotations[JobHashAnnotation], nil
 }
 
-func (jh *jobHelper) JobLabels(modName string, targetKernel string, jobType string) map[string]string {
+func (jh *jobHelper) JobLabels(modName string, targetKernel string, jobType JobType) map[string]string {
 	return moduleKernelLabels(modName, targetKernel, jobType)
 }
 
-func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel, jobType string, owner metav1.Object) (*batchv1.Job, error) {
+func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, modName, namespace, targetKernel string, jobType JobType, owner metav1.Object) (*batchv1.Job, error) {
 	matchLabels := moduleKernelLabels(modName, targetKernel, jobType)
 	jobs, err := jh.getJobs(ctx, namespace, matchLabels)
 	if err != nil {
@@ -82,7 +71,7 @@ func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, modName, namespac
 	return &moduleOwnedJobs[0], nil
 }
 
-func (jh *jobHelper) GetModuleJobs(ctx context.Context, modName, namespace, jobType string, owner metav1.Object) ([]batchv1.Job, error) {
+func (jh *jobHelper) GetModuleJobs(ctx context.Context, modName, namespace string, jobType JobType, owner metav1.Object) ([]batchv1.Job, error) {
 	matchLabels := moduleLabels(modName, jobType)
 	jobs, err := jh.getJobs(ctx, namespace, matchLabels)
 	if err != nil {
@@ -139,25 +128,27 @@ func (jh *jobHelper) getJobs(ctx context.Context, namespace string, labels map[s
 	return jobList.Items, nil
 }
 
-func moduleKernelLabels(moduleName, targetKernel, jobType string) map[string]string {
+func moduleKernelLabels(moduleName, targetKernel string, jobType JobType) map[string]string {
 	labels := moduleLabels(moduleName, jobType)
 	labels[constants.TargetKernelTarget] = targetKernel
 	return labels
 }
 
-func moduleLabels(moduleName, jobType string) map[string]string {
+func moduleLabels(moduleName string, jobType JobType) map[string]string {
 	return map[string]string{
 		constants.ModuleNameLabel: moduleName,
-		constants.JobType:         jobType,
+		constants.JobType:         string(jobType),
 	}
 }
 
 func filterJobsByOwner(jobs []batchv1.Job, owner metav1.Object) []batchv1.Job {
-	ownedJobs := []batchv1.Job{}
+	ownedJobs := make([]batchv1.Job, 0, len(jobs))
+
 	for _, job := range jobs {
 		if metav1.IsControlledBy(&job, owner) {
 			ownedJobs = append(ownedJobs, job)
 		}
 	}
+
 	return ownedJobs
 }

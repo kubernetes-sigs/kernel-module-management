@@ -6,7 +6,6 @@ const (
 	TargetKernelTarget   = "kmm.node.kubernetes.io/target-kernel"
 	DaemonSetRole        = "kmm.node.kubernetes.io/role"
 	JobType              = "kmm.node.kubernetes.io/job-type"
-	JobHashAnnotation    = "kmm.node.kubernetes.io/last-hash"
 	KernelLabel          = "kmm.node.kubernetes.io/kernel-version.full"
 
 	ModuleLoaderVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-module-loader"
@@ -19,5 +18,7 @@ const (
 	PublicSignDataKey              = "cert"
 	PrivateSignDataKey             = "key"
 
+	BuildImageEnvVar        = "RELATED_IMAGES_BUILD"
 	OperatorNamespaceEnvVar = "OPERATOR_NAMESPACE"
+	SignImageEnvVar         = "RELATED_IMAGES_SIGN"
 )

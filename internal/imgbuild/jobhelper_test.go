@@ -1,4 +1,4 @@
-package utils
+package imgbuild
 
 import (
 	"context"
@@ -413,7 +413,7 @@ var _ = Describe("JobStatus", func() {
 	})
 
 	DescribeTable("should return the correct status depending on the job status",
-		func(s *batchv1.Job, jobStatus string, expectsErr bool) {
+		func(s *batchv1.Job, jobStatus Status, expectsErr bool) {
 
 			res, err := jh.GetJobStatus(s)
 			if expectsErr {
@@ -421,16 +421,16 @@ var _ = Describe("JobStatus", func() {
 				return
 			}
 
-			Expect(string(res)).To(Equal(jobStatus))
+			Expect(res).To(Equal(jobStatus))
 		},
 		Entry("succeeded", &batchv1.Job{Status: batchv1.JobStatus{Succeeded: 1}}, StatusCompleted, false),
 		Entry("in progress", &batchv1.Job{Status: batchv1.JobStatus{Active: 1}}, StatusInProgress, false),
 		Entry("Failed", &batchv1.Job{Status: batchv1.JobStatus{Failed: 1}}, StatusFailed, false),
-		Entry("unknown", &batchv1.Job{Status: batchv1.JobStatus{Failed: 2}}, "", true),
+		Entry("unknown", &batchv1.Job{Status: batchv1.JobStatus{Failed: 2}}, Status(""), true),
 	)
 })
 
-var _ = Describe("IsJobChnaged", func() {
+var _ = Describe("IsJobChanged", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
@@ -452,10 +452,9 @@ var _ = Describe("IsJobChnaged", func() {
 			}
 			newJob := batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{constants.JobHashAnnotation: "some hash"},
+					Annotations: map[string]string{JobHashAnnotation: "some hash"},
 				},
 			}
-			fmt.Println(existingJob.GetAnnotations())
 
 			changed, err := jh.IsJobChanged(&existingJob, &newJob)
 
@@ -467,7 +466,7 @@ var _ = Describe("IsJobChnaged", func() {
 		},
 
 		Entry("should error if job has no annotations", nil, false, true),
-		Entry("should return true if job has changed", map[string]string{constants.JobHashAnnotation: "some other hash"}, true, false),
-		Entry("should return false is job has not changed ", map[string]string{constants.JobHashAnnotation: "some hash"}, false, false),
+		Entry("should return true if job has changed", map[string]string{JobHashAnnotation: "some other hash"}, true, false),
+		Entry("should return false is job has not changed ", map[string]string{JobHashAnnotation: "some hash"}, false, false),
 	)
 })

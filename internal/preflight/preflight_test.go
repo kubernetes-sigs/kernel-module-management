@@ -9,13 +9,10 @@ import (
 	v1stream "github.com/google/go-containerregistry/pkg/v1/stream"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/imgbuild"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,7 +72,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 	)
 	var (
 		ctrl              *gomock.Controller
-		mockKernelAPI     *module.MockKernelMapper
+		mockKernelAPI     *api.MockModuleLoaderDataFactory
 		mockStatusUpdater *statusupdater.MockPreflightStatusUpdater
 		preflightHelper   *MockpreflightHelperAPI
 		p                 *preflight
@@ -83,7 +80,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		mockKernelAPI = module.NewMockKernelMapper(ctrl)
+		mockKernelAPI = api.NewMockModuleLoaderDataFactory(ctrl)
 		mockStatusUpdater = statusupdater.NewMockPreflightStatusUpdater(ctrl)
 		preflightHelper = NewMockpreflightHelperAPI(ctrl)
 		p = &preflight{
@@ -100,7 +97,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 
 	It("Failed to process mapping", func() {
 		mod.Spec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{}
-		mockKernelAPI.EXPECT().GetModuleLoaderDataForKernel(mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
+		mockKernelAPI.EXPECT().FromModule(mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
 
 		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
@@ -125,7 +122,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 			mld.Sign = &kmmv1beta1.Sign{}
 		}
 
-		mockKernelAPI.EXPECT().GetModuleLoaderDataForKernel(mod, kernelVersion).Return(&mld, nil)
+		mockKernelAPI.EXPECT().FromModule(mod, kernelVersion).Return(&mld, nil)
 		mockStatusUpdater.EXPECT().PreflightSetVerificationStage(context.Background(), pv, mld.Name, kmmv1beta1.VerificationStageImage).Return(nil)
 		preflightHelper.EXPECT().verifyImage(ctx, &mld).Return(imageVerified, "image message")
 		if !imageVerified {
@@ -301,7 +298,7 @@ var _ = Describe("preflightHelper_verifyImage", func() {
 var _ = Describe("preflightHelper_verifyBuild", func() {
 	var (
 		ctrl         *gomock.Controller
-		mockBuildAPI *build.MockManager
+		mockBuildAPI *imgbuild.MockJobManager
 		clnt         *client.MockClient
 		ph           *preflightHelper
 	)
@@ -309,7 +306,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockBuildAPI = build.NewMockManager(ctrl)
+		mockBuildAPI = imgbuild.NewMockJobManager(ctrl)
 		ph = &preflightHelper{
 			client:   clnt,
 			buildAPI: mockBuildAPI,
@@ -330,7 +327,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 		}
 
 		mockBuildAPI.EXPECT().Sync(context.Background(), &mld, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(""), fmt.Errorf("some error"))
+			Return(imgbuild.Status(""), fmt.Errorf("some error"))
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mld)
 		Expect(res).To(BeFalse())
@@ -346,7 +343,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 		}
 
 		mockBuildAPI.EXPECT().Sync(context.Background(), &mld, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(utils.StatusCompleted), nil)
+			Return(imgbuild.StatusCompleted, nil)
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mld)
 		Expect(res).To(BeTrue())
@@ -362,7 +359,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 		}
 
 		mockBuildAPI.EXPECT().Sync(context.Background(), &mld, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(utils.StatusInProgress), nil)
+			Return(imgbuild.StatusInProgress, nil)
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mld)
 		Expect(res).To(BeFalse())
@@ -373,7 +370,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 var _ = Describe("preflightHelper_verifySign", func() {
 	var (
 		ctrl        *gomock.Controller
-		mockSignAPI *sign.MockSignManager
+		mockSignAPI *imgbuild.MockJobManager
 		clnt        *client.MockClient
 		ph          *preflightHelper
 	)
@@ -381,7 +378,7 @@ var _ = Describe("preflightHelper_verifySign", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockSignAPI = sign.NewMockSignManager(ctrl)
+		mockSignAPI = imgbuild.NewMockJobManager(ctrl)
 		ph = &preflightHelper{
 			client:  clnt,
 			signAPI: mockSignAPI,
@@ -401,10 +398,8 @@ var _ = Describe("preflightHelper_verifySign", func() {
 			KernelVersion:  kernelVersion,
 		}
 
-		previousImage := ""
-
-		mockSignAPI.EXPECT().Sync(context.Background(), &mld, previousImage, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(""), fmt.Errorf("some error"))
+		mockSignAPI.EXPECT().Sync(context.Background(), &mld, pv.Spec.PushBuiltImage, pv).
+			Return(imgbuild.Status(""), fmt.Errorf("some error"))
 
 		res, msg := ph.verifySign(context.Background(), pv, &mld)
 		Expect(res).To(BeFalse())
@@ -419,10 +414,8 @@ var _ = Describe("preflightHelper_verifySign", func() {
 			KernelVersion:  kernelVersion,
 		}
 
-		previousImage := ""
-
-		mockSignAPI.EXPECT().Sync(context.Background(), &mld, previousImage, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(utils.StatusCompleted), nil)
+		mockSignAPI.EXPECT().Sync(context.Background(), &mld, pv.Spec.PushBuiltImage, pv).
+			Return(imgbuild.StatusCompleted, nil)
 
 		res, msg := ph.verifySign(context.Background(), pv, &mld)
 		Expect(res).To(BeTrue())
@@ -437,10 +430,8 @@ var _ = Describe("preflightHelper_verifySign", func() {
 			KernelVersion:  kernelVersion,
 		}
 
-		previousImage := ""
-
-		mockSignAPI.EXPECT().Sync(context.Background(), &mld, previousImage, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(utils.StatusInProgress), nil)
+		mockSignAPI.EXPECT().Sync(context.Background(), &mld, pv.Spec.PushBuiltImage, pv).
+			Return(imgbuild.StatusInProgress, nil)
 
 		res, msg := ph.verifySign(context.Background(), pv, &mld)
 		Expect(res).To(BeFalse())

@@ -22,6 +22,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/imgbuild"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -38,19 +40,15 @@ import (
 	v1beta12 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/controllers"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build/job"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	signjob "github.com/kubernetes-sigs/kernel-module-management/internal/sign/job"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -113,32 +111,38 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	jobHelperAPI := utils.NewJobHelper(client)
-	buildHelperAPI := build.NewHelper()
+	jobHelperAPI := imgbuild.NewJobHelper(client)
+	buildImage := cmd.GetEnvOrFatalError(constants.BuildImageEnvVar, setupLogger)
 
-	buildAPI := job.NewBuildManager(
+	buildAPI := imgbuild.NewBuildManager(
 		client,
-		job.NewMaker(client, buildHelperAPI, jobHelperAPI, scheme),
 		jobHelperAPI,
+		build.NewJobMaker(client, buildImage, jobHelperAPI, scheme),
 		registryAPI,
 	)
 
-	signAPI := signjob.NewSignJobManager(
+	signAPI := imgbuild.NewSignManager(
 		client,
-		signjob.NewSigner(client, scheme, jobHelperAPI),
 		jobHelperAPI,
+		sign.NewJobMaker(
+			client,
+			jobHelperAPI,
+			buildImage,
+			cmd.GetEnvOrFatalError(constants.SignImageEnvVar, setupLogger),
+			scheme,
+		),
 		registryAPI,
 	)
 
 	daemonAPI := daemonset.NewCreator(client, constants.KernelLabel, scheme)
-	kernelAPI := module.NewKernelMapper(buildHelperAPI, sign.NewSignerHelper())
+	mldFactory := api.NewModuleLoaderDataFactory()
 
 	mc := controllers.NewModuleReconciler(
 		client,
 		buildAPI,
 		signAPI,
 		daemonAPI,
-		kernelAPI,
+		mldFactory,
 		metricsAPI,
 		filterAPI,
 		statusupdater.NewModuleStatusUpdater(client),
@@ -160,7 +164,7 @@ func main() {
 	}
 
 	preflightStatusUpdaterAPI := statusupdater.NewPreflightStatusUpdater(client)
-	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
+	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, mldFactory)
 
 	if err = controllers.NewPreflightValidationReconciler(client, filterAPI, metricsAPI, preflightStatusUpdaterAPI, preflightAPI).SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PreflightValidationReconcilerName)

@@ -1,15 +1,14 @@
-package job
+package build
 
 import (
 	"context"
 	"fmt"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
-	"golang.org/x/exp/slices"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/imgbuild"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,17 +18,15 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
-var _ = Describe("MakeJobTemplate", func() {
+var _ = Describe("MakeJob", func() {
 	const (
 		image              = "my.registry/my/image"
 		dockerfile         = "FROM test"
-		kanikoImage        = "some-kaniko-image:some-tag"
+		builderImage       = "some-build-image:some-tag"
 		kernelVersion      = "1.2.3"
 		moduleName         = "module-name"
 		namespace          = "some-namespace"
@@ -39,21 +36,15 @@ var _ = Describe("MakeJobTemplate", func() {
 	var (
 		ctrl      *gomock.Controller
 		clnt      *client.MockClient
-		m         Maker
-		mh        *build.MockHelper
-		jobhelper *utils.MockJobHelper
+		m         imgbuild.JobMaker
+		jobhelper *imgbuild.MockJobHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mh = build.NewMockHelper(ctrl)
-		jobhelper = utils.NewMockJobHelper(ctrl)
-		m = NewMaker(clnt, mh, jobhelper, scheme)
-	})
-
-	AfterEach(func() {
-		ctrl.Finish()
+		jobhelper = imgbuild.NewMockJobHelper(ctrl)
+		m = NewJobMaker(clnt, builderImage, jobhelper, scheme)
 	})
 
 	mod := kmmv1beta1.Module{
@@ -71,7 +62,7 @@ var _ = Describe("MakeJobTemplate", func() {
 	dockerfileCMData := map[string]string{constants.DockerfileCMKey: dockerfile}
 
 	DescribeTable("should set fields correctly", func(buildSecrets []v1.LocalObjectReference, imagePullSecret *v1.LocalObjectReference) {
-		GinkgoT().Setenv(relatedImageEnvVar, kanikoImage)
+		GinkgoT().Setenv(relatedImageEnvVar, builderImage)
 
 		ctx := context.Background()
 		nodeSelector := map[string]string{"arch": "x64"}
@@ -126,7 +117,7 @@ var _ = Describe("MakeJobTemplate", func() {
 									"--build-arg", "MOD_NAMESPACE=" + namespace,
 								},
 								Name:  "kaniko",
-								Image: kanikoImage,
+								Image: builderImage,
 								VolumeMounts: []v1.VolumeMount{
 									{
 										Name:      "dockerfile",
@@ -217,27 +208,20 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 		hash, err := getHashValue(&expected.Spec.Template, dockerfile)
 		Expect(err).NotTo(HaveOccurred())
-		annotations := map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", hash)}
+		annotations := map[string]string{imgbuild.JobHashAnnotation: fmt.Sprintf("%d", hash)}
 		expected.SetAnnotations(annotations)
 
-		overrides := []kmmv1beta1.BuildArg{
-			{Name: "KERNEL_VERSION", Value: kernelVersion},
-			{Name: "MOD_NAME", Value: moduleName},
-			{Name: "MOD_NAMESPACE", Value: namespace},
-		}
-
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, overrides).Return(append(slices.Clone(buildArgs), overrides...)),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
 					return nil
 				},
 			),
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, utils.JobTypeBuild).Return(labels),
+			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, imgbuild.JobTypeBuild).Return(labels),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, mld.Owner, true)
+		actual, err := m.MakeJob(ctx, &mld, mld.Owner, true)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -282,17 +266,16 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(nil, kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
 					return nil
 				},
 			),
-			jobhelper.EXPECT().JobLabels(mod.Name, kernelVersion, utils.JobTypeBuild).Return(map[string]string{}),
+			jobhelper.EXPECT().JobLabels(mod.Name, kernelVersion, imgbuild.JobTypeBuild).Return(map[string]string{}),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, mld.Owner, pushImage)
+		actual, err := m.MakeJob(ctx, &mld, mld.Owner, pushImage)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
@@ -359,19 +342,17 @@ var _ = Describe("MakeJobTemplate", func() {
 			KernelVersion:  kernelVersion,
 		}
 
-		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
 					return nil
 				},
 			),
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, utils.JobTypeBuild).Return(map[string]string{}),
+			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, imgbuild.JobTypeBuild).Return(map[string]string{}),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, mld.Owner, false)
+		actual, err := m.MakeJob(ctx, &mld, mld.Owner, false)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Image).To(Equal("some-build-image:" + customTag))
@@ -380,7 +361,6 @@ var _ = Describe("MakeJobTemplate", func() {
 	It("should add the kmm_unsigned suffix to the target image if sign is defined", func() {
 		ctx := context.Background()
 
-		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		mld := api.ModuleLoaderData{
 			Name:      mod.Name,
 			Namespace: mod.Namespace,
@@ -398,17 +378,16 @@ var _ = Describe("MakeJobTemplate", func() {
 		expectedImageName := mld.ContainerImage + ":" + mld.Namespace + "_" + mld.Name + "_kmm_unsigned"
 
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
 					return nil
 				},
 			),
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, utils.JobTypeBuild).Return(map[string]string{}),
+			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, imgbuild.JobTypeBuild).Return(map[string]string{}),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, mld.Owner, true)
+		actual, err := m.MakeJob(ctx, &mld, mld.Owner, true)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--destination"))
