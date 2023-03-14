@@ -36,7 +36,7 @@ type DaemonSetCreator interface {
 	GetModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	SetDriverContainerAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mld *api.ModuleLoaderData) error
 	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *kmmv1beta1.Module) error
-	GetNodeLabelFromPod(pod *v1.Pod, moduleName string) string
+	GetNodeLabelFromPod(pod *v1.Pod, moduleName string, useDeprecatedLabel bool) string
 }
 
 type daemonSetGenerator struct {
@@ -258,7 +258,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 				},
 				PriorityClassName:  "system-node-critical",
 				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
-				NodeSelector:       map[string]string{getDriverContainerNodeLabel(mod.Name): ""},
+				NodeSelector:       map[string]string{getDriverContainerNodeLabel(mod.Namespace, mod.Name, true): ""},
 				ServiceAccountName: mod.Spec.DevicePlugin.ServiceAccountName,
 				Volumes:            append([]v1.Volume{devicePluginVolume}, mod.Spec.DevicePlugin.Volumes...),
 			},
@@ -268,12 +268,12 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 	return controllerutil.SetControllerReference(mod, ds, dc.scheme)
 }
 
-func (dc *daemonSetGenerator) GetNodeLabelFromPod(pod *v1.Pod, moduleName string) string {
+func (dc *daemonSetGenerator) GetNodeLabelFromPod(pod *v1.Pod, moduleName string, useDeprecatedLabel bool) string {
 	podRole := pod.Labels[constants.DaemonSetRole]
 	if podRole == devicePluginRoleLabelValue {
-		return getDevicePluginNodeLabel(moduleName)
+		return getDevicePluginNodeLabel(pod.Namespace, moduleName, useDeprecatedLabel)
 	}
-	return getDriverContainerNodeLabel(moduleName)
+	return getDriverContainerNodeLabel(pod.Namespace, moduleName, useDeprecatedLabel)
 }
 
 func (dc *daemonSetGenerator) GetModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
@@ -299,12 +299,20 @@ func CopyMapStringString(m map[string]string) map[string]string {
 	return n
 }
 
-func getDriverContainerNodeLabel(moduleName string) string {
-	return fmt.Sprintf("kmm.node.kubernetes.io/%s.ready", moduleName)
+func getDriverContainerNodeLabel(namespace, moduleName string, useDeprecatedLabel bool) string {
+	// TODO: "kmm.node.kubernetes.io/<module-name>.ready" is needed for backward compatibility. Remove for 2.0
+	if useDeprecatedLabel {
+		return fmt.Sprintf("kmm.node.kubernetes.io/%s.ready", moduleName)
+	}
+	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.ready", namespace, moduleName)
 }
 
-func getDevicePluginNodeLabel(moduleName string) string {
-	return fmt.Sprintf("kmm.node.kubernetes.io/%s.device-plugin-ready", moduleName)
+func getDevicePluginNodeLabel(namespace, moduleName string, useDeprecatedLabel bool) string {
+	// TODO: "kmm.node.kubernetes.io/<module-name>.device-plugin-ready" is needed for backward compatibility. Remove for 2.0
+	if useDeprecatedLabel {
+		return fmt.Sprintf("kmm.node.kubernetes.io/%s.device-plugin-ready", moduleName)
+	}
+	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-ready", namespace, moduleName)
 }
 
 func IsDevicePluginDS(ds *appsv1.DaemonSet) bool {
