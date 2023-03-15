@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -555,8 +556,9 @@ var _ = Describe("ModuleReconciler_handleDriverContainer", func() {
 			Name:          "name",
 			Namespace:     "namespace",
 			KernelVersion: "kernelVersion1",
+			ModuleVersion: "v234.e",
 		}
-		hashValue, err := hashstructure.Hash(hashData{KernelVersion: mld.KernelVersion}, hashstructure.FormatV2, nil)
+		hashValue, err := hashstructure.Hash(hashData{KernelVersion: mld.KernelVersion, ModuleVersion: mld.ModuleVersion}, hashstructure.FormatV2, nil)
 		Expect(err).NotTo(HaveOccurred())
 		newDS := &appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace, Name: fmt.Sprintf("%s-%x", mld.Name, hashValue)},
@@ -579,13 +581,26 @@ var _ = Describe("ModuleReconciler_handleDriverContainer", func() {
 			Name:          "name",
 			Namespace:     "namespace",
 			KernelVersion: "kernelVersion1",
+			ModuleVersion: "wr4656",
+		}
+		hashValue, err := hashstructure.Hash(hashData{KernelVersion: mld.KernelVersion, ModuleVersion: mld.ModuleVersion}, hashstructure.FormatV2, nil)
+		Expect(err).NotTo(HaveOccurred())
+		name := fmt.Sprintf("%s-%x", mld.Name, hashValue)
+		existingDS := &appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace, Name: name},
 		}
 		gomock.InOrder(
-			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil),
-			mockDC.EXPECT().SetDriverContainerAsDesired(ctx, gomock.Any(), &mld).Return(nil),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, ds *appsv1.DaemonSet, _ ...ctrlclient.GetOption) error {
+					ds.SetName(name)
+					ds.SetNamespace(mld.Namespace)
+					return nil
+				},
+			),
+			mockDC.EXPECT().SetDriverContainerAsDesired(ctx, existingDS, &mld).Return(nil),
 		)
 
-		err := mhr.handleDriverContainer(ctx, &mld)
+		err = mhr.handleDriverContainer(ctx, &mld)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -652,8 +667,11 @@ var _ = Describe("ModuleReconciler_handleDevicePlugin", func() {
 			},
 		}
 
+		hashValue, err := hashstructure.Hash(hashData{ModuleVersion: ""}, hashstructure.FormatV2, nil)
+		Expect(err).NotTo(HaveOccurred())
+
 		newDS := &appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, Name: mod.Name + "-device-plugin"},
+			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, Name: fmt.Sprintf("%s-device-plugin-%x", mod.Name, hashValue)},
 		}
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
@@ -661,7 +679,7 @@ var _ = Describe("ModuleReconciler_handleDevicePlugin", func() {
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 		)
 
-		err := mhr.handleDevicePlugin(ctx, &mod)
+		err = mhr.handleDevicePlugin(ctx, &mod)
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -678,15 +696,24 @@ var _ = Describe("ModuleReconciler_handleDevicePlugin", func() {
 			},
 		}
 
+		hashValue, err := hashstructure.Hash(hashData{ModuleVersion: ""}, hashstructure.FormatV2, nil)
+		Expect(err).NotTo(HaveOccurred())
+		name := fmt.Sprintf("%s-device-plugin-%x", mod.Name, hashValue)
 		existingDS := &appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, Name: mod.Name + "-device-plugin"},
+			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, Name: name},
 		}
 		gomock.InOrder(
-			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, ds *appsv1.DaemonSet, _ ...ctrlclient.GetOption) error {
+					ds.SetName(name)
+					ds.SetNamespace(mod.Namespace)
+					return nil
+				},
+			),
 			mockDC.EXPECT().SetDevicePluginAsDesired(ctx, existingDS, &mod).Return(nil),
 		)
 
-		err := mhr.handleDevicePlugin(ctx, &mod)
+		err = mhr.handleDevicePlugin(ctx, &mod)
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -723,7 +750,7 @@ var _ = Describe("ModuleReconciler_garbageCollect", func() {
 		existingDS := []appsv1.DaemonSet{appsv1.DaemonSet{}, appsv1.DaemonSet{}}
 		kernelSet := sets.New[string]("kernelVersion1", "kernelVersion2")
 		gomock.InOrder(
-			mockDC.EXPECT().GarbageCollect(context.Background(), existingDS, kernelSet).Return(nil, nil),
+			mockDC.EXPECT().GarbageCollect(context.Background(), mod, existingDS, kernelSet).Return(nil, nil),
 			mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, nil),
 			mockSM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, nil),
 		)
@@ -741,10 +768,10 @@ var _ = Describe("ModuleReconciler_garbageCollect", func() {
 		existingDS := []appsv1.DaemonSet{appsv1.DaemonSet{}, appsv1.DaemonSet{}}
 		kernelSet := sets.New[string]("kernelVersion1", "kernelVersion2")
 		if dcError {
-			mockDC.EXPECT().GarbageCollect(context.Background(), existingDS, kernelSet).Return(nil, returnedError)
+			mockDC.EXPECT().GarbageCollect(context.Background(), mod, existingDS, kernelSet).Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mockDC.EXPECT().GarbageCollect(context.Background(), existingDS, kernelSet).Return(nil, nil)
+		mockDC.EXPECT().GarbageCollect(context.Background(), mod, existingDS, kernelSet).Return(nil, nil)
 		if buildError {
 			mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, returnedError)
 			goto executeTestFunction

@@ -192,6 +192,7 @@ type moduleReconcilerHelperAPI interface {
 
 type hashData struct {
 	KernelVersion string
+	ModuleVersion string
 }
 
 type moduleReconcilerHelper struct {
@@ -347,9 +348,13 @@ func (mrh *moduleReconcilerHelper) handleSigning(ctx context.Context, mld *api.M
 func (mrh *moduleReconcilerHelper) handleDriverContainer(ctx context.Context,
 	mld *api.ModuleLoaderData) error {
 
-	hashValue, err := hashstructure.Hash(hashData{KernelVersion: mld.KernelVersion}, hashstructure.FormatV2, nil)
+	dsNameData := hashData{
+		KernelVersion: mld.KernelVersion,
+		ModuleVersion: mld.ModuleVersion,
+	}
+	hashValue, err := hashstructure.Hash(dsNameData, hashstructure.FormatV2, nil)
 	if err != nil {
-		return fmt.Errorf("failed to hash kernel version %s for module loader daemonset name: %v", mld.KernelVersion, err)
+		return fmt.Errorf("failed to hash kernel and module versions (%s %s) and for module loader daemonset name: %v", mld.KernelVersion, mld.ModuleVersion, err)
 	}
 	name := fmt.Sprintf("%s-%x", mld.Name, hashValue)
 	ds := &appsv1.DaemonSet{
@@ -374,8 +379,13 @@ func (mrh *moduleReconcilerHelper) handleDevicePlugin(ctx context.Context, mod *
 	}
 
 	logger := log.FromContext(ctx)
+	hashValue, err := hashstructure.Hash(hashData{ModuleVersion: mod.Spec.ModuleLoader.Container.Version}, hashstructure.FormatV2, nil)
+	if err != nil {
+		return fmt.Errorf("failed to hash module version %s for device-plugin daemonset name: %v", mod.Spec.ModuleLoader.Container.Version, err)
+	}
+	name := fmt.Sprintf("%s-device-plugin-%x", mod.Name, hashValue)
 	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: mod.Name + "-device-plugin", Namespace: mod.Namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: mod.Namespace},
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, mrh.client, ds, func() error {
@@ -397,7 +407,7 @@ func (mrh *moduleReconcilerHelper) garbageCollect(ctx context.Context,
 	// Garbage collect old DaemonSets for which there are no nodes.
 	validKernels := sets.KeySet[string](mldMappings)
 
-	deleted, err := mrh.daemonAPI.GarbageCollect(ctx, existingDS, validKernels)
+	deleted, err := mrh.daemonAPI.GarbageCollect(ctx, mod, existingDS, validKernels)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect DaemonSets: %v", err)
 	}

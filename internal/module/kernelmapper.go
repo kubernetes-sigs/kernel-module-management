@@ -120,6 +120,7 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 	mld.Selector = mod.Spec.Selector
 	mld.ServiceAccountName = mod.Spec.ModuleLoader.ServiceAccountName
 	mld.Modprobe = mod.Spec.ModuleLoader.Container.Modprobe
+	mld.ModuleVersion = mod.Spec.ModuleLoader.Container.Version
 	mld.Owner = mod
 
 	return mld, nil
