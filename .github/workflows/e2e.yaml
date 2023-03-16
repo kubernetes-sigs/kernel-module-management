@@ -95,7 +95,7 @@ jobs:
           path: ./bin
           key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
         if: steps.cache-bin.outputs.cache-hit != 'true'
