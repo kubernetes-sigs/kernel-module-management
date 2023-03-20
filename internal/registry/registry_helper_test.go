@@ -41,7 +41,7 @@ func prepareLayer(fileName string, data []byte) (v1.Layer, error) {
 	if err := tw.WriteHeader(&tar.Header{
 		Name:     fileName,
 		Size:     int64(len(data)),
-		Typeflag: tar.TypeRegA,
+		Typeflag: tar.TypeReg,
 	}); err != nil {
 		return nil, err
 	}
