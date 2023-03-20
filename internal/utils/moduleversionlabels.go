@@ -27,6 +27,10 @@ func GetNamespaceNameFromVersionLabel(label string) (string, string, error) {
 	return parts[len(parts)-2], parts[len(parts)-1], nil
 }
 
+func IsVersionLabel(label string) bool {
+	return IsModuleVersionLabel(label) || IsModuleLoaderVersionLabel(label) || IsDevicePluginVersionLabel(label)
+}
+
 func IsModuleVersionLabel(label string) bool {
 	return strings.HasPrefix(label, constants.ModuleVersionLabelPrefix)
 }
@@ -37,4 +41,16 @@ func IsModuleLoaderVersionLabel(label string) bool {
 
 func IsDevicePluginVersionLabel(label string) bool {
 	return strings.HasPrefix(label, constants.DevicePluginVersionLabelPrefix)
+}
+
+func GetNodesVersionLabels(nodeLabels map[string]string) map[string]string {
+	versionLabels := map[string]string{}
+	for label, labelValue := range nodeLabels {
+		if strings.HasPrefix(label, constants.ModuleLoaderVersionLabelPrefix) ||
+			strings.HasPrefix(label, constants.DevicePluginVersionLabelPrefix) ||
+			strings.HasPrefix(label, constants.ModuleVersionLabelPrefix) {
+			versionLabels[label] = labelValue
+		}
+	}
+	return versionLabels
 }

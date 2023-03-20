@@ -19,5 +19,8 @@ const (
 	PublicSignDataKey              = "cert"
 	PrivateSignDataKey             = "key"
 
+	ModuleLoaderRoleLabelValue = "module-loader"
+	DevicePluginRoleLabelValue = "device-plugin"
+
 	OperatorNamespaceEnvVar = "OPERATOR_NAMESPACE"
 )
