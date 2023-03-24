@@ -10,8 +10,8 @@ require (
 	github.com/google/go-containerregistry v0.14.0
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20230316013512-53189d3374b8
 	github.com/mitchellh/hashstructure/v2 v2.0.2
-	github.com/onsi/ginkgo/v2 v2.9.1
-	github.com/onsi/gomega v1.27.3
+	github.com/onsi/ginkgo/v2 v2.9.2
+	github.com/onsi/gomega v1.27.4
 	github.com/prometheus/client_golang v1.14.0
 	golang.org/x/exp v0.0.0-20220407100705-7b9b53b0aca4
 	k8s.io/api v0.26.3
@@ -39,7 +39,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
-	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
+	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
