@@ -2023,6 +2023,11 @@ spec:
                           Defaults to Always if :latest tag is specified, or IfNotPresent
                           otherwise. Cannot be updated. More info: https://kubernetes.io/docs/concepts/containers/images#updating-images'
                         type: string
+                      inTreeRemoval:
+                        description: InTreeRemoval signifies if the an in-tree kernel
+                          module should be removed (if present) before loading the
+                          kernel module from the ContainerImage
+                        type: boolean
                       kernelMappings:
                         description: KernelMappings is a list of kernel mappings.
                           When a node's labels match Selector, then the KMM Operator
@@ -2117,6 +2122,11 @@ spec:
                               description: ContainerImage is the name of the DriverContainer
                                 image that should be used to deploy the module.
                               type: string
+                            inTreeRemoval:
+                              description: InTreeRemoval signifies if the an in-tree
+                                kernel module should be removed (if present) before
+                                loading the kernel module from the ContainerImage
+                              type: boolean
                             literal:
                               description: Literal defines a literal target kernel
                                 version to be matched exactly against node kernels.

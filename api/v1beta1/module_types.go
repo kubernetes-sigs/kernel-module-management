@@ -113,6 +113,11 @@ type KernelMapping struct {
 	// +optional
 	// Regexp is a regular expression to be match against node kernels.
 	Regexp string `json:"regexp"`
+
+	// +optional
+	// InTreeRemoval signifies if the an in-tree kernel module should be removed (if present)
+	// before loading the kernel module from the ContainerImage
+	InTreeRemoval *bool `json:"inTreeRemoval"`
 }
 
 type ModprobeArgs struct {
@@ -194,6 +199,11 @@ type ModuleLoaderContainerSpec struct {
 	// +optional
 	// RegistryTLS set the TLS configs for accessing the registry of the module-loader's image.
 	RegistryTLS TLSOptions `json:"registryTLS"`
+
+	// +optional
+	// InTreeRemoval signifies if the an in-tree kernel module should be removed (if present)
+	// before loading the kernel module from the ContainerImage
+	InTreeRemoval bool `json:"inTreeRemoval"`
 }
 
 type ModuleLoaderSpec struct {
