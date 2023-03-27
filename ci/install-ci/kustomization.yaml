@@ -15,7 +15,6 @@ patchesStrategicMerge:
     kind: Deployment
     metadata:
       name: controller-manager
-      namespace: system
     spec:
       template:
         spec:
