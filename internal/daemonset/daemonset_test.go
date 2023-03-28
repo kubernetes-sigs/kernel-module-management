@@ -550,22 +550,32 @@ var _ = Describe("GarbageCollect", func() {
 			},
 		},
 	}
-	versionLabel := utils.GetModuleVersionLabelName(mod.Namespace, mod.Name)
+	moduleLoaderVersionLabel := utils.GetModuleLoaderVersionLabelName(mod.Namespace, mod.Name)
+	devicePluginVersionLabel := utils.GetDevicePluginVersionLabelName(mod.Namespace, mod.Name)
 
-	DescribeTable("device-plugin and modue-loader GC", func(devicePluginFormerLabel, moduleLoaderFormerLabel, moduleLoaderInvalidKernel bool,
+	DescribeTable("device-plugin and module-loader GC", func(devicePluginFormerLabel, moduleLoaderFormerLabel, moduleLoaderInvalidKernel bool,
 		devicePluginFormerDesired, moduleLoaderFormerDesired int) {
 		moduleLoaderDS := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "moduleLoader",
 				Namespace: "namespace",
-				Labels:    map[string]string{kernelLabel: legitKernelVersion, constants.DaemonSetRole: moduleLoaderRoleLabelValue, versionLabel: currentModuleVersion},
+				Labels: map[string]string{
+					kernelLabel:               legitKernelVersion,
+					constants.DaemonSetRole:   moduleLoaderRoleLabelValue,
+					moduleLoaderVersionLabel:  currentModuleVersion,
+					constants.ModuleNameLabel: mod.Name,
+				},
 			},
 		}
 		devicePluginDS := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "devicePlugin",
 				Namespace: "namespace",
-				Labels:    map[string]string{constants.DaemonSetRole: devicePluginRoleLabelValue, versionLabel: currentModuleVersion},
+				Labels: map[string]string{
+					constants.DaemonSetRole:   devicePluginRoleLabelValue,
+					devicePluginVersionLabel:  currentModuleVersion,
+					constants.ModuleNameLabel: mod.Name,
+				},
 			},
 		}
 		devicePluginFormerVersionDS := &appsv1.DaemonSet{}
@@ -577,14 +587,14 @@ var _ = Describe("GarbageCollect", func() {
 		if devicePluginFormerLabel {
 			devicePluginFormerVersionDS = devicePluginDS.DeepCopy()
 			devicePluginFormerVersionDS.SetName("devicePluginFormer")
-			devicePluginFormerVersionDS.Labels[versionLabel] = "former label"
+			devicePluginFormerVersionDS.Labels[devicePluginVersionLabel] = "former label"
 			devicePluginFormerVersionDS.Status.DesiredNumberScheduled = int32(devicePluginFormerDesired)
 			existingDS = append(existingDS, *devicePluginFormerVersionDS)
 		}
 		if moduleLoaderFormerLabel {
 			moduleLoaderFormerVersionDS = moduleLoaderDS.DeepCopy()
 			moduleLoaderFormerVersionDS.SetName("moduleLoaderFormer")
-			moduleLoaderFormerVersionDS.Labels[versionLabel] = "former label"
+			moduleLoaderFormerVersionDS.Labels[moduleLoaderVersionLabel] = "former label"
 			moduleLoaderFormerVersionDS.Status.DesiredNumberScheduled = int32(moduleLoaderFormerDesired)
 			existingDS = append(existingDS, *moduleLoaderFormerVersionDS)
 		}
@@ -627,7 +637,7 @@ var _ = Describe("GarbageCollect", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "moduleLoader",
 				Namespace: "namespace",
-				Labels:    map[string]string{kernelLabel: notLegitKernelVersion, constants.DaemonSetRole: moduleLoaderRoleLabelValue, versionLabel: currentModuleVersion},
+				Labels:    map[string]string{kernelLabel: notLegitKernelVersion, constants.DaemonSetRole: moduleLoaderRoleLabelValue, moduleLoaderVersionLabel: currentModuleVersion},
 			},
 		}
 		clnt.EXPECT().Delete(context.Background(), &deleteDS).Return(fmt.Errorf("some error"))
@@ -637,7 +647,7 @@ var _ = Describe("GarbageCollect", func() {
 		_, err := dc.GarbageCollect(context.Background(), mod, existingDS, sets.New[string](legitKernelVersion))
 		Expect(err).To(HaveOccurred())
 
-		deleteDS.Labels[versionLabel] = "former label"
+		deleteDS.Labels[moduleLoaderVersionLabel] = "former label"
 		clnt.EXPECT().Delete(context.Background(), &deleteDS).Return(fmt.Errorf("some error"))
 
 		existingDS = []appsv1.DaemonSet{deleteDS}
