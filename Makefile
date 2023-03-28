@@ -177,6 +177,7 @@ uninstall: manifests ## Uninstall CRDs from the K8s cluster specified in ~/.kube
 
 KUSTOMIZE_CONFIG_DEFAULT ?= config/default
 KUSTOMIZE_CONFIG_HUB_DEFAULT ?= config/default-hub
+KUSTOMIZE_CONFIG_KMM ?= config/kmm
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
@@ -191,6 +192,10 @@ deploy-hub: manifests kustomize ## Deploy controller to the K8s cluster specifie
 .PHONY: undeploy
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	kubectl delete -k $(KUSTOMIZE_CONFIG_DEFAULT) --ignore-not-found=$(ignore-not-found)
+
+.PHONY: undeploy-kmm
+undeploy-kmm:
+	kubectl delete -k $(KUSTOMIZE_CONFIG_KMM) --ignore-not-found=$(ignore-not-found)
 
 .PHONY: undeploy-hub
 undeploy-hub: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
