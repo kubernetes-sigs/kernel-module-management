@@ -7,6 +7,17 @@ The Kernel Module Management Operator manages out of tree kernel modules in Kube
 
 ## Getting started
 Install the bleeding edge Kernel Module Management Operator in one command:
+
+First install [cert-manager](https://github.com/cert-manager/cert-manager) which is a dependency.
+```shell
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.11.0/cert-manager.yaml
+kubectl -n cert-manager wait --for=condition=Available deployment \
+	cert-manager \
+	cert-manager-cainjector \
+	cert-manager-webhook
+```
+
+Install KMM.
 ```shell
 kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default
 ```

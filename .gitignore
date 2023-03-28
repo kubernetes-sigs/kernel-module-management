@@ -1,4 +1,5 @@
 # Bundle files are generated
+bundle.Dockerfile
 /bundle
 
 # Operator's binaries
