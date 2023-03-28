@@ -57,9 +57,8 @@ func NewCreator(client client.Client, kernelLabel string, scheme *runtime.Scheme
 func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet, validKernels sets.Set[string]) ([]string, error) {
 	deleted := make([]string, 0)
 
-	versionLabel := utils.GetModuleVersionLabelName(mod.Namespace, mod.Name)
 	for _, ds := range existingDS {
-		if isOlderVersionUnusedDaemonset(&ds, versionLabel, mod.Spec.ModuleLoader.Container.Version) {
+		if isOlderVersionUnusedDaemonset(&ds, mod.Spec.ModuleLoader.Container.Version) {
 			if err := dc.client.Delete(ctx, &ds); err != nil {
 				return nil, fmt.Errorf("could not delete DaemonSet %s: %v", ds.Name, err)
 			}
@@ -332,8 +331,14 @@ func getDevicePluginNodeLabel(namespace, moduleName string, useDeprecatedLabel b
 	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-ready", namespace, moduleName)
 }
 
-func isOlderVersionUnusedDaemonset(ds *appsv1.DaemonSet, moduleVersionLabel, moduleVersion string) bool {
-	return ds.Labels[moduleVersionLabel] != moduleVersion && ds.Status.DesiredNumberScheduled == 0
+func isOlderVersionUnusedDaemonset(ds *appsv1.DaemonSet, moduleVersion string) bool {
+	moduleName := ds.Labels[constants.ModuleNameLabel]
+	moduleNamespace := ds.Namespace
+	versionLabel := utils.GetModuleLoaderVersionLabelName(moduleNamespace, moduleName)
+	if IsDevicePluginDS(ds) {
+		versionLabel = utils.GetDevicePluginVersionLabelName(moduleNamespace, moduleName)
+	}
+	return ds.Labels[versionLabel] != moduleVersion && ds.Status.DesiredNumberScheduled == 0
 }
 
 func isModuleLoaderDaemonsetWithInvalidKernel(ds *appsv1.DaemonSet, kernelLabel string, validKernels sets.Set[string]) bool {
