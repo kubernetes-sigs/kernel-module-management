@@ -175,31 +175,46 @@ install: manifests ## Install CRDs into the K8s cluster specified in ~/.kube/con
 uninstall: manifests ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	kubectl delete -k $(KUSTOMIZE_CONFIG_CRD) --ignore-not-found=$(ignore-not-found)
 
+KUSTOMIZE_CONFIG_CERT_MANAGER ?= https://github.com/cert-manager/cert-manager/releases/download/v1.11.0/cert-manager.yaml
+
+.PHONY: deploy-cert-manager
+deploy-cert-manager:
+	kubectl apply -f $(KUSTOMIZE_CONFIG_CERT_MANAGER)
+	kubectl -n cert-manager wait --for=condition=Available deployment \
+		cert-manager \
+		cert-manager-cainjector \
+		cert-manager-webhook
+
+.PHONY: undeploy-cert-manager
+undeploy-cert-manager:
+	kubectl delete -f $(KUSTOMIZE_CONFIG_CERT_MANAGER) --ignore-not-found=$(ignore-not-found)
+
 KUSTOMIZE_CONFIG_DEFAULT ?= config/default
 KUSTOMIZE_CONFIG_HUB_DEFAULT ?= config/default-hub
-KUSTOMIZE_CONFIG_KMM ?= config/kmm
 
 .PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+deploy: deploy-cert-manager manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	kubectl apply -k $(KUSTOMIZE_CONFIG_DEFAULT)
 
 .PHONY: deploy-hub
-deploy-hub: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+deploy-hub: deploy-cert-manager manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager-hub && $(KUSTOMIZE) edit set image controller=$(HUB_IMG)
 	kubectl apply -k $(KUSTOMIZE_CONFIG_HUB_DEFAULT)
 
-.PHONY: undeploy
-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+.PHONY: undeploy-kmm
+undeploy-kmm: kustomize
 	kubectl delete -k $(KUSTOMIZE_CONFIG_DEFAULT) --ignore-not-found=$(ignore-not-found)
 
-.PHONY: undeploy-kmm
-undeploy-kmm:
-	kubectl delete -k $(KUSTOMIZE_CONFIG_KMM) --ignore-not-found=$(ignore-not-found)
+.PHONY: undeploy-kmm-hub
+undeploy-kmm-hub: kustomize
+	kubectl delete -k $(KUSTOMIZE_CONFIG_HUB_DEFAULT) --ignore-not-found=$(ignore-not-found)
+
+.PHONY: undeploy
+undeploy: undeploy-kmm undeploy-cert-manager ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 
 .PHONY: undeploy-hub
-undeploy-hub: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	kubectl delete -k $(KUSTOMIZE_CONFIG_HUB_DEFAULT) --ignore-not-found=$(ignore-not-found)
+undeploy-hub: undeploy-kmm-hub undeploy-cert-manager ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 .PHONY: controller-gen
