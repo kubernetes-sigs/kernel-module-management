@@ -1,5 +1,5 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
+# Adds namespace to all resources.
+namespace: kmm-operator-system
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
@@ -20,7 +20,7 @@ bases:
 # crd/kustomization.yaml
 #- ../webhook
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'. 'WEBHOOK' components are required.
-- ../certmanager
+#- ../certmanager
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
 
@@ -62,15 +62,3 @@ vars:
 #    kind: Service
 #    version: v1
 #    name: webhook-service
-
-transformers:
-- |-
-  apiVersion: builtin
-  kind: NamespaceTransformer
-  metadata:
-    name: notImportantHere
-    namespace: kmm-operator-system
-  unsetOnly: true
-  fieldSpecs:
-  - path: metadata/namespace
-    create: true
