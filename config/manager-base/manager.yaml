@@ -3,12 +3,13 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
-  name: kmm-operator-system
+  name: system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: controller-manager
+  namespace: system
   labels:
     control-plane: controller-manager
 spec:
