@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -37,17 +38,14 @@ import (
 
 	v1beta12 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/controllers"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build/job"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	signjob "github.com/kubernetes-sigs/kernel-module-management/internal/sign/job"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -114,11 +112,10 @@ func main() {
 
 	registryAPI := registry.NewRegistry()
 	jobHelperAPI := utils.NewJobHelper(client)
-	buildHelperAPI := build.NewHelper()
 
 	buildAPI := job.NewBuildManager(
 		client,
-		job.NewMaker(client, buildHelperAPI, jobHelperAPI, scheme),
+		job.NewMaker(client, jobHelperAPI, scheme),
 		jobHelperAPI,
 		registryAPI,
 	)
@@ -131,14 +128,14 @@ func main() {
 	)
 
 	daemonAPI := daemonset.NewCreator(client, constants.KernelLabel, scheme)
-	kernelAPI := module.NewKernelMapper(buildHelperAPI, sign.NewSignerHelper())
+	mldCreator := api.NewModuleLoaderDataCreator()
 
 	mc := controllers.NewModuleReconciler(
 		client,
 		buildAPI,
 		signAPI,
 		daemonAPI,
-		kernelAPI,
+		mldCreator,
 		metricsAPI,
 		filterAPI,
 		statusupdater.NewModuleStatusUpdater(client),
@@ -164,7 +161,7 @@ func main() {
 	}
 
 	preflightStatusUpdaterAPI := statusupdater.NewPreflightStatusUpdater(client)
-	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
+	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, mldCreator)
 
 	if err = controllers.NewPreflightValidationReconciler(client, filterAPI, metricsAPI, preflightStatusUpdaterAPI, preflightAPI).SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PreflightValidationReconcilerName)

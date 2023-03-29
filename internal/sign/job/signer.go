@@ -106,10 +106,13 @@ func (s *signer) MakeJobTemplate(
 
 	if imageToSign != "" {
 		td.UnsignedImage = imageToSign
-	} else if signConfig.UnsignedImage != "" {
-		td.UnsignedImage = signConfig.UnsignedImage
 	} else {
-		return nil, fmt.Errorf("no image to sign given")
+		var err error
+
+		td.UnsignedImage, err = mld.UnsignedImage()
+		if err != nil {
+			return nil, fmt.Errorf("could not determine the unsigned image: %v", err)
+		}
 	}
 
 	if signConfig.UnsignedImageRegistryTLS.Insecure {

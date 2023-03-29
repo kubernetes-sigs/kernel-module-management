@@ -11,7 +11,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
@@ -75,7 +74,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 	)
 	var (
 		ctrl              *gomock.Controller
-		mockKernelAPI     *module.MockKernelMapper
+		mockMLDCreator    *api.MockModuleLoaderDataCreator
 		mockStatusUpdater *statusupdater.MockPreflightStatusUpdater
 		preflightHelper   *MockpreflightHelperAPI
 		p                 *preflight
@@ -83,11 +82,11 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		mockKernelAPI = module.NewMockKernelMapper(ctrl)
+		mockMLDCreator = api.NewMockModuleLoaderDataCreator(ctrl)
 		mockStatusUpdater = statusupdater.NewMockPreflightStatusUpdater(ctrl)
 		preflightHelper = NewMockpreflightHelperAPI(ctrl)
 		p = &preflight{
-			kernelAPI:     mockKernelAPI,
+			mldCreator:    mockMLDCreator,
 			helper:        preflightHelper,
 			statusUpdater: mockStatusUpdater,
 		}
@@ -100,7 +99,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 
 	It("Failed to process mapping", func() {
 		mod.Spec.ModuleLoader.Container.KernelMappings = []kmmv1beta1.KernelMapping{}
-		mockKernelAPI.EXPECT().GetModuleLoaderDataForKernel(mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
+		mockMLDCreator.EXPECT().FromModule(mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
 
 		res, message := p.PreflightUpgradeCheck(context.Background(), pv, mod)
 
@@ -125,7 +124,7 @@ var _ = Describe("preflight_PreflightUpgradeCheck", func() {
 			mld.Sign = &kmmv1beta1.Sign{}
 		}
 
-		mockKernelAPI.EXPECT().GetModuleLoaderDataForKernel(mod, kernelVersion).Return(&mld, nil)
+		mockMLDCreator.EXPECT().FromModule(mod, kernelVersion).Return(&mld, nil)
 		mockStatusUpdater.EXPECT().PreflightSetVerificationStage(context.Background(), pv, mld.Name, kmmv1beta1.VerificationStageImage).Return(nil)
 		preflightHelper.EXPECT().verifyImage(ctx, &mld).Return(imageVerified, "image message")
 		if !imageVerified {

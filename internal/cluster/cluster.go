@@ -18,7 +18,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
@@ -33,25 +32,25 @@ type ClusterAPI interface {
 }
 
 type clusterAPI struct {
-	client    client.Client
-	kernelAPI module.KernelMapper
-	buildAPI  build.Manager
-	signAPI   sign.SignManager
-	namespace string
+	client     client.Client
+	mldCreator api.ModuleLoaderDataCreator
+	buildAPI   build.Manager
+	signAPI    sign.SignManager
+	namespace  string
 }
 
 func NewClusterAPI(
 	client client.Client,
-	kernelAPI module.KernelMapper,
+	mldCreator api.ModuleLoaderDataCreator,
 	buildAPI build.Manager,
 	signAPI sign.SignManager,
 	defaultJobNamespace string) ClusterAPI {
 	return &clusterAPI{
-		client:    client,
-		kernelAPI: kernelAPI,
-		buildAPI:  buildAPI,
-		signAPI:   signAPI,
-		namespace: defaultJobNamespace,
+		client:     client,
+		mldCreator: mldCreator,
+		buildAPI:   buildAPI,
+		signAPI:    signAPI,
+		namespace:  defaultJobNamespace,
 	}
 }
 
@@ -169,7 +168,7 @@ func (c *clusterAPI) kernelMappingsByKernelVersion(
 			continue
 		}
 
-		mld, err := c.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
+		mld, err := c.mldCreator.FromModule(mod, kernelVersion)
 		if err != nil {
 			kernelVersionLogger.Info("no suitable container image found; skipping kernel version")
 			continue
@@ -238,11 +237,9 @@ func (c *clusterAPI) sign(
 		return true, nil
 	}
 
-	// if we need to sign AND we've built, then we must have built
-	// the intermediate image so must figure out its name
-	previousImage := ""
-	if module.ShouldBeBuilt(mld) {
-		previousImage = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
+	previousImage, err := mld.UnsignedImage()
+	if err != nil {
+		return false, fmt.Errorf("could not determine the unsigned image: %v", err)
 	}
 
 	logger := log.FromContext(ctx).WithValues(

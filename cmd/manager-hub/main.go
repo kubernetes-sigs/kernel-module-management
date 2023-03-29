@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,7 +36,6 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/controllers/hub"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build/job"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
@@ -43,9 +43,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	signjob "github.com/kubernetes-sigs/kernel-module-management/internal/sign/job"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -106,11 +104,10 @@ func main() {
 
 	registryAPI := registry.NewRegistry()
 	jobHelperAPI := utils.NewJobHelper(client)
-	buildHelper := build.NewHelper()
 
 	buildAPI := job.NewBuildManager(
 		client,
-		job.NewMaker(client, buildHelper, jobHelperAPI, scheme),
+		job.NewMaker(client, jobHelperAPI, scheme),
 		jobHelperAPI,
 		registryAPI,
 	)
@@ -130,7 +127,7 @@ func main() {
 	mcmr := hub.NewManagedClusterModuleReconciler(
 		client,
 		manifestwork.NewCreator(client, scheme),
-		cluster.NewClusterAPI(client, module.NewKernelMapper(buildHelper, sign.NewSignerHelper()), buildAPI, signAPI, operatorNamespace),
+		cluster.NewClusterAPI(client, api.NewModuleLoaderDataCreator(), buildAPI, signAPI, operatorNamespace),
 		statusupdater.NewManagedClusterModuleStatusUpdater(client),
 		filterAPI,
 	)

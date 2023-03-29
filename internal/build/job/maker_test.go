@@ -9,7 +9,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
-	"golang.org/x/exp/slices"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +18,6 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -40,16 +38,14 @@ var _ = Describe("MakeJobTemplate", func() {
 		ctrl      *gomock.Controller
 		clnt      *client.MockClient
 		m         Maker
-		mh        *build.MockHelper
 		jobhelper *utils.MockJobHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mh = build.NewMockHelper(ctrl)
 		jobhelper = utils.NewMockJobHelper(ctrl)
-		m = NewMaker(clnt, mh, jobhelper, scheme)
+		m = NewMaker(clnt, jobhelper, scheme)
 	})
 
 	AfterEach(func() {
@@ -228,14 +224,7 @@ var _ = Describe("MakeJobTemplate", func() {
 		annotations := map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", hash)}
 		expected.SetAnnotations(annotations)
 
-		overrides := []kmmv1beta1.BuildArg{
-			{Name: "KERNEL_VERSION", Value: kernelVersion},
-			{Name: "MOD_NAME", Value: moduleName},
-			{Name: "MOD_NAMESPACE", Value: namespace},
-		}
-
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, overrides).Return(append(slices.Clone(buildArgs), overrides...)),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -300,7 +289,6 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(nil, kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -377,9 +365,7 @@ var _ = Describe("MakeJobTemplate", func() {
 			KernelVersion:  kernelVersion,
 		}
 
-		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -398,7 +384,6 @@ var _ = Describe("MakeJobTemplate", func() {
 	It("should add the kmm_unsigned suffix to the target image if sign is defined", func() {
 		ctx := context.Background()
 
-		override := kmmv1beta1.BuildArg{Name: "KERNEL_VERSION", Value: kernelVersion}
 		mld := api.ModuleLoaderData{
 			Name:      mod.Name,
 			Namespace: mod.Namespace,
@@ -416,7 +401,6 @@ var _ = Describe("MakeJobTemplate", func() {
 		expectedImageName := mld.ContainerImage + ":" + mld.Namespace + "_" + mld.Name + "_kmm_unsigned"
 
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, override),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData

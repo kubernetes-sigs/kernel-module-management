@@ -57,7 +57,7 @@ func (jbm *signJobManager) GarbageCollect(ctx context.Context, modName, namespac
 func (jbm *signJobManager) ShouldSync(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
 
 	// if there is no sign specified skip
-	if !module.ShouldBeSigned(mld) {
+	if !mld.SignConfigured() {
 		return false, nil
 	}
 

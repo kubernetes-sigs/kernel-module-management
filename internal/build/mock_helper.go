@@ -34,25 +34,6 @@ func (m *MockHelper) EXPECT() *MockHelperMockRecorder {
 	return m.recorder
 }
 
-// ApplyBuildArgOverrides mocks base method.
-func (m *MockHelper) ApplyBuildArgOverrides(args []v1beta1.BuildArg, overrides ...v1beta1.BuildArg) []v1beta1.BuildArg {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{args}
-	for _, a := range overrides {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "ApplyBuildArgOverrides", varargs...)
-	ret0, _ := ret[0].([]v1beta1.BuildArg)
-	return ret0
-}
-
-// ApplyBuildArgOverrides indicates an expected call of ApplyBuildArgOverrides.
-func (mr *MockHelperMockRecorder) ApplyBuildArgOverrides(args interface{}, overrides ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{args}, overrides...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBuildArgOverrides", reflect.TypeOf((*MockHelper)(nil).ApplyBuildArgOverrides), varargs...)
-}
-
 // GetRelevantBuild mocks base method.
 func (m *MockHelper) GetRelevantBuild(moduleBuild, mappingBuild *v1beta1.Build) *v1beta1.Build {
 	m.ctrl.T.Helper()

@@ -12,7 +12,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -286,15 +285,15 @@ var _ = Describe("ModuleReconciler_getNodesListBySelector", func() {
 
 var _ = Describe("ModuleReconciler_getRelevantKernelMappingsAndNodes", func() {
 	var (
-		ctrl   *gomock.Controller
-		mockKM *module.MockKernelMapper
-		mhr    moduleReconcilerHelperAPI
+		ctrl           *gomock.Controller
+		mockMLDCreator *api.MockModuleLoaderDataCreator
+		mhr            moduleReconcilerHelperAPI
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		mockKM = module.NewMockKernelMapper(ctrl)
-		mhr = newModuleReconcilerHelper(nil, nil, nil, nil, mockKM, nil)
+		mockMLDCreator = api.NewMockModuleLoaderDataCreator(ctrl)
+		mhr = newModuleReconcilerHelper(nil, nil, nil, nil, mockMLDCreator, nil)
 	})
 
 	node1 := v1.Node{
@@ -327,8 +326,8 @@ var _ = Describe("ModuleReconciler_getRelevantKernelMappingsAndNodes", func() {
 		expectedNodes := []v1.Node{node1, node2, node3}
 		expectedMappings := map[string]*api.ModuleLoaderData{"kernelVersion1": &mld1, "kernelVersion2": &mld2}
 		gomock.InOrder(
-			mockKM.EXPECT().GetModuleLoaderDataForKernel(&kmmv1beta1.Module{}, node1.Status.NodeInfo.KernelVersion).Return(&mld1, nil),
-			mockKM.EXPECT().GetModuleLoaderDataForKernel(&kmmv1beta1.Module{}, node2.Status.NodeInfo.KernelVersion).Return(&mld2, nil),
+			mockMLDCreator.EXPECT().FromModule(&kmmv1beta1.Module{}, node1.Status.NodeInfo.KernelVersion).Return(&mld1, nil),
+			mockMLDCreator.EXPECT().FromModule(&kmmv1beta1.Module{}, node2.Status.NodeInfo.KernelVersion).Return(&mld2, nil),
 		)
 
 		mappings, resNodes, err := mhr.getRelevantKernelMappingsAndNodes(context.Background(), &kmmv1beta1.Module{}, nodes)
@@ -344,8 +343,8 @@ var _ = Describe("ModuleReconciler_getRelevantKernelMappingsAndNodes", func() {
 		expectedNodes := []v1.Node{node1, node3}
 		expectedMappings := map[string]*api.ModuleLoaderData{"kernelVersion1": &mld1}
 		gomock.InOrder(
-			mockKM.EXPECT().GetModuleLoaderDataForKernel(&kmmv1beta1.Module{}, node1.Status.NodeInfo.KernelVersion).Return(&mld1, nil),
-			mockKM.EXPECT().GetModuleLoaderDataForKernel(&kmmv1beta1.Module{}, node2.Status.NodeInfo.KernelVersion).Return(nil, fmt.Errorf("some error")),
+			mockMLDCreator.EXPECT().FromModule(&kmmv1beta1.Module{}, node1.Status.NodeInfo.KernelVersion).Return(&mld1, nil),
+			mockMLDCreator.EXPECT().FromModule(&kmmv1beta1.Module{}, node2.Status.NodeInfo.KernelVersion).Return(nil, fmt.Errorf("some error")),
 		)
 
 		mappings, resNodes, err := mhr.getRelevantKernelMappingsAndNodes(context.Background(), &kmmv1beta1.Module{}, nodes)

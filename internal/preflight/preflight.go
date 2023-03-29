@@ -8,7 +8,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
@@ -37,17 +36,17 @@ func NewPreflightAPI(
 	signAPI sign.SignManager,
 	registryAPI registry.Registry,
 	statusUpdater statusupdater.PreflightStatusUpdater,
-	kernelAPI module.KernelMapper) PreflightAPI {
+	mldCreator api.ModuleLoaderDataCreator) PreflightAPI {
 	helper := newPreflightHelper(client, buildAPI, signAPI, registryAPI)
 	return &preflight{
-		kernelAPI:     kernelAPI,
+		mldCreator:    mldCreator,
 		statusUpdater: statusUpdater,
 		helper:        helper,
 	}
 }
 
 type preflight struct {
-	kernelAPI     module.KernelMapper
+	mldCreator    api.ModuleLoaderDataCreator
 	statusUpdater statusupdater.PreflightStatusUpdater
 	helper        preflightHelperAPI
 }
@@ -55,7 +54,7 @@ type preflight struct {
 func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mod *kmmv1beta1.Module) (bool, string) {
 	log := ctrlruntime.LoggerFrom(ctx)
 	kernelVersion := pv.Spec.KernelVersion
-	mld, err := p.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
+	mld, err := p.mldCreator.FromModule(mod, kernelVersion)
 	if err != nil {
 		return false, fmt.Sprintf("failed to process kernel mapping in the module %s for kernel version %s", mod.Name, kernelVersion)
 	}
@@ -70,10 +69,7 @@ func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.Pr
 		return true, msg
 	}
 
-	shouldBuild := module.ShouldBeBuilt(mld)
-	shouldSign := module.ShouldBeSigned(mld)
-
-	if shouldBuild {
+	if mld.BuildConfigured() {
 		err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mld.Name, kmmv1beta1.VerificationStageBuild)
 		if err != nil {
 			log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to build stage"), "module", mld.Name, "error", err)
@@ -85,7 +81,7 @@ func (p *preflight) PreflightUpgradeCheck(ctx context.Context, pv *kmmv1beta1.Pr
 		}
 	}
 
-	if shouldSign {
+	if mld.SignConfigured() {
 		err = p.statusUpdater.PreflightSetVerificationStage(ctx, pv, mld.Name, kmmv1beta1.VerificationStageSign)
 		if err != nil {
 			log.Info(utils.WarnString("failed to update the stage of Module CR in preflight to sign stage"), "module", mld.Name, "error", err)
@@ -174,9 +170,9 @@ func (p *preflightHelper) verifyBuild(ctx context.Context, pv *kmmv1beta1.Prefli
 func (p *preflightHelper) verifySign(ctx context.Context, pv *kmmv1beta1.PreflightValidation, mld *api.ModuleLoaderData) (bool, string) {
 	log := ctrlruntime.LoggerFrom(ctx)
 
-	previousImage := ""
-	if module.ShouldBeBuilt(mld) {
-		previousImage = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
+	previousImage, err := mld.UnsignedImage()
+	if err != nil {
+		return false, fmt.Sprintf("could not determine the unsigned image: %v", err)
 	}
 
 	// at this stage we know that eiher mapping Sign or Container sign are defined

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	buildutils "github.com/kubernetes-sigs/kernel-module-management/internal/build/utils"
 	"github.com/mitchellh/hashstructure/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,9 +20,7 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
@@ -41,7 +40,6 @@ type Maker interface {
 
 type maker struct {
 	client    client.Client
-	helper    build.Helper
 	jobHelper utils.JobHelper
 	scheme    *runtime.Scheme
 }
@@ -53,12 +51,10 @@ type hashData struct {
 
 func NewMaker(
 	client client.Client,
-	helper build.Helper,
 	jobHelper utils.JobHelper,
 	scheme *runtime.Scheme) Maker {
 	return &maker{
 		client:    client,
-		helper:    helper,
 		jobHelper: jobHelper,
 		scheme:    scheme,
 	}
@@ -70,11 +66,9 @@ func (m *maker) MakeJobTemplate(
 	owner metav1.Object,
 	pushImage bool) (*batchv1.Job, error) {
 
-	// if build AND sign are specified, then we will build an intermediate image
-	// and let sign produce the one specified in its targetImage
-	containerImage := mld.ContainerImage
-	if module.ShouldBeSigned(mld) {
-		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
+	containerImage, err := mld.BuildDestinationImage()
+	if err != nil {
+		return nil, fmt.Errorf("could not determine the destination image: %v", err)
 	}
 
 	specTemplate := m.specTemplate(mld, containerImage, pushImage)
@@ -162,7 +156,7 @@ func (m *maker) containerArgs(
 		{Name: "MOD_NAME", Value: mld.Name},
 		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
 	}
-	buildArgs := m.helper.ApplyBuildArgOverrides(
+	buildArgs := buildutils.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
 		overrides...,
 	)

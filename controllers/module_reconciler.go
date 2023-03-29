@@ -27,7 +27,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -66,13 +65,13 @@ func NewModuleReconciler(
 	buildAPI build.Manager,
 	signAPI sign.SignManager,
 	daemonAPI daemonset.DaemonSetCreator,
-	kernelAPI module.KernelMapper,
+	mldCreator api.ModuleLoaderDataCreator,
 	metricsAPI metrics.Metrics,
 	filter *filter.Filter,
 	statusUpdaterAPI statusupdater.ModuleStatusUpdater,
 	operatorNamespace string,
 ) *ModuleReconciler {
-	reconHelperAPI := newModuleReconcilerHelper(client, buildAPI, signAPI, daemonAPI, kernelAPI, metricsAPI)
+	reconHelperAPI := newModuleReconcilerHelper(client, buildAPI, signAPI, daemonAPI, mldCreator, metricsAPI)
 	return &ModuleReconciler{
 		daemonAPI:         daemonAPI,
 		reconHelperAPI:    reconHelperAPI,
@@ -200,7 +199,7 @@ type moduleReconcilerHelper struct {
 	buildAPI   build.Manager
 	signAPI    sign.SignManager
 	daemonAPI  daemonset.DaemonSetCreator
-	kernelAPI  module.KernelMapper
+	mldCreator api.ModuleLoaderDataCreator
 	metricsAPI metrics.Metrics
 }
 
@@ -208,14 +207,14 @@ func newModuleReconcilerHelper(client client.Client,
 	buildAPI build.Manager,
 	signAPI sign.SignManager,
 	daemonAPI daemonset.DaemonSetCreator,
-	kernelAPI module.KernelMapper,
+	mldCreator api.ModuleLoaderDataCreator,
 	metricsAPI metrics.Metrics) moduleReconcilerHelperAPI {
 	return &moduleReconcilerHelper{
 		client:     client,
 		buildAPI:   buildAPI,
 		signAPI:    signAPI,
 		daemonAPI:  daemonAPI,
-		kernelAPI:  kernelAPI,
+		mldCreator: mldCreator,
 		metricsAPI: metricsAPI,
 	}
 }
@@ -243,7 +242,7 @@ func (mrh *moduleReconcilerHelper) getRelevantKernelMappingsAndNodes(ctx context
 			continue
 		}
 
-		mld, err := mrh.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
+		mld, err := mrh.mldCreator.FromModule(mod, kernelVersion)
 		if err != nil {
 			nodeLogger.Error(err, "failed to get and process kernel mapping")
 			continue
@@ -320,10 +319,9 @@ func (mrh *moduleReconcilerHelper) handleSigning(ctx context.Context, mld *api.M
 		return true, nil
 	}
 
-	// if we need to sign AND we've built, then we must have built the intermediate image so must figure out its name
-	previousImage := ""
-	if module.ShouldBeBuilt(mld) {
-		previousImage = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
+	previousImage, err := mld.UnsignedImage()
+	if err != nil {
+		return false, fmt.Errorf("could not determine the unsigned image: %v", err)
 	}
 
 	logger := log.FromContext(ctx).WithValues("kernel version", mld.KernelVersion, "image", mld.ContainerImage)

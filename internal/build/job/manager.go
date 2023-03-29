@@ -57,16 +57,13 @@ func (jbm *jobManager) GarbageCollect(ctx context.Context, modName, namespace st
 func (jbm *jobManager) ShouldSync(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
 
 	// if there is no build specified skip
-	if !module.ShouldBeBuilt(mld) {
+	if !mld.BuildConfigured() {
 		return false, nil
 	}
 
-	targetImage := mld.ContainerImage
-
-	// if build AND sign are specified, then we will build an intermediate image
-	// and let sign produce the one specified in targetImage
-	if module.ShouldBeSigned(mld) {
-		targetImage = module.IntermediateImageName(mld.Name, mld.Namespace, targetImage)
+	targetImage, err := mld.BuildDestinationImage()
+	if err != nil {
+		return false, fmt.Errorf("could not determine the destination image: %v", err)
 	}
 
 	// build is specified and targetImage is either the final image or the intermediate image
