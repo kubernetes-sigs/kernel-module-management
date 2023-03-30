@@ -170,7 +170,7 @@ var _ = Describe("prepareModuleLoaderData", func() {
 	})
 
 	DescribeTable("prepare mapping", func(buildExistsInMapping, buildExistsInModuleSpec, signExistsInMapping, SignExistsInModuleSpec,
-		registryTLSExistsInMapping, containerImageExistsInMapping bool) {
+		registryTLSExistsInMapping, containerImageExistsInMapping, inTreeRemovalExistsInMapping bool) {
 		build := &kmmv1beta1.Build{
 			DockerfileConfigMap: &v1.LocalObjectReference{
 				Name: "some name",
@@ -225,17 +225,23 @@ var _ = Describe("prepareModuleLoaderData", func() {
 			mld.Sign = sign
 			signHelper.EXPECT().GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(sign, nil)
 		}
+		if inTreeRemovalExistsInMapping {
+			mld.InTreeRemoval = true
+			tmp := true
+			mapping.InTreeRemoval = &tmp
+		}
 
 		res, err := kh.prepareModuleLoaderData(&mapping, &mod, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*res).To(Equal(mld))
 	},
-		Entry("build in mapping only", true, false, false, false, false, false),
-		Entry("build in spec only", false, true, false, false, false, false),
-		Entry("sign in mapping only", false, false, true, false, false, false),
-		Entry("sign in spec only", false, false, false, true, false, false),
-		Entry("registryTLS in mapping", false, false, false, false, true, false),
-		Entry("containerImage in mapping", false, false, false, false, false, true),
+		Entry("build in mapping only", true, false, false, false, false, false, false),
+		Entry("build in spec only", false, true, false, false, false, false, false),
+		Entry("sign in mapping only", false, false, true, false, false, false, false),
+		Entry("sign in spec only", false, false, false, true, false, false, false),
+		Entry("registryTLS in mapping", false, false, false, false, true, false, false),
+		Entry("containerImage in mapping", false, false, false, false, false, true, false),
+		Entry("inTreeRemoval in mapping", false, false, false, false, false, false, true),
 	)
 })
 

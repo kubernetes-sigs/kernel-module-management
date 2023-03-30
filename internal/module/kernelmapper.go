@@ -113,6 +113,11 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 		mld.ContainerImage = mod.Spec.ModuleLoader.Container.ContainerImage
 	}
 
+	mld.InTreeRemoval = mod.Spec.ModuleLoader.Container.InTreeRemoval
+	if mapping.InTreeRemoval != nil {
+		mld.InTreeRemoval = *mapping.InTreeRemoval
+	}
+
 	mld.KernelVersion = kernelVersion
 	mld.Name = mod.Name
 	mld.Namespace = mod.Namespace

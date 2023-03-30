@@ -51,6 +51,9 @@ type ModuleLoaderData struct {
 	// RegistryTLS set the TLS configs for accessing the registry of the module-loader's image.
 	RegistryTLS *kmmv1beta1.TLSOptions
 
+	// InTreeRemoval - in case it is true, remove kernel module from kernel prior to insertion
+	InTreeRemoval bool
+
 	// used for setting the owner field of jobs/buildconfigs
 	Owner metav1.Object
 }

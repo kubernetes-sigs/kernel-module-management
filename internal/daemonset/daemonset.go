@@ -125,7 +125,7 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 		Lifecycle: &v1.Lifecycle{
 			PostStart: &v1.LifecycleHandler{
 				Exec: &v1.ExecAction{
-					Command: MakeLoadCommand(mld.Modprobe, mld.Name),
+					Command: MakeLoadCommand(mld.InTreeRemoval, mld.Modprobe, mld.Name),
 				},
 			},
 			PreStop: &v1.LifecycleHandler{
@@ -370,13 +370,21 @@ func OverrideLabels(labels, overrides map[string]string) map[string]string {
 	return labels
 }
 
-func MakeLoadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
+func MakeLoadCommand(inTreeRemoval bool, spec kmmv1beta1.ModprobeSpec, modName string) []string {
 	loadCommandShell := []string{
 		"/bin/sh",
 		"-c",
 	}
 
 	var loadCommand strings.Builder
+
+	if inTreeRemoval {
+		loadCommand.WriteString("modprobe -r")
+		if spec.DirName != "" {
+			loadCommand.WriteString(" -d " + spec.DirName)
+		}
+		loadCommand.WriteString(" " + spec.ModuleName + " && ")
+	}
 
 	if fw := spec.FirmwarePath; fw != "" {
 		fmt.Fprintf(&loadCommand, "cp -r %s/* %s && ", fw, nodeVarLibFirmwarePath)
@@ -401,8 +409,8 @@ func MakeLoadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 		loadCommand.WriteString(" -v")
 	}
 
-	if dirName := spec.DirName; dirName != "" {
-		loadCommand.WriteString(" -d " + dirName)
+	if spec.DirName != "" {
+		loadCommand.WriteString(" -d " + spec.DirName)
 	}
 
 	loadCommand.WriteString(" " + spec.ModuleName)
