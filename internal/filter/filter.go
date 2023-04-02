@@ -19,6 +19,7 @@ import (
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 func HasLabel(label string) predicate.Predicate {
@@ -283,4 +284,26 @@ func PodReadinessChangedPredicate(logger logr.Logger) predicate.Predicate {
 
 func PreflightReconcilerUpdatePredicate() predicate.Predicate {
 	return predicate.GenerationChangedPredicate{}
+}
+
+func NodeLabelModuleVersionUpdatePredicate(logger logr.Logger) predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldNode, ok := e.ObjectOld.(*v1.Node)
+			if !ok {
+				logger.Info("Old object is not a node", "object", e.ObjectOld)
+				return true
+			}
+
+			newNode, ok := e.ObjectNew.(*v1.Node)
+			if !ok {
+				logger.Info("New object is not a node", "object", e.ObjectNew)
+				return true
+			}
+
+			oldNodeVersionLabels := utils.GetNodesVersionLabels(oldNode.Labels)
+			newNodeVersionLabels := utils.GetNodesVersionLabels(newNode.Labels)
+			return !reflect.DeepEqual(oldNodeVersionLabels, newNodeVersionLabels)
+		},
+	}
 }
