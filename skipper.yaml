@@ -2,7 +2,7 @@ registry: quay.io
 build-container-image: kmm-operator-build
 
 containers:
-  special-resource-operator-build: Dockerfile.kmm-operator-build
+  kmm-operator-build: Dockerfile.kmm-operator-build
 volumes:
     - $HOME/.cache/go-build:$HOME/.cache/go-build
     - $HOME/go/pkg:/go/pkg
