@@ -1,0 +1,27 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-hub-kmm-sigs-x-k8s-io-v1beta1-managedclustermodule
+  failurePolicy: Fail
+  name: vmanagedclustermodule.kb.io
+  rules:
+  - apiGroups:
+    - hub.kmm.sigs.x-k8s.io
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - managedclustermodules
+  sideEffects: None

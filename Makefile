@@ -97,11 +97,12 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd webhook paths="./api/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) webhook paths="./api/..." output:webhook:artifacts:config=config/webhook
 	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./controllers" output:rbac:artifacts:config=config/rbac
-
 	# Hub
-	$(CONTROLLER_GEN) crd webhook paths="./api-hub/..." output:crd:artifacts:config=config/crd-hub/bases
+	$(CONTROLLER_GEN) crd paths="./api-hub/..." output:crd:artifacts:config=config/crd-hub/bases
+	$(CONTROLLER_GEN) webhook paths="./api-hub/..." output:webhook:artifacts:config=config/webhook-hub
 	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./controllers/hub" output:rbac:artifacts:config=config/rbac-hub
 
 .PHONY: generate
