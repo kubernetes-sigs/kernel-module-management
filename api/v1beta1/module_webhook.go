@@ -19,8 +19,9 @@ package v1beta1
 import (
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/runtime"
 	"regexp"
+
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -30,6 +31,8 @@ import (
 var modulelog = logf.Log.WithName("module-resource")
 
 func (m *Module) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	// controller-runtime will set the path to `validate-<group>-<version>-<resource> so we
+	// need to make sure it is set correctly in the +kubebuilder annotation below.
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(m).
 		Complete()
