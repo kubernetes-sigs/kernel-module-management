@@ -70,7 +70,10 @@ var _ = Describe("MakeJobTemplate", func() {
 	dockerfileConfigMap := v1.LocalObjectReference{Name: "configMapName"}
 	dockerfileCMData := map[string]string{constants.DockerfileCMKey: dockerfile}
 
-	DescribeTable("should set fields correctly", func(buildSecrets []v1.LocalObjectReference, imagePullSecret *v1.LocalObjectReference) {
+	DescribeTable("should set fields correctly", func(
+		buildSecrets []v1.LocalObjectReference,
+		imagePullSecret *v1.LocalObjectReference,
+		useBuildSelector bool) {
 		GinkgoT().Setenv(relatedImageEnvVar, kanikoImage)
 
 		ctx := context.Background()
@@ -88,6 +91,11 @@ var _ = Describe("MakeJobTemplate", func() {
 			RegistryTLS:    &kmmv1beta1.TLSOptions{},
 			Selector:       nodeSelector,
 			KernelVersion:  kernelVersion,
+		}
+
+		if useBuildSelector {
+			mld.Selector = nil
+			mld.Build.Selector = nodeSelector
 		}
 
 		labels := map[string]string{
@@ -250,21 +258,31 @@ var _ = Describe("MakeJobTemplate", func() {
 			"no secrets at all",
 			[]v1.LocalObjectReference{},
 			nil,
+			false,
+		),
+		Entry(
+			"no secrets at all with build.Selector property",
+			[]v1.LocalObjectReference{},
+			nil,
+			true,
 		),
 		Entry(
 			"only buidSecrets",
 			[]v1.LocalObjectReference{{Name: "s1"}},
 			nil,
+			false,
 		),
 		Entry(
 			"only imagePullSecrets",
 			[]v1.LocalObjectReference{},
 			&v1.LocalObjectReference{Name: "pull-push-secret"},
+			false,
 		),
 		Entry(
 			"buildSecrets and imagePullSecrets",
 			[]v1.LocalObjectReference{{Name: "s1"}},
 			&v1.LocalObjectReference{Name: "pull-push-secret"},
+			false,
 		),
 	)
 
