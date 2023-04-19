@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-openapi/swag"
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -252,6 +253,7 @@ var _ = Describe("SetDriverContainerAsDesired", func() {
 								},
 							},
 						},
+						ShareProcessNamespace: swag.Bool(true),
 						ImagePullSecrets: []v1.LocalObjectReference{
 							{Name: imageRepoSecretName},
 						},
