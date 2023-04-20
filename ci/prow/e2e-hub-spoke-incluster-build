@@ -1,0 +1,70 @@
+#!/bin/bash
+#
+set -euxo pipefail
+
+# Install the `clusteradm` command
+curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh | bash
+
+export MINIKUBE=minikube
+export OPERATOR_NAMESPACE=kmm-operator-system
+
+kubectl label node/${MINIKUBE} node-role.kubernetes.io/worker=""
+
+# Init OCM in the cluster
+clusteradm init --wait
+kubectl wait --for=condition=Available deployment/cluster-manager -n open-cluster-management
+kubectl wait --for=condition=Available deployment/cluster-manager-placement-controller -n open-cluster-management-hub
+kubectl wait --for=condition=Available deployment/cluster-manager-registration-controller -n open-cluster-management-hub
+kubectl wait --for=condition=Available deployment/cluster-manager-registration-webhook -n open-cluster-management-hub
+kubectl wait --for=condition=Available deployment/cluster-manager-work-webhook -n open-cluster-management-hub
+
+# Join the "spoke" cluster to the "hub" cluster (in this case a single cluster is both hub and spoke)
+token=$(clusteradm get token | grep token= | cut -d"=" -f2-)
+hub_api_server=$(kubectl config view -o yaml | yq '.clusters[] | select(.. | .name?=="minikube")' | yq '.cluster.server')
+clusteradm join \
+  --hub-token ${token} \
+  --hub-apiserver ${hub_api_server} \
+  --wait \
+  --cluster-name ${MINIKUBE}
+kubectl wait --for=condition=Available deployment/klusterlet-registration-agent -n open-cluster-management-agent
+clusteradm accept --clusters ${MINIKUBE}
+
+
+# Installing required addons to the hub/spoke clusters
+clusteradm install hub-addon --names application-manager
+clusteradm addon enable --names application-manager --clusters ${MINIKUBE}
+
+clusteradm install hub-addon --names governance-policy-framework
+clusteradm addon enable --names governance-policy-framework --clusters ${MINIKUBE}
+
+clusteradm addon enable addon --names config-policy-controller --clusters ${MINIKUBE}
+
+# Install kmm and kmm-hub
+make deploy-hub
+make deploy
+kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-hub-controller-manager -n ${OPERATOR_NAMESPACE}
+kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-controller-manager -n ${OPERATOR_NAMESPACE}
+
+# Apply the ManagedClusterModule
+kubectl apply -f ci/managedclustermodule-kmm-ci-build-sign.yaml
+
+# Wait for the build job to be created and completed
+timeout 1m bash -c 'until kubectl -n ${OPERATOR_NAMESPACE} get jobs -o json | jq -er ".items[].metadata.name | select(.? | match(\"build\"))"; do sleep 1; done'
+export build_job=$(kubectl -n ${OPERATOR_NAMESPACE} get jobs -o json | jq -r '.items[].metadata.name | select(.? | match("build"))')
+kubectl -n ${OPERATOR_NAMESPACE} wait --for=condition=complete --timeout=1m job/${build_job}
+
+# Wait for the sign job to be created and completed
+timeout 1m bash -c 'until kubectl -n ${OPERATOR_NAMESPACE} get jobs -o json | jq -er ".items[].metadata.name | select(.? | match(\"sign\"))"; do sleep 1; done'
+export sign_job=$(kubectl -n ${OPERATOR_NAMESPACE} get jobs -o json | jq -r '.items[].metadata.name | select(.? | match("sign"))')
+kubectl -n ${OPERATOR_NAMESPACE} wait --for=condition=complete --timeout=1m job/${sign_job}
+
+# Waiting for the manifestwork to be created
+timeout 1m bash -c 'until kubectl -n ${MINIKUBE} get manifestwork/mod-example; do sleep 1; done'
+kubectl get manifestwork/mod-example -n ${MINIKUBE} -o yaml | yq '.spec.workload.manifests'
+
+# Validate that the Module and the ModuleLoader are running and make sure it has no `build`/`sign` sections
+timeout 1m bash -c 'until kubectl -n ${OPERATOR_NAMESPACE} get module/mod-example; do sleep 1; done'
+export moduleloader_pod=$(kubectl -n ${OPERATOR_NAMESPACE} get pods | grep mod-example | grep -v build | grep -v sign | cut -d" " -f1)
+kubectl -n ${OPERATOR_NAMESPACE} wait --for=condition=Ready --timeout=1m pod/${moduleloader_pod}
+kubectl -n ${OPERATOR_NAMESPACE} get module/mod-example -o json | \
+    jq '.spec.moduleLoader.container.kernelMappings[] | (.build | type) == "null" and (.sign // null | type) == "null"' | grep true
