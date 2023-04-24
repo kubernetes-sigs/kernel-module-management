@@ -2362,6 +2362,20 @@ spec:
                                 description: ModuleName is the name of the Module
                                   to be loaded.
                                 type: string
+                              modulesLoadingOrder:
+                                description: 'ModulesLoadingOrder defines the dependency
+                                  between kernel modules loading, in case it was not
+                                  created by depmod (independent kernel modules).
+                                  The list order should be: upmost module, then the
+                                  module it depends on and so on. Example: if moduleA
+                                  depends on first loading moduleB, and moduleB depends
+                                  on first loading moduleC the entry should look:
+                                  ModulesLoadingOrder: - moduleA - moduleB - moduleC
+                                  In order to load all 3 modules, moduleA shoud be
+                                  defined in the ModuleName parameter of this struct'
+                                items:
+                                  type: string
+                                type: array
                               parameters:
                                 description: 'Parameters is an optional list of kernel
                                   module parameters to be provided to modprobe. They
