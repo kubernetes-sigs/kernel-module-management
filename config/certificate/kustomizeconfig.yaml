@@ -14,3 +14,9 @@ varReference:
 - kind: Certificate
   group: cert-manager.io
   path: spec/dnsNames
+
+namePrefix:
+- kind: Certificate
+  group: cert-manager.io
+  name: serving-cert
+  path: spec/secretName
