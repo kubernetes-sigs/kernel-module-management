@@ -52,19 +52,19 @@ func (mr *MockClusterAPIMockRecorder) BuildAndSign(ctx, mcm, cluster interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BuildAndSign", reflect.TypeOf((*MockClusterAPI)(nil).BuildAndSign), ctx, mcm, cluster)
 }
 
-// GarbageCollectBuilds mocks base method.
-func (m *MockClusterAPI) GarbageCollectBuilds(ctx context.Context, mcm v1beta1.ManagedClusterModule) ([]string, error) {
+// GarbageCollectBuildsAndSigns mocks base method.
+func (m *MockClusterAPI) GarbageCollectBuildsAndSigns(ctx context.Context, mcm v1beta1.ManagedClusterModule) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GarbageCollectBuilds", ctx, mcm)
+	ret := m.ctrl.Call(m, "GarbageCollectBuildsAndSigns", ctx, mcm)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GarbageCollectBuilds indicates an expected call of GarbageCollectBuilds.
-func (mr *MockClusterAPIMockRecorder) GarbageCollectBuilds(ctx, mcm interface{}) *gomock.Call {
+// GarbageCollectBuildsAndSigns indicates an expected call of GarbageCollectBuildsAndSigns.
+func (mr *MockClusterAPIMockRecorder) GarbageCollectBuildsAndSigns(ctx, mcm interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollectBuilds", reflect.TypeOf((*MockClusterAPI)(nil).GarbageCollectBuilds), ctx, mcm)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollectBuildsAndSigns", reflect.TypeOf((*MockClusterAPI)(nil).GarbageCollectBuildsAndSigns), ctx, mcm)
 }
 
 // RequestedManagedClusterModule mocks base method.

@@ -29,7 +29,7 @@ type ClusterAPI interface {
 	RequestedManagedClusterModule(ctx context.Context, namespacedName types.NamespacedName) (*hubv1beta1.ManagedClusterModule, error)
 	SelectedManagedClusters(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule) (*clusterv1.ManagedClusterList, error)
 	BuildAndSign(ctx context.Context, mcm hubv1beta1.ManagedClusterModule, cluster clusterv1.ManagedCluster) (bool, error)
-	GarbageCollectBuilds(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error)
+	GarbageCollectBuildsAndSigns(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error)
 }
 
 type clusterAPI struct {
@@ -140,8 +140,17 @@ func (c *clusterAPI) BuildAndSign(
 	return completedSuccessfully, nil
 }
 
-func (c *clusterAPI) GarbageCollectBuilds(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error) {
-	return c.buildAPI.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm)
+func (c *clusterAPI) GarbageCollectBuildsAndSigns(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error) {
+	deletedBuilds, err := c.buildAPI.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to garbage collect build object: %v", err)
+	}
+
+	deletedSigns, err := c.signAPI.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to garbage collect sign object: %v", err)
+	}
+	return append(deletedBuilds, deletedSigns...), nil
 }
 
 func (c *clusterAPI) kernelMappingsByKernelVersion(

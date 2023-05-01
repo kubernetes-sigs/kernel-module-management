@@ -136,9 +136,9 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, req ctrl
 		return res, fmt.Errorf("failed to garbage collect ManifestWorks with no matching cluster selector: %v", err)
 	}
 
-	deleted, err := r.clusterAPI.GarbageCollectBuilds(ctx, *mcm)
+	deleted, err := r.clusterAPI.GarbageCollectBuildsAndSigns(ctx, *mcm)
 	if err != nil {
-		return res, fmt.Errorf("failed to garbage collect build objects: %v", err)
+		return res, fmt.Errorf("failed to garbage collect build and sign objects: %v", err)
 	}
 	if len(deleted) > 0 {
 		logger.Info("Garbage-collected Build objects", "names", deleted)

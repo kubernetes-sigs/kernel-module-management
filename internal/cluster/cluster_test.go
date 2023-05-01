@@ -15,383 +15,395 @@ import (
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
-var _ = Describe("ClusterAPI", func() {
-	var (
-		ctrl   *gomock.Controller
-		clnt   *client.MockClient
-		mockKM *module.MockKernelMapper
-		mockBM *build.MockManager
-		mockSM *sign.MockSignManager
-	)
+const (
+	mcmName = "test-module"
+
+	namespace = "namespace"
+)
+
+var _ = Describe("RequestedManagedClusterModule", func() {
+	var c ClusterAPI
 
 	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		mockKM = module.NewMockKernelMapper(ctrl)
-		mockBM = build.NewMockManager(ctrl)
-		mockSM = sign.NewMockSignManager(ctrl)
+		c = NewClusterAPI(clnt, mockKM, nil, nil, "")
 	})
 
-	const (
-		mcmName = "test-module"
-
-		namespace = "namespace"
-	)
-
-	var _ = Describe("RequestedManagedClusterModule", func() {
-		It("should return the requested ManagedClusterModule", func() {
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcmName,
-					Namespace: namespace,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{},
-					Selector:   map[string]string{"key": "value"},
-				},
-			}
-
-			nsn := types.NamespacedName{
+	It("should return the requested ManagedClusterModule", func() {
+		mcm := &hubv1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{
 				Name:      mcmName,
 				Namespace: namespace,
-			}
+			},
+			Spec: hubv1beta1.ManagedClusterModuleSpec{
+				ModuleSpec: kmmv1beta1.ModuleSpec{},
+				Selector:   map[string]string{"key": "value"},
+			},
+		}
 
-			ctx := context.Background()
+		nsn := types.NamespacedName{
+			Name:      mcmName,
+			Namespace: namespace,
+		}
 
-			gomock.InOrder(
-				clnt.EXPECT().Get(ctx, nsn, gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, m *hubv1beta1.ManagedClusterModule, _ ...ctrlclient.GetOption) error {
-						m.ObjectMeta = mcm.ObjectMeta
-						m.Spec = mcm.Spec
-						return nil
-					},
-				),
-			)
+		ctx := context.Background()
 
-			c := NewClusterAPI(clnt, mockKM, nil, nil, "")
-
-			res, err := c.RequestedManagedClusterModule(ctx, nsn)
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(res).To(Equal(mcm))
-		})
-
-		It("should return the respective error when the client Get request fails", func() {
-			nsn := types.NamespacedName{
-				Name:      mcmName,
-				Namespace: namespace,
-			}
-
-			ctx := context.Background()
-
-			gomock.InOrder(
-				clnt.EXPECT().Get(ctx, nsn, gomock.Any()).Return(errors.New("generic-error")),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, nil, nil, "")
-
-			res, err := c.RequestedManagedClusterModule(ctx, nsn)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("generic-error"))
-			Expect(res).To(BeNil())
-		})
-	})
-
-	var _ = Describe("SelectedManagedClusters", func() {
-		It("should return the ManagedClusters matching the ManagedClusterModule selector", func() {
-			mcm := &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcmName,
-					Namespace: namespace,
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, nsn, gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, m *hubv1beta1.ManagedClusterModule, _ ...ctrlclient.GetOption) error {
+					m.ObjectMeta = mcm.ObjectMeta
+					m.Spec = mcm.Spec
+					return nil
 				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{},
-					Selector:   map[string]string{"key": "value"},
-				},
-			}
-
-			clusterList := clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-					},
-				},
-			}
-
-			ctx := context.Background()
-
-			gomock.InOrder(
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, list *clusterv1.ManagedClusterList, _ ...interface{}) error {
-						list.Items = clusterList.Items
-						return nil
-					},
-				),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, nil, nil, "")
-
-			res, err := c.SelectedManagedClusters(ctx, mcm)
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(res).To(Equal(&clusterList))
-		})
-
-		It("should return the respective error when the client List request fails", func() {
-			ctx := context.Background()
-
-			gomock.InOrder(
-				clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(errors.New("generic-error")),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, nil, nil, "")
-
-			res, err := c.SelectedManagedClusters(ctx, &hubv1beta1.ManagedClusterModule{})
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("generic-error"))
-			Expect(res.Items).To(BeEmpty())
-		})
-	})
-
-	var _ = Describe("BuildAndSign", func() {
-		const (
-			imageName = "test-image"
-
-			kernelVersion = "1.2.3"
+			),
 		)
 
-		var (
-			mld = api.ModuleLoaderData{
-				ContainerImage: imageName,
-				KernelVersion:  kernelVersion,
-			}
+		res, err := c.RequestedManagedClusterModule(ctx, nsn)
 
-			mcm = &hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcmName,
-					Namespace: namespace,
-				},
-				Spec: hubv1beta1.ManagedClusterModuleSpec{
-					ModuleSpec: kmmv1beta1.ModuleSpec{},
-					Selector:   map[string]string{"key": "value"},
-				},
-			}
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(Equal(mcm))
+	})
 
-			clusterList = clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-						Status: clusterv1.ManagedClusterStatus{
-							ClusterClaims: []clusterv1.ManagedClusterClaim{
-								{
-									Name:  constants.KernelVersionsClusterClaimName,
-									Value: kernelVersion,
-								},
+	It("should return the respective error when the client Get request fails", func() {
+		nsn := types.NamespacedName{
+			Name:      mcmName,
+			Namespace: namespace,
+		}
+
+		ctx := context.Background()
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, nsn, gomock.Any()).Return(errors.New("generic-error")),
+		)
+
+		res, err := c.RequestedManagedClusterModule(ctx, nsn)
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("generic-error"))
+		Expect(res).To(BeNil())
+	})
+})
+
+var _ = Describe("SelectedManagedClusters", func() {
+	var c ClusterAPI
+
+	BeforeEach(func() {
+		c = NewClusterAPI(clnt, mockKM, nil, nil, "")
+	})
+
+	It("should return the ManagedClusters matching the ManagedClusterModule selector", func() {
+		mcm := &hubv1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      mcmName,
+				Namespace: namespace,
+			},
+			Spec: hubv1beta1.ManagedClusterModuleSpec{
+				ModuleSpec: kmmv1beta1.ModuleSpec{},
+				Selector:   map[string]string{"key": "value"},
+			},
+		}
+
+		clusterList := clusterv1.ManagedClusterList{
+			Items: []clusterv1.ManagedCluster{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "default",
+						Labels: map[string]string{"key": "value"},
+					},
+				},
+			},
+		}
+
+		ctx := context.Background()
+
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *clusterv1.ManagedClusterList, _ ...interface{}) error {
+					list.Items = clusterList.Items
+					return nil
+				},
+			),
+		)
+
+		res, err := c.SelectedManagedClusters(ctx, mcm)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(Equal(&clusterList))
+	})
+
+	It("should return the respective error when the client List request fails", func() {
+		ctx := context.Background()
+
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(errors.New("generic-error")),
+		)
+
+		res, err := c.SelectedManagedClusters(ctx, &hubv1beta1.ManagedClusterModule{})
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("generic-error"))
+		Expect(res.Items).To(BeEmpty())
+	})
+})
+
+var _ = Describe("BuildAndSign", func() {
+	const (
+		imageName = "test-image"
+
+		kernelVersion = "1.2.3"
+	)
+
+	var c ClusterAPI
+
+	BeforeEach(func() {
+		c = NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
+	})
+
+	var (
+		mld = api.ModuleLoaderData{
+			ContainerImage: imageName,
+			KernelVersion:  kernelVersion,
+		}
+
+		mcm = &hubv1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      mcmName,
+				Namespace: namespace,
+			},
+			Spec: hubv1beta1.ManagedClusterModuleSpec{
+				ModuleSpec: kmmv1beta1.ModuleSpec{},
+				Selector:   map[string]string{"key": "value"},
+			},
+		}
+
+		clusterList = clusterv1.ManagedClusterList{
+			Items: []clusterv1.ManagedCluster{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "default",
+						Labels: map[string]string{"key": "value"},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						ClusterClaims: []clusterv1.ManagedClusterClaim{
+							{
+								Name:  constants.KernelVersionsClusterClaimName,
+								Value: kernelVersion,
 							},
 						},
 					},
 				},
-			}
+			},
+		}
 
-			mod = kmmv1beta1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mcm.Name,
-					Namespace: namespace,
-				},
-				Spec: mcm.Spec.ModuleSpec,
-			}
+		mod = kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      mcm.Name,
+				Namespace: namespace,
+			},
+			Spec: mcm.Spec.ModuleSpec,
+		}
 
-			ctx = context.Background()
+		ctx = context.Background()
+	)
+
+	It("should do nothing when no kernel mappings are found", func() {
+		gomock.InOrder(
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, errors.New("generic-error")),
 		)
 
-		It("should do nothing when no kernel mappings are found", func() {
-			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, errors.New("generic-error")),
-			)
+		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
-
-			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
-			Expect(err).ToNot(HaveOccurred())
-			Expect(completed).To(BeFalse())
-		})
-
-		It("should return an error when ClusterClaims are not found or empty", func() {
-			clusterList := clusterv1.ManagedClusterList{
-				Items: []clusterv1.ManagedCluster{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:   "default",
-							Labels: map[string]string{"key": "value"},
-						},
-					},
-				},
-			}
-
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
-
-			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
-			Expect(err).To(HaveOccurred())
-			Expect(completed).To(BeFalse())
-		})
-
-		It("should do nothing when Build and Sign are not needed", func() {
-			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
-				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
-				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
-
-			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
-			Expect(err).ToNot(HaveOccurred())
-			Expect(completed).To(BeTrue())
-		})
-
-		It("should run build sync if needed", func() {
-			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
-				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
-				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
-
-			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
-			Expect(err).ToNot(HaveOccurred())
-			Expect(completed).To(BeTrue())
-		})
-
-		It("should return an error when build sync errors", func() {
-			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
-				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(""), errors.New("test-error")),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
-
-			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
-			Expect(err).To(HaveOccurred())
-			Expect(completed).To(BeFalse())
-		})
-
-		It("should run sign sync if needed", func() {
-			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
-				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
-				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
-
-			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
-			Expect(err).ToNot(HaveOccurred())
-			Expect(completed).To(BeFalse())
-		})
-
-		It("should return an error when sign sync errors", func() {
-			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
-				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
-				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(""), errors.New("test-error")),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
-
-			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
-			Expect(err).To(HaveOccurred())
-			Expect(completed).To(BeFalse())
-		})
-
-		It("should not run sign sync when build sync does not complete", func() {
-			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
-				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
-
-			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
-			Expect(err).ToNot(HaveOccurred())
-			Expect(completed).To(BeFalse())
-		})
-
-		It("should run both build sync and sign sync when build is completed", func() {
-			gomock.InOrder(
-				mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
-				mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
-				mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-				mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
-			)
-
-			c := NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
-
-			completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
-			Expect(err).ToNot(HaveOccurred())
-			Expect(completed).To(BeTrue())
-		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(completed).To(BeFalse())
 	})
 
-	var _ = Describe("GarbageCollectBuilds", func() {
-		It("should return the deleted build names when garbage collection succeeds", func() {
-			mcm := hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{Name: mcmName},
-			}
+	It("should return an error when ClusterClaims are not found or empty", func() {
+		clusterList := clusterv1.ManagedClusterList{
+			Items: []clusterv1.ManagedCluster{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "default",
+						Labels: map[string]string{"key": "value"},
+					},
+				},
+			},
+		}
 
-			collectedBuilds := []string{"test-build"}
+		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 
-			ctx := context.Background()
+		Expect(err).To(HaveOccurred())
+		Expect(completed).To(BeFalse())
+	})
 
-			gomock.InOrder(
-				mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(collectedBuilds, nil),
-			)
+	It("should do nothing when Build and Sign are not needed", func() {
+		gomock.InOrder(
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
+		)
 
-			c := NewClusterAPI(clnt, nil, mockBM, nil, namespace)
+		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 
-			collected, err := c.GarbageCollectBuilds(ctx, mcm)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(completed).To(BeTrue())
+	})
 
-			Expect(err).ToNot(HaveOccurred())
-			Expect(collected).To(Equal(collectedBuilds))
-		})
+	It("should run build sync if needed", func() {
+		gomock.InOrder(
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
+		)
 
-		It("should return an error when garbage collection fails", func() {
-			mcm := hubv1beta1.ManagedClusterModule{
-				ObjectMeta: metav1.ObjectMeta{Name: mcmName},
-			}
-			ctx := context.Background()
+		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 
-			gomock.InOrder(
-				mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(nil, errors.New("test")),
-			)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(completed).To(BeTrue())
+	})
 
-			c := NewClusterAPI(clnt, nil, mockBM, nil, namespace)
+	It("should return an error when build sync errors", func() {
+		gomock.InOrder(
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(""), errors.New("test-error")),
+		)
 
-			_, err := c.GarbageCollectBuilds(ctx, mcm)
+		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
 
-			Expect(err).To(HaveOccurred())
-		})
+		Expect(err).To(HaveOccurred())
+		Expect(completed).To(BeFalse())
+	})
+
+	It("should run sign sync if needed", func() {
+		gomock.InOrder(
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
+		)
+
+		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(completed).To(BeFalse())
+	})
+
+	It("should return an error when sign sync errors", func() {
+		gomock.InOrder(
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(""), errors.New("test-error")),
+		)
+
+		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+
+		Expect(err).To(HaveOccurred())
+		Expect(completed).To(BeFalse())
+	})
+
+	It("should not run sign sync when build sync does not complete", func() {
+		gomock.InOrder(
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
+		)
+
+		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(completed).To(BeFalse())
+	})
+
+	It("should run both build sync and sign sync when build is completed", func() {
+		gomock.InOrder(
+			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
+			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
+		)
+
+		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(completed).To(BeTrue())
+	})
+})
+
+var _ = Describe("GarbageCollectBuildsAndSigns", func() {
+	var c ClusterAPI
+
+	BeforeEach(func() {
+		c = NewClusterAPI(clnt, nil, mockBM, mockSM, namespace)
+	})
+
+	DescribeTable("return deleted builds and signs if no failure", func(buildsToDeleteFound, signsToDeleteFound bool) {
+		deletedBuilds := []string{}
+		deletedSigns := []string{}
+		if buildsToDeleteFound {
+			deletedBuilds = append(deletedBuilds, "test-build")
+		}
+		if signsToDeleteFound {
+			deletedSigns = append(deletedSigns, "test-sign")
+		}
+		expectedCollected := append(deletedBuilds, deletedSigns...)
+		mcm := hubv1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{Name: mcmName},
+		}
+		ctx := context.Background()
+
+		gomock.InOrder(
+			mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(deletedBuilds, nil),
+			mockSM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(deletedSigns, nil),
+		)
+
+		collected, err := c.GarbageCollectBuildsAndSigns(ctx, mcm)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(collected).To(Equal(expectedCollected))
+	},
+		Entry("builds to delete found, signs to delete not found", true, false),
+		Entry("builds to delete not found, signs to delete found", false, true),
+		Entry("builds to delete found, signs to delete found", true, true),
+		Entry("builds to delete not found, signs to delete not found", true, true),
+	)
+
+	It("should return an error when builds garbage collection fails", func() {
+		mcm := hubv1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{Name: mcmName},
+		}
+		ctx := context.Background()
+		collectedBuilds := []string{"test-build"}
+
+		gomock.InOrder(
+			mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(collectedBuilds, nil),
+			mockSM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(nil, errors.New("test")),
+		)
+
+		collected, err := c.GarbageCollectBuildsAndSigns(ctx, mcm)
+
+		Expect(err).To(HaveOccurred())
+		Expect(collected).To(BeNil())
+	})
+
+	It("should return an error when signs garbage collection fails", func() {
+		mcm := hubv1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{Name: mcmName},
+		}
+		ctx := context.Background()
+
+		gomock.InOrder(
+			mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(nil, errors.New("test")),
+		)
+
+		collected, err := c.GarbageCollectBuildsAndSigns(ctx, mcm)
+
+		Expect(err).To(HaveOccurred())
+		Expect(collected).To(BeNil())
 	})
 })
