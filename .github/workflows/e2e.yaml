@@ -39,6 +39,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install yq
+        run: sudo snap install yq
+
       - name: Build the image
         run: make docker-build-hub HUB_IMG=kmm-hub:local
 
@@ -122,15 +125,22 @@ jobs:
       registry:
         image: registry:2
         ports: ['5000:5000/tcp']
+        options: --restart=always
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Give network connectivity to minikube clusters running the none driver
+        run: |
+          sudo iptables -I DOCKER-USER -i bridge -o bridge -j ACCEPT
+          sudo iptables -I DOCKER-USER -i bridge ! -o bridge -j ACCEPT
+
       - name: Create the minikube cluster
-        uses: ./.github/actions/create-minikube-cluster
+        uses: medyagh/setup-minikube@latest
         with:
+          driver: none
           start-args: --insecure-registry=host.minikube.internal:5000
 
       - name: Download container images
@@ -149,10 +159,10 @@ jobs:
         run: |
           docker load -i artifacts/ci-image-signer/kmm-signimage_local.tar
           docker load -i artifacts/ci-image-worker/kmm-worker_local.tar
-          
+
           docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
           docker tag kmm-worker:local localhost:5000/kmm/worker:local
-          
+
           docker push localhost:5000/kmm/signimage:local
           docker push localhost:5000/kmm/worker:local
 
@@ -174,7 +184,7 @@ jobs:
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
       - name: Run test
-        run: ${{ matrix.script }}
+        run: GIT_REF=$GITHUB_REF ${{ matrix.script }}
         env:
           ${{ matrix.env }}
 

@@ -11,7 +11,6 @@ spec:
           - cert-manager
           - kmm-operator-system
     - logs:
-        namespace: kmm-operator-system
         selector:
           - app.kubernetes.io/part-of=kmm
   hostCollectors:

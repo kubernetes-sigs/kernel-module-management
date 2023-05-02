@@ -6,11 +6,14 @@ check_module_not_loaded () {
   local module_name="$1"
 
   echo "Check that the ${module_name} module is not loaded on the node..."
-  if minikube ssh -- lsmod | grep "${module_name}"; then
+  if lsmod | grep "${module_name}"; then
    echo "Unexpected lsmod output - ${module_name} is loaded on the node"
    return 1
   fi
 }
+
+
+: "$GIT_REF"
 
 echo "Deploy KMM..."
 make deploy
@@ -19,10 +22,10 @@ check_module_not_loaded "kmm_ci_a"
 check_module_not_loaded "kmm_ci_b"
 
 echo "Load the dummy module to be removed by the worker Pod before loading kmm-ci"
-minikube ssh -- sudo modprobe dummy
+sudo modprobe dummy
 
 echo "Verify that dummy is loaded"
-minikube ssh -- lsmod | grep dummy
+lsmod | grep dummy
 
 echo "Create a build secret..."
 oc create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
@@ -35,14 +38,22 @@ kubectl apply -f ci/secret_kmm-kmod-signing.yaml
 
 kubectl wait --for=condition=Available deployment/kmm-operator-controller -n kmm-operator-system
 
+echo "Set the GIT_REF build argument"
+yq '
+  .spec.moduleLoader.container.kernelMappings[select(.regexp == "^.+$")].build.buildArgs = [{"name": "GIT_REF", "value": strenv(GIT_REF)}]
+' ci/module-kmm-ci-build-sign.yaml | tee module.replaced.yaml
+
 echo "Add an kmm-ci Module that contains a valid mapping..."
-kubectl apply -f ci/module-kmm-ci-build-sign.yaml
+kubectl apply -f module.replaced.yaml
 
 echo "Check that the module gets loaded on the node..."
-timeout 10m bash -c 'until minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
+timeout 10m bash -c 'until lsmod | grep kmm_ci_a; do sleep 3; done'
+
+echo "Check that the module successfully read the firmware"
+dmesg | grep "ALL GOOD WITH FIRMWARE kmm_ci"
 
 echo "Check that the dependent module is also loaded on the node..."
-if ! minikube ssh -- lsmod | grep kmm_ci_b; then
+if ! lsmod | grep kmm_ci_b; then
   echo "Unexpected lsmod output - kmm_ci_b is not loaded on the node"
   return 1
 fi
@@ -53,7 +64,7 @@ echo "Remove the Module..."
 kubectl delete -f ci/module-kmm-ci-build-sign.yaml --wait=false
 
 echo "Check that the module gets unloaded from the node..."
-timeout 1m bash -c 'until ! minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
+timeout 1m bash -c 'until ! lsmod | grep kmm_ci_a; do sleep 3; done'
 
 echo "Check that the dependent module is also unloaded from the node..."
 check_module_not_loaded "kmm_ci_b"

@@ -1,8 +1,5 @@
 healthProbeBindAddress: :8081
 webhookPort: 9443
-leaderElection:
-  enabled: true
-  resourceID: kmm.sigs.x-k8s.io
 metrics:
   enableAuthnAuthz: true
   bindAddress: 0.0.0.0:8443
@@ -10,3 +7,4 @@ metrics:
 worker:
   runAsUser: 0
   seLinuxType: spc_t
+  setFirmwareClassPath: /var/lib/firmware
