@@ -1,10 +1,12 @@
 package daemonset
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"text/template"
 
 	"github.com/go-openapi/swag"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -179,9 +181,14 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 	}
 
 	var modulesOrderAnnotations map[string]string
-	if mld.Modprobe.ModulesLoadingOrder != nil {
+	if len(mld.Modprobe.ModulesLoadingOrder) >= 2 {
+		modulesOrderConf, err := getModulesOrderAnnotationValue(mld)
+		if err != nil {
+			return fmt.Errorf("could not generate the softdep configuration: %v", err)
+		}
+
 		modulesOrderAnnotations = map[string]string{
-			"modules-order": getModulesOrderAnnotationValue(mld),
+			"modules-order": modulesOrderConf,
 		}
 		softdepVolume := v1.Volume{
 			Name: "modules-order",
@@ -494,19 +501,18 @@ func makeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 	return append(unloadCommandShell, unloadCommand.String())
 }
 
-func getModulesOrderAnnotationValue(mld *api.ModuleLoaderData) string {
-	modulesNames := mld.Modprobe.ModulesLoadingOrder
-	softDepData := ""
-	for i := 0; i < len(modulesNames); i++ {
-		if i == len(modulesNames)-1 {
-			break
-		}
-		line := prepareSoftDepLine(modulesNames[i], modulesNames[i+1])
-		softDepData = softDepData + line
-	}
-	return softDepData
-}
+var softdepTemplate = template.Must(
+	template.New("softdep").Parse(
+		`{{ range $index, $mod := slice $ 1 -}}
+softdep {{ index $ $index }} pre: {{ $mod }}
+{{ end -}}
+`),
+)
 
-func prepareSoftDepLine(dependendModuleName, moduleName string) string {
-	return fmt.Sprintf("softdep %s pre: %s\n", dependendModuleName, moduleName)
+func getModulesOrderAnnotationValue(mld *api.ModuleLoaderData) (string, error) {
+	var buf bytes.Buffer
+
+	err := softdepTemplate.Execute(&buf, mld.Modprobe.ModulesLoadingOrder)
+
+	return buf.String(), err
 }
