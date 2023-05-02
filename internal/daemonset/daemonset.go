@@ -57,19 +57,12 @@ func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, mod *kmmv1beta
 	deleted := make([]string, 0)
 
 	for _, ds := range existingDS {
-		if isOlderVersionUnusedDaemonset(&ds, mod.Spec.ModuleLoader.Container.Version) {
+		if isOlderVersionUnusedDaemonset(&ds, mod.Spec.ModuleLoader.Container.Version) ||
+			isModuleLoaderDaemonsetWithInvalidKernel(&ds, dc.kernelLabel, validKernels) {
+			deleted = append(deleted, ds.Name)
 			if err := dc.client.Delete(ctx, &ds); err != nil {
 				return nil, fmt.Errorf("could not delete DaemonSet %s: %v", ds.Name, err)
 			}
-			deleted = append(deleted, ds.Name)
-			continue
-		}
-		if isModuleLoaderDaemonsetWithInvalidKernel(&ds, dc.kernelLabel, validKernels) {
-			if err := dc.client.Delete(ctx, &ds); err != nil {
-				return nil, fmt.Errorf("could not delete DaemonSet %s: %v", ds.Name, err)
-			}
-
-			deleted = append(deleted, ds.Name)
 		}
 	}
 
@@ -125,12 +118,12 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 		Lifecycle: &v1.Lifecycle{
 			PostStart: &v1.LifecycleHandler{
 				Exec: &v1.ExecAction{
-					Command: MakeLoadCommand(mld.InTreeRemoval, mld.Modprobe, mld.Name),
+					Command: makeLoadCommand(mld.InTreeRemoval, mld.Modprobe, mld.Name),
 				},
 			},
 			PreStop: &v1.LifecycleHandler{
 				Exec: &v1.ExecAction{
-					Command: MakeUnloadCommand(mld.Modprobe, mld.Name),
+					Command: makeUnloadCommand(mld.Modprobe, mld.Name),
 				},
 			},
 		},
@@ -185,11 +178,40 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 		container.VolumeMounts = append(container.VolumeMounts, firmwareVolumeMount)
 	}
 
+	var modulesOrderAnnotations map[string]string
+	if mld.Modprobe.ModulesLoadingOrder != nil {
+		modulesOrderAnnotations = map[string]string{
+			"modules-order": getModulesOrderAnnotationValue(mld),
+		}
+		softdepVolume := v1.Volume{
+			Name: "modules-order",
+			VolumeSource: v1.VolumeSource{
+				DownwardAPI: &v1.DownwardAPIVolumeSource{
+					Items: []v1.DownwardAPIVolumeFile{
+						{
+							Path:     "softdep.conf",
+							FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.annotations['modules-order']"},
+						},
+					},
+				},
+			},
+		}
+		volumes = append(volumes, softdepVolume)
+
+		softDepVolumeMount := v1.VolumeMount{
+			Name:      "modules-order",
+			ReadOnly:  true,
+			MountPath: "/etc/modprobe.d",
+		}
+		container.VolumeMounts = append(container.VolumeMounts, softDepVolumeMount)
+	}
+
 	ds.Spec = appsv1.DaemonSetSpec{
 		Template: v1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels:     standardLabels,
-				Finalizers: []string{constants.NodeLabelerFinalizer},
+				Labels:      standardLabels,
+				Finalizers:  []string{constants.NodeLabelerFinalizer},
+				Annotations: modulesOrderAnnotations,
 			},
 			Spec: v1.PodSpec{
 				ShareProcessNamespace: swag.Bool(true),
@@ -276,9 +298,8 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 						VolumeMounts:    append(mod.Spec.DevicePlugin.Container.VolumeMounts, containerVolumeMounts...),
 					},
 				},
-				PriorityClassName: "system-node-critical",
-				ImagePullSecrets:  GetPodPullSecrets(mod.Spec.ImageRepoSecret),
-				//NodeSelector:       map[string]string{getDriverContainerNodeLabel(mod.Namespace, mod.Name, true): ""},
+				PriorityClassName:  "system-node-critical",
+				ImagePullSecrets:   GetPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:       nodeSelector,
 				ServiceAccountName: mod.Spec.DevicePlugin.ServiceAccountName,
 				Volumes:            append([]v1.Volume{devicePluginVolume}, mod.Spec.DevicePlugin.Volumes...),
@@ -375,7 +396,7 @@ func OverrideLabels(labels, overrides map[string]string) map[string]string {
 	return labels
 }
 
-func MakeLoadCommand(inTreeRemoval bool, spec kmmv1beta1.ModprobeSpec, modName string) []string {
+func makeLoadCommand(inTreeRemoval bool, spec kmmv1beta1.ModprobeSpec, modName string) []string {
 	loadCommandShell := []string{
 		"/bin/sh",
 		"-c",
@@ -430,7 +451,7 @@ func MakeLoadCommand(inTreeRemoval bool, spec kmmv1beta1.ModprobeSpec, modName s
 	return append(loadCommandShell, loadCommand.String())
 }
 
-func MakeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
+func makeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 	unloadCommandShell := []string{
 		"/bin/sh",
 		"-c",
@@ -471,4 +492,21 @@ func MakeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 	unloadCommand.WriteString(fwUnloadCommand)
 
 	return append(unloadCommandShell, unloadCommand.String())
+}
+
+func getModulesOrderAnnotationValue(mld *api.ModuleLoaderData) string {
+	modulesNames := mld.Modprobe.ModulesLoadingOrder
+	softDepData := ""
+	for i := 0; i < len(modulesNames); i++ {
+		if i == len(modulesNames)-1 {
+			break
+		}
+		line := prepareSoftDepLine(modulesNames[i], modulesNames[i+1])
+		softDepData = softDepData + line
+	}
+	return softDepData
+}
+
+func prepareSoftDepLine(dependendModuleName, moduleName string) string {
+	return fmt.Sprintf("softdep %s pre: %s\n", dependendModuleName, moduleName)
 }
