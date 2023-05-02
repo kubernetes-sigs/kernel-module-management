@@ -3,6 +3,8 @@ package cluster
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
@@ -146,6 +148,54 @@ var _ = Describe("SelectedManagedClusters", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("generic-error"))
 		Expect(res.Items).To(BeEmpty())
+	})
+})
+
+var _ = Describe("KernelVersions", func() {
+	var c ClusterAPI
+
+	BeforeEach(func() {
+		c = NewClusterAPI(clnt, mockKM, nil, nil, "")
+	})
+
+	It("should return an error when no cluster claims are found", func() {
+		cluster := clusterv1.ManagedCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "default",
+				Labels: map[string]string{"key": "value"},
+			},
+		}
+
+		versions, err := c.KernelVersions(cluster)
+
+		Expect(err).To(HaveOccurred())
+		Expect(versions).To(BeNil())
+	})
+
+	It("should return the sorted kernel versions found in the KMM cluster claim", func() {
+		kernelVersions := []string{"2.0.0", "1.0.0"}
+
+		cluster := clusterv1.ManagedCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "default",
+				Labels: map[string]string{"key": "value"},
+			},
+			Status: clusterv1.ManagedClusterStatus{
+				ClusterClaims: []clusterv1.ManagedClusterClaim{
+					{
+						Name:  constants.KernelVersionsClusterClaimName,
+						Value: strings.Join(kernelVersions, "\n"),
+					},
+				},
+			},
+		}
+
+		versions, err := c.KernelVersions(cluster)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(versions).To(HaveLen(2))
+		Expect(versions).To(ContainElements(kernelVersions[0], kernelVersions[1]))
+		Expect(sort.StringsAreSorted(versions)).To(BeTrue())
 	})
 })
 

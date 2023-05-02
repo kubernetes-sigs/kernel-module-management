@@ -49,6 +49,75 @@ var _ = Describe("IntermediateImageName", func() {
 	})
 })
 
+var _ = Describe("ImageDigest", func() {
+	const (
+		imageName = "image-name"
+		namespace = "test"
+	)
+
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+
+		mockRegistry *registry.MockRegistry
+
+		mld api.ModuleLoaderData
+		ctx context.Context
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+
+		mockRegistry = registry.NewMockRegistry(ctrl)
+
+		mld = api.ModuleLoaderData{}
+		ctx = context.Background()
+	})
+
+	It("should return the image digest", func() {
+		expectedDigest := "sha256:a-digest"
+
+		gomock.InOrder(
+			mockRegistry.EXPECT().GetDigest(ctx, imageName, gomock.Any(), nil).Return(expectedDigest, nil),
+		)
+
+		digest, err := ImageDigest(ctx, clnt, mockRegistry, &mld, namespace, imageName)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(digest).To(Equal(expectedDigest))
+	})
+
+	It("should return an error if the registry call fails", func() {
+		gomock.InOrder(
+			mockRegistry.EXPECT().GetDigest(ctx, imageName, gomock.Any(), nil).Return("", errors.New("some-error")),
+		)
+
+		digest, err := ImageDigest(ctx, clnt, mockRegistry, &mld, namespace, imageName)
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("some-error"))
+		Expect(digest).To(BeEmpty())
+	})
+
+	It("should use the ImageRepoSecret if one is specified", func() {
+		expectedDigest := "sha256:a-digest"
+
+		mld.ImageRepoSecret = &v1.LocalObjectReference{
+			Name: "secret",
+		}
+
+		gomock.InOrder(
+			mockRegistry.EXPECT().GetDigest(ctx, imageName, gomock.Any(), gomock.Not(gomock.Nil())).Return(expectedDigest, nil),
+		)
+
+		digest, err := ImageDigest(ctx, clnt, mockRegistry, &mld, namespace, imageName)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(digest).To(Equal(expectedDigest))
+	})
+})
+
 var _ = Describe("ImageExists", func() {
 	const (
 		imageName = "image-name"

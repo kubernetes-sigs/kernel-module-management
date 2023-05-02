@@ -2,6 +2,7 @@ package module
 
 import (
 	"fmt"
+
 	"github.com/golang/mock/gomock"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
@@ -12,7 +13,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("GetMergedMappingForKernel", func() {
+var _ = Describe("GetModuleLoaderDataForKernel", func() {
 	const (
 		kernelVersion = "1.2.3"
 		selectedImage = "image1"

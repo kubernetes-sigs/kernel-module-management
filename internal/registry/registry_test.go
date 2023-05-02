@@ -2,6 +2,7 @@ package registry
 
 import (
 	context "context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -355,6 +356,130 @@ var _ = Describe("VerifyModuleExists", func() {
 		res := reg.VerifyModuleExists(layer, "/opt", "somekernel", "module_name.ko")
 		Expect(res).To(BeTrue())
 	})
+})
+
+var _ = Describe("GetDigest", func() {
+	const (
+		validImageHost = "gcr.io"
+		validImageOrg  = "org"
+		validImageName = "image-name"
+		validImageTag  = "some-tag"
+		invalidImage   = "non-valid-image-name"
+	)
+
+	var (
+		ctrl                   *gomock.Controller
+		ctx                    context.Context
+		mockRegistryAuthGetter *auth.MockRegistryAuthGetter
+		reg                    Registry
+		validImage             = fmt.Sprintf("%s/%s/%s:%s", validImageHost, validImageOrg, validImageName, validImageTag)
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		ctx = context.TODO()
+		mockRegistryAuthGetter = auth.NewMockRegistryAuthGetter(ctrl)
+		reg = NewRegistry()
+	})
+
+	AfterEach(func() {
+		ctrl.Finish()
+	})
+
+	Context("Cannot get pull options", func() {
+		var err error
+
+		AfterEach(func() {
+			Expect(err.Error()).To(ContainSubstring("failed to get pull options for image"))
+		})
+
+		It("should fail if the image name isn't valid", func() {
+			_, err = reg.GetDigest(ctx, invalidImage, &kmmv1beta1.TLSOptions{}, nil)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("does not contain hash or tag"))
+		})
+
+		It("should fail if it cannot get key chain from secret", func() {
+			mockRegistryAuthGetter.EXPECT().GetKeyChain(ctx).Return(nil, errors.New("some error"))
+
+			_, err = reg.GetDigest(ctx, validImage, &kmmv1beta1.TLSOptions{}, mockRegistryAuthGetter)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot get keychain from the registry auth getter"))
+		})
+	})
+
+	Context("Cannot get image digest", func() {
+		var err error
+
+		AfterEach(func() {
+			Expect(err.Error()).To(ContainSubstring("failed to get digest for image"))
+		})
+
+		It("should fail if it cannot get manifest", func() {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+			}))
+			defer server.Close()
+			u := mustParseURL(server.URL)
+
+			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
+			_, err = reg.GetDigest(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
+
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should fail if the image doesn't exist", func() {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+			u := mustParseURL(server.URL)
+
+			image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
+			_, err = reg.GetDigest(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
+
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	DescribeTable("should work as expected", func(withRegistryAuthGetter bool) {
+		var manifestDigest string
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			manifest, err := os.ReadFile("testdata/image_manifest.json")
+			Expect(err).NotTo(HaveOccurred())
+
+			h := sha256.New()
+			_, err = h.Write(manifest)
+			Expect(err).NotTo(HaveOccurred())
+			manifestDigest = fmt.Sprintf("sha256:%x", h.Sum(nil))
+
+			_, err = w.Write(manifest)
+			Expect(err).NotTo(HaveOccurred())
+		}))
+		defer server.Close()
+		u := mustParseURL(server.URL)
+
+		if withRegistryAuthGetter {
+			mockRegistryAuthGetter.EXPECT().GetKeyChain(ctx).Return(authn.DefaultKeychain, nil)
+		}
+
+		var err error
+		var digest string
+		image := fmt.Sprintf("%s/%s/%s:%s", u.Host, validImageOrg, validImageName, validImageTag)
+		if withRegistryAuthGetter {
+			digest, err = reg.GetDigest(ctx, image, &kmmv1beta1.TLSOptions{}, mockRegistryAuthGetter)
+		} else {
+			digest, err = reg.GetDigest(ctx, image, &kmmv1beta1.TLSOptions{}, nil)
+		}
+		Expect(err).ToNot(HaveOccurred())
+		Expect(digest).To(Equal(manifestDigest))
+	},
+		Entry("with public registry", false),
+		Entry("with private registry", true),
+	)
 })
 
 func mustParseURL(rawURL string) *url.URL {
