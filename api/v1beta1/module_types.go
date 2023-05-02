@@ -119,9 +119,9 @@ type KernelMapping struct {
 	Regexp string `json:"regexp"`
 
 	// +optional
-	// InTreeRemoval signifies if the an in-tree kernel module should be removed (if present)
+	// InTreeModuleToRemove specifies the in-tree kernel module that should be removed (if present)
 	// before loading the kernel module from the ContainerImage
-	InTreeRemoval *bool `json:"inTreeRemoval"`
+	InTreeModuleToRemove string `json:"inTreeModuleToRemove"`
 }
 
 type ModprobeArgs struct {
@@ -218,9 +218,9 @@ type ModuleLoaderContainerSpec struct {
 	RegistryTLS TLSOptions `json:"registryTLS"`
 
 	// +optional
-	// InTreeRemoval signifies if the an in-tree kernel module should be removed (if present)
+	// InTreeModuleToRemove specifies the in-tree kernel module that should be removed (if present)
 	// before loading the kernel module from the ContainerImage
-	InTreeRemoval bool `json:"inTreeRemoval"`
+	InTreeModuleToRemove string `json:"inTreeModuleToRemove"`
 }
 
 type ModuleLoaderSpec struct {

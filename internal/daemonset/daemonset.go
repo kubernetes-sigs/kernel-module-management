@@ -118,7 +118,7 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 		Lifecycle: &v1.Lifecycle{
 			PostStart: &v1.LifecycleHandler{
 				Exec: &v1.ExecAction{
-					Command: makeLoadCommand(mld.InTreeRemoval, mld.Modprobe, mld.Name),
+					Command: makeLoadCommand(mld.InTreeModuleToRemove, mld.Modprobe, mld.Name),
 				},
 			},
 			PreStop: &v1.LifecycleHandler{
@@ -396,7 +396,7 @@ func OverrideLabels(labels, overrides map[string]string) map[string]string {
 	return labels
 }
 
-func makeLoadCommand(inTreeRemoval bool, spec kmmv1beta1.ModprobeSpec, modName string) []string {
+func makeLoadCommand(inTreeModuleToRemove string, spec kmmv1beta1.ModprobeSpec, modName string) []string {
 	loadCommandShell := []string{
 		"/bin/sh",
 		"-c",
@@ -404,12 +404,12 @@ func makeLoadCommand(inTreeRemoval bool, spec kmmv1beta1.ModprobeSpec, modName s
 
 	var loadCommand strings.Builder
 
-	if inTreeRemoval {
+	if inTreeModuleToRemove != "" {
 		loadCommand.WriteString("modprobe -r")
 		if spec.DirName != "" {
 			loadCommand.WriteString(" -d " + spec.DirName)
 		}
-		loadCommand.WriteString(" " + spec.ModuleName + " && ")
+		loadCommand.WriteString(" " + inTreeModuleToRemove + " && ")
 	}
 
 	if fw := spec.FirmwarePath; fw != "" {
