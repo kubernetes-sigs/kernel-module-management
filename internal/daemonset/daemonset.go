@@ -496,17 +496,12 @@ func makeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 
 func getModulesOrderAnnotationValue(mld *api.ModuleLoaderData) string {
 	modulesNames := mld.Modprobe.ModulesLoadingOrder
-	softDepData := ""
-	for i := 0; i < len(modulesNames); i++ {
-		if i == len(modulesNames)-1 {
-			break
-		}
-		line := prepareSoftDepLine(modulesNames[i], modulesNames[i+1])
-		softDepData = softDepData + line
-	}
-	return softDepData
-}
 
-func prepareSoftDepLine(dependendModuleName, moduleName string) string {
-	return fmt.Sprintf("softdep %s pre: %s\n", dependendModuleName, moduleName)
+	var sb strings.Builder
+
+	for i := 0; i < len(modulesNames)-1; i++ {
+		fmt.Fprintf(&sb, "softdep %s pre: %s\n", modulesNames[i], modulesNames[i+1])
+	}
+
+	return sb.String()
 }
