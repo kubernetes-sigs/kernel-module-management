@@ -17,9 +17,10 @@ limitations under the License.
 package v1beta1
 
 import (
+	"testing"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"testing"
 )
 
 func TestV1beta1(t *testing.T) {
@@ -270,6 +271,88 @@ var _ = Describe("validateModprobe", func() {
 
 		e := mod.validateModprobe()
 		Expect(e).ToNot(HaveOccurred())
+	})
+
+	It("should fail when ModulesLoadingOrder is defined but is length is < 2", func() {
+		mod := &Module{
+			Spec: ModuleSpec{
+				ModuleLoader: ModuleLoaderSpec{
+					Container: ModuleLoaderContainerSpec{
+						Modprobe: ModprobeSpec{
+							ModuleName:          "module-name",
+							ModulesLoadingOrder: []string{"test"},
+						},
+					},
+				},
+			},
+		}
+
+		Expect(
+			mod.validateModprobe(),
+		).To(
+			HaveOccurred(),
+		)
+	})
+
+	It("should fail when ModulesLoadingOrder is defined but moduleName is empty", func() {
+		mod := &Module{
+			Spec: ModuleSpec{
+				ModuleLoader: ModuleLoaderSpec{
+					Container: ModuleLoaderContainerSpec{
+						Modprobe: ModprobeSpec{ModulesLoadingOrder: make([]string, 0)},
+					},
+				},
+			},
+		}
+
+		Expect(
+			mod.validateModprobe(),
+		).To(
+			HaveOccurred(),
+		)
+	})
+
+	It("should fail when ModulesLoadingOrder is defined but its first element is not moduleName", func() {
+		mod := &Module{
+			Spec: ModuleSpec{
+				ModuleLoader: ModuleLoaderSpec{
+					Container: ModuleLoaderContainerSpec{
+						Modprobe: ModprobeSpec{
+							ModulesLoadingOrder: []string{"test1", "test2"},
+						},
+					},
+				},
+			},
+		}
+
+		Expect(
+			mod.validateModprobe(),
+		).To(
+			HaveOccurred(),
+		)
+	})
+
+	It("should fail when ModulesLoadingOrder contains duplicates", func() {
+		const moduleName = "module-name"
+
+		mod := &Module{
+			Spec: ModuleSpec{
+				ModuleLoader: ModuleLoaderSpec{
+					Container: ModuleLoaderContainerSpec{
+						Modprobe: ModprobeSpec{
+							ModuleName:          moduleName,
+							ModulesLoadingOrder: []string{moduleName, "test", "test"},
+						},
+					},
+				},
+			},
+		}
+
+		Expect(
+			mod.validateModprobe(),
+		).To(
+			HaveOccurred(),
+		)
 	})
 })
 
