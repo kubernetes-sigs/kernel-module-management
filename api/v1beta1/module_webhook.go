@@ -22,6 +22,7 @@ import (
 	"regexp"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -95,7 +96,8 @@ func (m *Module) validateKernelMapping() error {
 
 func (m *Module) validateModprobe() error {
 	modprobe := m.Spec.ModuleLoader.Container.Modprobe
-	moduleNameDefined := modprobe.ModuleName != ""
+	moduleName := modprobe.ModuleName
+	moduleNameDefined := moduleName != ""
 	rawLoadArgsDefined := modprobe.RawArgs != nil && len(modprobe.RawArgs.Load) > 0
 	rawUnloadArgsDefined := modprobe.RawArgs != nil && len(modprobe.RawArgs.Unload) > 0
 
@@ -103,11 +105,32 @@ func (m *Module) validateModprobe() error {
 		if rawLoadArgsDefined || rawUnloadArgsDefined {
 			return errors.New("rawArgs cannot be set when moduleName is set")
 		}
-		return nil
+	} else if !rawLoadArgsDefined || !rawUnloadArgsDefined {
+		return errors.New("load and unload rawArgs must be set when moduleName is unset")
 	}
 
-	if !rawLoadArgsDefined || !rawUnloadArgsDefined {
-		return errors.New("load and unload rawArgs must be set when moduleName is unset")
+	if modprobe.ModulesLoadingOrder != nil {
+		if len(modprobe.ModulesLoadingOrder) < 2 {
+			return errors.New("if a loading order is defined, at least two values must be defined")
+		}
+
+		if !moduleNameDefined {
+			return errors.New("if a loading order is defined, moduleName must be set")
+		}
+
+		if modprobe.ModulesLoadingOrder[0] != moduleName {
+			return errors.New("if a loading order is defined, the first element must be moduleName")
+		}
+
+		s := sets.New[string]()
+
+		for _, modName := range modprobe.ModulesLoadingOrder {
+			if s.Has(modName) {
+				return fmt.Errorf("%q: duplicate value in the loading order list", modName)
+			}
+
+			s.Insert(modName)
+		}
 	}
 
 	return nil
