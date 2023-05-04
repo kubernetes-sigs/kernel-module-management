@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+: "$BINDIR"
+
+readonly TMP=$(mktemp -d)
+readonly VERSION=5.0.1
+
+echo "Downloading kustomize in $TMP"
+
+cd "$TMP"
+
+curl -L "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${VERSION}/kustomize_v${VERSION}_$(go env GOOS)_$(go env GOARCH).tar.gz" | tar xzvf -
+
+mv kustomize "$BINDIR"
+chmod +x "$BINDIR/kustomize"
+
+rm -fr "$TMP"

@@ -4,8 +4,8 @@ kind: Kustomization
 resources:
   - ../install-ci
 
-patchesStrategicMerge:
-  - |
+patches:
+- patch: |
     apiVersion: apps/v1
     kind: Deployment
     metadata:
