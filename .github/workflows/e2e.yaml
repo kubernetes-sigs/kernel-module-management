@@ -30,6 +30,29 @@ jobs:
           path: kmm_local.tar
           retention-days: 1
 
+  build-operator-hub-image:
+    runs-on: ubuntu-latest
+
+    name: Build the KMMO-hub container image
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build the image
+        run: make docker-build-hub HUB_IMG=kmm-hub:local
+
+      - name: Export the image
+        run: docker save -o kmm-hub_local.tar kmm-hub:local
+
+      - name: Upload the image
+        uses: actions/upload-artifact@v3
+        with:
+          name: ci-images
+          if-no-files-found: error
+          path: kmm-hub_local.tar
+          retention-days: 1
+
   build-signing-image:
     runs-on: ubuntu-latest
 
@@ -53,10 +76,10 @@ jobs:
           path: kmm-signimage_local.tar
           retention-days: 1
 
-  in-cluster-build:
+  e2e:
 
     runs-on: ubuntu-latest
-    name: in-cluster-build
+    name: e2e
     needs: [build-operator-image, build-signing-image]
 
     services:
@@ -104,6 +127,69 @@ jobs:
         run: ./ci/prow/e2e-incluster-build
         env:
           KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
+
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
+        if: ${{ always() }}
+
+  e2e-hub:
+
+    runs-on: ubuntu-latest
+    name: e2e-hub
+    needs: [build-operator-image, build-operator-hub-image, build-signing-image]
+
+    services:
+      registry:
+        image: registry:2
+        ports: ['5000:5000/tcp']
+
+    steps:
+
+      - name: Install curl on the machine
+        run: sudo apt update -y && sudo apt upgrade -y && sudo apt install -y curl
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
+        with:
+          start-args: --insecure-registry=host.minikube.internal:5000
+
+      - name: Download container images
+        uses: actions/download-artifact@v3
+        with:
+          name: ci-images
+
+      - name: Import the KMM-hub operator image into minikube
+        run: minikube image load kmm-hub_local.tar
+
+      - name: Import the KMM operator image into minikube
+        run: minikube image load kmm_local.tar
+
+      - name: Copy the signing image to the registry
+        run: |
+          docker load -i kmm-signimage_local.tar
+          docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
+          docker push localhost:5000/kmm/signimage:local
+
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
+
+      - name: Run test
+        run: ./ci/prow/e2e-hub-spoke-incluster-build
+        env:
+          KUSTOMIZE_CONFIG_HUB_DEFAULT: ci/install-ci-hub
+          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci-spoke
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
