@@ -50,14 +50,23 @@ make deploy
 kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-hub-controller-manager -n ${OPERATOR_NAMESPACE}
 kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-controller-manager -n ${OPERATOR_NAMESPACE}
 
+echo "Create a build secret..."
+oc create secret generic build-secret --from-literal=ci-build-secret=super-secret-value -n ${OPERATOR_NAMESPACE}
+
+echo "Add a configmap that contain the kernel module build dockerfile..."
+kubectl apply -f ci/kmm-kmod-dockerfile.yaml -n ${OPERATOR_NAMESPACE}
+
+echo "Add Secrets containing the signing key and certificate..."
+kubectl apply -f ci/secret_kmm-kmod-signing.yaml -n ${OPERATOR_NAMESPACE}
+
 # Apply the ManagedClusterModule
 kubectl apply -f ci/managedclustermodule-kmm-ci-build-sign.yaml
 
 # Waiting for the manifestwork to be created
-timeout 1m bash -c 'until kubectl -n ${MINIKUBE} get manifestwork/mod-example; do sleep 1; done'
-kubectl get manifestwork/mod-example -n ${MINIKUBE} -o yaml | yq '.spec.workload.manifests'
+timeout 1m bash -c 'until kubectl -n ${MINIKUBE} get manifestwork/kmm-ci; do sleep 1; done'
+kubectl get manifestwork/kmm-ci -n ${MINIKUBE} -o yaml | yq '.spec.workload.manifests'
 
 # Validate that the Module has no `build`/`sign` sections
-timeout 1m bash -c 'until kubectl -n ${OPERATOR_NAMESPACE} get module/mod-example; do sleep 1; done'
-kubectl -n ${OPERATOR_NAMESPACE} get module/mod-example -o json | \
+timeout 1m bash -c 'until kubectl -n ${OPERATOR_NAMESPACE} get module/kmm-ci; do sleep 1; done'
+kubectl -n ${OPERATOR_NAMESPACE} get module/kmm-ci -o json | \
     jq '.spec.moduleLoader.container.kernelMappings[] | (.build | type) == "null" and (.sign // null | type) == "null"' | grep true
