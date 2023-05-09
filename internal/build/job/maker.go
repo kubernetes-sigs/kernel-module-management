@@ -159,6 +159,7 @@ func (m *maker) containerArgs(
 
 	overrides := []kmmv1beta1.BuildArg{
 		{Name: "KERNEL_VERSION", Value: mld.KernelVersion},
+		{Name: "KERNEL_FULL_VERSION", Value: mld.KernelVersion},
 		{Name: "MOD_NAME", Value: mld.Name},
 		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
 	}

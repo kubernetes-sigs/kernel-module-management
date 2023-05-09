@@ -4,7 +4,7 @@ metadata:
   name: kmm-kmod-dockerfile
 data:
   dockerfile: |
-    FROM ubuntu as builder
+    FROM ubuntu:20.04 as builder
 
     ARG KERNEL_VERSION
 
@@ -25,7 +25,7 @@ data:
 
     RUN KERNEL_SRC_DIR=/usr/src/linux-headers-${KERNEL_VERSION} make all
 
-    FROM ubuntu
+    FROM ubuntu:20.04
 
     ARG KERNEL_VERSION
 

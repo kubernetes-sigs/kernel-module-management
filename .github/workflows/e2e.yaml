@@ -8,7 +8,7 @@ env:
 jobs:
 
   build-operator-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     name: Build the KMMO container image
 
@@ -31,7 +31,7 @@ jobs:
           retention-days: 1
 
   build-operator-hub-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     name: Build the KMMO-hub container image
 
@@ -54,7 +54,7 @@ jobs:
           retention-days: 1
 
   build-signing-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     name: Build the signing image
 
@@ -78,7 +78,7 @@ jobs:
 
   e2e:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: e2e
     needs: [build-operator-image, build-signing-image]
 
@@ -111,12 +111,17 @@ jobs:
           docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
           docker push localhost:5000/kmm/signimage:local
 
+      - name: Set some Ubuntu environment variables
+        run: |
+          grep 'ID=' /etc/os-release >> "$GITHUB_ENV"
+          grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
+
       - name: Cache binaries needed by Makefile
         id: cache-bin
         uses: actions/cache@v3
         with:
           path: ./bin
-          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+          key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
       - uses: actions/setup-go@v4
         with:
@@ -134,7 +139,7 @@ jobs:
 
   e2e-hub:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: e2e-hub
     needs: [build-operator-image, build-operator-hub-image, build-signing-image]
 
@@ -144,9 +149,6 @@ jobs:
         ports: ['5000:5000/tcp']
 
     steps:
-
-      - name: Install curl on the machine
-        run: sudo apt update -y && sudo apt upgrade -y && sudo apt install -y curl
 
       - name: Checkout
         uses: actions/checkout@v3
@@ -173,12 +175,17 @@ jobs:
           docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
           docker push localhost:5000/kmm/signimage:local
 
+      - name: Set some Ubuntu environment variables
+        run: |
+          grep 'ID=' /etc/os-release >> "$GITHUB_ENV"
+          grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
+
       - name: Cache binaries needed by Makefile
         id: cache-bin
         uses: actions/cache@v3
         with:
           path: ./bin
-          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+          key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
       - uses: actions/setup-go@v4
         with:

@@ -59,6 +59,8 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 
 	const (
 		mcmName = "test-module"
+
+		kernelVersion = "1.2.3"
 	)
 
 	nsn := types.NamespacedName{
@@ -310,6 +312,48 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 		Expect(res).To(Equal(reconcile.Result{Requeue: false}))
 	})
 
+	It("should not requeue the request when no kernel versions for the managed cluster are found", func() {
+		mcm := v1beta1.ManagedClusterModule{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: mcmName,
+			},
+			Spec: v1beta1.ManagedClusterModuleSpec{
+				ModuleSpec: kmmv1beta1.ModuleSpec{},
+				Selector:   map[string]string{"key": "value"},
+			},
+		}
+
+		clusterList := clusterv1.ManagedClusterList{
+			Items: []clusterv1.ManagedCluster{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "default",
+						Labels: map[string]string{"key": "value"},
+					},
+				},
+			},
+		}
+
+		manifestWorkList := workv1.ManifestWorkList{}
+
+		gomock.InOrder(
+			mockClusterAPI.EXPECT().RequestedManagedClusterModule(ctx, req.NamespacedName).Return(&mcm, nil),
+			mockClusterAPI.EXPECT().SelectedManagedClusters(ctx, gomock.Any()).Return(&clusterList, nil),
+			mockClusterAPI.EXPECT().BuildAndSign(gomock.Any(), mcm, clusterList.Items[0]).Return(true, nil),
+			mockClusterAPI.EXPECT().KernelVersions(clusterList.Items[0]).Return(nil, errors.New("no kernel versions")),
+			mockMW.EXPECT().GarbageCollect(ctx, clusterList, mcm).Return(nil),
+			mockClusterAPI.EXPECT().GarbageCollectBuildsAndSigns(ctx, mcm),
+			mockMW.EXPECT().GetOwnedManifestWorks(ctx, mcm).Return(&manifestWorkList, nil),
+			mockSU.EXPECT().ManagedClusterModuleUpdateStatus(ctx, &mcm, manifestWorkList.Items).Return(nil),
+		)
+
+		mr := NewManagedClusterModuleReconciler(clnt, mockMW, mockClusterAPI, mockSU, nil)
+
+		res, err := mr.Reconcile(context.Background(), req)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(Equal(reconcile.Result{Requeue: false}))
+	})
+
 	It("should create a ManifestWork if a managed cluster matches the selector and build/sign is completed", func() {
 		mcm := v1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{
@@ -344,8 +388,9 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			mockClusterAPI.EXPECT().RequestedManagedClusterModule(ctx, req.NamespacedName).Return(&mcm, nil),
 			mockClusterAPI.EXPECT().SelectedManagedClusters(ctx, gomock.Any()).Return(&clusterList, nil),
 			mockClusterAPI.EXPECT().BuildAndSign(gomock.Any(), mcm, clusterList.Items[0]).Return(true, nil),
+			mockClusterAPI.EXPECT().KernelVersions(clusterList.Items[0]).Return([]string{kernelVersion}, nil),
 			clnt.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-			mockMW.EXPECT().SetManifestWorkAsDesired(context.Background(), &mw, gomock.AssignableToTypeOf(mcm)),
+			mockMW.EXPECT().SetManifestWorkAsDesired(context.Background(), &mw, gomock.AssignableToTypeOf(mcm), []string{kernelVersion}),
 			clnt.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil),
 			mockMW.EXPECT().GarbageCollect(ctx, clusterList, mcm),
 			mockClusterAPI.EXPECT().GarbageCollectBuildsAndSigns(ctx, mcm),
@@ -391,13 +436,16 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			},
 		}
 
+		kernelVersions := []string{kernelVersion}
+
 		gomock.InOrder(
 			mockClusterAPI.EXPECT().RequestedManagedClusterModule(ctx, req.NamespacedName).Return(&mcm, nil),
 			mockClusterAPI.EXPECT().SelectedManagedClusters(ctx, gomock.Any()).Return(&clusterList, nil),
 			mockClusterAPI.EXPECT().BuildAndSign(gomock.Any(), mcm, clusterList.Items[0]).Return(true, nil),
+			mockClusterAPI.EXPECT().KernelVersions(clusterList.Items[0]).Return(kernelVersions, nil),
 			clnt.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()),
-			mockMW.EXPECT().SetManifestWorkAsDesired(context.Background(), &mw, gomock.AssignableToTypeOf(mcm)).Do(
-				func(ctx context.Context, m *workv1.ManifestWork, _ v1beta1.ManagedClusterModule) {
+			mockMW.EXPECT().SetManifestWorkAsDesired(context.Background(), &mw, gomock.AssignableToTypeOf(mcm), kernelVersions).Do(
+				func(ctx context.Context, m *workv1.ManifestWork, _ v1beta1.ManagedClusterModule, _ []string) {
 					m.SetLabels(map[string]string{"test": "test"})
 				}),
 			clnt.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()),

@@ -67,6 +67,21 @@ func (mr *MockClusterAPIMockRecorder) GarbageCollectBuildsAndSigns(ctx, mcm inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollectBuildsAndSigns", reflect.TypeOf((*MockClusterAPI)(nil).GarbageCollectBuildsAndSigns), ctx, mcm)
 }
 
+// KernelVersions mocks base method.
+func (m *MockClusterAPI) KernelVersions(cluster v1.ManagedCluster) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "KernelVersions", cluster)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// KernelVersions indicates an expected call of KernelVersions.
+func (mr *MockClusterAPIMockRecorder) KernelVersions(cluster interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "KernelVersions", reflect.TypeOf((*MockClusterAPI)(nil).KernelVersions), cluster)
+}
+
 // RequestedManagedClusterModule mocks base method.
 func (m *MockClusterAPI) RequestedManagedClusterModule(ctx context.Context, namespacedName types.NamespacedName) (*v1beta1.ManagedClusterModule, error) {
 	m.ctrl.T.Helper()

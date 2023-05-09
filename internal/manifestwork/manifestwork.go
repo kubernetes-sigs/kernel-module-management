@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	reflect "reflect"
+	"strings"
 
-	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	"github.com/google/go-containerregistry/pkg/name"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -15,9 +16,15 @@ import (
 	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/cache"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 )
 
 var moduleStatusJSONPaths = []workv1.JsonPath{
@@ -52,18 +59,29 @@ var moduleStatusJSONPaths = []workv1.JsonPath{
 type ManifestWorkCreator interface {
 	GarbageCollect(ctx context.Context, clusters clusterv1.ManagedClusterList, mcm hubv1beta1.ManagedClusterModule) error
 	GetOwnedManifestWorks(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) (*workv1.ManifestWorkList, error)
-	SetManifestWorkAsDesired(ctx context.Context, mw *workv1.ManifestWork, mcm hubv1beta1.ManagedClusterModule) error
+	SetManifestWorkAsDesired(ctx context.Context, mw *workv1.ManifestWork, mcm hubv1beta1.ManagedClusterModule, kernelVersions []string) error
 }
 
 type manifestWorkGenerator struct {
-	client client.Client
-	scheme *runtime.Scheme
+	client      client.Client
+	scheme      *runtime.Scheme
+	kernelAPI   module.KernelMapper
+	registryAPI registry.Registry
+	cache       cache.Cache[string]
 }
 
-func NewCreator(client client.Client, scheme *runtime.Scheme) ManifestWorkCreator {
+func NewCreator(
+	client client.Client,
+	scheme *runtime.Scheme,
+	kernelAPI module.KernelMapper,
+	registryAPI registry.Registry,
+	cache cache.Cache[string]) ManifestWorkCreator {
 	return &manifestWorkGenerator{
-		client: client,
-		scheme: scheme,
+		client:      client,
+		scheme:      scheme,
+		kernelAPI:   kernelAPI,
+		registryAPI: registryAPI,
+		cache:       cache,
 	}
 }
 
@@ -95,7 +113,11 @@ func (mwg *manifestWorkGenerator) GetOwnedManifestWorks(ctx context.Context, mcm
 	return mwg.getOwnedManifestWorks(ctx, mcm)
 }
 
-func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(ctx context.Context, mw *workv1.ManifestWork, mcm hubv1beta1.ManagedClusterModule) error {
+func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(
+	ctx context.Context,
+	mw *workv1.ManifestWork,
+	mcm hubv1beta1.ManagedClusterModule,
+	kernelVersions []string) error {
 	if mw == nil {
 		return errors.New("mw cannot be nil")
 	}
@@ -104,11 +126,8 @@ func (mwg *manifestWorkGenerator) SetManifestWorkAsDesired(ctx context.Context, 
 	mcm.Spec.ModuleSpec.ModuleLoader.Container.Build = nil
 	mcm.Spec.ModuleSpec.ModuleLoader.Container.Sign = nil
 
-	kernelMappings := mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings
-	for i := 0; i < len(kernelMappings); i++ {
-		kernelMappings[i].Build = nil
-		kernelMappings[i].Sign = nil
-	}
+	// Recreate Module KernelMappings
+	mcm.Spec.ModuleSpec.ModuleLoader.Container.KernelMappings = mwg.managedClusterKernelMappings(ctx, mcm, kernelVersions)
 
 	kind := reflect.TypeOf(kmmv1beta1.Module{}).Name()
 	gvk := kmmv1beta1.GroupVersion.WithKind(kind)
@@ -174,4 +193,105 @@ func (mwg *manifestWorkGenerator) getOwnedManifestWorks(ctx context.Context, mcm
 	err := mwg.client.List(ctx, manifestWorkList, opts...)
 
 	return manifestWorkList, err
+}
+
+func (mwg *manifestWorkGenerator) managedClusterKernelMappings(
+	ctx context.Context,
+	mcm hubv1beta1.ManagedClusterModule,
+	kernelVersions []string) []kmmv1beta1.KernelMapping {
+
+	mod := &kmmv1beta1.Module{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      mcm.Name,
+			Namespace: mcm.Spec.SpokeNamespace,
+		},
+		Spec: mcm.Spec.ModuleSpec,
+	}
+
+	logger := log.FromContext(ctx)
+
+	mappings := make([]kmmv1beta1.KernelMapping, 0, len(kernelVersions))
+
+	for _, kernelVersion := range kernelVersions {
+		kernelVersion := strings.TrimSuffix(kernelVersion, "+")
+
+		kernelVersionLogger := logger.WithValues(
+			"kernel version", kernelVersion,
+		)
+
+		mld, err := mwg.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
+		if err != nil {
+			kernelVersionLogger.Info("no suitable container image found; skipping kernel version")
+			continue
+		}
+
+		kernelVersionLogger.V(1).Info("Found a valid mapping",
+			"image", mld.ContainerImage,
+		)
+
+		mapping := mwg.mappingFromModuleLoaderData(mld)
+
+		digest, err := mwg.imageDigestForModuleLoaderData(ctx, mld)
+		if err != nil {
+			kernelVersionLogger.Error(err, "skipping image tag replacement")
+		}
+		if digest != "" {
+			mapping.ContainerImage, err = mwg.replaceTagWithDigest(mapping.ContainerImage, digest)
+
+			if err != nil {
+				kernelVersionLogger.Error(err, "skipping image tag replacement")
+			} else {
+				kernelVersionLogger.V(1).Info("replaced container image tag with digest",
+					"image", mld.ContainerImage,
+					"imageWithDigest", mapping.ContainerImage,
+				)
+			}
+		}
+
+		mappings = append(mappings, mapping)
+	}
+
+	return mappings
+}
+
+func (mwg *manifestWorkGenerator) replaceTagWithDigest(image, digest string) (string, error) {
+	ref, err := name.ParseReference(image, name.WithDefaultRegistry(""))
+	if err != nil {
+		return "", fmt.Errorf("could not parse the container image name: %v", err)
+	}
+	return ref.Context().Name() + "@" + digest, nil
+}
+
+func (mwg *manifestWorkGenerator) mappingFromModuleLoaderData(mld *api.ModuleLoaderData) kmmv1beta1.KernelMapping {
+	return kmmv1beta1.KernelMapping{
+		ContainerImage:       mld.ContainerImage,
+		Literal:              mld.KernelVersion,
+		InTreeModuleToRemove: mld.InTreeModuleToRemove,
+	}
+}
+
+func (mwg *manifestWorkGenerator) imageDigestForModuleLoaderData(ctx context.Context, mld *api.ModuleLoaderData) (string, error) {
+	ref, err := name.ParseReference(mld.ContainerImage, name.WithDefaultRegistry(""))
+	if err != nil {
+		return "", fmt.Errorf("could not parse the container image name: %v", err)
+	}
+
+	// the identifier is either a tag or a digest, only digests contain a ':'
+	if identifier := ref.Identifier(); identifier != "" && strings.Contains(identifier, ":") {
+		return "", errors.New("image already contains a digest")
+	}
+
+	value, found := mwg.cache.Get(mld.ContainerImage)
+	if found && value.(string) != "" {
+		return value.(string), nil
+	}
+
+	digest, err := module.ImageDigest(ctx, mwg.client, mwg.registryAPI, mld, mld.Namespace, ref.Name())
+	if err != nil {
+		return "", fmt.Errorf("could not get image digest: %v", err)
+	}
+
+	mwg.cache.Set(mld.ContainerImage, digest)
+
+	return digest, nil
 }
