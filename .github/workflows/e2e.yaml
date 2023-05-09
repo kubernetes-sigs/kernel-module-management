@@ -8,7 +8,7 @@ env:
 jobs:
 
   build-operator-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     name: Build the KMMO container image
 
@@ -31,7 +31,7 @@ jobs:
           retention-days: 1
 
   build-operator-hub-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     name: Build the KMMO-hub container image
 
@@ -54,7 +54,7 @@ jobs:
           retention-days: 1
 
   build-signing-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     name: Build the signing image
 
@@ -78,7 +78,7 @@ jobs:
 
   e2e:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: e2e
     needs: [build-operator-image, build-signing-image]
 
@@ -134,7 +134,7 @@ jobs:
 
   e2e-hub:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: e2e-hub
     needs: [build-operator-image, build-operator-hub-image, build-signing-image]
 
