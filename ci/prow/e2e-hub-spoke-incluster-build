@@ -24,11 +24,16 @@ hub_api_server=$(kubectl config view -o yaml | yq '.clusters[] | select(.. | .na
 clusteradm join \
   --hub-token ${token} \
   --hub-apiserver ${hub_api_server} \
-  --wait \
   --cluster-name ${MINIKUBE}
-kubectl wait --for=condition=Available deployment/klusterlet-registration-agent -n open-cluster-management-agent
-clusteradm accept --clusters ${MINIKUBE}
 
+# Wait for the join command to succeed
+kubectl wait --for=condition=Established crd managedclusters.cluster.open-cluster-management.io
+timeout 60 sh -c "until kubectl get managedcluster ${MINIKUBE}; do sleep 2; done"
+timeout 30 sh -c "until kubectl get csr -l open-cluster-management.io/cluster-name=${MINIKUBE} | grep Pending; do sleep 2; done"
+timeout 1m bash -c "until kubectl get csr -l open-cluster-management.io/cluster-name=${MINIKUBE} -o json | jq -er \".items[].metadata.name\"; do sleep 2; done"
+kubectl wait --for=condition=Available deployment/klusterlet-registration-agent -n open-cluster-management-agent
+
+clusteradm accept --clusters ${MINIKUBE}
 
 # Installing required addons to the hub/spoke clusters
 clusteradm install hub-addon --names application-manager
