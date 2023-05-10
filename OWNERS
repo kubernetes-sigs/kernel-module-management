@@ -1,11 +1,12 @@
 # See the OWNERS docs at https://go.k8s.io/owners
 
 approvers:
+  - mresvanis
   - qbarrand
-  - mrunalp
   - ybettan
   - yevgeny-shnaidman
 reviewers:
+  - mresvanis
   - qbarrand
   - ybettan
   - yevgeny-shnaidman
