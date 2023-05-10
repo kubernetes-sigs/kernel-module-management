@@ -111,12 +111,17 @@ jobs:
           docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
           docker push localhost:5000/kmm/signimage:local
 
+      - name: Set some Ubuntu environment variables
+        run: |
+          grep 'ID=' /etc/os-release >> "$GITHUB_ENV"
+          grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
+
       - name: Cache binaries needed by Makefile
         id: cache-bin
         uses: actions/cache@v3
         with:
           path: ./bin
-          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+          key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
       - uses: actions/setup-go@v4
         with:
@@ -170,12 +175,17 @@ jobs:
           docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
           docker push localhost:5000/kmm/signimage:local
 
+      - name: Set some Ubuntu environment variables
+        run: |
+          grep 'ID=' /etc/os-release >> "$GITHUB_ENV"
+          grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
+
       - name: Cache binaries needed by Makefile
         id: cache-bin
         uses: actions/cache@v3
         with:
           path: ./bin
-          key: ${{ runner.os }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+          key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
 
       - uses: actions/setup-go@v4
         with:
