@@ -40,6 +40,30 @@ func ShouldBeSigned(mld *api.ModuleLoaderData) bool {
 	return mld.Sign != nil
 }
 
+func ImageDigest(
+	ctx context.Context,
+	client client.Client,
+	reg registry.Registry,
+	mld *api.ModuleLoaderData,
+	namespace string,
+	imageName string) (string, error) {
+
+	var registryAuthGetter auth.RegistryAuthGetter
+	if mld.ImageRepoSecret != nil {
+		registryAuthGetter = auth.NewRegistryAuthGetter(client, types.NamespacedName{
+			Name:      mld.ImageRepoSecret.Name,
+			Namespace: namespace,
+		})
+	}
+
+	digest, err := reg.GetDigest(ctx, imageName, mld.RegistryTLS, registryAuthGetter)
+	if err != nil {
+		return "", fmt.Errorf("could not get image digest: %v", err)
+	}
+
+	return digest, nil
+}
+
 func ImageExists(
 	ctx context.Context,
 	client client.Client,
@@ -56,8 +80,7 @@ func ImageExists(
 		})
 	}
 
-	tlsOptions := mld.RegistryTLS
-	exists, err := reg.ImageExists(ctx, imageName, tlsOptions, registryAuthGetter)
+	exists, err := reg.ImageExists(ctx, imageName, mld.RegistryTLS, registryAuthGetter)
 	if err != nil {
 		return false, fmt.Errorf("could not check if the image is available: %v", err)
 	}

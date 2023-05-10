@@ -113,6 +113,12 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, req ctrl
 			continue
 		}
 
+		kernelVersions, err := r.clusterAPI.KernelVersions(cluster)
+		if err != nil {
+			logger.Error(err, "no kernel versions found for managed cluster; skipping ManifestWork reconciliation")
+			continue
+		}
+
 		mw := &workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      mcm.Name,
@@ -121,7 +127,7 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		opRes, err := controllerutil.CreateOrPatch(clusterCtx, r.client, mw, func() error {
-			return r.manifestAPI.SetManifestWorkAsDesired(ctx, mw, *mcm)
+			return r.manifestAPI.SetManifestWorkAsDesired(ctx, mw, *mcm, kernelVersions)
 		})
 
 		if err != nil {

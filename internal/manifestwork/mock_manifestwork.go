@@ -67,15 +67,15 @@ func (mr *MockManifestWorkCreatorMockRecorder) GetOwnedManifestWorks(ctx, mcm in
 }
 
 // SetManifestWorkAsDesired mocks base method.
-func (m *MockManifestWorkCreator) SetManifestWorkAsDesired(ctx context.Context, mw *v10.ManifestWork, mcm v1beta1.ManagedClusterModule) error {
+func (m *MockManifestWorkCreator) SetManifestWorkAsDesired(ctx context.Context, mw *v10.ManifestWork, mcm v1beta1.ManagedClusterModule, kernelVersions []string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetManifestWorkAsDesired", ctx, mw, mcm)
+	ret := m.ctrl.Call(m, "SetManifestWorkAsDesired", ctx, mw, mcm, kernelVersions)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetManifestWorkAsDesired indicates an expected call of SetManifestWorkAsDesired.
-func (mr *MockManifestWorkCreatorMockRecorder) SetManifestWorkAsDesired(ctx, mw, mcm interface{}) *gomock.Call {
+func (mr *MockManifestWorkCreatorMockRecorder) SetManifestWorkAsDesired(ctx, mw, mcm, kernelVersions interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetManifestWorkAsDesired", reflect.TypeOf((*MockManifestWorkCreator)(nil).SetManifestWorkAsDesired), ctx, mw, mcm)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetManifestWorkAsDesired", reflect.TypeOf((*MockManifestWorkCreator)(nil).SetManifestWorkAsDesired), ctx, mw, mcm, kernelVersions)
 }

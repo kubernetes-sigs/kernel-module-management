@@ -37,6 +37,21 @@ func (m *MockRegistry) EXPECT() *MockRegistryMockRecorder {
 	return m.recorder
 }
 
+// GetDigest mocks base method.
+func (m *MockRegistry) GetDigest(ctx context.Context, image string, tlsOptions *v1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDigest", ctx, image, tlsOptions, registryAuthGetter)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDigest indicates an expected call of GetDigest.
+func (mr *MockRegistryMockRecorder) GetDigest(ctx, image, tlsOptions, registryAuthGetter interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDigest", reflect.TypeOf((*MockRegistry)(nil).GetDigest), ctx, image, tlsOptions, registryAuthGetter)
+}
+
 // GetLayerByDigest mocks base method.
 func (m *MockRegistry) GetLayerByDigest(digest string, pullConfig *RepoPullConfig) (v1.Layer, error) {
 	m.ctrl.T.Helper()

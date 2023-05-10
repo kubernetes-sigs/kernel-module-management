@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
@@ -30,6 +31,7 @@ type ClusterAPI interface {
 	SelectedManagedClusters(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule) (*clusterv1.ManagedClusterList, error)
 	BuildAndSign(ctx context.Context, mcm hubv1beta1.ManagedClusterModule, cluster clusterv1.ManagedCluster) (bool, error)
 	GarbageCollectBuildsAndSigns(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error)
+	KernelVersions(cluster clusterv1.ManagedCluster) ([]string, error)
 }
 
 type clusterAPI struct {
@@ -153,12 +155,26 @@ func (c *clusterAPI) GarbageCollectBuildsAndSigns(ctx context.Context, mcm hubv1
 	return append(deletedBuilds, deletedSigns...), nil
 }
 
+func (c *clusterAPI) KernelVersions(cluster clusterv1.ManagedCluster) ([]string, error) {
+	for _, clusterClaim := range cluster.Status.ClusterClaims {
+		if clusterClaim.Name != constants.KernelVersionsClusterClaimName {
+			continue
+		}
+
+		kernelVersions := strings.Split(clusterClaim.Value, "\n")
+		sort.Strings(kernelVersions)
+
+		return kernelVersions, nil
+	}
+	return nil, errors.New("KMM kernel version ClusterClaim not found")
+}
+
 func (c *clusterAPI) kernelMappingsByKernelVersion(
 	ctx context.Context,
 	mod *kmmv1beta1.Module,
 	cluster clusterv1.ManagedCluster) (map[string]*api.ModuleLoaderData, error) {
 
-	kernelVersions, err := c.kernelVersions(cluster)
+	kernelVersions, err := c.KernelVersions(cluster)
 	if err != nil {
 		return nil, err
 	}
@@ -193,16 +209,6 @@ func (c *clusterAPI) kernelMappingsByKernelVersion(
 	}
 
 	return mldMappings, nil
-}
-
-func (c *clusterAPI) kernelVersions(cluster clusterv1.ManagedCluster) ([]string, error) {
-	for _, clusterClaim := range cluster.Status.ClusterClaims {
-		if clusterClaim.Name != constants.KernelVersionsClusterClaimName {
-			continue
-		}
-		return strings.Split(clusterClaim.Value, "\n"), nil
-	}
-	return nil, errors.New("KMM ClusterClaim not found")
 }
 
 func (c *clusterAPI) build(
