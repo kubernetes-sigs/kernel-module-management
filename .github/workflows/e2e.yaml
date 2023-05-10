@@ -145,9 +145,6 @@ jobs:
 
     steps:
 
-      - name: Install curl on the machine
-        run: sudo apt update -y && sudo apt upgrade -y && sudo apt install -y curl
-
       - name: Checkout
         uses: actions/checkout@v3
 
