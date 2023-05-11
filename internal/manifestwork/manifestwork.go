@@ -63,11 +63,12 @@ type ManifestWorkCreator interface {
 }
 
 type manifestWorkGenerator struct {
-	client      client.Client
-	scheme      *runtime.Scheme
-	kernelAPI   module.KernelMapper
-	registryAPI registry.Registry
-	cache       cache.Cache[string]
+	client            client.Client
+	scheme            *runtime.Scheme
+	kernelAPI         module.KernelMapper
+	registryAPI       registry.Registry
+	cache             cache.Cache[string]
+	operatorNamespace string
 }
 
 func NewCreator(
@@ -75,13 +76,15 @@ func NewCreator(
 	scheme *runtime.Scheme,
 	kernelAPI module.KernelMapper,
 	registryAPI registry.Registry,
-	cache cache.Cache[string]) ManifestWorkCreator {
+	cache cache.Cache[string],
+	operatorNamespace string) ManifestWorkCreator {
 	return &manifestWorkGenerator{
-		client:      client,
-		scheme:      scheme,
-		kernelAPI:   kernelAPI,
-		registryAPI: registryAPI,
-		cache:       cache,
+		client:            client,
+		scheme:            scheme,
+		kernelAPI:         kernelAPI,
+		registryAPI:       registryAPI,
+		cache:             cache,
+		operatorNamespace: operatorNamespace,
 	}
 }
 
@@ -286,7 +289,7 @@ func (mwg *manifestWorkGenerator) imageDigestForModuleLoaderData(ctx context.Con
 		return value.(string), nil
 	}
 
-	digest, err := module.ImageDigest(ctx, mwg.client, mwg.registryAPI, mld, mld.Namespace, ref.Name())
+	digest, err := module.ImageDigest(ctx, mwg.client, mwg.registryAPI, mld, mwg.operatorNamespace, ref.Name())
 	if err != nil {
 		return "", fmt.Errorf("could not get image digest: %v", err)
 	}

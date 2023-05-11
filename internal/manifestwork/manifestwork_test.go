@@ -95,7 +95,7 @@ var _ = Describe("GarbageCollect", func() {
 			clnt.EXPECT().Delete(ctx, &mwToBeCollected),
 		)
 
-		mwc := NewCreator(clnt, scheme, nil, nil, nil)
+		mwc := NewCreator(clnt, scheme, nil, nil, nil, "")
 
 		err := mwc.GarbageCollect(context.Background(), clusterList, mcm)
 		Expect(err).NotTo(HaveOccurred())
@@ -153,7 +153,7 @@ var _ = Describe("GetOwnedManifestWorks", func() {
 			),
 		)
 
-		mwc := NewCreator(clnt, scheme, nil, nil, nil)
+		mwc := NewCreator(clnt, scheme, nil, nil, nil, "")
 
 		ownedManifestWorks, err := mwc.GetOwnedManifestWorks(context.Background(), mcm)
 		Expect(err).NotTo(HaveOccurred())
@@ -219,7 +219,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 	})
 
 	It("should return an error if the ManifestWork is nil", func() {
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache)
+		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
 
 		Expect(
 			mwc.SetManifestWorkAsDesired(context.Background(), nil, hubv1beta1.ManagedClusterModule{}, nil),
@@ -233,7 +233,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(gomock.Any(), kernelVersion).Return(nil, errors.New("no-mappings-found")),
 		)
 
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache)
+		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
 
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
 		Expect(err).NotTo(HaveOccurred())
@@ -257,7 +257,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(gomock.Any(), kernelVersion).Return(&mld, nil),
 		)
 
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache)
+		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
 
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
 		Expect(err).NotTo(HaveOccurred())
@@ -282,7 +282,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			mockCache.EXPECT().Get(mld.ContainerImage).Return(digest, true),
 		)
 
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache)
+		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
 
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
 		Expect(err).NotTo(HaveOccurred())
@@ -305,7 +305,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			mockRegistry.EXPECT().GetDigest(ctx, mld.ContainerImage+":latest", gomock.Any(), nil).Return("", errors.New("generic-error")),
 		)
 
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache)
+		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
 
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
 		Expect(err).NotTo(HaveOccurred())
@@ -350,7 +350,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			mockCache.EXPECT().Set(mld.ContainerImage, digest),
 		)
 
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache)
+		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
 
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
 
