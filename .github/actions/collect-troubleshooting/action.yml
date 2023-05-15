@@ -1,47 +1,26 @@
 name: Collect troubleshooting data
 
-description: This action fetches some troubleshooting data for KMMO
+description: This action fetches some troubleshooting data for KMM
 
 runs:
   using: composite
 
   steps:
-    - name: Get all resources in the kmm-operator-system namespace
-      run: kubectl get all -n kmm-operator-system
+    - name: Install kubectl support-bundle
+      run: |
+        curl https://krew.sh/support-bundle | bash
+        echo "PATH=${KREW_ROOT:-$HOME/.krew}/bin:$PATH" >> "$GITHUB_ENV"
       shell: bash
 
-    - name: Get all resources in the default namespace
-      run: kubectl get all
+    - name: Set the output file
+      run: echo "OUTPUT_FILE=${{ github.job }}-support-bundle.tar.gz" >> "$GITHUB_ENV"
       shell: bash
 
-    - name: Describe nodes
-      run: kubectl describe node
+    - name: Collect a support bundle
+      run: kubectl support-bundle -o $OUTPUT_FILE ./support/kmm.spec.yaml
       shell: bash
 
-    - name: Describe DaemonSets
-      run: kubectl describe daemonset -l kmm.node.kubernetes.io/module.name
-      shell: bash
-
-    - name: Describe Pods
-      run: kubectl describe pod -l kmm.node.kubernetes.io/module.name
-      shell: bash
-
-    - name: Describe Jobs
-      run: kubectl describe job.batch -l kmm.node.kubernetes.io/module.name
-      shell: bash
-
-    - name: Collect dmesg
-      run: sudo dmesg
-      shell: bash
-
-    - name: Get all operator logs
-      run: kubectl logs deployment.apps/kmm-operator-controller-manager -n kmm-operator-system
-      shell: bash
-
-    - name: Describe the Controller Deployment
-      run: kubectl describe deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-      shell: bash
-
-    - name: Get the Controller Deployment
-      run: kubectl get -o yaml deployments.apps -n kmm-operator-system kmm-operator-controller-manager
-      shell: bash
+    - uses: actions/upload-artifact@v3
+      with:
+        name: support-bundle
+        path: ${{ env.OUTPUT_FILE }}

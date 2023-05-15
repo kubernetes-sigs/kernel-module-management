@@ -9,8 +9,10 @@ namespace: kmm-operator-system
 namePrefix: kmm-operator-hub-
 
 # Labels to add to all resources and selectors.
-#commonLabels:
-#  someName: someValue
+commonLabels:
+  app.kubernetes.io/name: kmm-hub
+  app.kubernetes.io/component: kmm-hub
+  app.kubernetes.io/part-of: kmm
 
 resources:
 - ../crd-hub

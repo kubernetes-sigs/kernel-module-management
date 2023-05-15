@@ -1,0 +1,100 @@
+apiVersion: troubleshoot.sh/v1beta2
+kind: SupportBundle
+metadata:
+  name: kmm
+spec:
+  collectors:
+    - clusterInfo: {}
+    - clusterResources:
+        namespaces:
+          - default
+          - cert-manager
+          - kmm-operator-system
+    - logs:
+        namespace: kmm-operator-system
+        selector:
+          - app.kubernetes.io/part-of=kmm
+  hostCollectors:
+    - cpu: {}
+    - hostOS: {}
+    - http:
+        get:
+          url: http://localhost:5000/v2/_catalog
+    - memory: {}
+    - run:
+        collectorName: "kernel logs"
+        command: "dmesg"
+        args: []
+  analyzers:
+    #
+    # cert-manager Deployments
+    #
+    - deploymentStatus:
+        name: cert-manager
+        namespace: cert-manager
+        outcomes:
+          - fail:
+              when: "absent"
+              message: The deployment is not present.
+          - fail:
+              when: "< 1"
+              message: The deployment does not have any ready replicas.
+          - pass:
+              message: There is at least one Ready replica of the Deployment.
+    - deploymentStatus:
+        name: cert-manager-cainjector
+        namespace: cert-manager
+        outcomes:
+          - fail:
+              when: "absent"
+              message: The deployment is not present.
+          - fail:
+              when: "< 1"
+              message: The deployment does not have any ready replicas.
+          - pass:
+              message: There is at least one Ready replica of the Deployment.
+    - deploymentStatus:
+        name: cert-manager-webhook
+        namespace: cert-manager
+        outcomes:
+          - fail:
+              when: "absent"
+              message: The deployment is not present.
+          - fail:
+              when: "< 1"
+              message: The deployment does not have any ready replicas.
+          - pass:
+              message: There is at least one Ready replica of the Deployment.
+    #
+    # KMM Deployments
+    #
+    - deploymentStatus:
+        name: kmm-operator-controller-manager
+        namespace: kmm-operator-system
+        outcomes:
+          - fail:
+              when: "absent"
+              message: The KMM deployment is not present.
+          - fail:
+              when: "< 1"
+              message: The API deployment does not have any ready replicas.
+          - pass:
+              message: There is at least one Ready replica of the Deployment.
+    - deploymentStatus:
+        name: kmm-operator-hub-controller-manager
+        namespace: kmm-operator-system
+        outcomes:
+          - fail:
+              when: "absent"
+              message: The KMM-Hub deployment is not present.
+          - fail:
+              when: "< 1"
+              message: The API deployment does not have any ready replicas.
+          - pass:
+              message: There is at least one Ready replica of the Deployment.
+    - jobStatus:
+        namespace: default
+        outcomes:
+          - fail:
+            when: "failed >= 1"
+            message: At least one Job has failed.
