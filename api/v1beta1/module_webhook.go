@@ -26,6 +26,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // log is for logging in this package.
@@ -44,30 +45,30 @@ func (m *Module) SetupWebhookWithManager(mgr ctrl.Manager) error {
 var _ webhook.Validator = &Module{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (m *Module) ValidateCreate() error {
+func (m *Module) ValidateCreate() (admission.Warnings, error) {
 	modulelog.Info("Validating Module creation", "name", m.Name, "namespace", m.Namespace)
 
 	if err := m.validateKernelMapping(); err != nil {
-		return fmt.Errorf("failed to validate kernel mappings: %v", err)
+		return nil, fmt.Errorf("failed to validate kernel mappings: %v", err)
 	}
 
-	return m.validateModprobe()
+	return nil, m.validateModprobe()
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (m *Module) ValidateUpdate(_ runtime.Object) error {
+func (m *Module) ValidateUpdate(_ runtime.Object) (admission.Warnings, error) {
 	modulelog.Info("Validating Module update", "name", m.Name, "namespace", m.Namespace)
 
 	if err := m.validateKernelMapping(); err != nil {
-		return fmt.Errorf("failed to validate kernel mappings: %v", err)
+		return nil, fmt.Errorf("failed to validate kernel mappings: %v", err)
 	}
 
-	return m.validateModprobe()
+	return nil, m.validateModprobe()
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (m *Module) ValidateDelete() error {
-	return nil
+func (m *Module) ValidateDelete() (admission.Warnings, error) {
+	return nil, nil
 }
 
 func (m *Module) validateKernelMapping() error {

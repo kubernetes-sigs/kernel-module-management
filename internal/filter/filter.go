@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/util/podutils"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -65,14 +66,10 @@ func clusterClaim(name string, clusterClaims []clusterv1.ManagedClusterClaim) *c
 
 type Filter struct {
 	client client.Client
-	logger logr.Logger
 }
 
-func New(client client.Client, logger logr.Logger) *Filter {
-	return &Filter{
-		client: client,
-		logger: logger,
-	}
+func New(client client.Client) *Filter {
+	return &Filter{client: client}
 }
 
 func (f *Filter) ModuleReconcilerNodePredicate(kernelLabel string) predicate.Predicate {
@@ -109,8 +106,8 @@ func NodeUpdateKernelChangedPredicate() predicate.Predicate {
 	}
 }
 
-func (f *Filter) FindModulesForNode(node client.Object) []reconcile.Request {
-	logger := f.logger.WithValues("node", node.GetName())
+func (f *Filter) FindModulesForNode(ctx context.Context, node client.Object) []reconcile.Request {
+	logger := ctrl.LoggerFrom(ctx).WithValues("node", node.GetName())
 
 	reqs := make([]reconcile.Request, 0)
 
@@ -162,8 +159,8 @@ func (f *Filter) FindModulesForNode(node client.Object) []reconcile.Request {
 	return reqs
 }
 
-func (f *Filter) FindManagedClusterModulesForCluster(cluster client.Object) []reconcile.Request {
-	logger := f.logger.WithValues("managedcluster", cluster.GetName())
+func (f *Filter) FindManagedClusterModulesForCluster(ctx context.Context, cluster client.Object) []reconcile.Request {
+	logger := ctrl.LoggerFrom(ctx).WithValues("managedcluster", cluster.GetName())
 
 	reqs := make([]reconcile.Request, 0)
 
@@ -222,10 +219,10 @@ func (f *Filter) ManagedClusterModuleReconcilerManagedClusterPredicate() predica
 	)
 }
 
-func (f *Filter) EnqueueAllPreflightValidations(mod client.Object) []reconcile.Request {
+func (f *Filter) EnqueueAllPreflightValidations(ctx context.Context, mod client.Object) []reconcile.Request {
 	reqs := make([]reconcile.Request, 0)
 
-	logger := f.logger.WithValues("module", mod.GetName())
+	logger := ctrl.LoggerFrom(ctx).WithValues("module", mod.GetName())
 	logger.Info("Listing all preflights")
 	preflights := kmmv1beta1.PreflightValidationList{}
 	if err := f.client.List(context.Background(), &preflights); err != nil {

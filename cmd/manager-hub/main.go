@@ -20,6 +20,7 @@ import (
 	"flag"
 	"time"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -29,7 +30,6 @@ import (
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -87,21 +87,22 @@ func main() {
 
 	setupLogger.Info("Creating manager", "git commit", commit)
 
-	options := ctrl.Options{Scheme: scheme}
-
-	options, err = options.AndFrom(ctrl.ConfigFile().AtPath(configFile))
+	cfg, err := config.ParseFile(configFile)
 	if err != nil {
-		cmd.FatalError(setupLogger, err, "unable to load the config file")
+		cmd.FatalError(setupLogger, err, "could not parse the configuration file", "path", configFile)
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
+	options := cfg.ManagerOptions()
+	options.Scheme = scheme
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), *options)
 	if err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create manager")
 	}
 
 	client := mgr.GetClient()
 
-	filterAPI := filter.New(client, mgr.GetLogger())
+	filterAPI := filter.New(client)
 
 	metricsAPI := metrics.New()
 	metricsAPI.Register()

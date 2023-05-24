@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"open-cluster-management.io/api/cluster/v1alpha1"
@@ -17,10 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 )
 
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;patch;list;watch
@@ -101,10 +99,8 @@ func (r *NodeKernelClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) er
 		// Each time our ClusterClaim is updated, enqueue an empty reconciliation request.
 		// We list all nodes during reconciliation, so sending an empty request is OK.
 		Watches(
-			&source.Kind{
-				Type: &v1alpha1.ClusterClaim{},
-			},
-			handler.EnqueueRequestsFromMapFunc(func(_ client.Object) []reconcile.Request {
+			&v1alpha1.ClusterClaim{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []reconcile.Request {
 				return []reconcile.Request{{}}
 			}),
 			builder.WithPredicates(

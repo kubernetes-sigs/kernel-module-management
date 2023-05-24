@@ -373,8 +373,8 @@ var _ = Describe("ValidateCreate", func() {
 			},
 		}
 
-		e := mod.ValidateCreate()
-		Expect(e).ToNot(HaveOccurred())
+		_, err := mod.ValidateCreate()
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should fail when validating kernel mappings regexps", func() {
@@ -390,9 +390,9 @@ var _ = Describe("ValidateCreate", func() {
 			},
 		}
 
-		e := mod.ValidateCreate()
-		Expect(e).To(HaveOccurred())
-		Expect(e.Error()).To(ContainSubstring("failed to validate kernel mappings"))
+		_, err := mod.ValidateCreate()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to validate kernel mappings"))
 	})
 })
 
@@ -434,8 +434,11 @@ var _ = Describe("ValidateUpdate", func() {
 			},
 		}
 
-		Expect(mod1.ValidateUpdate(nil)).ToNot(HaveOccurred())
-		Expect(mod2.ValidateUpdate(nil)).ToNot(HaveOccurred())
+		_, err1 := mod1.ValidateUpdate(nil)
+		Expect(err1).ToNot(HaveOccurred())
+
+		_, err2 := mod2.ValidateUpdate(nil)
+		Expect(err2).ToNot(HaveOccurred())
 	})
 
 	It("should fail when validating kernel mappings regexps", func() {
@@ -451,15 +454,15 @@ var _ = Describe("ValidateUpdate", func() {
 			},
 		}
 
-		e := mod.ValidateUpdate(nil)
-		Expect(e).To(HaveOccurred())
-		Expect(e.Error()).To(ContainSubstring("failed to validate kernel mappings"))
+		_, err := mod.ValidateUpdate(nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to validate kernel mappings"))
 	})
 })
 
 var _ = Describe("ValidateDelete", func() {
 	It("should do nothing and return always nil", func() {
 		module := &Module{}
-		Expect(module.ValidateDelete()).ToNot(HaveOccurred())
+		Expect(module.ValidateDelete()).To(BeEmpty())
 	})
 })

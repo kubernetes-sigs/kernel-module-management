@@ -22,6 +22,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var modulelog = logf.Log.WithName("managed-cluster-module-resource")
@@ -39,7 +40,7 @@ func (mcm *ManagedClusterModule) SetupWebhookWithManager(mgr ctrl.Manager) error
 var _ webhook.Validator = &ManagedClusterModule{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (mcm *ManagedClusterModule) ValidateCreate() error {
+func (mcm *ManagedClusterModule) ValidateCreate() (admission.Warnings, error) {
 	modulelog.Info("Validating ManagedClusterModule creation", "name", mcm.Name, "namespace", mcm.Namespace)
 
 	module := &kmmv1beta1.Module{
@@ -49,7 +50,7 @@ func (mcm *ManagedClusterModule) ValidateCreate() error {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (mcm *ManagedClusterModule) ValidateUpdate(obj runtime.Object) error {
+func (mcm *ManagedClusterModule) ValidateUpdate(obj runtime.Object) (admission.Warnings, error) {
 	modulelog.Info("Validating ManagedClusterModule update", "name", mcm.Name, "namespace", mcm.Namespace)
 
 	module := &kmmv1beta1.Module{
@@ -59,7 +60,7 @@ func (mcm *ManagedClusterModule) ValidateUpdate(obj runtime.Object) error {
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (mcm *ManagedClusterModule) ValidateDelete() error {
+func (mcm *ManagedClusterModule) ValidateDelete() (admission.Warnings, error) {
 	modulelog.Info("Validating ManagedClusterModule delete", "name", mcm.Name, "namespace", mcm.Namespace)
 
 	module := &kmmv1beta1.Module{
