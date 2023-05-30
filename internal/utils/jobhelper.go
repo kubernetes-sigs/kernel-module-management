@@ -71,6 +71,8 @@ func (jh *jobHelper) GetModuleJobByKernel(ctx context.Context, modName, namespac
 		return nil, fmt.Errorf("failed to get module %s, jobs by kernel %s: %v", modName, targetKernel, err)
 	}
 
+	// filter jobs by owner, since they could have been created by the preflight
+	// when checking that specific module
 	moduleOwnedJobs := filterJobsByOwner(jobs, owner)
 	numFoundJobs := len(moduleOwnedJobs)
 	if numFoundJobs == 0 {
@@ -88,6 +90,9 @@ func (jh *jobHelper) GetModuleJobs(ctx context.Context, modName, namespace, jobT
 	if err != nil {
 		return nil, fmt.Errorf("failed to get jobs for module %s, namespace %s: %v", modName, namespace, err)
 	}
+
+	// filter jobs by owner, since they could have been created by the preflight
+	// when checking that specific module
 	moduleOwnedJobs := filterJobsByOwner(jobs, owner)
 	return moduleOwnedJobs, nil
 }
