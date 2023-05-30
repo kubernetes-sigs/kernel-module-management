@@ -3,4 +3,5 @@ metricsBindAddress: 127.0.0.1:8080
 webhookPort: 9443
 leaderElection:
   enabled: true
-  resourceID: kmm-hub.sigs.x-k8s.io
+  resourceID: some-resource-id
+

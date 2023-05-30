@@ -22,6 +22,11 @@ import (
 	"time"
 
 	v1beta12 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	batchv1 "k8s.io/api/batch/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,13 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 const (
@@ -75,7 +73,7 @@ func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error
 		For(&v1beta12.PreflightValidation{}, builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate())).
 		Owns(&batchv1.Job{}).
 		Watches(
-			&source.Kind{Type: &v1beta12.Module{}},
+			&v1beta12.Module{},
 			handler.EnqueueRequestsFromMapFunc(r.filter.EnqueueAllPreflightValidations),
 			builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate()),
 		).

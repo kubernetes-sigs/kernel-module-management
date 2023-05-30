@@ -45,7 +45,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const ModuleReconcilerName = "Module"
@@ -490,7 +489,7 @@ func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string
 		Owns(&appsv1.DaemonSet{}).
 		Owns(&batchv1.Job{}).
 		Watches(
-			&source.Kind{Type: &v1.Node{}},
+			&v1.Node{},
 			handler.EnqueueRequestsFromMapFunc(r.filter.FindModulesForNode),
 			builder.WithPredicates(
 				r.filter.ModuleReconcilerNodePredicate(kernelLabel),

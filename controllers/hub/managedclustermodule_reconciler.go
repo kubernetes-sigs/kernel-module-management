@@ -20,6 +20,11 @@ import (
 	"context"
 	"fmt"
 
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	batchv1 "k8s.io/api/batch/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,13 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 )
 
 const ManagedClusterModuleReconcilerName = "ManagedClusterModule"
@@ -168,7 +166,7 @@ func (r *ManagedClusterModuleReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		Owns(&workv1.ManifestWork{}).
 		Owns(&batchv1.Job{}).
 		Watches(
-			&source.Kind{Type: &clusterv1.ManagedCluster{}},
+			&clusterv1.ManagedCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.filter.FindManagedClusterModulesForCluster),
 			builder.WithPredicates(
 				r.filter.ManagedClusterModuleReconcilerManagedClusterPredicate(),
