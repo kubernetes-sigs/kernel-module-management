@@ -53,7 +53,6 @@ steps:
     name: golang:1.20-alpine3.17
     env:
       - '_GIT_TAG=$_GIT_TAG'
-      - 'PROJECT_ID=$PROJECT_ID'
     entrypoint: sh
     args:
       - -eEuo
@@ -71,11 +70,11 @@ steps:
         export PATH=$$(go env GOPATH)/bin:$${PATH}
 
         # KMM
-        make bundle IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG USE_IMAGE_DIGESTS=true
+        make bundle IMAGE_TAG=$_GIT_TAG USE_IMAGE_DIGESTS=true
         mv bundle bundle.Dockerfile /bundle-kmm
 
         # KMM Hub
-        make bundle-hub HUB_IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:$_GIT_TAG USE_IMAGE_DIGESTS=true
+        make bundle-hub IMAGE_TAG:$_GIT_TAG USE_IMAGE_DIGESTS=true
         mv bundle bundle.Dockerfile /bundle-hub
     volumes:
       - name: bundle-kmm

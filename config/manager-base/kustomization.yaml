@@ -4,6 +4,11 @@ kind: Kustomization
 resources:
 - manager.yaml
 
+images:
+- name: signer
+  newName: gcr.io/k8s-staging-kmm/kernel-module-management-signimage
+  newTag: latest
+
 patches:
 # Protect the /metrics endpoint by putting it behind auth.
 # If you want your controller-manager to expose the /metrics
@@ -14,3 +19,5 @@ patches:
 # through a ComponentConfig type
 - path: manager_config_patch.yaml
 
+configurations:
+- kustomizeconfig.yaml
