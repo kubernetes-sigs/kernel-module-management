@@ -6,7 +6,6 @@ steps:
     - --build-arg
     - TARGET=manager
     - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG
-    - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator:latest
     - .
     waitFor: ['-']
   - id: push-manager-image
@@ -23,7 +22,6 @@ steps:
     - --build-arg
     - TARGET=manager-hub
     - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:$_GIT_TAG
-    - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:latest
     - .
     waitFor: ['-']
   - id: push-manager-hub-image
@@ -38,7 +36,6 @@ steps:
     args:
       - build
       - --tag=gcr.io/$PROJECT_ID/kernel-module-management-signimage:$_GIT_TAG
-      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-signimage:latest
       - --file=Dockerfile.signimage
       - .
     waitFor: ['-']
@@ -53,7 +50,6 @@ steps:
     name: golang:1.20-alpine3.17
     env:
       - '_GIT_TAG=$_GIT_TAG'
-      - 'PROJECT_ID=$PROJECT_ID'
     entrypoint: sh
     args:
       - -eEuo
@@ -71,11 +67,11 @@ steps:
         export PATH=$$(go env GOPATH)/bin:$${PATH}
 
         # KMM
-        make bundle IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator:$_GIT_TAG USE_IMAGE_DIGESTS=true
+        make bundle IMAGE_TAG=$_GIT_TAG USE_IMAGE_DIGESTS=true
         mv bundle bundle.Dockerfile /bundle-kmm
 
         # KMM Hub
-        make bundle-hub HUB_IMG=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub:$_GIT_TAG USE_IMAGE_DIGESTS=true
+        make bundle-hub IMAGE_TAG:$_GIT_TAG USE_IMAGE_DIGESTS=true
         mv bundle bundle.Dockerfile /bundle-hub
     volumes:
       - name: bundle-kmm
@@ -90,7 +86,6 @@ steps:
       - --file=bundle.Dockerfile
       - --cache-from=gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:latest
       - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:$_GIT_TAG
-      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:latest
       - .
     dir: /bundle-kmm
     volumes:
@@ -104,7 +99,6 @@ steps:
       - --file=bundle.Dockerfile
       - --cache-from=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:latest
       - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:$_GIT_TAG
-      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:latest
       - .
     dir: /bundle-hub
     volumes:
@@ -119,6 +113,4 @@ images:
   # Binary images pushed manually in steps so that they are available in build-bundles,
   # which looks for their SHA on their registry.
   - gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:$_GIT_TAG
-  - gcr.io/$PROJECT_ID/kernel-module-management-operator-bundle:latest
   - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:$_GIT_TAG
-  - gcr.io/$PROJECT_ID/kernel-module-management-operator-hub-bundle:latest
