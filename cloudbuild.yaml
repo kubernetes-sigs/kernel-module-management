@@ -71,7 +71,7 @@ steps:
         mv bundle bundle.Dockerfile /bundle-kmm
 
         # KMM Hub
-        make bundle-hub IMAGE_TAG:$_GIT_TAG USE_IMAGE_DIGESTS=true
+        make bundle-hub IMAGE_TAG=$_GIT_TAG USE_IMAGE_DIGESTS=true
         mv bundle bundle.Dockerfile /bundle-hub
     volumes:
       - name: bundle-kmm
