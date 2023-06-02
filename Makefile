@@ -31,12 +31,11 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # gcr.io/k8s-staging-kmm/kernel-module-management-bundle:$VERSION and gcr.io/k8s-staging-kmm/kernel-module-management-catalog:$VERSION.
 IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-operator
 
-# SIGNER_IMAGE_TAG_BASE and SIGNER_IMAGE_TAG together define SIGNER_IMG
-# SIGNER_IMG is the name given to the signer job image that is used to sign kernel modules
-# to implement the escureboot signing functionality
+# This is the default tag of all images made by this Makefile.
+IMAGE_TAG ?= latest
+
 SIGNER_IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-signimage
-SIGNER_IMAGE_TAG ?= $(shell  git log --format="%H" -n 1)
-SIGNER_IMG ?= $(SIGNER_IMAGE_TAG_BASE):$(SIGNER_IMAGE_TAG)
+SIGNER_IMG ?= $(SIGNER_IMAGE_TAG_BASE):$(IMAGE_TAG)
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -54,8 +53,8 @@ ifeq ($(USE_IMAGE_DIGESTS), true)
 endif
 
 # Image URL to use all building/pushing image targets
-IMG ?= $(IMAGE_TAG_BASE):latest
-HUB_IMG ?= $(IMAGE_TAG_BASE)-hub:latest
+IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
+HUB_IMG ?= $(IMAGE_TAG_BASE)-hub:$(IMAGE_TAG)
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.23
@@ -196,11 +195,13 @@ KUSTOMIZE_CONFIG_HUB_DEFAULT ?= config/default-hub
 .PHONY: deploy
 deploy: deploy-cert-manager manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	kubectl apply -k $(KUSTOMIZE_CONFIG_DEFAULT)
 
 .PHONY: deploy-hub
 deploy-hub: deploy-cert-manager manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager-hub && $(KUSTOMIZE) edit set image controller=$(HUB_IMG)
+	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	kubectl apply -k $(KUSTOMIZE_CONFIG_HUB_DEFAULT)
 
 .PHONY: undeploy-kmm
@@ -270,6 +271,7 @@ bundle: operator-sdk manifests kustomize ## Generate bundle manifests and metada
 	rm -fr ./bundle
 	${OPERATOR_SDK} generate kustomize manifests --apis-dir api
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	kubectl kustomize config/manifests | ${OPERATOR_SDK} generate bundle $(BUNDLE_GEN_FLAGS)
 	${OPERATOR_SDK} bundle validate ./bundle
 
@@ -282,6 +284,7 @@ bundle-hub: operator-sdk manifests kustomize ## Generate bundle manifests and me
 		--package kernel-module-management-hub \
 		--input-dir config/manifests-hub
 	cd config/manager-hub && $(KUSTOMIZE) edit set image controller=$(HUB_IMG)
+	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	kubectl kustomize config/manifests-hub | ${OPERATOR_SDK} generate bundle --package kernel-module-management-hub $(BUNDLE_GEN_FLAGS)
 	${OPERATOR_SDK} bundle validate ./bundle
 
