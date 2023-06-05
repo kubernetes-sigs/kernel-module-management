@@ -41,6 +41,12 @@ replacements:
       fieldPath: metadata.namespace
     targets:
       - select:
+          kind: CustomResourceDefinition
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+      - select:
           kind: ValidatingWebhookConfiguration
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
@@ -50,6 +56,13 @@ replacements:
       kind: Certificate
       fieldPath: metadata.name
     targets:
+      - select:
+          kind: CustomResourceDefinition
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 1
       - select:
           kind: ValidatingWebhookConfiguration
         fieldPaths:
