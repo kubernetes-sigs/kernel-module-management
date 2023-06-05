@@ -5,4 +5,4 @@ metadata:
   annotations:
     # `default` and `serving-cert` may be substituted by kustomize
     cert-manager.io/inject-ca-from: default/serving-cert
-  name: managedclustermodules.kmm.sigs.x-k8s.io
+  name: preflightvalidations.kmm.sigs.x-k8s.io
