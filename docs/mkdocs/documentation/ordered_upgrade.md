@@ -32,11 +32,11 @@ module. In k8s cluster there are 2 type of workloads that can access KMM kernel 
    - `version`
    the update should be atomic: both `containerImage` and `version` fields should be updated simultaneously
 2. customer has to remove their workload on the node that should be upgraded
-3. customer removes `kmm.node.kubernetes.io/version-module-<module-namespace>-<module-name>` on the node,
+3. customer removes `kmm.node.kubernetes.io/version-module-<module-namespace>-<module-name>` label on the node,
    which will trigger unloading the current kernel module
 4. customer executes additional upgrading actions on the node (if need be)
 5. customer adds `kmm.node.kubernetes.io/version-module-<module-namespace>-<module-name>=<module version>` label on the node.
-   <module version> value should be the new Version field value set in the CR (item 2).
+   <module version> value should be the new `version` field value set in the CR (item 2).
 6. customer restores their workload on the node.
 
 In case customer does not need to to execute additional upgrading actions (point 4), then all he needs to do is just to 
@@ -54,7 +54,7 @@ label value to new `$moduleVersion`, as the one set in the KMM CR.
 2. ModuleLoader and DevicePlugin daemonsets now have additional node selector value - `beta.kmm.node.kubernetes.io/version-module-loader--<module-namespace>-<module-name>`
    and `kmm.node.kubernetes.io/version-device-plugin-<module-namespace>-<module-name>` accordingly. Manipulation of those labels in the nodes will allow the above mentioned
    controller to remove/add pods on the node
-3. upon change of the Version field in the Module CR, a new ModuleLoader and DevicePlugin daemonsets will be created with appropriate labels in the `nodeSelector` field
+3. upon change of the `version` field in the Module CR, a new ModuleLoader and DevicePlugin daemonsets will be created with appropriate labels in the `nodeSelector` field
 
 ### Flow
 
