@@ -50,6 +50,49 @@ The reconciliation loop for `Module` runs the following steps:
     2. successful build jobs;
     3. successful signing jobs.
 
+### Soft dependencies between kernel modules
+
+Some setups may require that several kernel modules be loaded in a specific order to work properly, although the modules
+do not directly depend on each other through symbols.
+`depmod` is usually not aware of those dependencies, and they do not appear in the files it produces.  
+If `mod_a` has a soft dependency on `mod_b`, `modprobe mod_a` will not load `mod_b`.
+
+Soft dependencies can be declared in the `Module` CRD via the
+`.spec.moduleLoader.container.modprobe.modulesLoadingOrder` field:
+
+```yaml
+modulesLoadingOrder:  # optional
+  - mod_a
+  - mod_b
+```
+
+With the configuration above:
+
+- the loading order will be `mod_b`, then `mod_a`;
+- the unloading order will be `mod_a`, then `mod_b`.
+
+The first value in the list, to be loaded last, must be equivalent to the `moduleName`.
+
+### Replacing an in-tree module
+
+Some modules loaded by KMM may replace in-tree modules already loaded on the node.  
+To unload an in-tree module before loading your module, set the `.spec.moduleLoader.container.inTreeModuleToRemove`:
+
+```yaml
+spec:
+  moduleLoader:
+    container:
+      modprobe:
+        moduleName: mod_a
+        # ...
+
+      # Other fields removed for brevity
+      inTreeModuleToRemove: mod_b
+```
+
+The ModuleLoader pod will first try to unload the in-tree `mod_b` before loading `mod_a` from the ModuleLoader image.  
+When the ModuleLoader pod is terminated and `mod_a` is unloaded, `mod_b` will not be loaded again.
+
 ## Security and permissions
 
 Loading kernel modules is a highly sensitive operation.
@@ -93,6 +136,13 @@ spec:
         parameters:  # Optional
           - param=1
 
+        modulesLoadingOrder:  # optional
+          - my-kmod
+          - my_dep_a
+          - my_dep_b
+
+      inTreeModuleToRemove: my-kmod-intree  # optional
+
       kernelMappings:  # At least one item is required
         - literal: 6.0.15-300.fc37.x86_64
           containerImage: some.registry/org/my-kmod:6.0.15-300.fc37.x86_64
@@ -106,6 +156,7 @@ spec:
         # For any other kernel, build the image using the Dockerfile in the my-kmod ConfigMap.
         - regexp: '^.+$'
           containerImage: "some.registry/org/my-kmod:${KERNEL_FULL_VERSION}"
+          inTreeModuleToRemove: my-other-kmod-intree  # optional
           build:
             buildArgs:  # Optional
               - name: ARG_NAME
@@ -161,3 +212,21 @@ spec:
   selector:
     node-role.kubernetes.io/worker: ""
 ```
+
+### Variable substitution
+
+The following `Module` fields support shell-like variable substitution:
+
+- `.spec.moduleLoader.container.containerImage`;
+- `.spec.moduleLoader.container.kernelMappings[*].containerImage`;
+- `.spec.moduleLoader.container.sign.filesToSign`;
+- `.spec.moduleLoader.container.kernelMappings[*].sign.filesToSign`;
+
+The following variables will be substituted:
+
+| Name                          | Description                            | Example                 |
+|-------------------------------|----------------------------------------|-------------------------|
+| `KERNEL_FULL_VERSION`         | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
+| `KERNEL_VERSION` (deprecated) | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
+| `MOD_NAME`                    | The `Module`'s name                    | `my-mod`                |
+| `MOD_NAMESPACE`               | The `Module`'s namespace               | `my-namespace`          |

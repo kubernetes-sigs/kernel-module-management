@@ -65,6 +65,15 @@ Otherwise, KMM will create a Job to build your image.
 The [kaniko](https://github.com/GoogleContainerTools/kaniko) build system is used.
 KMM monitors the health of the build job, retrying if necessary.
 
+The following build arguments are automatically set by KMM:
+
+| Name                          | Description                            | Example                 |
+|-------------------------------|----------------------------------------|-------------------------|
+| `KERNEL_FULL_VERSION`         | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
+| `KERNEL_VERSION` (deprecated) | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
+| `MOD_NAME`                    | The `Module`'s name                    | `my-mod`                |
+| `MOD_NAMESPACE`               | The `Module`'s namespace               | `my-namespace`          |
+
 Once the image is built, KMM proceeds with the `Module` reconciliation.
 
 ```yaml
