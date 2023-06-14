@@ -18,6 +18,7 @@ nav:
       - Secure boot: documentation/secure_boot.md
       - Preflight validation: documentation/preflight_validation.md
       - Ordered upgrade: documentation/ordered_upgrade.md
+      - documentation/hub_spoke.md
       - documentation/troubleshooting.md
       - documentation/uninstall.md
   - Lab: lab/index.md
