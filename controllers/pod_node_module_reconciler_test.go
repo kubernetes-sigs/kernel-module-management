@@ -150,6 +150,31 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		now := metav1.Now()
+
+		patchRemoveFinalizerFunc := func(_ interface{}, pod *v1.Pod, p client.Patch, _ ...client.GetOption) {
+			Expect(p.Type()).To(Equal(types.MergePatchType))
+			Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null}}`)))
+		}
+
+		It("should NOT label or unlabel when the Pod has no .spec.nodeName", func() {
+			gomock.InOrder(kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
+				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
+					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
+					pod.Finalizers = []string{constants.NodeLabelerFinalizer}
+					pod.DeletionTimestamp = &now
+					pod.Name = podName
+				},
+			),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
+				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
+				kubeClient.EXPECT().Patch(context.TODO(), gomock.AssignableToTypeOf(&v1.Pod{}), gomock.Any()).Do(patchRemoveFinalizerFunc),
+			)
+
+			_, err := r.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
 		It("should label the node when a Pod is ready", func() {
 
 			gomock.InOrder(
@@ -190,7 +215,6 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 		It("should remove the pod finalizer when the pod is being deleted", func() {
 
 			var (
-				now           = metav1.Now()
 				labelSelector = client.MatchingLabels{constants.ModuleNameLabel: moduleName}
 				fieldSelector = client.MatchingFields{"spec.nodeName": nodeName}
 			)
@@ -214,12 +238,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 					},
 				),
 				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil),
-				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(
-					func(_ interface{}, pod *v1.Pod, p client.Patch, _ ...client.GetOption) {
-						Expect(p.Type()).To(Equal(types.MergePatchType))
-						Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null}}`)))
-					},
-				),
+				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(patchRemoveFinalizerFunc),
 			)
 
 			_, err := r.Reconcile(ctx, req)
