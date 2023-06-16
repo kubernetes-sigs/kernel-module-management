@@ -71,7 +71,7 @@ func (m *Module) validate() (admission.Warnings, error) {
 
 	if m.Spec.ModuleLoader.Container.Version != "" && nameLength > maxCombinedLength {
 		return nil, fmt.Errorf(
-			"module name and namespace have a combined length of %d characters, which exceed the maximum of %d when version is set",
+			"module name and namespace have a combined length of %d characters, which exceeds the maximum of %d when version is set",
 			nameLength,
 			maxCombinedLength,
 		)

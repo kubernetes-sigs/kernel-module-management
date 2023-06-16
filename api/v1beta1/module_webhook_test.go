@@ -404,7 +404,7 @@ var _ = Describe("validateModprobe", func() {
 })
 
 var _ = Describe("validate", func() {
-	const chars21 = "czqpo8fb94jv5m529m4aq" // 21 chars
+	chars21 := strings.Repeat("a", 21)
 
 	DescribeTable(
 		"should work as expected",
