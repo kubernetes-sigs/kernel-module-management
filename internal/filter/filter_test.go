@@ -556,24 +556,6 @@ var _ = Describe("DeletingPredicate", func() {
 	)
 })
 
-var _ = Describe("PodHasSpecNodeName", func() {
-	p := PodHasSpecNodeName()
-
-	DescribeTable(
-		"should return the expected value",
-		func(o client.Object, expected bool) {
-			Expect(
-				p.Create(event.CreateEvent{Object: o}),
-			).To(
-				Equal(expected),
-			)
-		},
-		Entry("ConfigMap: false", &v1.ConfigMap{}, false),
-		Entry("Pod with no nodeName: false", &v1.Pod{}, false),
-		Entry("Pod with a nodeName: true", &v1.Pod{Spec: v1.PodSpec{NodeName: "test"}}, true),
-	)
-})
-
 var _ = Describe("PodReadinessChangedPredicate", func() {
 	p := PodReadinessChangedPredicate(logr.Discard())
 

@@ -70,27 +70,32 @@ func (pnmr *PodNodeModuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// has changed not due to Daemonset termination, but due to internal state of Daemonset on
 	// cluster
 	if !podutils.IsPodReady(&pod) || !pod.DeletionTimestamp.IsZero() {
-		logger.Info("Unlabeling node")
+		// If the pod was created very recently but immediately deleted, its .spec.nodeName may still be empty.
+		// In that case, no need to try and unlabel the node; because .spec.nodeName is empty, it was never labeled in
+		// the first place.
+		if nodeName != "" {
+			logger.Info("Unlabeling node")
 
-		// Make sure we don't already have a new running pod before unlabeling the node
-		labelSelector := client.MatchingLabels{constants.ModuleNameLabel: moduleName}
-		fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
-		var modulePodsList v1.PodList
-		err := pnmr.client.List(ctx, &modulePodsList, labelSelector, fieldSelector)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get list of all pods for module %s on node %s: %v", moduleName, nodeName, err)
-		}
-		var foundRunningPod bool
-		for _, p := range modulePodsList.Items {
-			if podutils.IsPodReady(&p) && p.DeletionTimestamp.IsZero() {
-				foundRunningPod = true
-				break
+			// Make sure we don't already have a new running pod before unlabeling the node
+			labelSelector := client.MatchingLabels{constants.ModuleNameLabel: moduleName}
+			fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
+			var modulePodsList v1.PodList
+			err := pnmr.client.List(ctx, &modulePodsList, labelSelector, fieldSelector)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to get list of all pods for module %s on node %s: %v", moduleName, nodeName, err)
 			}
-		}
-		if !foundRunningPod {
-			if err := pnmr.deleteLabel(ctx, nodeName, labelName, deprecatedLabelName); err != nil {
-				return ctrl.Result{}, fmt.Errorf("could not unlabel node %s with label {%q, %q}: %v",
-					nodeName, labelName, deprecatedLabelName, err)
+			var foundRunningPod bool
+			for _, p := range modulePodsList.Items {
+				if podutils.IsPodReady(&p) && p.DeletionTimestamp.IsZero() {
+					foundRunningPod = true
+					break
+				}
+			}
+			if !foundRunningPod {
+				if err := pnmr.deleteLabel(ctx, nodeName, labelName, deprecatedLabelName); err != nil {
+					return ctrl.Result{}, fmt.Errorf("could not unlabel node %s with label {%q, %q}: %v",
+						nodeName, labelName, deprecatedLabelName, err)
+				}
 			}
 		}
 
@@ -136,7 +141,6 @@ func (pnmr *PodNodeModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			filter.DeletingPredicate(),
 		),
 		filter.HasLabel(constants.ModuleNameLabel),
-		filter.PodHasSpecNodeName(),
 	)
 
 	return ctrl.
