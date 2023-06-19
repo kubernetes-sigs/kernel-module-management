@@ -3,8 +3,9 @@ kind: ClusterServiceVersion
 metadata:
   annotations:
     alm-examples: '[]'
-    capabilities: Basic Install
+    capabilities: Seamless Upgrades
     categories: Drivers and plugins
+    repository: https://github.com/kubernetes-sigs/kernel-module-management
   name: kernel-module-management-hub.v0.0.0
   namespace: placeholder
 spec:
@@ -42,8 +43,6 @@ spec:
   - module
   - modules
   links:
-  - name: GitHub repository
-    url: https://github.com/kubernetes-sigs/kernel-module-management
   - name: Documentation
     url: https://kmm.sigs.k8s.io
   - name: Slack
@@ -52,6 +51,7 @@ spec:
   - email: kubernetes-kmm@googlegroups.com
     name: Kernel Module Management
   maturity: stable
+  minKubeVersion: 1.24.0
   provider:
     name: Kubernetes SIG Node
     url: https://github.com/kubernetes-sigs/kernel-module-management
