@@ -405,46 +405,39 @@ func makeLoadCommand(inTreeModuleToRemove string, spec kmmv1beta1.ModprobeSpec, 
 	var loadCommand strings.Builder
 
 	if inTreeModuleToRemove != "" {
-		loadCommand.WriteString("modprobe -r")
-		if spec.DirName != "" {
-			loadCommand.WriteString(" -d " + spec.DirName)
-		}
-		loadCommand.WriteString(" " + inTreeModuleToRemove + " && ")
+		fmt.Fprintf(&loadCommand, "modprobe -r %q && ", inTreeModuleToRemove)
 	}
 
 	if fw := spec.FirmwarePath; fw != "" {
-		fmt.Fprintf(&loadCommand, "cp -r %s/* %s && ", fw, nodeVarLibFirmwarePath)
+		fmt.Fprintf(&loadCommand, `cp -r "%s/*" %s && `, fw, nodeVarLibFirmwarePath)
 	}
 
 	loadCommand.WriteString("modprobe")
 
 	if rawArgs := spec.RawArgs; rawArgs != nil && len(rawArgs.Load) > 0 {
 		for _, arg := range rawArgs.Load {
-			loadCommand.WriteRune(' ')
-			loadCommand.WriteString(arg)
+			fmt.Fprintf(&loadCommand, " %q", arg)
 		}
 		return append(loadCommandShell, loadCommand.String())
 	}
 
 	if args := spec.Args; args != nil && len(args.Load) > 0 {
 		for _, arg := range args.Load {
-			loadCommand.WriteRune(' ')
-			loadCommand.WriteString(arg)
+			fmt.Fprintf(&loadCommand, " %q", arg)
 		}
 	} else {
 		loadCommand.WriteString(" -v")
 	}
 
 	if spec.DirName != "" {
-		loadCommand.WriteString(" -d " + spec.DirName)
+		fmt.Fprintf(&loadCommand, " -d %q", spec.DirName)
 	}
 
-	loadCommand.WriteString(" " + spec.ModuleName)
+	fmt.Fprintf(&loadCommand, " %q", spec.ModuleName)
 
 	if params := spec.Parameters; len(params) > 0 {
 		for _, param := range params {
-			loadCommand.WriteRune(' ')
-			loadCommand.WriteString(param)
+			fmt.Fprintf(&loadCommand, " %q", param)
 		}
 	}
 
@@ -462,33 +455,32 @@ func makeUnloadCommand(spec kmmv1beta1.ModprobeSpec, modName string) []string {
 
 	fwUnloadCommand := ""
 	if fw := spec.FirmwarePath; fw != "" {
-		fwUnloadCommand = fmt.Sprintf(" && cd %s && find |sort -r |xargs -I{} rm -d %s/{}", fw, nodeVarLibFirmwarePath)
+		fwUnloadCommand = fmt.Sprintf(` && cd %q && find |sort -r |xargs -I{} rm -d "%s/{}"`, fw, nodeVarLibFirmwarePath)
 	}
 
 	if rawArgs := spec.RawArgs; rawArgs != nil && len(rawArgs.Unload) > 0 {
 		for _, arg := range rawArgs.Unload {
-			unloadCommand.WriteRune(' ')
-			unloadCommand.WriteString(arg)
-			unloadCommand.WriteString(fwUnloadCommand)
+			fmt.Fprintf(&unloadCommand, " %q", arg)
 		}
+
+		unloadCommand.WriteString(fwUnloadCommand)
 
 		return append(unloadCommandShell, unloadCommand.String())
 	}
 
 	if args := spec.Args; args != nil && len(args.Unload) > 0 {
 		for _, arg := range args.Unload {
-			unloadCommand.WriteRune(' ')
-			unloadCommand.WriteString(arg)
+			fmt.Fprintf(&unloadCommand, " %q", arg)
 		}
 	} else {
 		unloadCommand.WriteString(" -rv")
 	}
 
 	if dirName := spec.DirName; dirName != "" {
-		unloadCommand.WriteString(" -d " + dirName)
+		fmt.Fprintf(&unloadCommand, " -d %q", dirName)
 	}
 
-	unloadCommand.WriteString(" " + spec.ModuleName)
+	fmt.Fprintf(&unloadCommand, " %q", spec.ModuleName)
 	unloadCommand.WriteString(fwUnloadCommand)
 
 	return append(unloadCommandShell, unloadCommand.String())
