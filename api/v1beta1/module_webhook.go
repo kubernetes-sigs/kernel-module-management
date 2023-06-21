@@ -55,8 +55,20 @@ func (m *Module) ValidateCreate() (admission.Warnings, error) {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (m *Module) ValidateUpdate(_ runtime.Object) (admission.Warnings, error) {
+func (m *Module) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	modulelog.Info("Validating Module update", "name", m.Name, "namespace", m.Namespace)
+
+	if old != nil {
+		oldModule, ok := old.(*Module)
+		if !ok {
+			return nil, fmt.Errorf("old object %v is not of the expected type *Module", old)
+		}
+
+		if (oldModule.Spec.ModuleLoader.Container.Version == "" && m.Spec.ModuleLoader.Container.Version != "") ||
+			(oldModule.Spec.ModuleLoader.Container.Version != "" && m.Spec.ModuleLoader.Container.Version == "") {
+			return nil, errors.New("cannot update to or from an empty version; please delete the Module and create it again")
+		}
+	}
 
 	return m.validate()
 }
