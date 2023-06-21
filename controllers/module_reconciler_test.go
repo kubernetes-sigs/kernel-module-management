@@ -10,13 +10,13 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
-	"github.com/mitchellh/hashstructure/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -100,6 +100,11 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().getRelevantKernelMappingsAndNodes(ctx, &mod, selectNodesList).Return(mappings, kernelNodesList, nil)
+		if getDSError {
+			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, returnedError)
+			goto executeTestFunction
+		}
+		mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil)
 		if handleBuildError {
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(false, returnedError)
 			goto executeTestFunction
@@ -111,20 +116,15 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		}
 		mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(true, nil)
 		if handleDCError {
-			mockReconHelper.EXPECT().handleDriverContainer(ctx, mappings["kernelVersion"]).Return(returnedError)
+			mockReconHelper.EXPECT().handleDriverContainer(ctx, mappings["kernelVersion"], moduleDS).Return(returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().handleDriverContainer(ctx, mappings["kernelVersion"]).Return(nil)
+		mockReconHelper.EXPECT().handleDriverContainer(ctx, mappings["kernelVersion"], moduleDS).Return(nil)
 		if handlePluginError {
-			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod).Return(returnedError)
+			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, moduleDS).Return(returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod).Return(nil)
-		if getDSError {
-			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, returnedError)
-			goto executeTestFunction
-		}
-		mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil)
+		mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, moduleDS).Return(nil)
 		if gcError {
 			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings, moduleDS).Return(returnedError)
 			goto executeTestFunction
@@ -162,9 +162,9 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappingsAndNodes(ctx, &mod, selectNodesList).Return(mappings, kernelNodesList, nil),
-			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(false, nil),
-			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod).Return(nil),
 			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
+			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(false, nil),
+			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, moduleDS).Return(nil),
 			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings, moduleDS).Return(nil),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, kernelNodesList, selectNodesList, moduleDS).Return(nil),
 		)
@@ -187,10 +187,10 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappingsAndNodes(ctx, &mod, selectNodesList).Return(mappings, kernelNodesList, nil),
+			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(false, nil),
-			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod).Return(nil),
-			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
+			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, moduleDS).Return(nil),
 			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings, moduleDS).Return(nil),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, kernelNodesList, selectNodesList, moduleDS).Return(nil),
 		)
@@ -212,11 +212,11 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappingsAndNodes(ctx, &mod, selectNodesList).Return(mappings, kernelNodesList, nil),
+			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(true, nil),
-			mockReconHelper.EXPECT().handleDriverContainer(ctx, mappings["kernelVersion"]).Return(nil),
-			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod).Return(nil),
-			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
+			mockReconHelper.EXPECT().handleDriverContainer(ctx, mappings["kernelVersion"], moduleDS).Return(nil),
+			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, moduleDS).Return(nil),
 			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings, moduleDS).Return(nil),
 			mockSU.EXPECT().ModuleUpdateStatus(ctx, &mod, kernelNodesList, selectNodesList, moduleDS).Return(nil),
 		)
@@ -558,10 +558,8 @@ var _ = Describe("ModuleReconciler_handleDriverContainer", func() {
 			KernelVersion: "kernelVersion1",
 			ModuleVersion: "v234.e",
 		}
-		hashValue, err := hashstructure.Hash(hashData{KernelVersion: mld.KernelVersion, ModuleVersion: mld.ModuleVersion}, hashstructure.FormatV2, nil)
-		Expect(err).NotTo(HaveOccurred())
 		newDS := &appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace, Name: fmt.Sprintf("%s-%x", mld.Name, hashValue)},
+			ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace, GenerateName: mld.Name + "-"},
 		}
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
@@ -569,7 +567,7 @@ var _ = Describe("ModuleReconciler_handleDriverContainer", func() {
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 		)
 
-		err = mhr.handleDriverContainer(ctx, &mld)
+		err := mhr.handleDriverContainer(ctx, &mld, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -583,11 +581,13 @@ var _ = Describe("ModuleReconciler_handleDriverContainer", func() {
 			KernelVersion: "kernelVersion1",
 			ModuleVersion: "wr4656",
 		}
-		hashValue, err := hashstructure.Hash(hashData{KernelVersion: mld.KernelVersion, ModuleVersion: mld.ModuleVersion}, hashstructure.FormatV2, nil)
-		Expect(err).NotTo(HaveOccurred())
-		name := fmt.Sprintf("%s-%x", mld.Name, hashValue)
-		existingDS := &appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace, Name: name},
+		const name = "some name"
+		labels := map[string]string{
+			constants.KernelLabel: mld.KernelVersion,
+			utils.GetModuleLoaderVersionLabelName(mld.Namespace, mld.Name): mld.ModuleVersion,
+		}
+		existingDS := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace, Name: name, Labels: labels},
 		}
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
@@ -597,10 +597,10 @@ var _ = Describe("ModuleReconciler_handleDriverContainer", func() {
 					return nil
 				},
 			),
-			mockDC.EXPECT().SetDriverContainerAsDesired(ctx, existingDS, &mld).Return(nil),
+			mockDC.EXPECT().SetDriverContainerAsDesired(ctx, &existingDS, &mld).Return(nil),
 		)
 
-		err = mhr.handleDriverContainer(ctx, &mld)
+		err := mhr.handleDriverContainer(ctx, &mld, []appsv1.DaemonSet{existingDS})
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -618,7 +618,7 @@ var _ = Describe("ModuleReconciler_handleDriverContainer", func() {
 			mockDC.EXPECT().SetDriverContainerAsDesired(ctx, gomock.Any(), &mld).Return(fmt.Errorf("some error")),
 		)
 
-		err := mhr.handleDriverContainer(ctx, &mld)
+		err := mhr.handleDriverContainer(ctx, &mld, nil)
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -650,7 +650,7 @@ var _ = Describe("ModuleReconciler_handleDevicePlugin", func() {
 			},
 		}
 
-		err := mhr.handleDevicePlugin(ctx, &mod)
+		err := mhr.handleDevicePlugin(ctx, &mod, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -667,11 +667,8 @@ var _ = Describe("ModuleReconciler_handleDevicePlugin", func() {
 			},
 		}
 
-		hashValue, err := hashstructure.Hash(hashData{ModuleVersion: ""}, hashstructure.FormatV2, nil)
-		Expect(err).NotTo(HaveOccurred())
-
 		newDS := &appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, Name: fmt.Sprintf("%s-device-plugin-%x", mod.Name, hashValue)},
+			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, GenerateName: mod.Name + "-device-plugin-"},
 		}
 		gomock.InOrder(
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
@@ -679,7 +676,7 @@ var _ = Describe("ModuleReconciler_handleDevicePlugin", func() {
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 		)
 
-		err = mhr.handleDevicePlugin(ctx, &mod)
+		err := mhr.handleDevicePlugin(ctx, &mod, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -696,10 +693,8 @@ var _ = Describe("ModuleReconciler_handleDevicePlugin", func() {
 			},
 		}
 
-		hashValue, err := hashstructure.Hash(hashData{ModuleVersion: ""}, hashstructure.FormatV2, nil)
-		Expect(err).NotTo(HaveOccurred())
-		name := fmt.Sprintf("%s-device-plugin-%x", mod.Name, hashValue)
-		existingDS := &appsv1.DaemonSet{
+		const name = "some name"
+		existingDS := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, Name: name},
 		}
 		gomock.InOrder(
@@ -710,10 +705,10 @@ var _ = Describe("ModuleReconciler_handleDevicePlugin", func() {
 					return nil
 				},
 			),
-			mockDC.EXPECT().SetDevicePluginAsDesired(ctx, existingDS, &mod).Return(nil),
+			mockDC.EXPECT().SetDevicePluginAsDesired(ctx, &existingDS, &mod).Return(nil),
 		)
 
-		err = mhr.handleDevicePlugin(ctx, &mod)
+		err := mhr.handleDevicePlugin(ctx, &mod, []appsv1.DaemonSet{existingDS})
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -886,4 +881,67 @@ var _ = Describe("ModuleReconciler_setKMMOMetrics", func() {
 		Entry("modprobe raw args", false, false, false, false, false, nil, []string{"rawparam1", "rawparam2"}),
 		Entry("altogether", true, true, true, true, true, []string{"param1", "param2"}, []string{"rawparam1", "rawparam2"}),
 	)
+})
+
+var _ = Describe("ModuleReconciler_getExistingDS", func() {
+	const (
+		moduleName      = "moduleName"
+		moduleNamespace = "moduleNamespace"
+		kernelVersion   = "kernelVersion"
+		moduleVersion   = "moduleVersion"
+	)
+
+	moduleLoaderLabels := map[string]string{
+		constants.KernelLabel: kernelVersion,
+		utils.GetModuleLoaderVersionLabelName(moduleNamespace, moduleName): moduleVersion,
+	}
+
+	devicePluginLabels := map[string]string{
+		utils.GetDevicePluginVersionLabelName(moduleNamespace, moduleName): moduleVersion,
+	}
+
+	ds := appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Namespace: moduleNamespace, Name: moduleName},
+	}
+
+	It("empty list", func() {
+		By("empty daemonset list")
+		res := getExistingDS(nil, moduleNamespace, moduleName, kernelVersion, moduleVersion, false)
+		Expect(res).To(BeNil())
+
+		By("module loader, kernel version and module version are equal")
+		ds.SetLabels(moduleLoaderLabels)
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, kernelVersion, moduleVersion, false)
+		Expect(res).To(Equal(&ds))
+
+		By("module loader, kernel version not equal, module version equal")
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "some version", moduleVersion, false)
+		Expect(res).To(BeNil())
+
+		By("module loader, kernel version equal, module version not equal")
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, kernelVersion, "some version", false)
+		Expect(res).To(BeNil())
+
+		By("module loader, kernel version equal, module version label missing and module version parameter is empty")
+		newLabels := map[string]string{
+			constants.KernelLabel: kernelVersion,
+		}
+		ds.SetLabels(newLabels)
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, kernelVersion, "", false)
+		Expect(res).To(Equal(&ds))
+
+		By("device plugin, module version equal")
+		ds.SetLabels(devicePluginLabels)
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "", moduleVersion, true)
+		Expect(res).To(Equal(&ds))
+
+		By("device plugin, module version not equal")
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "", "some version", true)
+		Expect(res).To(BeNil())
+
+		By("device plugin, module version label missing, and module version parameter is empty")
+		ds.SetLabels(map[string]string{})
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "", "", true)
+		Expect(res).To(Equal(&ds))
+	})
 })
