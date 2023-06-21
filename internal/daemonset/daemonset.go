@@ -405,11 +405,7 @@ func makeLoadCommand(inTreeModuleToRemove string, spec kmmv1beta1.ModprobeSpec, 
 	var loadCommand strings.Builder
 
 	if inTreeModuleToRemove != "" {
-		loadCommand.WriteString("modprobe -r")
-		if spec.DirName != "" {
-			loadCommand.WriteString(" -d " + spec.DirName)
-		}
-		loadCommand.WriteString(" " + inTreeModuleToRemove + " && ")
+		loadCommand.WriteString("modprobe -r " + inTreeModuleToRemove + " && ")
 	}
 
 	if fw := spec.FirmwarePath; fw != "" {

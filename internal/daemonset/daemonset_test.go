@@ -892,7 +892,7 @@ var _ = Describe("makeLoadCommand", func() {
 			Equal([]string{
 				"/bin/sh",
 				"-c",
-				fmt.Sprintf("modprobe -r -d %s %s && modprobe -v -d %s %s %s %s", dir, "in-tree-module", dir, kernelModuleName, arg1, arg2),
+				fmt.Sprintf("modprobe -r %s && modprobe -v -d %s %s %s %s", "in-tree-module", dir, kernelModuleName, arg1, arg2),
 			}),
 		)
 	})
