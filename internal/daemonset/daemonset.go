@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-openapi/swag"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -214,13 +213,12 @@ func (dc *daemonSetGenerator) SetDriverContainerAsDesired(
 				Annotations: modulesOrderAnnotations,
 			},
 			Spec: v1.PodSpec{
-				ShareProcessNamespace: swag.Bool(true),
-				Containers:            []v1.Container{container},
-				ImagePullSecrets:      GetPodPullSecrets(mld.ImageRepoSecret),
-				NodeSelector:          nodeSelector,
-				PriorityClassName:     "system-node-critical",
-				ServiceAccountName:    mld.ServiceAccountName,
-				Volumes:               volumes,
+				Containers:         []v1.Container{container},
+				ImagePullSecrets:   GetPodPullSecrets(mld.ImageRepoSecret),
+				NodeSelector:       nodeSelector,
+				PriorityClassName:  "system-node-critical",
+				ServiceAccountName: mld.ServiceAccountName,
+				Volumes:            volumes,
 			},
 		},
 		Selector: &metav1.LabelSelector{MatchLabels: standardLabels},

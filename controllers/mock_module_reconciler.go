@@ -115,31 +115,31 @@ func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleBuild(ctx, mld interf
 }
 
 // handleDevicePlugin mocks base method.
-func (m *MockmoduleReconcilerHelperAPI) handleDevicePlugin(ctx context.Context, mod *v1beta1.Module) error {
+func (m *MockmoduleReconcilerHelperAPI) handleDevicePlugin(ctx context.Context, mod *v1beta1.Module, existingModuleDS []v1.DaemonSet) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "handleDevicePlugin", ctx, mod)
+	ret := m.ctrl.Call(m, "handleDevicePlugin", ctx, mod, existingModuleDS)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // handleDevicePlugin indicates an expected call of handleDevicePlugin.
-func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDevicePlugin(ctx, mod interface{}) *gomock.Call {
+func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDevicePlugin(ctx, mod, existingModuleDS interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDevicePlugin", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDevicePlugin), ctx, mod)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDevicePlugin", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDevicePlugin), ctx, mod, existingModuleDS)
 }
 
 // handleDriverContainer mocks base method.
-func (m *MockmoduleReconcilerHelperAPI) handleDriverContainer(ctx context.Context, mld *api.ModuleLoaderData) error {
+func (m *MockmoduleReconcilerHelperAPI) handleDriverContainer(ctx context.Context, mld *api.ModuleLoaderData, existingModuleDS []v1.DaemonSet) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "handleDriverContainer", ctx, mld)
+	ret := m.ctrl.Call(m, "handleDriverContainer", ctx, mld, existingModuleDS)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // handleDriverContainer indicates an expected call of handleDriverContainer.
-func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDriverContainer(ctx, mld interface{}) *gomock.Call {
+func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDriverContainer(ctx, mld, existingModuleDS interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDriverContainer", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDriverContainer), ctx, mld)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDriverContainer", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDriverContainer), ctx, mld, existingModuleDS)
 }
 
 // handleSigning mocks base method.

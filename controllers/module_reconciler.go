@@ -24,6 +24,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
@@ -31,7 +32,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
-	"github.com/mitchellh/hashstructure/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -119,6 +119,11 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("could get kernel mappings and nodes for modules %s: %w", mod.Name, err)
 	}
 
+	existingModuleDS, err := r.daemonAPI.GetModuleDaemonSets(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		return res, fmt.Errorf("could not get DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
+	}
+
 	for kernelVersion, mld := range mldMappings {
 		completedSuccessfully, err := r.reconHelperAPI.handleBuild(ctx, mld)
 		if err != nil {
@@ -142,21 +147,16 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			continue
 		}
 
-		err = r.reconHelperAPI.handleDriverContainer(ctx, mld)
+		err = r.reconHelperAPI.handleDriverContainer(ctx, mld, existingModuleDS)
 		if err != nil {
 			return res, fmt.Errorf("failed to handle driver container for kernel version %s: %v", kernelVersion, err)
 		}
 	}
 
 	logger.Info("Handle device plugin")
-	err = r.reconHelperAPI.handleDevicePlugin(ctx, mod)
+	err = r.reconHelperAPI.handleDevicePlugin(ctx, mod, existingModuleDS)
 	if err != nil {
 		return res, fmt.Errorf("could handle device plugin: %w", err)
-	}
-
-	existingModuleDS, err := r.daemonAPI.GetModuleDaemonSets(ctx, mod.Name, mod.Namespace)
-	if err != nil {
-		return res, fmt.Errorf("could get DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
 	}
 
 	logger.Info("Run garbage collection")
@@ -184,14 +184,9 @@ type moduleReconcilerHelperAPI interface {
 	getRelevantKernelMappingsAndNodes(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, []v1.Node, error)
 	handleBuild(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
 	handleSigning(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
-	handleDriverContainer(ctx context.Context, mld *api.ModuleLoaderData) error
-	handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module) error
+	handleDriverContainer(ctx context.Context, mld *api.ModuleLoaderData, existingModuleDS []appsv1.DaemonSet) error
+	handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingModuleDS []appsv1.DaemonSet) error
 	garbageCollect(ctx context.Context, mod *kmmv1beta1.Module, mldMappings map[string]*api.ModuleLoaderData, existingDS []appsv1.DaemonSet) error
-}
-
-type hashData struct {
-	KernelVersion string
-	ModuleVersion string
 }
 
 type moduleReconcilerHelper struct {
@@ -345,22 +340,18 @@ func (mrh *moduleReconcilerHelper) handleSigning(ctx context.Context, mld *api.M
 }
 
 func (mrh *moduleReconcilerHelper) handleDriverContainer(ctx context.Context,
-	mld *api.ModuleLoaderData) error {
-
-	dsNameData := hashData{
-		KernelVersion: mld.KernelVersion,
-		ModuleVersion: mld.ModuleVersion,
-	}
-	hashValue, err := hashstructure.Hash(dsNameData, hashstructure.FormatV2, nil)
-	if err != nil {
-		return fmt.Errorf("failed to hash kernel and module versions (%s %s) and for module loader daemonset name: %v", mld.KernelVersion, mld.ModuleVersion, err)
-	}
-	name := fmt.Sprintf("%s-%x", mld.Name, hashValue)
-	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace, Name: name},
-	}
+	mld *api.ModuleLoaderData,
+	existingModuleDS []appsv1.DaemonSet) error {
 
 	logger := log.FromContext(ctx)
+	ds := getExistingDS(existingModuleDS, mld.Namespace, mld.Name, mld.KernelVersion, mld.ModuleVersion, false)
+	if ds == nil {
+		logger.Info("creating new driver container DS", "kernel version", mld.KernelVersion, "image", mld.ContainerImage, "version", mld.ModuleVersion)
+		ds = &appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace, GenerateName: mld.Name + "-"},
+		}
+	}
+
 	opRes, err := controllerutil.CreateOrPatch(ctx, mrh.client, ds, func() error {
 		return mrh.daemonAPI.SetDriverContainerAsDesired(ctx, ds, mld)
 	})
@@ -372,21 +363,19 @@ func (mrh *moduleReconcilerHelper) handleDriverContainer(ctx context.Context,
 	return err
 }
 
-func (mrh *moduleReconcilerHelper) handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module) error {
+func (mrh *moduleReconcilerHelper) handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingModuleDS []appsv1.DaemonSet) error {
 	if mod.Spec.DevicePlugin == nil {
 		return nil
 	}
 
 	logger := log.FromContext(ctx)
-	hashValue, err := hashstructure.Hash(hashData{ModuleVersion: mod.Spec.ModuleLoader.Container.Version}, hashstructure.FormatV2, nil)
-	if err != nil {
-		return fmt.Errorf("failed to hash module version %s for device-plugin daemonset name: %v", mod.Spec.ModuleLoader.Container.Version, err)
+	ds := getExistingDS(existingModuleDS, mod.Namespace, mod.Name, "", mod.Spec.ModuleLoader.Container.Version, true)
+	if ds == nil {
+		logger.Info("creating new device plugin DS", "version", mod.Spec.ModuleLoader.Container.Version)
+		ds = &appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, GenerateName: mod.Name + "-device-plugin-"},
+		}
 	}
-	name := fmt.Sprintf("%s-device-plugin-%x", mod.Name, hashValue)
-	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: mod.Namespace},
-	}
-
 	opRes, err := controllerutil.CreateOrPatch(ctx, mrh.client, ds, func() error {
 		return mrh.daemonAPI.SetDevicePluginAsDesired(ctx, ds, mod)
 	})
@@ -523,4 +512,26 @@ func isModuleBuildAndSignCapable(mod *kmmv1beta1.Module) (bool, bool) {
 		}
 	}
 	return buildCapable, signCapable
+}
+
+func getExistingDS(existingDS []appsv1.DaemonSet,
+	moduleNamespace string,
+	moduleName string,
+	kernelVersion string,
+	moduleVersion string,
+	isDevicePlugin bool) *appsv1.DaemonSet {
+
+	versionLabel := utils.GetModuleLoaderVersionLabelName(moduleNamespace, moduleName)
+	if isDevicePlugin {
+		versionLabel = utils.GetDevicePluginVersionLabelName(moduleNamespace, moduleName)
+	}
+	for _, ds := range existingDS {
+		dsLabels := ds.GetLabels()
+		dsKernelVersion := dsLabels[constants.KernelLabel]
+		dsModuleVersion := dsLabels[versionLabel]
+		if dsKernelVersion == kernelVersion && dsModuleVersion == moduleVersion {
+			return &ds
+		}
+	}
+	return nil
 }
