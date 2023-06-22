@@ -519,6 +519,30 @@ var _ = Describe("ValidateUpdate", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed to validate kernel mappings"))
 	})
+
+	DescribeTable(
+		"version updates",
+		func(oldVersion, newVersion string, errorExpected bool) {
+			old := validModule
+			old.Spec.ModuleLoader.Container.Version = oldVersion
+
+			new := validModule
+			new.Spec.ModuleLoader.Container.Version = newVersion
+
+			_, err := new.ValidateUpdate(&old)
+			exp := Expect(err)
+
+			if errorExpected {
+				exp.To(HaveOccurred())
+			} else {
+				exp.NotTo(HaveOccurred())
+			}
+		},
+		Entry(nil, "v1", "", true),
+		Entry(nil, "", "v2", true),
+		Entry(nil, "", "", false),
+		Entry(nil, "v1", "v2", false),
+	)
 })
 
 var _ = Describe("ValidateDelete", func() {
