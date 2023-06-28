@@ -2,7 +2,8 @@
 
 ## Using `kubectl`
 
-First, install the [cert-manager](https://github.com/cert-manager/cert-manager) dependency:
+### Installing the cert-manager dependency
+
 ```shell
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.11.0/cert-manager.yaml
 kubectl -n cert-manager wait --for=condition=Available deployment \
@@ -11,7 +12,8 @@ kubectl -n cert-manager wait --for=condition=Available deployment \
 	cert-manager-webhook
 ```
 
-Then, install KMM:
+### Installing KMM
+
 ```shell
 kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default
 ```
