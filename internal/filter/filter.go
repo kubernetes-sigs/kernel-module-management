@@ -33,6 +33,26 @@ var skipDeletions predicate.Predicate = predicate.Funcs{
 	DeleteFunc: func(_ event.DeleteEvent) bool { return false },
 }
 
+var nodeBecomesReady predicate.Predicate = predicate.Funcs{
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		oldNode, ok := e.ObjectOld.(*v1.Node)
+		if !ok {
+			return false
+		}
+
+		newNode, ok := e.ObjectNew.(*v1.Node)
+		if !ok {
+			return false
+		}
+		newReadyStatus := getNodeReadyCondition(newNode)
+		oldReadyStatus := getNodeReadyCondition(oldNode)
+		if newReadyStatus != oldReadyStatus && newReadyStatus == v1.ConditionTrue {
+			return true
+		}
+		return false
+	},
+}
+
 var kmmClusterClaimChanged predicate.Predicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		oldManagedCluster, ok := e.ObjectOld.(*clusterv1.ManagedCluster)
@@ -76,7 +96,7 @@ func (f *Filter) ModuleReconcilerNodePredicate(kernelLabel string) predicate.Pre
 	return predicate.And(
 		skipDeletions,
 		HasLabel(kernelLabel),
-		predicate.LabelChangedPredicate{},
+		predicate.Or(nodeBecomesReady, predicate.LabelChangedPredicate{}),
 	)
 }
 
@@ -294,4 +314,13 @@ func NodeLabelModuleVersionUpdatePredicate(logger logr.Logger) predicate.Predica
 			return !reflect.DeepEqual(oldNodeVersionLabels, newNodeVersionLabels)
 		},
 	}
+}
+
+func getNodeReadyCondition(node *v1.Node) v1.ConditionStatus {
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady {
+			return condition.Status
+		}
+	}
+	return v1.ConditionUnknown
 }

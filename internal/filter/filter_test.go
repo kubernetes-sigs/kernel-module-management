@@ -647,3 +647,48 @@ var _ = Describe("FindPreflightsForModule", func() {
 	})
 
 })
+
+var _ = Describe("nodeBecomesReady", func() {
+	var (
+		oldNode v1.Node
+		newNode *v1.Node
+	)
+
+	BeforeEach(func() {
+		oldNode = v1.Node{
+			Status: v1.NodeStatus{
+				Conditions: []v1.NodeCondition{
+					{
+						Type:   v1.NodeMemoryPressure,
+						Status: v1.ConditionFalse,
+					},
+				},
+			},
+		}
+		newNode = oldNode.DeepCopy()
+	})
+	nodeReadyTrue := v1.NodeCondition{
+		Type:   v1.NodeReady,
+		Status: v1.ConditionTrue,
+	}
+	nodeReadyUnknown := v1.NodeCondition{
+		Type:   v1.NodeReady,
+		Status: v1.ConditionUnknown,
+	}
+
+	DescribeTable("Should return the expected value", func(oldCond v1.NodeCondition, newCond v1.NodeCondition, expected bool) {
+		newNode.Status.Conditions = append(newNode.Status.Conditions, newCond)
+		oldNode.Status.Conditions = append(oldNode.Status.Conditions, oldCond)
+		res := nodeBecomesReady.Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: newNode})
+		if expected {
+			Expect(res).To(BeTrue())
+		} else {
+			Expect(res).To(BeFalse())
+		}
+	},
+		Entry("old True, new True", nodeReadyTrue, nodeReadyTrue, false),
+		Entry("old Unknown, new Unknown", nodeReadyUnknown, nodeReadyUnknown, false),
+		Entry("old True, new Unknown", nodeReadyTrue, nodeReadyUnknown, false),
+		Entry("old Unknown, new True", nodeReadyUnknown, nodeReadyTrue, true),
+	)
+})
