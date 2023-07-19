@@ -20,9 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type ModuleNodeSpec struct {
-	Name           string `json:"name"`
-	Namespace      string `json:"namespace"`
+type ModuleConfig struct {
 	ContainerImage string `json:"containerImage"`
 	//+optional
 	InTreeModuleToRemove string       `json:"inTreeModuleToRemove,omitempty"`
@@ -30,59 +28,65 @@ type ModuleNodeSpec struct {
 	KmodLoaded           bool         `json:"kmodLoaded"`
 }
 
-// NodeModulesStateSpec describes the desired state of modules on the node
-// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
-// +kubebuilder:validation:Required
-type NodeModulesStateSpec struct {
-	// ModuleStateSpec list the spec of all the modules that need to be executed
-	// on the node
-	Modules []ModuleNodeSpec `json:"modules,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+type NodeModuleSpec struct {
+	Name      string       `json:"name"`
+	Namespace string       `json:"namespace"`
+	Config    ModuleConfig `json:"config"`
 }
 
-type ModuleNodeStatus struct {
+// NodeModulesConfigSpec describes the desired state of modules on the node
+// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+// +kubebuilder:validation:Required
+type NodeModulesConfigSpec struct {
+	// Modules list the spec of all the modules that need to be executed
+	// on the node
+	Modules []NodeModuleSpec `json:"modules,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+}
+
+type NodeModuleStatus struct {
 	Name       string `json:"name"`
 	Namespace  string `json:"namespace"`
 	KmodLoaded bool   `json:"kmodLoaded"`
 }
 
-// NodeModuleStateStatus is the most recently observed status of the KMM modules on node.
+// NodeModuleConfigStatus is the most recently observed status of the KMM modules on node.
 // It is populated by the system and is read-only.
 // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
-type NodeModulesStateStatus struct {
+type NodeModulesConfigStatus struct {
 	// Modules contain observations about each Module's node state status
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +optional
-	Modules []ModuleNodeStatus `json:"modules,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	Modules []NodeModuleStatus `json:"modules,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// NodeModulesState keeps a KMM state of a node  on the current Kubernetes cluster.
-// +kubebuilder:resource:path=nodemodulestates,scope=Cluster
-// +kubebuilder:resource:path=nodemodulestates,scope=Cluster,shortName=nms
-// +operator-sdk:csv:customresourcedefinitions:displayName="Node Modules State"
-type NodeModulesState struct {
+// NodeModulesConfig keeps spec and state of the KMM modules on a node.
+// +kubebuilder:resource:path=nodemodulesconfig,scope=Cluster
+// +kubebuilder:resource:path=nodemodulesconfig,scope=Cluster,shortName=nmc
+// +operator-sdk:csv:customresourcedefinitions:displayName="Node Modules Config"
+type NodeModulesConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   NodeModulesStateSpec   `json:"spec,omitempty"`
-	Status NodeModulesStateStatus `json:"status,omitempty"`
+	Spec   NodeModulesConfigSpec   `json:"spec,omitempty"`
+	Status NodeModulesConfigStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// NodeModulesStateList is a list of NodeModulesState objects.
-type NodeModulesStateList struct {
+// NodeModulesConfigList is a list of NodeModulesConfig objects.
+type NodeModulesConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 
-	// List of NodeState. More info:
+	// List of NodeModulesConfig. More info:
 	// https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
-	Items []NodeModulesState `json:"items"`
+	Items []NodeModulesConfig `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&NodeModulesState{}, &NodeModulesStateList{})
+	SchemeBuilder.Register(&NodeModulesConfig{}, &NodeModulesConfigList{})
 }
