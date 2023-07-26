@@ -57,7 +57,7 @@ spec:
     wants-my-mcm: 'true'  # Selects ManagedCluster objects
 ```
 
-If build or signing instructions are present under `.spec.moduleSpec`, those jobs are run on the Hub cluster in the
+If build or signing instructions are present under `.spec.moduleSpec`, those pods are run on the Hub cluster in the
 operator's namespace.  
 When the `.spec.selector` matches one or more `ManagedCluster` resources, then KMM-Hub creates a `ManifestWork` resource
 in the corresponding namespace(s).

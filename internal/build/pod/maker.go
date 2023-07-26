@@ -1,4 +1,4 @@
-package job
+package pod
 
 import (
 	"context"
@@ -7,13 +7,11 @@ import (
 	"strings"
 
 	"github.com/mitchellh/hashstructure/v2"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -29,46 +27,46 @@ const (
 	dockerfileVolumeName = "dockerfile"
 )
 
-//go:generate mockgen -source=maker.go -package=job -destination=mock_maker.go
+//go:generate mockgen -source=maker.go -package=pod -destination=mock_maker.go
 
 type Maker interface {
-	MakeJobTemplate(
+	MakePodTemplate(
 		ctx context.Context,
 		mld *api.ModuleLoaderData,
 		owner metav1.Object,
-		pushImage bool) (*batchv1.Job, error)
+		pushImage bool) (*v1.Pod, error)
 }
 
 type maker struct {
 	client    client.Client
 	helper    build.Helper
-	jobHelper utils.JobHelper
+	podHelper utils.PodHelper
 	scheme    *runtime.Scheme
 }
 
 type hashData struct {
-	Dockerfile  string
-	PodTemplate *v1.PodTemplateSpec
+	Dockerfile string
+	PodSpec    *v1.PodSpec
 }
 
 func NewMaker(
 	client client.Client,
 	helper build.Helper,
-	jobHelper utils.JobHelper,
+	podHelper utils.PodHelper,
 	scheme *runtime.Scheme) Maker {
 	return &maker{
 		client:    client,
 		helper:    helper,
-		jobHelper: jobHelper,
+		podHelper: podHelper,
 		scheme:    scheme,
 	}
 }
 
-func (m *maker) MakeJobTemplate(
+func (m *maker) MakePodTemplate(
 	ctx context.Context,
 	mld *api.ModuleLoaderData,
 	owner metav1.Object,
-	pushImage bool) (*batchv1.Job, error) {
+	pushImage bool) (*v1.Pod, error) {
 
 	// if build AND sign are specified, then we will build an intermediate image
 	// and let sign produce the one specified in its targetImage
@@ -77,39 +75,35 @@ func (m *maker) MakeJobTemplate(
 		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
 	}
 
-	specTemplate := m.specTemplate(mld, containerImage, pushImage)
-	specTemplateHash, err := m.getHashAnnotationValue(
+	podSpec := m.podSpec(mld, containerImage, pushImage)
+	podSpecHash, err := m.getHashAnnotationValue(
 		ctx,
 		mld.Build.DockerfileConfigMap.Name,
 		mld.Namespace,
-		&specTemplate,
+		&podSpec,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("could not hash job's definitions: %v", err)
+		return nil, fmt.Errorf("could not hash pod's definitions: %v", err)
 	}
 
-	job := &batchv1.Job{
+	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-build-",
 			Namespace:    mld.Namespace,
-			Labels:       m.jobHelper.JobLabels(mld.Name, mld.KernelVersion, utils.JobTypeBuild),
-			Annotations:  map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
+			Labels:       m.podHelper.PodLabels(mld.Name, mld.KernelVersion, utils.PodTypeBuild),
+			Annotations:  map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash)},
 		},
-		Spec: batchv1.JobSpec{
-			Completions:  pointer.Int32(1),
-			BackoffLimit: pointer.Int32(0),
-			Template:     specTemplate,
-		},
+		Spec: podSpec,
 	}
 
-	if err := controllerutil.SetControllerReference(owner, job, m.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(owner, pod, m.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner reference: %v", err)
 	}
 
-	return job, nil
+	return pod, nil
 }
 
-func (m *maker) specTemplate(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodTemplateSpec {
+func (m *maker) podSpec(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodSpec {
 
 	buildConfig := mld.Build
 	kanikoImage := os.Getenv("RELATED_IMAGES_BUILD")
@@ -127,20 +121,18 @@ func (m *maker) specTemplate(mld *api.ModuleLoaderData, containerImage string, p
 		selector = mld.Build.Selector
 	}
 
-	return v1.PodTemplateSpec{
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Args:         m.containerArgs(buildConfig, mld, containerImage, pushImage),
-					Name:         "kaniko",
-					Image:        kanikoImage,
-					VolumeMounts: volumeMounts(mld.ImageRepoSecret, buildConfig),
-				},
+	return v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Args:         m.containerArgs(buildConfig, mld, containerImage, pushImage),
+				Name:         "kaniko",
+				Image:        kanikoImage,
+				VolumeMounts: volumeMounts(mld.ImageRepoSecret, buildConfig),
 			},
-			RestartPolicy: v1.RestartPolicyNever,
-			Volumes:       volumes(mld.ImageRepoSecret, buildConfig),
-			NodeSelector:  selector,
 		},
+		RestartPolicy: v1.RestartPolicyNever,
+		Volumes:       volumes(mld.ImageRepoSecret, buildConfig),
+		NodeSelector:  selector,
 	}
 }
 
@@ -193,7 +185,7 @@ func (m *maker) containerArgs(
 	return args
 }
 
-func (m *maker) getHashAnnotationValue(ctx context.Context, configMapName, namespace string, podTemplate *v1.PodTemplateSpec) (uint64, error) {
+func (m *maker) getHashAnnotationValue(ctx context.Context, configMapName, namespace string, podSpec *v1.PodSpec) (uint64, error) {
 	dockerfileCM := &corev1.ConfigMap{}
 	namespacedName := types.NamespacedName{Name: configMapName, Namespace: namespace}
 	if err := m.client.Get(ctx, namespacedName, dockerfileCM); err != nil {
@@ -204,7 +196,7 @@ func (m *maker) getHashAnnotationValue(ctx context.Context, configMapName, names
 		return 0, fmt.Errorf("invalid Dockerfile ConfigMap %s format, %s key is missing", namespacedName, constants.DockerfileCMKey)
 	}
 
-	return getHashValue(podTemplate, data)
+	return getHashValue(podSpec, data)
 }
 
 func volumes(imageRepoSecret *v1.LocalObjectReference, buildConfig *kmmv1beta1.Build) []v1.Volume {
@@ -250,14 +242,14 @@ func dockerfileVolumeMount(name string) v1.VolumeMount {
 	}
 }
 
-func getHashValue(podTemplate *v1.PodTemplateSpec, dockerfile string) (uint64, error) {
+func getHashValue(podSpec *v1.PodSpec, dockerfile string) (uint64, error) {
 	dataToHash := hashData{
-		Dockerfile:  dockerfile,
-		PodTemplate: podTemplate,
+		Dockerfile: dockerfile,
+		PodSpec:    podSpec,
 	}
 	hashValue, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
 	if err != nil {
-		return 0, fmt.Errorf("could not hash job's spec template and dockefile: %v", err)
+		return 0, fmt.Errorf("could not hash pod's spec template and dockefile: %v", err)
 	}
 	return hashValue, nil
 }

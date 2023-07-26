@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -39,7 +40,6 @@ import (
 	v1beta12 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/controllers"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build/job"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
@@ -50,7 +50,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	signjob "github.com/kubernetes-sigs/kernel-module-management/internal/sign/job"
+	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	//+kubebuilder:scaffold:imports
@@ -117,20 +117,20 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	jobHelperAPI := utils.NewJobHelper(client)
+	podHelperAPI := utils.NewPodHelper(client)
 	buildHelperAPI := build.NewHelper()
 
-	buildAPI := job.NewBuildManager(
+	buildAPI := pod.NewBuildManager(
 		client,
-		job.NewMaker(client, buildHelperAPI, jobHelperAPI, scheme),
-		jobHelperAPI,
+		pod.NewMaker(client, buildHelperAPI, podHelperAPI, scheme),
+		podHelperAPI,
 		registryAPI,
 	)
 
-	signAPI := signjob.NewSignJobManager(
+	signAPI := signpod.NewSignPodManager(
 		client,
-		signjob.NewSigner(client, scheme, jobHelperAPI),
-		jobHelperAPI,
+		signpod.NewSigner(client, scheme, podHelperAPI),
+		podHelperAPI,
 		registryAPI,
 	)
 

@@ -2081,7 +2081,7 @@ spec:
                                 properties:
                                   tag:
                                     description: Kaniko image tag to use when creating
-                                      the build Job
+                                      the build Pod
                                     type: string
                                 type: object
                               secrets:
@@ -2194,7 +2194,7 @@ spec:
                                       properties:
                                         tag:
                                           description: Kaniko image tag to use when
-                                            creating the build Job
+                                            creating the build Pod
                                           type: string
                                       type: object
                                     secrets:

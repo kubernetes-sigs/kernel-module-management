@@ -41,14 +41,14 @@ The reconciliation loop for `Module` runs the following steps:
 3. for each kernel version:
     1. go through `.spec.moduleLoader.container.kernelMappings` and find the appropriate container image name.
        If the kernel mapping has `build` or `sign` defined and the container image does not already exist, run the build
-       and / or signing job as required;
+       and / or signing pod as required;
     2. create a ModuleLoader `DaemonSet` with the container image determined at the previous step;
     3. if `.spec.devicePlugin` is defined, create a device plugin `DaemonSet` using the configuration specified under
        `.spec.devicePlugin.container`;
 4. garbage-collect:
     1. existing `DaemonSets` targeting kernel versions that are not run by any node in the cluster;
-    2. successful build jobs;
-    3. successful signing jobs.
+    2. successful build pods;
+    3. successful signing pods.
 
 ### Soft dependencies between kernel modules
 

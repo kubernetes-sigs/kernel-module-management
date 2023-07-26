@@ -5,15 +5,6 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - create
-  - delete
-  - list
-  - watch
-- apiGroups:
   - cluster.open-cluster-management.io
   resources:
   - managedclusters
@@ -27,6 +18,15 @@ rules:
   - configmaps
   verbs:
   - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
   - list
   - watch
 - apiGroups:

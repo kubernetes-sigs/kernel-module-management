@@ -30,6 +30,7 @@ import (
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -37,7 +38,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/controllers/hub"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build/job"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cache"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
@@ -49,7 +50,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	signjob "github.com/kubernetes-sigs/kernel-module-management/internal/sign/job"
+	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	//+kubebuilder:scaffold:imports
@@ -110,20 +111,20 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	jobHelperAPI := utils.NewJobHelper(client)
+	podHelperAPI := utils.NewPodHelper(client)
 	buildHelper := build.NewHelper()
 
-	buildAPI := job.NewBuildManager(
+	buildAPI := pod.NewBuildManager(
 		client,
-		job.NewMaker(client, buildHelper, jobHelperAPI, scheme),
-		jobHelperAPI,
+		pod.NewMaker(client, buildHelper, podHelperAPI, scheme),
+		podHelperAPI,
 		registryAPI,
 	)
 
-	signAPI := signjob.NewSignJobManager(
+	signAPI := signpod.NewSignPodManager(
 		client,
-		signjob.NewSigner(client, scheme, jobHelperAPI),
-		jobHelperAPI,
+		signpod.NewSigner(client, scheme, podHelperAPI),
+		podHelperAPI,
 		registryAPI,
 	)
 

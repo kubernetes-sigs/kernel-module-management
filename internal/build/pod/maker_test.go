@@ -1,4 +1,4 @@
-package job
+package pod
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"go.uber.org/mock/gomock"
 	"golang.org/x/exp/slices"
-	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,7 +24,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
-var _ = Describe("MakeJobTemplate", func() {
+var _ = Describe("MakePodTemplate", func() {
 	const (
 		image              = "my.registry/my/image"
 		dockerfile         = "FROM test"
@@ -41,15 +40,15 @@ var _ = Describe("MakeJobTemplate", func() {
 		clnt      *client.MockClient
 		m         Maker
 		mh        *build.MockHelper
-		jobhelper *utils.MockJobHelper
+		podhelper *utils.MockPodHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mh = build.NewMockHelper(ctrl)
-		jobhelper = utils.NewMockJobHelper(ctrl)
-		m = NewMaker(clnt, mh, jobhelper, scheme)
+		podhelper = utils.NewMockPodHelper(ctrl)
+		m = NewMaker(clnt, mh, podhelper, scheme)
 	})
 
 	AfterEach(func() {
@@ -108,10 +107,10 @@ var _ = Describe("MakeJobTemplate", func() {
 		labels := map[string]string{
 			constants.ModuleNameLabel:    moduleName,
 			constants.TargetKernelTarget: kernelVersion,
-			constants.JobType:            "build",
+			constants.PodType:            "build",
 		}
 
-		expected := &batchv1.Job{
+		expected := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: mld.Name + "-build-",
 				Namespace:    namespace,
@@ -126,46 +125,40 @@ var _ = Describe("MakeJobTemplate", func() {
 					},
 				},
 			},
-			Spec: batchv1.JobSpec{
-				Completions:  pointer.Int32(1),
-				BackoffLimit: pointer.Int32(0),
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Args: []string{
+							"--destination", image,
+							"--build-arg", "name1=value1",
+							"--build-arg", "KERNEL_VERSION=" + kernelVersion,
+							"--build-arg", "KERNEL_FULL_VERSION=" + kernelVersion,
+							"--build-arg", "MOD_NAME=" + moduleName,
+							"--build-arg", "MOD_NAMESPACE=" + namespace,
+						},
+						Name:  "kaniko",
+						Image: kanikoImage,
+						VolumeMounts: []v1.VolumeMount{
 							{
-								Args: []string{
-									"--destination", image,
-									"--build-arg", "name1=value1",
-									"--build-arg", "KERNEL_VERSION=" + kernelVersion,
-									"--build-arg", "KERNEL_FULL_VERSION=" + kernelVersion,
-									"--build-arg", "MOD_NAME=" + moduleName,
-									"--build-arg", "MOD_NAMESPACE=" + namespace,
-								},
-								Name:  "kaniko",
-								Image: kanikoImage,
-								VolumeMounts: []v1.VolumeMount{
-									{
-										Name:      "dockerfile",
-										ReadOnly:  true,
-										MountPath: "/workspace",
-									},
-								},
+								Name:      "dockerfile",
+								ReadOnly:  true,
+								MountPath: "/workspace",
 							},
 						},
-						NodeSelector:  nodeSelector,
-						RestartPolicy: v1.RestartPolicyNever,
-						Volumes: []v1.Volume{
-							{
-								Name: "dockerfile",
-								VolumeSource: v1.VolumeSource{
-									ConfigMap: &v1.ConfigMapVolumeSource{
-										LocalObjectReference: dockerfileConfigMap,
-										Items: []v1.KeyToPath{
-											{
-												Key:  constants.DockerfileCMKey,
-												Path: "Dockerfile",
-											},
-										},
+					},
+				},
+				NodeSelector:  nodeSelector,
+				RestartPolicy: v1.RestartPolicyNever,
+				Volumes: []v1.Volume{
+					{
+						Name: "dockerfile",
+						VolumeSource: v1.VolumeSource{
+							ConfigMap: &v1.ConfigMapVolumeSource{
+								LocalObjectReference: dockerfileConfigMap,
+								Items: []v1.KeyToPath{
+									{
+										Key:  constants.DockerfileCMKey,
+										Path: "Dockerfile",
 									},
 								},
 							},
@@ -178,8 +171,8 @@ var _ = Describe("MakeJobTemplate", func() {
 		if imagePullSecret != nil {
 			mld.ImageRepoSecret = imagePullSecret
 
-			expected.Spec.Template.Spec.Containers[0].VolumeMounts =
-				append(expected.Spec.Template.Spec.Containers[0].VolumeMounts,
+			expected.Spec.Containers[0].VolumeMounts =
+				append(expected.Spec.Containers[0].VolumeMounts,
 					v1.VolumeMount{
 						Name:      "secret-pull-push-secret",
 						ReadOnly:  true,
@@ -187,8 +180,8 @@ var _ = Describe("MakeJobTemplate", func() {
 					},
 				)
 
-			expected.Spec.Template.Spec.Volumes =
-				append(expected.Spec.Template.Spec.Volumes,
+			expected.Spec.Volumes =
+				append(expected.Spec.Volumes,
 					v1.Volume{
 						Name: "secret-pull-push-secret",
 						VolumeSource: v1.VolumeSource{
@@ -210,8 +203,8 @@ var _ = Describe("MakeJobTemplate", func() {
 
 			mld.Build.Secrets = buildSecrets
 
-			expected.Spec.Template.Spec.Containers[0].VolumeMounts =
-				append(expected.Spec.Template.Spec.Containers[0].VolumeMounts,
+			expected.Spec.Containers[0].VolumeMounts =
+				append(expected.Spec.Containers[0].VolumeMounts,
 					v1.VolumeMount{
 						Name:      "secret-s1",
 						ReadOnly:  true,
@@ -219,8 +212,8 @@ var _ = Describe("MakeJobTemplate", func() {
 					},
 				)
 
-			expected.Spec.Template.Spec.Volumes =
-				append(expected.Spec.Template.Spec.Volumes,
+			expected.Spec.Volumes =
+				append(expected.Spec.Volumes,
 					v1.Volume{
 						Name: "secret-s1",
 						VolumeSource: v1.VolumeSource{
@@ -231,9 +224,9 @@ var _ = Describe("MakeJobTemplate", func() {
 					},
 				)
 		}
-		hash, err := getHashValue(&expected.Spec.Template, dockerfile)
+		hash, err := getHashValue(&expected.Spec, dockerfile)
 		Expect(err).NotTo(HaveOccurred())
-		annotations := map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", hash)}
+		annotations := map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", hash)}
 		expected.SetAnnotations(annotations)
 
 		gomock.InOrder(
@@ -244,10 +237,10 @@ var _ = Describe("MakeJobTemplate", func() {
 					return nil
 				},
 			),
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, utils.JobTypeBuild).Return(labels),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, utils.PodTypeBuild).Return(labels),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, mld.Owner, true)
+		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, true)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -309,18 +302,18 @@ var _ = Describe("MakeJobTemplate", func() {
 					return nil
 				},
 			),
-			jobhelper.EXPECT().JobLabels(mod.Name, kernelVersion, utils.JobTypeBuild).Return(map[string]string{}),
+			podhelper.EXPECT().PodLabels(mod.Name, kernelVersion, utils.PodTypeBuild).Return(map[string]string{}),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, mld.Owner, pushImage)
+		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, pushImage)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
+		Expect(actual.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
 
 		if pushImage {
-			Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--destination"))
+			Expect(actual.Spec.Containers[0].Args).To(ContainElement("--destination"))
 		} else {
-			Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--no-push"))
+			Expect(actual.Spec.Containers[0].Args).To(ContainElement("--no-push"))
 		}
 	},
 		Entry(
@@ -387,13 +380,13 @@ var _ = Describe("MakeJobTemplate", func() {
 					return nil
 				},
 			),
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, utils.JobTypeBuild).Return(map[string]string{}),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, utils.PodTypeBuild).Return(map[string]string{}),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, mld.Owner, false)
+		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, false)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Template.Spec.Containers[0].Image).To(Equal("some-build-image:" + customTag))
+		Expect(actual.Spec.Containers[0].Image).To(Equal("some-build-image:" + customTag))
 	})
 
 	It("should add the kmm_unsigned suffix to the target image if sign is defined", func() {
@@ -423,13 +416,13 @@ var _ = Describe("MakeJobTemplate", func() {
 					return nil
 				},
 			),
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, utils.JobTypeBuild).Return(map[string]string{}),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, utils.PodTypeBuild).Return(map[string]string{}),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, mld.Owner, true)
+		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, true)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--destination"))
-		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(expectedImageName))
+		Expect(actual.Spec.Containers[0].Args).To(ContainElement("--destination"))
+		Expect(actual.Spec.Containers[0].Args).To(ContainElement(expectedImageName))
 	})
 })

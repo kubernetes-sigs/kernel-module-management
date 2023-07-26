@@ -33,7 +33,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,7 +86,7 @@ func NewModuleReconciler(
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
 //+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups="core",resources=configmaps,verbs=get;list;watch
-//+kubebuilder:rbac:groups="batch",resources=jobs,verbs=create;list;watch;delete
+//+kubebuilder:rbac:groups="core",resources=pods,verbs=create;list;watch;delete
 
 // Reconcile lists all nodes and looks for kernels that match its mappings.
 // For each mapping that matches at least one node in the cluster, it creates a DaemonSet running the container image
@@ -298,7 +297,7 @@ func (mrh *moduleReconcilerHelper) handleBuild(ctx context.Context, mld *api.Mod
 	case utils.StatusCompleted:
 		completedSuccessfully = true
 	case utils.StatusFailed:
-		logger.Info(utils.WarnString("Build job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
+		logger.Info(utils.WarnString("Build pod has failed. If the fix is not in Module CR, then delete pod after the fix in order to restart the pod"))
 	}
 
 	return completedSuccessfully, nil
@@ -333,7 +332,7 @@ func (mrh *moduleReconcilerHelper) handleSigning(ctx context.Context, mld *api.M
 	case utils.StatusCompleted:
 		completedSuccessfully = true
 	case utils.StatusFailed:
-		logger.Info(utils.WarnString("Sign job has failed. If the fix is not in Module CR, then delete job after the fix in order to restart the job"))
+		logger.Info(utils.WarnString("Sign pod has failed. If the fix is not in Module CR, then delete pod after the fix in order to restart the pod"))
 	}
 
 	return completedSuccessfully, nil
@@ -402,7 +401,7 @@ func (mrh *moduleReconcilerHelper) garbageCollect(ctx context.Context,
 
 	logger.Info("Garbage-collected DaemonSets", "names", deleted)
 
-	// Garbage collect for successfully finished build jobs
+	// Garbage collect for successfully finished build pods
 	deleted, err = mrh.buildAPI.GarbageCollect(ctx, mod.Name, mod.Namespace, mod)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect build objects: %v", err)
@@ -410,7 +409,7 @@ func (mrh *moduleReconcilerHelper) garbageCollect(ctx context.Context,
 
 	logger.Info("Garbage-collected Build objects", "names", deleted)
 
-	// Garbage collect for successfully finished sign jobs
+	// Garbage collect for successfully finished sign pods
 	deleted, err = mrh.signAPI.GarbageCollect(ctx, mod.Name, mod.Namespace, mod)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect sign objects: %v", err)
@@ -476,7 +475,7 @@ func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kmmv1beta1.Module{}).
 		Owns(&appsv1.DaemonSet{}).
-		Owns(&batchv1.Job{}).
+		Owns(&v1.Pod{}).
 		Watches(
 			&v1.Node{},
 			handler.EnqueueRequestsFromMapFunc(r.filter.FindModulesForNode),

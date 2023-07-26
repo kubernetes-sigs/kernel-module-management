@@ -1,4 +1,4 @@
-package signjob
+package signpod
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"go.uber.org/mock/gomock"
-	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,7 +22,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
-var _ = Describe("MakeJobTemplate", func() {
+var _ = Describe("MakePodTemplate", func() {
 	const (
 		unsignedImage = "my.registry/my/image"
 		signedImage   = unsignedImage + "-signed"
@@ -33,6 +32,23 @@ var _ = Describe("MakeJobTemplate", func() {
 		namespace     = "some-namespace"
 		privateKey    = "some private key"
 		publicKey     = "some public key"
+
+		dockerfile = `FROM my.registry/my/image as source
+
+FROM some-sign-image:some-tag AS signimage
+
+RUN mkdir -p /tmp/signroot
+
+COPY --from=source /modules/simple-kmod.ko /tmp/signroot/modules/simple-kmod.ko
+RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-kmod.ko
+COPY --from=source /modules/simple-procfs-kmod.ko /tmp/signroot/modules/simple-procfs-kmod.ko
+RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-procfs-kmod.ko
+
+FROM source
+
+COPY --from=signimage /tmp/signroot/modules/simple-kmod.ko /modules/simple-kmod.ko
+COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simple-procfs-kmod.ko
+`
 	)
 
 	var (
@@ -40,7 +56,7 @@ var _ = Describe("MakeJobTemplate", func() {
 		clnt      *client.MockClient
 		mld       api.ModuleLoaderData
 		m         Signer
-		jobhelper *utils.MockJobHelper
+		podhelper *utils.MockPodHelper
 
 		filesToSign = []string{
 			"/modules/simple-kmod.ko",
@@ -51,8 +67,8 @@ var _ = Describe("MakeJobTemplate", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		jobhelper = utils.NewMockJobHelper(ctrl)
-		m = NewSigner(clnt, scheme, jobhelper)
+		podhelper = utils.NewMockPodHelper(ctrl)
+		m = NewSigner(clnt, scheme, podhelper)
 		mld = api.ModuleLoaderData{
 			Name:      moduleName,
 			Namespace: namespace,
@@ -66,7 +82,7 @@ var _ = Describe("MakeJobTemplate", func() {
 		}
 	})
 
-	labels := map[string]string{"kmm.node.kubernetes.io/job-type": "sign",
+	labels := map[string]string{"kmm.node.kubernetes.io/pod-type": "sign",
 		"kmm.node.kubernetes.io/module.name":   moduleName,
 		"kmm.node.kubernetes.io/target-kernel": kernelVersion,
 	}
@@ -129,14 +145,14 @@ var _ = Describe("MakeJobTemplate", func() {
 			},
 		}
 
-		expected := &batchv1.Job{
+		expected := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: mld.Name + "-sign-",
 				Namespace:    namespace,
 				Labels: map[string]string{
 					constants.ModuleNameLabel:    moduleName,
 					constants.TargetKernelTarget: kernelVersion,
-					constants.JobType:            "sign",
+					constants.PodType:            "sign",
 				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
@@ -148,63 +164,37 @@ var _ = Describe("MakeJobTemplate", func() {
 					},
 				},
 			},
-			Spec: batchv1.JobSpec{
-				Completions:  pointer.Int32(1),
-				BackoffLimit: pointer.Int32(0),
-				Template: v1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Annotations: map[string]string{
-							"dockerfile": `FROM my.registry/my/image as source
-
-FROM some-sign-image:some-tag AS signimage
-
-RUN mkdir -p /tmp/signroot
-
-COPY --from=source /modules/simple-kmod.ko /tmp/signroot/modules/simple-kmod.ko
-RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-kmod.ko
-COPY --from=source /modules/simple-procfs-kmod.ko /tmp/signroot/modules/simple-procfs-kmod.ko
-RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-procfs-kmod.ko
-
-FROM source
-
-COPY --from=signimage /tmp/signroot/modules/simple-kmod.ko /modules/simple-kmod.ko
-COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simple-procfs-kmod.ko
-`,
-						},
-					},
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Name:  "kaniko",
+						Image: buildImage,
+						Args:  []string{"--destination", signedImage},
+						VolumeMounts: []v1.VolumeMount{
+							secretMount,
+							certMount,
 							{
-								Name:  "kaniko",
-								Image: buildImage,
-								Args:  []string{"--destination", signedImage},
-								VolumeMounts: []v1.VolumeMount{
-									secretMount,
-									certMount,
-									{
-										Name:      "dockerfile",
-										ReadOnly:  true,
-										MountPath: "/workspace",
-									},
-								},
+								Name:      "dockerfile",
+								ReadOnly:  true,
+								MountPath: "/workspace",
 							},
 						},
-						NodeSelector:  nodeSelector,
-						RestartPolicy: v1.RestartPolicyNever,
-						Volumes: []v1.Volume{
-							keysecret,
-							certsecret,
-							{
-								Name: "dockerfile",
-								VolumeSource: v1.VolumeSource{
-									DownwardAPI: &v1.DownwardAPIVolumeSource{
-										Items: []v1.DownwardAPIVolumeFile{
-											{
-												Path: "Dockerfile",
-												FieldRef: &v1.ObjectFieldSelector{
-													FieldPath: "metadata.annotations['dockerfile']",
-												},
-											},
+					},
+				},
+				NodeSelector:  nodeSelector,
+				RestartPolicy: v1.RestartPolicyNever,
+				Volumes: []v1.Volume{
+					keysecret,
+					certsecret,
+					{
+						Name: "dockerfile",
+						VolumeSource: v1.VolumeSource{
+							DownwardAPI: &v1.DownwardAPIVolumeSource{
+								Items: []v1.DownwardAPIVolumeFile{
+									{
+										Path: "Dockerfile",
+										FieldRef: &v1.ObjectFieldSelector{
+											FieldPath: "metadata.annotations['dockerfile']",
 										},
 									},
 								},
@@ -216,8 +206,8 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		}
 		if imagePullSecret != nil {
 			mld.ImageRepoSecret = imagePullSecret
-			expected.Spec.Template.Spec.Containers[0].VolumeMounts =
-				append(expected.Spec.Template.Spec.Containers[0].VolumeMounts,
+			expected.Spec.Containers[0].VolumeMounts =
+				append(expected.Spec.Containers[0].VolumeMounts,
 					v1.VolumeMount{
 						Name:      "secret-pull-push-secret",
 						ReadOnly:  true,
@@ -225,8 +215,8 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 					},
 				)
 
-			expected.Spec.Template.Spec.Volumes =
-				append(expected.Spec.Template.Spec.Volumes,
+			expected.Spec.Volumes =
+				append(expected.Spec.Volumes,
 					v1.Volume{
 						Name: "secret-pull-push-secret",
 						VolumeSource: v1.VolumeSource{
@@ -241,9 +231,12 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 				)
 		}
 
-		hash, err := getHashValue(&expected.Spec.Template, []byte(publicKey), []byte(privateKey))
+		hash, err := getHashValue(&expected.Spec, []byte(publicKey), []byte(privateKey), []byte(dockerfile))
 		Expect(err).NotTo(HaveOccurred())
-		annotations := map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", hash)}
+		annotations := map[string]string{
+			constants.PodHashAnnotation: fmt.Sprintf("%d", hash),
+			"dockerfile":                dockerfile,
+		}
 		expected.SetAnnotations(annotations)
 
 		mld.Selector = nodeSelector
@@ -263,7 +256,7 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, labels, unsignedImage, true, mld.Owner)
+		actual, err := m.MakePodTemplate(ctx, &mld, labels, unsignedImage, true, mld.Owner)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -308,14 +301,14 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, labels, "", pushImage, mld.Owner)
+		actual, err := m.MakePodTemplate(ctx, &mld, labels, "", pushImage, mld.Owner)
 
 		Expect(err).NotTo(HaveOccurred())
 
 		if pushImage {
-			Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--destination"))
+			Expect(actual.Spec.Containers[0].Args).To(ContainElement("--destination"))
 		} else {
-			Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement("-no-push"))
+			Expect(actual.Spec.Containers[0].Args).To(ContainElement("-no-push"))
 		}
 
 	},
@@ -367,10 +360,10 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			),
 		)
 
-		actual, err := m.MakeJobTemplate(ctx, &mld, labels, "", true, mld.Owner)
+		actual, err := m.MakePodTemplate(ctx, &mld, labels, "", true, mld.Owner)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Template.Spec.Containers[0].Args).To(ContainElement(expectedFlag))
+		Expect(actual.Spec.Containers[0].Args).To(ContainElement(expectedFlag))
 	},
 		Entry(
 			"filelist and push",

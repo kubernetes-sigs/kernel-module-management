@@ -99,6 +99,6 @@ The KMM Operator would only be granted a limited set of Kubernetes API privilege
 - Read, modify (for kernel version labeling) and watch `Nodes`;
 - Read and watch `Modules`, update their status;
 - Read, create, modify and watch `DaemonSets`;
-- Read, create, modify and watch `Job` objects (used for building and signing);
+- Read, create, modify and watch `Pod` objects (used for building and signing);
 - Read `Secrets` for pull and build secrets.
-- Read `Configmaps` for build jobs
+- Read `Configmaps` for build pods

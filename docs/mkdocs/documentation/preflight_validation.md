@@ -102,7 +102,7 @@ Image validation consists of 2 stages:
 
 Build validation is executed only in case image validation has failed, and there is a `build` section in the `Module`
 that is relevant for the upgraded kernel.
-Build validation will try to run build job and validate that it finishes successfully.
+Build validation will try to run build pod and validate that it finishes successfully.
 If the `PushBuiltImage` flag is defined in the `PreflightValidation` CR, it will also try to push the resulting image
 into its repo.
 The resulting image name is taken from the definition of the `containerImage` field of the `Module` CR.
@@ -116,7 +116,7 @@ The resulting image name is taken from the definition of the `containerImage` fi
 Sign validation is executed only in case image validation has failed, there is a `sign` section in the `Module` that is
 relevant for the upgrade kernel, and build validation finished successfully in case there was a `build` section in the
 `Module` relevant for the upgraded kernel.
-Sign validation will try to run the sign job and validate that it finishes successfully.
+Sign validation will try to run the sign pod and validate that it finishes successfully.
 In case the `PushBuiltImage` flag is defined in the `PreflightValidation` CR, it will also try to push the resulting
 image to its registry.
 The result image is always the image defined in the `ContainerImage` field of the `Module`.

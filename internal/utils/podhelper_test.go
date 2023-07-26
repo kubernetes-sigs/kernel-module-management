@@ -8,7 +8,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	batchv1 "k8s.io/api/batch/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -18,7 +18,7 @@ import (
 	sigclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("JobLabels", func() {
+var _ = Describe("PodLabels", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
@@ -29,40 +29,40 @@ var _ = Describe("JobLabels", func() {
 		clnt = client.NewMockClient(ctrl)
 	})
 
-	It("get job labels", func() {
+	It("get pod labels", func() {
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName"},
 		}
-		mgr := NewJobHelper(clnt)
-		labels := mgr.JobLabels(mod.Name, "targetKernel", "jobType")
+		mgr := NewPodHelper(clnt)
+		labels := mgr.PodLabels(mod.Name, "targetKernel", "podType")
 
 		Expect(labels).To(HaveKeyWithValue(constants.ModuleNameLabel, "moduleName"))
 		Expect(labels).To(HaveKeyWithValue(constants.TargetKernelTarget, "targetKernel"))
-		Expect(labels).To(HaveKeyWithValue(constants.JobType, "jobType"))
+		Expect(labels).To(HaveKeyWithValue(constants.PodType, "podType"))
 	})
 })
 
-var _ = Describe("GetModuleJobByKernel", func() {
+var _ = Describe("GetModulePodByKernel", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		jh   JobHelper
+		ph   PodHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		jh = NewJobHelper(clnt)
+		ph = NewPodHelper(clnt)
 	})
 
-	It("should return only one job", func() {
+	It("should return only one pod", func() {
 		ctx := context.Background()
 
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
 		}
-		j := batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob", Namespace: "moduleNamespace"},
+		j := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "modulePod", Namespace: "moduleNamespace"},
 		}
 
 		err := controllerutil.SetControllerReference(&mod, &j, scheme)
@@ -71,7 +71,7 @@ var _ = Describe("GetModuleJobByKernel", func() {
 		labels := map[string]string{
 			constants.ModuleNameLabel:    "moduleName",
 			constants.TargetKernelTarget: "targetKernel",
-			constants.JobType:            "jobType",
+			constants.PodType:            "podType",
 		}
 
 		opts := []sigclient.ListOption{
@@ -80,19 +80,19 @@ var _ = Describe("GetModuleJobByKernel", func() {
 		}
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
-				list.Items = []batchv1.Job{j}
+			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
+				list.Items = []v1.Pod{j}
 				return nil
 			},
 		)
 
-		job, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType", &mod)
+		pod, err := ph.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
 
-		Expect(job).To(Equal(&j))
+		Expect(pod).To(Equal(&j))
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("failure to fetch jobs", func() {
+	It("failure to fetch pods", func() {
 		ctx := context.Background()
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
@@ -101,34 +101,34 @@ var _ = Describe("GetModuleJobByKernel", func() {
 		labels := map[string]string{
 			constants.ModuleNameLabel:    "moduleName",
 			constants.TargetKernelTarget: "targetKernel",
-			constants.JobType:            "jobType",
+			constants.PodType:            "podType",
 		}
 
 		opts := []sigclient.ListOption{
 			sigclient.MatchingLabels(labels),
 			sigclient.InNamespace("moduleNamespace"),
 		}
-		jobList := batchv1.JobList{}
+		podList := v1.PodList{}
 
-		clnt.EXPECT().List(ctx, &jobList, opts).Return(errors.New("random error"))
+		clnt.EXPECT().List(ctx, &podList, opts).Return(errors.New("random error"))
 
-		_, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType", &mod)
+		_, err := ph.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
 
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should fails if more then 1 job exists", func() {
+	It("should fails if more then 1 pod exists", func() {
 		ctx := context.Background()
 
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
 		}
 
-		j1 := batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob1", Namespace: "moduleNamespace"},
+		j1 := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "modulePod1", Namespace: "moduleNamespace"},
 		}
-		j2 := batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob2", Namespace: "moduleNamespace"},
+		j2 := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "modulePod2", Namespace: "moduleNamespace"},
 		}
 
 		err := controllerutil.SetControllerReference(&mod, &j1, scheme)
@@ -139,7 +139,7 @@ var _ = Describe("GetModuleJobByKernel", func() {
 		labels := map[string]string{
 			constants.ModuleNameLabel:    "moduleName",
 			constants.TargetKernelTarget: "targetKernel",
-			constants.JobType:            "jobType",
+			constants.PodType:            "podType",
 		}
 
 		opts := []sigclient.ListOption{
@@ -148,17 +148,17 @@ var _ = Describe("GetModuleJobByKernel", func() {
 		}
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
-				list.Items = []batchv1.Job{j1, j2}
+			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
+				list.Items = []v1.Pod{j1, j2}
 				return nil
 			},
 		)
 
-		_, err = jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType", &mod)
+		_, err = ph.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
 
 		Expect(err).To(HaveOccurred())
 	})
-	It("more then 1 job exists, but only one is owned by the module", func() {
+	It("more then 1 pod exists, but only one is owned by the module", func() {
 		ctx := context.Background()
 
 		mod := kmmv1beta1.Module{
@@ -171,11 +171,11 @@ var _ = Describe("GetModuleJobByKernel", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "anotherModuleName", Namespace: "moduleNamespace", UID: "another uuid"},
 		}
 
-		j1 := batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob1", Namespace: "moduleNamespace"},
+		j1 := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "modulePod1", Namespace: "moduleNamespace"},
 		}
-		j2 := batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob2", Namespace: "moduleNamespace"},
+		j2 := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "modulePod2", Namespace: "moduleNamespace"},
 		}
 
 		err := controllerutil.SetControllerReference(&mod, &j1, scheme)
@@ -186,7 +186,7 @@ var _ = Describe("GetModuleJobByKernel", func() {
 		labels := map[string]string{
 			constants.ModuleNameLabel:    "moduleName",
 			constants.TargetKernelTarget: "targetKernel",
-			constants.JobType:            "jobType",
+			constants.PodType:            "podType",
 		}
 
 		opts := []sigclient.ListOption{
@@ -195,44 +195,44 @@ var _ = Describe("GetModuleJobByKernel", func() {
 		}
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
-				list.Items = []batchv1.Job{j1, j2}
+			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
+				list.Items = []v1.Pod{j1, j2}
 				return nil
 			},
 		)
 
-		job, err := jh.GetModuleJobByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "jobType", &mod)
+		pod, err := ph.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(job).To(Equal(&j1))
+		Expect(pod).To(Equal(&j1))
 	})
 })
 
-var _ = Describe("GetModuleJobs", func() {
+var _ = Describe("GetModulePods", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		jh   JobHelper
+		ph   PodHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		jh = NewJobHelper(clnt)
+		ph = NewPodHelper(clnt)
 	})
 
-	It("return all found jobs", func() {
+	It("return all found pods", func() {
 		ctx := context.Background()
 
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
 		}
 
-		j1 := batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob1", Namespace: "moduleNamespace"},
+		j1 := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "modulePod1", Namespace: "moduleNamespace"},
 		}
-		j2 := batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleJob12", Namespace: "moduleNamespace"},
+		j2 := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "modulePod12", Namespace: "moduleNamespace"},
 		}
 		err := controllerutil.SetControllerReference(&mod, &j1, scheme)
 		Expect(err).NotTo(HaveOccurred())
@@ -241,7 +241,7 @@ var _ = Describe("GetModuleJobs", func() {
 
 		labels := map[string]string{
 			constants.ModuleNameLabel: "moduleName",
-			constants.JobType:         "jobType",
+			constants.PodType:         "podType",
 		}
 
 		opts := []sigclient.ListOption{
@@ -250,16 +250,16 @@ var _ = Describe("GetModuleJobs", func() {
 		}
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
-				list.Items = []batchv1.Job{j1, j2}
+			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
+				list.Items = []v1.Pod{j1, j2}
 				return nil
 			},
 		)
 
-		jobs, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType", &mod)
+		pods, err := ph.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(jobs)).To(Equal(2))
+		Expect(len(pods)).To(Equal(2))
 	})
 
 	It("error flow", func() {
@@ -271,7 +271,7 @@ var _ = Describe("GetModuleJobs", func() {
 
 		labels := map[string]string{
 			constants.ModuleNameLabel: "moduleName",
-			constants.JobType:         "jobType",
+			constants.PodType:         "podType",
 		}
 
 		opts := []sigclient.ListOption{
@@ -281,12 +281,12 @@ var _ = Describe("GetModuleJobs", func() {
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).Return(fmt.Errorf("some error"))
 
-		_, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType", &mod)
+		_, err := ph.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
 
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("zero jobs found", func() {
+	It("zero pods found", func() {
 		ctx := context.Background()
 
 		mod := kmmv1beta1.Module{
@@ -295,7 +295,7 @@ var _ = Describe("GetModuleJobs", func() {
 
 		labels := map[string]string{
 			constants.ModuleNameLabel: "moduleName",
-			constants.JobType:         "jobType",
+			constants.PodType:         "podType",
 		}
 
 		opts := []sigclient.ListOption{
@@ -304,42 +304,42 @@ var _ = Describe("GetModuleJobs", func() {
 		}
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *batchv1.JobList, _ ...interface{}) error {
-				list.Items = []batchv1.Job{}
+			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
+				list.Items = []v1.Pod{}
 				return nil
 			},
 		)
 
-		jobs, err := jh.GetModuleJobs(ctx, mod.Name, mod.Namespace, "jobType", &mod)
+		pods, err := ph.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(jobs)).To(Equal(0))
+		Expect(len(pods)).To(Equal(0))
 	})
 })
 
-var _ = Describe("DeleteJob", func() {
+var _ = Describe("DeletePod", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		jh   JobHelper
+		ph   PodHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		jh = NewJobHelper(clnt)
+		ph = NewPodHelper(clnt)
 	})
 
 	It("good flow", func() {
 		ctx := context.Background()
 
-		j := batchv1.Job{}
+		pod := v1.Pod{}
 		opts := []sigclient.DeleteOption{
 			sigclient.PropagationPolicy(metav1.DeletePropagationBackground),
 		}
-		clnt.EXPECT().Delete(ctx, &j, opts).Return(nil)
+		clnt.EXPECT().Delete(ctx, &pod, opts).Return(nil)
 
-		err := jh.DeleteJob(ctx, &j)
+		err := ph.DeletePod(ctx, &pod)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -348,39 +348,39 @@ var _ = Describe("DeleteJob", func() {
 	It("error flow", func() {
 		ctx := context.Background()
 
-		j := batchv1.Job{}
+		pod := v1.Pod{}
 		opts := []sigclient.DeleteOption{
 			sigclient.PropagationPolicy(metav1.DeletePropagationBackground),
 		}
-		clnt.EXPECT().Delete(ctx, &j, opts).Return(errors.New("random error"))
+		clnt.EXPECT().Delete(ctx, &pod, opts).Return(errors.New("random error"))
 
-		err := jh.DeleteJob(ctx, &j)
+		err := ph.DeletePod(ctx, &pod)
 
 		Expect(err).To(HaveOccurred())
 
 	})
 })
 
-var _ = Describe("CreateJob", func() {
+var _ = Describe("CreatePod", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		jh   JobHelper
+		ph   PodHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		jh = NewJobHelper(clnt)
+		ph = NewPodHelper(clnt)
 	})
 
 	It("good flow", func() {
 		ctx := context.Background()
 
-		j := batchv1.Job{}
-		clnt.EXPECT().Create(ctx, &j).Return(nil)
+		pod := v1.Pod{}
+		clnt.EXPECT().Create(ctx, &pod).Return(nil)
 
-		err := jh.CreateJob(ctx, &j)
+		err := ph.CreatePod(ctx, &pod)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -389,75 +389,74 @@ var _ = Describe("CreateJob", func() {
 	It("error flow", func() {
 		ctx := context.Background()
 
-		j := batchv1.Job{}
-		clnt.EXPECT().Create(ctx, &j).Return(errors.New("random error"))
+		pod := v1.Pod{}
+		clnt.EXPECT().Create(ctx, &pod).Return(errors.New("random error"))
 
-		err := jh.CreateJob(ctx, &j)
+		err := ph.CreatePod(ctx, &pod)
 
 		Expect(err).To(HaveOccurred())
 
 	})
 })
 
-var _ = Describe("JobStatus", func() {
+var _ = Describe("PodStatus", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		jh   JobHelper
+		ph   PodHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		jh = NewJobHelper(clnt)
+		ph = NewPodHelper(clnt)
 	})
 
-	DescribeTable("should return the correct status depending on the job status",
-		func(s *batchv1.Job, jobStatus string, expectsErr bool) {
+	DescribeTable("should return the correct status depending on the pod status",
+		func(s *v1.Pod, podStatus string, expectsErr bool) {
 
-			res, err := jh.GetJobStatus(s)
+			res, err := ph.GetPodStatus(s)
 			if expectsErr {
 				Expect(err).To(HaveOccurred())
 				return
 			}
 
-			Expect(string(res)).To(Equal(jobStatus))
+			Expect(string(res)).To(Equal(podStatus))
 		},
-		Entry("succeeded", &batchv1.Job{Status: batchv1.JobStatus{Succeeded: 1}}, StatusCompleted, false),
-		Entry("in progress", &batchv1.Job{Status: batchv1.JobStatus{Active: 1}}, StatusInProgress, false),
-		Entry("Failed", &batchv1.Job{Status: batchv1.JobStatus{Failed: 1}}, StatusFailed, false),
-		Entry("unknown", &batchv1.Job{Status: batchv1.JobStatus{Failed: 2}}, "", true),
+		Entry("succeeded", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodSucceeded}}, StatusCompleted, false),
+		Entry("in progress", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodRunning}}, StatusInProgress, false),
+		Entry("Failed", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodFailed}}, StatusFailed, false),
 	)
 })
 
-var _ = Describe("IsJobChnaged", func() {
+var _ = Describe("IsPodChnaged", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		jh   JobHelper
+		ph   PodHelper
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		jh = NewJobHelper(clnt)
+		ph = NewPodHelper(clnt)
 	})
 
-	DescribeTable("should detect if a job has changed",
+	DescribeTable("should detect if a pod has changed",
 		func(annotation map[string]string, expectchanged bool, expectsErr bool) {
-			existingJob := batchv1.Job{
+			existingPod := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: annotation,
 				},
 			}
-			newJob := batchv1.Job{
+			newPod := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{constants.JobHashAnnotation: "some hash"},
+					Annotations: map[string]string{constants.PodHashAnnotation: "some hash"},
 				},
 			}
-			fmt.Println(existingJob.GetAnnotations())
+			fmt.Println(existingPod.GetAnnotations())
 
-			changed, err := jh.IsJobChanged(&existingJob, &newJob)
+			changed, err := ph.IsPodChanged(&existingPod, &newPod)
 
 			if expectsErr {
 				Expect(err).To(HaveOccurred())
@@ -466,8 +465,8 @@ var _ = Describe("IsJobChnaged", func() {
 			Expect(expectchanged).To(Equal(changed))
 		},
 
-		Entry("should error if job has no annotations", nil, false, true),
-		Entry("should return true if job has changed", map[string]string{constants.JobHashAnnotation: "some other hash"}, true, false),
-		Entry("should return false is job has not changed ", map[string]string{constants.JobHashAnnotation: "some hash"}, false, false),
+		Entry("should error if pod has no annotations", nil, false, true),
+		Entry("should return true if pod has changed", map[string]string{constants.PodHashAnnotation: "some other hash"}, true, false),
+		Entry("should return false is pod has not changed ", map[string]string{constants.PodHashAnnotation: "some hash"}, false, false),
 	)
 })

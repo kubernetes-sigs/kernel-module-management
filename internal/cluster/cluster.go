@@ -47,13 +47,13 @@ func NewClusterAPI(
 	kernelAPI module.KernelMapper,
 	buildAPI build.Manager,
 	signAPI sign.SignManager,
-	defaultJobNamespace string) ClusterAPI {
+	defaultPodNamespace string) ClusterAPI {
 	return &clusterAPI{
 		client:    client,
 		kernelAPI: kernelAPI,
 		buildAPI:  buildAPI,
 		signAPI:   signAPI,
-		namespace: defaultJobNamespace,
+		namespace: defaultPodNamespace,
 	}
 }
 

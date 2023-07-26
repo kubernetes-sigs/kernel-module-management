@@ -53,16 +53,6 @@ kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-cont
 # Apply the ManagedClusterModule
 kubectl apply -f ci/managedclustermodule-kmm-ci-build-sign.yaml
 
-# Wait for the build job to be created and completed
-timeout 1m bash -c 'until kubectl -n ${OPERATOR_NAMESPACE} get jobs -o json | jq -er ".items[].metadata.name | select(.? | match(\"build\"))"; do sleep 1; done'
-export build_job=$(kubectl -n ${OPERATOR_NAMESPACE} get jobs -o json | jq -r '.items[].metadata.name | select(.? | match("build"))')
-kubectl -n ${OPERATOR_NAMESPACE} wait --for=condition=complete --timeout=1m job/${build_job}
-
-# Wait for the sign job to be created and completed
-timeout 1m bash -c 'until kubectl -n ${OPERATOR_NAMESPACE} get jobs -o json | jq -er ".items[].metadata.name | select(.? | match(\"sign\"))"; do sleep 1; done'
-export sign_job=$(kubectl -n ${OPERATOR_NAMESPACE} get jobs -o json | jq -r '.items[].metadata.name | select(.? | match("sign"))')
-kubectl -n ${OPERATOR_NAMESPACE} wait --for=condition=complete --timeout=1m job/${sign_job}
-
 # Waiting for the manifestwork to be created
 timeout 1m bash -c 'until kubectl -n ${MINIKUBE} get manifestwork/mod-example; do sleep 1; done'
 kubectl get manifestwork/mod-example -n ${MINIKUBE} -o yaml | yq '.spec.workload.manifests'

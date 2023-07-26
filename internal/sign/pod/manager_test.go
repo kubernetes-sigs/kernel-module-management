@@ -1,4 +1,4 @@
-package signjob
+package signpod
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
-	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -24,7 +23,7 @@ var _ = Describe("ShouldSync", func() {
 		ctrl *gomock.Controller
 		clnt *client.MockClient
 		reg  *registry.MockRegistry
-		mgr  *signJobManager
+		mgr  *signPodManager
 	)
 
 	const (
@@ -37,7 +36,7 @@ var _ = Describe("ShouldSync", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		reg = registry.NewMockRegistry(ctrl)
-		mgr = NewSignJobManager(clnt, nil, nil, reg)
+		mgr = NewSignPodManager(clnt, nil, nil, reg)
 	})
 
 	It("should return false if there was not sign section", func() {
@@ -119,8 +118,8 @@ var _ = Describe("Sync", func() {
 	var (
 		ctrl      *gomock.Controller
 		maker     *MockSigner
-		jobhelper *utils.MockJobHelper
-		mgr       *signJobManager
+		podhelper *utils.MockPodHelper
+		mgr       *signPodManager
 	)
 
 	const (
@@ -130,17 +129,17 @@ var _ = Describe("Sync", func() {
 
 		moduleName    = "module-name"
 		kernelVersion = "1.2.3"
-		jobName       = "some-job"
+		podName       = "some-pod"
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		maker = NewMockSigner(ctrl)
-		jobhelper = utils.NewMockJobHelper(ctrl)
-		mgr = NewSignJobManager(nil, maker, jobhelper, nil)
+		podhelper = utils.NewMockPodHelper(ctrl)
+		mgr = NewSignPodManager(nil, maker, podhelper, nil)
 	})
 
-	labels := map[string]string{"kmm.node.kubernetes.io/job-type": "sign",
+	labels := map[string]string{"kmm.node.kubernetes.io/pod-type": "sign",
 		"kmm.node.kubernetes.io/module.name":   moduleName,
 		"kmm.node.kubernetes.io/target-kernel": kernelVersion,
 	}
@@ -153,43 +152,43 @@ var _ = Describe("Sync", func() {
 		KernelVersion:  kernelVersion,
 	}
 
-	DescribeTable("should return the correct status depending on the job status",
-		func(s batchv1.JobStatus, jobStatus utils.Status, expectsErr bool) {
-			j := batchv1.Job{
+	DescribeTable("should return the correct status depending on the pod status",
+		func(s v1.PodStatus, podStatus utils.Status, expectsErr bool) {
+			j := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"kmm.node.kubernetes.io/job-type": "sign",
+					Labels: map[string]string{"kmm.node.kubernetes.io/pod-type": "sign",
 						"kmm.node.kubernetes.io/module.name":   moduleName,
 						"kmm.node.kubernetes.io/target-kernel": kernelVersion,
 					},
 					Namespace:   namespace,
-					Annotations: map[string]string{constants.JobHashAnnotation: "some hash"},
+					Annotations: map[string]string{constants.PodHashAnnotation: "some hash"},
 				},
 				Status: s,
 			}
-			newJob := batchv1.Job{
+			newPod := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"kmm.node.kubernetes.io/job-type": "sign",
+					Labels: map[string]string{"kmm.node.kubernetes.io/pod-type": "sign",
 						"kmm.node.kubernetes.io/module.name":   moduleName,
 						"kmm.node.kubernetes.io/target-kernel": kernelVersion,
 					},
 					Namespace:   namespace,
-					Annotations: map[string]string{constants.JobHashAnnotation: "some hash"},
+					Annotations: map[string]string{constants.PodHashAnnotation: "some hash"},
 				},
 				Status: s,
 			}
 			ctx := context.Background()
 
-			var joberr error
+			var poderr error
 			if expectsErr {
-				joberr = errors.New("random error")
+				poderr = errors.New("random error")
 			}
 
 			gomock.InOrder(
-				jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, "sign").Return(labels),
-				maker.EXPECT().MakeJobTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-				jobhelper.EXPECT().GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.JobTypeSign, mld.Owner).Return(&newJob, nil),
-				jobhelper.EXPECT().IsJobChanged(&j, &newJob).Return(false, nil),
-				jobhelper.EXPECT().GetJobStatus(&newJob).Return(jobStatus, joberr),
+				podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+				maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
+				podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(&newPod, nil),
+				podhelper.EXPECT().IsPodChanged(&j, &newPod).Return(false, nil),
+				podhelper.EXPECT().GetPodStatus(&newPod).Return(podStatus, poderr),
 			)
 
 			res, err := mgr.Sync(ctx, mld, previousImageName, true, mld.Owner)
@@ -199,20 +198,20 @@ var _ = Describe("Sync", func() {
 				return
 			}
 
-			Expect(res).To(Equal(jobStatus))
+			Expect(res).To(Equal(podStatus))
 		},
-		Entry("active", batchv1.JobStatus{Active: 1}, utils.Status(utils.StatusInProgress), false),
-		Entry("active", batchv1.JobStatus{Active: 1}, utils.Status(utils.StatusInProgress), false),
-		Entry("succeeded", batchv1.JobStatus{Succeeded: 1}, utils.Status(utils.StatusCompleted), false),
-		Entry("failed", batchv1.JobStatus{Failed: 1}, utils.Status(""), true),
+		Entry("active", v1.PodStatus{Phase: v1.PodRunning}, utils.Status(utils.StatusInProgress), false),
+		Entry("active", v1.PodStatus{Phase: v1.PodRunning}, utils.Status(utils.StatusInProgress), false),
+		Entry("succeeded", v1.PodStatus{Phase: v1.PodSucceeded}, utils.Status(utils.StatusCompleted), false),
+		Entry("failed", v1.PodStatus{Phase: v1.PodFailed}, utils.Status(""), true),
 	)
 
-	It("should return an error if there was an error creating the job template", func() {
+	It("should return an error if there was an error creating the pod template", func() {
 		ctx := context.Background()
 
 		gomock.InOrder(
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, "sign").Return(labels),
-			maker.EXPECT().MakeJobTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).
+			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).
 				Return(nil, errors.New("random error")),
 		)
 
@@ -223,23 +222,23 @@ var _ = Describe("Sync", func() {
 		)
 	})
 
-	It("should return an error if there was an error getting running jobs", func() {
+	It("should return an error if there was an error getting running pods", func() {
 		ctx := context.Background()
-		j := batchv1.Job{
+		j := v1.Pod{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "batch/v1",
-				Kind:       "Job",
+				Kind:       "Pod",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      jobName,
+				Name:      podName,
 				Namespace: namespace,
 			},
 		}
 
 		gomock.InOrder(
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, "sign").Return(labels),
-			maker.EXPECT().MakeJobTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.JobTypeSign, mld.Owner).Return(nil, errors.New("random error")),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(nil, errors.New("random error")),
 		)
 
 		Expect(
@@ -249,24 +248,24 @@ var _ = Describe("Sync", func() {
 		)
 	})
 
-	It("should return an error if there was an error creating the job", func() {
+	It("should return an error if there was an error creating the pod", func() {
 		ctx := context.Background()
-		j := batchv1.Job{
+		j := v1.Pod{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "batch/v1",
-				Kind:       "Job",
+				Kind:       "Pod",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      jobName,
+				Name:      podName,
 				Namespace: namespace,
 			},
 		}
 
 		gomock.InOrder(
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, "sign").Return(labels),
-			maker.EXPECT().MakeJobTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.JobTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingJob),
-			jobhelper.EXPECT().CreateJob(ctx, &j).Return(errors.New("unable to create job")),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
+			podhelper.EXPECT().CreatePod(ctx, &j).Return(errors.New("unable to create pod")),
 		)
 
 		Expect(
@@ -276,25 +275,25 @@ var _ = Describe("Sync", func() {
 		)
 	})
 
-	It("should create the job and return without error if it doesn't exist", func() {
+	It("should create the pod and return without error if it doesn't exist", func() {
 		ctx := context.Background()
 
-		j := batchv1.Job{
+		j := v1.Pod{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "batch/v1",
-				Kind:       "Job",
+				Kind:       "Pod",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      jobName,
+				Name:      podName,
 				Namespace: namespace,
 			},
 		}
 
 		gomock.InOrder(
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, "sign").Return(labels),
-			maker.EXPECT().MakeJobTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.JobTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingJob),
-			jobhelper.EXPECT().CreateJob(ctx, &j).Return(nil),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
+			podhelper.EXPECT().CreatePod(ctx, &j).Return(nil),
 		)
 
 		Expect(
@@ -304,27 +303,27 @@ var _ = Describe("Sync", func() {
 		)
 	})
 
-	It("should delete the job if it was edited", func() {
+	It("should delete the pod if it was edited", func() {
 		ctx := context.Background()
 
-		newJob := batchv1.Job{
+		newPod := v1.Pod{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "batch/v1",
-				Kind:       "Job",
+				Kind:       "Pod",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:        jobName,
+				Name:        podName,
 				Namespace:   namespace,
-				Annotations: map[string]string{constants.JobHashAnnotation: "new hash"},
+				Annotations: map[string]string{constants.PodHashAnnotation: "new hash"},
 			},
 		}
 
 		gomock.InOrder(
-			jobhelper.EXPECT().JobLabels(mld.Name, kernelVersion, "sign").Return(labels),
-			maker.EXPECT().MakeJobTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&newJob, nil),
-			jobhelper.EXPECT().GetModuleJobByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.JobTypeSign, mld.Owner).Return(&newJob, nil),
-			jobhelper.EXPECT().IsJobChanged(&newJob, &newJob).Return(true, nil),
-			jobhelper.EXPECT().DeleteJob(ctx, &newJob).Return(nil),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&newPod, nil),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(&newPod, nil),
+			podhelper.EXPECT().IsPodChanged(&newPod, &newPod).Return(true, nil),
+			podhelper.EXPECT().DeletePod(ctx, &newPod).Return(nil),
 		)
 
 		Expect(
@@ -339,15 +338,15 @@ var _ = Describe("GarbageCollect", func() {
 	var (
 		ctrl      *gomock.Controller
 		clnt      *client.MockClient
-		jobhelper *utils.MockJobHelper
-		mgr       *signJobManager
+		podhelper *utils.MockPodHelper
+		mgr       *signPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		jobhelper = utils.NewMockJobHelper(ctrl)
-		mgr = NewSignJobManager(clnt, nil, jobhelper, nil)
+		podhelper = utils.NewMockPodHelper(ctrl)
+		mgr = NewSignPodManager(clnt, nil, podhelper, nil)
 	})
 
 	mld := api.ModuleLoaderData{
@@ -355,27 +354,27 @@ var _ = Describe("GarbageCollect", func() {
 		Owner: &kmmv1beta1.Module{},
 	}
 
-	DescribeTable("should return the correct error and names of the collected jobs",
-		func(jobStatus1 batchv1.JobStatus, jobStatus2 batchv1.JobStatus, expectsErr bool) {
-			job1 := batchv1.Job{
+	DescribeTable("should return the correct error and names of the collected pods",
+		func(podStatus1 v1.PodStatus, podStatus2 v1.PodStatus, expectsErr bool) {
+			pod1 := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "jobName1",
+					Name: "podName1",
 				},
-				Status: jobStatus1,
+				Status: podStatus1,
 			}
-			job2 := batchv1.Job{
+			pod2 := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "jobName2",
+					Name: "podName2",
 				},
-				Status: jobStatus2,
+				Status: podStatus2,
 			}
 			expectedNames := []string{}
 			if !expectsErr {
-				if job1.Status.Succeeded == 1 {
-					expectedNames = append(expectedNames, "jobName1")
+				if pod1.Status.Phase == v1.PodSucceeded {
+					expectedNames = append(expectedNames, "podName1")
 				}
-				if job2.Status.Succeeded == 1 {
-					expectedNames = append(expectedNames, "jobName2")
+				if pod2.Status.Phase == v1.PodSucceeded {
+					expectedNames = append(expectedNames, "podName2")
 				}
 			}
 			returnedError := fmt.Errorf("some error")
@@ -383,13 +382,13 @@ var _ = Describe("GarbageCollect", func() {
 				returnedError = nil
 			}
 
-			jobhelper.EXPECT().GetModuleJobs(context.Background(), mld.Name, mld.Namespace, utils.JobTypeSign, mld.Owner).Return([]batchv1.Job{job1, job2}, returnedError)
+			podhelper.EXPECT().GetModulePods(context.Background(), mld.Name, mld.Namespace, utils.PodTypeSign, mld.Owner).Return([]v1.Pod{pod1, pod2}, returnedError)
 			if !expectsErr {
-				if job1.Status.Succeeded == 1 {
-					jobhelper.EXPECT().DeleteJob(context.Background(), &job1).Return(nil)
+				if pod1.Status.Phase == v1.PodSucceeded {
+					podhelper.EXPECT().DeletePod(context.Background(), &pod1).Return(nil)
 				}
-				if job2.Status.Succeeded == 1 {
-					jobhelper.EXPECT().DeleteJob(context.Background(), &job2).Return(nil)
+				if pod2.Status.Phase == v1.PodSucceeded {
+					podhelper.EXPECT().DeletePod(context.Background(), &pod2).Return(nil)
 				}
 			}
 
@@ -403,9 +402,9 @@ var _ = Describe("GarbageCollect", func() {
 				Expect(expectedNames).To(Equal(names))
 			}
 		},
-		Entry("all jobs succeeded", batchv1.JobStatus{Succeeded: 1}, batchv1.JobStatus{Succeeded: 1}, false),
-		Entry("1 job succeeded", batchv1.JobStatus{Succeeded: 1}, batchv1.JobStatus{Succeeded: 0}, false),
-		Entry("0 job succeeded", batchv1.JobStatus{Succeeded: 0}, batchv1.JobStatus{Succeeded: 0}, false),
-		Entry("error occured", batchv1.JobStatus{Succeeded: 0}, batchv1.JobStatus{Succeeded: 0}, true),
+		Entry("all pods succeeded", v1.PodStatus{Phase: v1.PodSucceeded}, v1.PodStatus{Phase: v1.PodSucceeded}, false),
+		Entry("1 pod succeeded", v1.PodStatus{Phase: v1.PodSucceeded}, v1.PodStatus{Phase: v1.PodFailed}, false),
+		Entry("0 pod succeeded", v1.PodStatus{Phase: v1.PodFailed}, v1.PodStatus{Phase: v1.PodFailed}, false),
+		Entry("error occured", v1.PodStatus{Phase: v1.PodFailed}, v1.PodStatus{Phase: v1.PodFailed}, true),
 	)
 })
