@@ -22,6 +22,8 @@ import (
 
 type ModuleConfig struct {
 	ContainerImage string `json:"containerImage"`
+	// When InsecurePull is true, the container image can be pulled without TLS.
+	InsecurePull bool `json:"insecurePull"`
 	//+optional
 	InTreeModuleToRemove string       `json:"inTreeModuleToRemove,omitempty"`
 	Modprobe             ModprobeSpec `json:"modprobe"`

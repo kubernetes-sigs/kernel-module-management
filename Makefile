@@ -37,6 +37,9 @@ IMAGE_TAG ?= latest
 SIGNER_IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-signimage
 SIGNER_IMG ?= $(SIGNER_IMAGE_TAG_BASE):$(IMAGE_TAG)
 
+WORKER_IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-worker
+WORKER_IMG ?= $(WORKER_IMAGE_TAG_BASE):$(IMAGE_TAG)
+
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
@@ -139,6 +142,9 @@ manager: $(shell find -name "*.go") go.mod go.sum  ## Build manager binary.
 manager-hub: $(shell find -name "*.go") go.mod go.sum  ## Build manager-hub binary.
 	go build -o $@ ./cmd/manager-hub
 
+worker: $(shell find -name "*.go") go.mod go.sum  ## Build worker binary.
+	go build -ldflags="-X main.Version=$(VERSION)" -o $@ ./cmd/worker
+
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
@@ -194,7 +200,7 @@ KUSTOMIZE_CONFIG_HUB_DEFAULT ?= config/default-hub
 
 .PHONY: deploy
 deploy: deploy-cert-manager manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG) worker=$(WORKER_IMG)
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	kubectl apply -k $(KUSTOMIZE_CONFIG_DEFAULT)
 
@@ -270,7 +276,7 @@ operator-sdk:
 bundle: operator-sdk manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
 	rm -fr ./bundle
 	${OPERATOR_SDK} generate kustomize manifests --apis-dir api
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG) worker=$(WORKER_IMG)
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	kubectl kustomize config/manifests | ${OPERATOR_SDK} generate bundle $(BUNDLE_GEN_FLAGS)
 	cp -r config/manifests/bundle-metadata/* bundle/metadata/

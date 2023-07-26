@@ -1,0 +1,15 @@
+containerImage: registry.local/org/img:tag
+insecurePull: true
+inTreeModuleToRemove: some-module
+modprobe:
+  moduleName: test
+  parameters: [key0=value0, key1=value1]
+  dirName: /path
+  args:
+    load: [load, args]
+    unload: [unload, args]
+  rawArgs:
+    load: [load, rawargs]
+    unload: [unload, rawargs]
+  firmwarePath: /some/path
+  modulesLoadingOrder: [mod1, mod2]
