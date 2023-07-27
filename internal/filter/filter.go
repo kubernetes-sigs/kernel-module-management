@@ -33,7 +33,7 @@ var skipDeletions predicate.Predicate = predicate.Funcs{
 	DeleteFunc: func(_ event.DeleteEvent) bool { return false },
 }
 
-var nodeBecomesReady predicate.Predicate = predicate.Funcs{
+var nodeBecomesSchedulable predicate.Predicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		oldNode, ok := e.ObjectOld.(*v1.Node)
 		if !ok {
@@ -44,11 +44,13 @@ var nodeBecomesReady predicate.Predicate = predicate.Funcs{
 		if !ok {
 			return false
 		}
-		newReadyStatus := getNodeReadyCondition(newNode)
-		oldReadyStatus := getNodeReadyCondition(oldNode)
-		if newReadyStatus != oldReadyStatus && newReadyStatus == v1.ConditionTrue {
+
+		isOldSchedulable := utils.IsNodeSchedulable(oldNode)
+		isNewSchedulable := utils.IsNodeSchedulable(newNode)
+		if isOldSchedulable != isNewSchedulable && isNewSchedulable {
 			return true
 		}
+
 		return false
 	},
 }
@@ -96,7 +98,7 @@ func (f *Filter) ModuleReconcilerNodePredicate(kernelLabel string) predicate.Pre
 	return predicate.And(
 		skipDeletions,
 		HasLabel(kernelLabel),
-		predicate.Or(nodeBecomesReady, predicate.LabelChangedPredicate{}),
+		predicate.Or(nodeBecomesSchedulable, predicate.LabelChangedPredicate{}),
 	)
 }
 
@@ -314,13 +316,4 @@ func NodeLabelModuleVersionUpdatePredicate(logger logr.Logger) predicate.Predica
 			return !reflect.DeepEqual(oldNodeVersionLabels, newNodeVersionLabels)
 		},
 	}
-}
-
-func getNodeReadyCondition(node *v1.Node) v1.ConditionStatus {
-	for _, condition := range node.Status.Conditions {
-		if condition.Type == v1.NodeReady {
-			return condition.Status
-		}
-	}
-	return v1.ConditionUnknown
 }

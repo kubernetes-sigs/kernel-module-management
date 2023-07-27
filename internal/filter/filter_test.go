@@ -648,7 +648,7 @@ var _ = Describe("FindPreflightsForModule", func() {
 
 })
 
-var _ = Describe("nodeBecomesReady", func() {
+var _ = Describe("nodeBecomesSchedulable", func() {
 	var (
 		oldNode v1.Node
 		newNode *v1.Node
@@ -667,28 +667,29 @@ var _ = Describe("nodeBecomesReady", func() {
 		}
 		newNode = oldNode.DeepCopy()
 	})
-	nodeReadyTrue := v1.NodeCondition{
-		Type:   v1.NodeReady,
-		Status: v1.ConditionTrue,
-	}
-	nodeReadyUnknown := v1.NodeCondition{
-		Type:   v1.NodeReady,
-		Status: v1.ConditionUnknown,
+
+	nonSchedulableTaint := v1.Taint{
+		Effect: v1.TaintEffectNoSchedule,
 	}
 
-	DescribeTable("Should return the expected value", func(oldCond v1.NodeCondition, newCond v1.NodeCondition, expected bool) {
-		newNode.Status.Conditions = append(newNode.Status.Conditions, newCond)
-		oldNode.Status.Conditions = append(oldNode.Status.Conditions, oldCond)
-		res := nodeBecomesReady.Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: newNode})
+	DescribeTable("Should return the expected value", func(oldTaint *v1.Taint, newTaint *v1.Taint, expected bool) {
+		if newTaint != nil {
+			newNode.Spec.Taints = append(newNode.Spec.Taints, *newTaint)
+		}
+		if oldTaint != nil {
+			oldNode.Spec.Taints = append(oldNode.Spec.Taints, *oldTaint)
+		}
+
+		res := nodeBecomesSchedulable.Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: newNode})
 		if expected {
 			Expect(res).To(BeTrue())
 		} else {
 			Expect(res).To(BeFalse())
 		}
 	},
-		Entry("old True, new True", nodeReadyTrue, nodeReadyTrue, false),
-		Entry("old Unknown, new Unknown", nodeReadyUnknown, nodeReadyUnknown, false),
-		Entry("old True, new Unknown", nodeReadyTrue, nodeReadyUnknown, false),
-		Entry("old Unknown, new True", nodeReadyUnknown, nodeReadyTrue, true),
+		Entry("old Schedulable, new Schedulable", nil, nil, false),
+		Entry("old NonSchedulable, new NonSchedulable", &nonSchedulableTaint, &nonSchedulableTaint, false),
+		Entry("old Schedulable, new NonSchedulable", nil, &nonSchedulableTaint, false),
+		Entry("old NonSchedulable, new Schedulable", &nonSchedulableTaint, nil, true),
 	)
 })

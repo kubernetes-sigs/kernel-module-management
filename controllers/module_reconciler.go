@@ -267,7 +267,7 @@ func (mrh *moduleReconcilerHelper) getNodesListBySelector(ctx context.Context, m
 	nodes := make([]v1.Node, 0, len(selectedNodes.Items))
 
 	for _, node := range selectedNodes.Items {
-		if isNodeSchedulable(&node) {
+		if utils.IsNodeSchedulable(&node) {
 			nodes = append(nodes, node)
 		}
 	}
@@ -486,15 +486,6 @@ func (r *ModuleReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string
 		).
 		Named(ModuleReconcilerName).
 		Complete(r)
-}
-
-func isNodeSchedulable(node *v1.Node) bool {
-	for _, taint := range node.Spec.Taints {
-		if taint.Effect == v1.TaintEffectNoSchedule {
-			return false
-		}
-	}
-	return true
 }
 
 func isModuleBuildAndSignCapable(mod *kmmv1beta1.Module) (bool, bool) {
