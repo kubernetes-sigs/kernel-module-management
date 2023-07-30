@@ -68,7 +68,7 @@ var _ = Describe("Get", func() {
 
 })
 
-var _ = Describe("SetNMCAsDesired", func() {
+var _ = Describe("SetModuleConfig", func() {
 	var (
 		ctx       context.Context
 		nmcHelper Helper
@@ -92,7 +92,7 @@ var _ = Describe("SetNMCAsDesired", func() {
 
 		moduleConfig := kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "in-tree-module"}
 
-		err := nmcHelper.SetNMCAsDesired(ctx, &nmc, namespace, name, &moduleConfig)
+		err := nmcHelper.SetModuleConfig(ctx, &nmc, namespace, name, &moduleConfig)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(3))
@@ -114,12 +114,29 @@ var _ = Describe("SetNMCAsDesired", func() {
 
 		moduleConfig := kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "in-tree-module"}
 
-		err := nmcHelper.SetNMCAsDesired(ctx, &nmc, namespace, name, &moduleConfig)
+		err := nmcHelper.SetModuleConfig(ctx, &nmc, namespace, name, &moduleConfig)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(2))
 		Expect(nmc.Spec.Modules[1].Config.InTreeModuleToRemove).To(Equal("in-tree-module"))
 	})
+})
+
+var _ = Describe("RemoveModuleConfig", func() {
+	var (
+		ctx       context.Context
+		nmcHelper Helper
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		nmcHelper = NewHelper(nil)
+	})
+
+	namespace := "test_namespace"
+	name := "test_name"
+
+	nmc := kmmv1beta1.NodeModulesConfig{}
 
 	It("deleting non-existent module", func() {
 		nmc.Spec.Modules = []kmmv1beta1.NodeModuleSpec{
@@ -135,7 +152,7 @@ var _ = Describe("SetNMCAsDesired", func() {
 			},
 		}
 
-		err := nmcHelper.SetNMCAsDesired(ctx, &nmc, namespace, name, nil)
+		err := nmcHelper.RemoveModuleConfig(ctx, &nmc, namespace, name)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(2))
@@ -157,7 +174,7 @@ var _ = Describe("SetNMCAsDesired", func() {
 			},
 		}
 
-		err := nmcHelper.SetNMCAsDesired(ctx, &nmc, namespace, name, nil)
+		err := nmcHelper.RemoveModuleConfig(ctx, &nmc, namespace, name)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(1))

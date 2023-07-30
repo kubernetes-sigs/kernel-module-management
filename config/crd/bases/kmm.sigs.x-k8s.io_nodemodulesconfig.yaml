@@ -53,6 +53,8 @@ spec:
                           description: When InsecurePull is true, the container image
                             can be pulled without TLS.
                           type: boolean
+                        kernelVersion:
+                          type: string
                         kmodLoaded:
                           type: boolean
                         modprobe:
@@ -142,6 +144,7 @@ spec:
                       required:
                       - containerImage
                       - insecurePull
+                      - kernelVersion
                       - kmodLoaded
                       - modprobe
                       type: object

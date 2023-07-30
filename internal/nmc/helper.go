@@ -15,7 +15,8 @@ import (
 
 type Helper interface {
 	Get(ctx context.Context, name string) (*kmmv1beta1.NodeModulesConfig, error)
-	SetNMCAsDesired(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, namespace, name string, moduleConfig *kmmv1beta1.ModuleConfig) error
+	SetModuleConfig(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, namespace, name string, moduleConfig *kmmv1beta1.ModuleConfig) error
+	RemoveModuleConfig(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, namespace, name string) error
 	GetModuleEntry(nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) (*kmmv1beta1.NodeModuleSpec, int)
 }
 
@@ -41,27 +42,27 @@ func (h *helper) Get(ctx context.Context, name string) (*kmmv1beta1.NodeModulesC
 	return &nmc, nil
 }
 
-func (h *helper) SetNMCAsDesired(ctx context.Context,
+func (h *helper) SetModuleConfig(ctx context.Context,
 	nmc *kmmv1beta1.NodeModulesConfig,
 	namespace string,
 	name string,
 	moduleConfig *kmmv1beta1.ModuleConfig) error {
-	foundEntry, index := h.GetModuleEntry(nmc, namespace, name)
-	// remove entry
-	if moduleConfig == nil {
-		if foundEntry != nil {
-			nmc.Spec.Modules = append(nmc.Spec.Modules[:index], nmc.Spec.Modules[index+1:]...)
-		}
-		return nil
-	}
 
-	// add/change entry
+	foundEntry, _ := h.GetModuleEntry(nmc, namespace, name)
 	if foundEntry == nil {
 		nmc.Spec.Modules = append(nmc.Spec.Modules, kmmv1beta1.NodeModuleSpec{Name: name, Namespace: namespace})
 		foundEntry = &nmc.Spec.Modules[len(nmc.Spec.Modules)-1]
 	}
 	foundEntry.Config = *moduleConfig
 
+	return nil
+}
+
+func (h *helper) RemoveModuleConfig(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, namespace, name string) error {
+	foundEntry, index := h.GetModuleEntry(nmc, namespace, name)
+	if foundEntry != nil {
+		nmc.Spec.Modules = append(nmc.Spec.Modules[:index], nmc.Spec.Modules[index+1:]...)
+	}
 	return nil
 }
 
