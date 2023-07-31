@@ -1,0 +1,40 @@
+# Build the manager binary
+FROM golang:1.20-alpine3.18 as builder
+
+RUN ["apk", "add", "bash", "make"]
+
+WORKDIR /workspace
+
+# Copy the Go Modules manifests
+COPY go.mod go.mod
+COPY go.sum go.sum
+
+# cache deps before building and copying source so that we don't need to re-download as much
+# and so that source changes don't invalidate our downloaded layer
+RUN ["go", "mod", "download"]
+
+# Copy the go source
+COPY api api
+COPY cmd/worker cmd/worker
+COPY internal internal
+
+# Copy Makefile
+COPY Makefile Makefile
+COPY docs.mk docs.mk
+
+# Copy the .git directory which is needed to store the build info
+COPY .git .git
+
+# Build
+RUN make worker
+
+FROM alpine:3.18
+
+RUN ["apk", "add", "ca-certificates", "kmod"]
+
+WORKDIR /
+
+COPY --from=builder /workspace/worker /worker
+USER 65532:65532
+
+ENTRYPOINT ["/worker"]

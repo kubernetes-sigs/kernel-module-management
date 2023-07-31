@@ -49,6 +49,10 @@ spec:
                           type: string
                         inTreeModuleToRemove:
                           type: string
+                        insecurePull:
+                          description: When InsecurePull is true, the container image
+                            can be pulled without TLS.
+                          type: boolean
                         kmodLoaded:
                           type: boolean
                         modprobe:
@@ -137,6 +141,7 @@ spec:
                           type: object
                       required:
                       - containerImage
+                      - insecurePull
                       - kmodLoaded
                       - modprobe
                       type: object
