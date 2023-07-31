@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/openshift/release:golang-1.19
+FROM golang:1.20-alpine3.18 as builder
 
 ENV GO111MODULE=on
 ENV GOFLAGS=""
@@ -6,8 +6,7 @@ ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
 
-RUN yum install -y which
-RUN yum install -y podman docker
+RUN ["apk", "add", "bash", "make", "docker", "curl", "shadow", "git"]
 RUN go install github.com/golang/mock/mockgen@v1.7.0-rc.1
 RUN curl -L "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o /tmp/kubectl
 RUN install -o root -g root -m 0755 /tmp/kubectl /usr/local/bin/kubectl
