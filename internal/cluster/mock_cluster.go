@@ -8,8 +8,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	gomock "go.uber.org/mock/gomock"
 	types "k8s.io/apimachinery/pkg/types"
 	v1 "open-cluster-management.io/api/cluster/v1"
 )

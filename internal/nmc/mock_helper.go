@@ -8,8 +8,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockHelper is a mock of Helper interface.

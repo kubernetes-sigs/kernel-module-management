@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/golang/mock/gomock"
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
+	"go.uber.org/mock/gomock"
 )
 
 type fileExistsMatcher struct {

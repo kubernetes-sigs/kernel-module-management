@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/golang/mock/gomock"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"

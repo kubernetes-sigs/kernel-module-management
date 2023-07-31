@@ -5,7 +5,6 @@ go 1.19
 require (
 	github.com/a8m/envsubst v1.4.2
 	github.com/go-logr/logr v1.2.4
-	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.9
 	github.com/google/go-containerregistry v0.15.2
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20230523181351-c3f8a49229d3
@@ -14,6 +13,7 @@ require (
 	github.com/onsi/gomega v1.27.10
 	github.com/prometheus/client_golang v1.16.0
 	github.com/spf13/cobra v1.7.0
+	go.uber.org/mock v0.2.0
 	golang.org/x/exp v0.0.0-20220407100705-7b9b53b0aca4
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.27.4

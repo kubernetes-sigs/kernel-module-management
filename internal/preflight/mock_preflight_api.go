@@ -8,9 +8,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockPreflightAPI is a mock of PreflightAPI interface.
