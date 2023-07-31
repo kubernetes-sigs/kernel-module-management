@@ -49,6 +49,22 @@ steps:
       - --all-tags
       - gcr.io/$PROJECT_ID/kernel-module-management-signimage
     waitFor: [build-signimage]
+  - id: build-worker
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-worker:$_GIT_TAG
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-worker:latest
+      - --file=Dockerfile.worker
+      - .
+    waitFor: ['-']
+  - id: push-worker
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - gcr.io/$PROJECT_ID/kernel-module-management-worker
+    waitFor: [build-worker]
   - id: build-bundles
     name: golang:1.20-alpine3.17
     env:
@@ -81,7 +97,7 @@ steps:
         path: /bundle-kmm
       - name: bundle-hub
         path: /bundle-hub
-    waitFor: [push-manager-image, build-manager-hub-image, push-signimage]
+    waitFor: [push-manager-image, push-manager-hub-image, push-signimage, push-worker]
   - id: build-kmm-bundle-image
     name: gcr.io/cloud-builders/docker
     args:
