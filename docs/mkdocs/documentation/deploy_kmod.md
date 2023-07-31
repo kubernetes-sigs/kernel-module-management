@@ -93,23 +93,17 @@ spec:
 The ModuleLoader pod will first try to unload the in-tree `mod_b` before loading `mod_a` from the ModuleLoader image.  
 When the ModuleLoader pod is terminated and `mod_a` is unloaded, `mod_b` will not be loaded again.
 
-## Security and permissions
+### Image pull policy
 
-Loading kernel modules is a highly sensitive operation.
-Once loaded, kernel modules have all possible permissions to do any kind of operation on the node.
+Many examples in this documentation use the kernel version as image tag for the ModuleLoader image name.  
+If that image tag is being overridden on the registry, the Kubernetes
+[default image pull policy](https://kubernetes.io/docs/concepts/containers/images/#imagepullpolicy-defaulting) that KMM
+honors can lead to nodes not pulling the latest version of an image.  
+Use `.spec.moduleLoader.container.imagePullPolicy` to configure the right
+[image pull policy](https://kubernetes.io/docs/concepts/containers/images/#updating-images) for your ModuleLoader
+DaemonSets.
 
-### Pod Security standards
-
-KMM creates privileged workload to load the kernel modules on nodes.  
-If [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) is enabled in the
-cluster, an administrator needs to configure the isolation level for the namespace where the `Module` is deployed for
-the ModuleLoader and device plugin pods to work.
-
-```shell
-kubectl label --overwrite ns "${namespace}" pod-security.kubernetes.io/enforce=privileged
-```
-
-## Example resource
+### Example resource
 
 Below is an annotated `Module` example with most options set.
 More information about specific features is available in the dedicated pages:
@@ -140,6 +134,8 @@ spec:
           - my-kmod
           - my_dep_a
           - my_dep_b
+
+      imagePullPolicy: Always  # optional
 
       inTreeModuleToRemove: my-kmod-intree  # optional
 
@@ -213,7 +209,7 @@ spec:
     node-role.kubernetes.io/worker: ""
 ```
 
-### Variable substitution
+#### Variable substitution
 
 The following `Module` fields support shell-like variable substitution:
 
@@ -230,3 +226,19 @@ The following variables will be substituted:
 | `KERNEL_VERSION` (deprecated) | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
 | `MOD_NAME`                    | The `Module`'s name                    | `my-mod`                |
 | `MOD_NAMESPACE`               | The `Module`'s namespace               | `my-namespace`          |
+
+## Security and permissions
+
+Loading kernel modules is a highly sensitive operation.
+Once loaded, kernel modules have all possible permissions to do any kind of operation on the node.
+
+### Pod Security standards
+
+KMM creates privileged workload to load the kernel modules on nodes.  
+If [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) is enabled in the
+cluster, an administrator needs to configure the isolation level for the namespace where the `Module` is deployed for
+the ModuleLoader and device plugin pods to work.
+
+```shell
+kubectl label --overwrite ns "${namespace}" pod-security.kubernetes.io/enforce=privileged
+```
