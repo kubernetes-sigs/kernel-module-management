@@ -8,8 +8,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	authn "github.com/google/go-containerregistry/pkg/authn"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockRegistryAuthGetter is a mock of RegistryAuthGetter interface.

@@ -8,9 +8,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	utils "github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

@@ -11,12 +11,12 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-containerregistry/pkg/authn"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

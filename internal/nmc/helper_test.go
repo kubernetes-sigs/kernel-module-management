@@ -12,8 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/golang/mock/gomock"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"go.uber.org/mock/gomock"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
