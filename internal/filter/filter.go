@@ -6,8 +6,6 @@ import (
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/util/podutils"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -144,28 +142,18 @@ func (f *Filter) FindModulesForNode(ctx context.Context, node client.Object) []r
 
 	logger.Info("Listed modules", "count", len(mods.Items))
 
-	nodeLabelsSet := labels.Set(node.GetLabels())
-
 	for _, mod := range mods.Items {
 		logger := logger.WithValues("module name", mod.Name)
 
 		logger.V(1).Info("Processing module")
 
-		sel := labels.NewSelector()
-
-		for k, v := range mod.Spec.Selector {
-			logger.V(1).Info("Processing selector item", "key", k, "value", v)
-
-			requirement, err := labels.NewRequirement(k, selection.Equals, []string{v})
-			if err != nil {
-				logger.Error(err, "could not generate requirement")
-				return reqs
-			}
-
-			sel = sel.Add(*requirement)
+		moduleSelectorMatchNode, err := utils.IsObjectSelectedByLabels(node.GetLabels(), mod.Spec.Selector)
+		if err != nil {
+			logger.Error(err, "could not determine if node is selected by module", "node", node.GetName(), "module", mod.Name)
+			return reqs
 		}
 
-		if !sel.Matches(nodeLabelsSet) {
+		if !moduleSelectorMatchNode {
 			logger.V(1).Info("Node labels do not match the module's selector; skipping")
 			continue
 		}
@@ -197,28 +185,18 @@ func (f *Filter) FindManagedClusterModulesForCluster(ctx context.Context, cluste
 
 	logger.Info("Listed ManagedClusterModules", "count", len(mods.Items))
 
-	clusterLabelsSet := labels.Set(cluster.GetLabels())
-
 	for _, mod := range mods.Items {
 		logger := logger.WithValues("ManagedClusterModule name", mod.Name)
 
 		logger.V(1).Info("Processing ManagedClusterModule")
 
-		sel := labels.NewSelector()
-
-		for k, v := range mod.Spec.Selector {
-			logger.V(1).Info("Processing selector item", "key", k, "value", v)
-
-			requirement, err := labels.NewRequirement(k, selection.Equals, []string{v})
-			if err != nil {
-				logger.Error(err, "could not generate requirement")
-				return reqs
-			}
-
-			sel = sel.Add(*requirement)
+		mcmSelectorMatchCluster, err := utils.IsObjectSelectedByLabels(cluster.GetLabels(), mod.Spec.Selector)
+		if err != nil {
+			logger.Error(err, "could not determine if cluster is selected by ManagedClusterModule", "node", cluster.GetName(), "module", mod.Name)
+			return reqs
 		}
 
-		if !sel.Matches(clusterLabelsSet) {
+		if !mcmSelectorMatchCluster {
 			logger.V(1).Info("Cluster labels do not match the ManagedClusterModule's selector; skipping")
 			continue
 		}

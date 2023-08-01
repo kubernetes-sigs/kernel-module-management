@@ -21,6 +21,7 @@ import (
 )
 
 type ModuleConfig struct {
+	KernelVersion  string `json:"kernelVersion"`
 	ContainerImage string `json:"containerImage"`
 	// When InsecurePull is true, the container image can be pulled without TLS.
 	InsecurePull bool `json:"insecurePull"`

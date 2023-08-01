@@ -65,16 +65,30 @@ func (mr *MockHelperMockRecorder) GetModuleEntry(nmc, modNamespace, modName inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleEntry", reflect.TypeOf((*MockHelper)(nil).GetModuleEntry), nmc, modNamespace, modName)
 }
 
-// SetNMCAsDesired mocks base method.
-func (m *MockHelper) SetNMCAsDesired(ctx context.Context, nmc *v1beta1.NodeModulesConfig, namespace, name string, moduleConfig *v1beta1.ModuleConfig) error {
+// RemoveModuleConfig mocks base method.
+func (m *MockHelper) RemoveModuleConfig(ctx context.Context, nmc *v1beta1.NodeModulesConfig, namespace, name string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetNMCAsDesired", ctx, nmc, namespace, name, moduleConfig)
+	ret := m.ctrl.Call(m, "RemoveModuleConfig", ctx, nmc, namespace, name)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SetNMCAsDesired indicates an expected call of SetNMCAsDesired.
-func (mr *MockHelperMockRecorder) SetNMCAsDesired(ctx, nmc, namespace, name, moduleConfig interface{}) *gomock.Call {
+// RemoveModuleConfig indicates an expected call of RemoveModuleConfig.
+func (mr *MockHelperMockRecorder) RemoveModuleConfig(ctx, nmc, namespace, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetNMCAsDesired", reflect.TypeOf((*MockHelper)(nil).SetNMCAsDesired), ctx, nmc, namespace, name, moduleConfig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveModuleConfig", reflect.TypeOf((*MockHelper)(nil).RemoveModuleConfig), ctx, nmc, namespace, name)
+}
+
+// SetModuleConfig mocks base method.
+func (m *MockHelper) SetModuleConfig(ctx context.Context, nmc *v1beta1.NodeModulesConfig, namespace, name string, moduleConfig *v1beta1.ModuleConfig) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetModuleConfig", ctx, nmc, namespace, name, moduleConfig)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetModuleConfig indicates an expected call of SetModuleConfig.
+func (mr *MockHelperMockRecorder) SetModuleConfig(ctx, nmc, namespace, name, moduleConfig interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetModuleConfig", reflect.TypeOf((*MockHelper)(nil).SetModuleConfig), ctx, nmc, namespace, name, moduleConfig)
 }
