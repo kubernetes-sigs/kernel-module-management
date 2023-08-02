@@ -178,6 +178,10 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 		Modprobe:             mld.Modprobe,
 	}
 
+	if tls := mld.RegistryTLS; tls != nil {
+		moduleConfig.InsecurePull = tls.Insecure || tls.InsecureSkipTLSVerify
+	}
+
 	nmc := &kmmv1beta1.NodeModulesConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 	}

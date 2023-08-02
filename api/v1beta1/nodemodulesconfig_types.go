@@ -31,9 +31,10 @@ type ModuleConfig struct {
 }
 
 type NodeModuleSpec struct {
-	Name      string       `json:"name"`
-	Namespace string       `json:"namespace"`
-	Config    ModuleConfig `json:"config"`
+	Name               string       `json:"name"`
+	Namespace          string       `json:"namespace"`
+	Config             ModuleConfig `json:"config"`
+	ServiceAccountName string       `json:"serviceAccountName"`
 }
 
 // NodeModulesConfigSpec describes the desired state of modules on the node

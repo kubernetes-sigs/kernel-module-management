@@ -22,8 +22,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -40,7 +38,9 @@ import (
 	v1beta12 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/controllers"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
@@ -86,6 +86,7 @@ func main() {
 	}
 
 	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
+	workerImage := cmd.GetEnvOrFatalError("RELATED_IMAGES_WORKER", setupLogger)
 
 	managed, err := GetBoolEnv("KMM_MANAGED")
 	if err != nil {
@@ -163,6 +164,17 @@ func main() {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleNMCReconcilerName)
 	}
 
+	workerHelper := controllers.NewWorkerHelper(
+		client,
+		controllers.NewPodManager(client, workerImage, scheme),
+	)
+
+	ctx := ctrl.SetupSignalHandler()
+
+	if err = controllers.NewNodeModulesConfigReconciler(client, workerHelper).SetupWithManager(ctx, mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeModulesConfigReconcilerName)
+	}
+
 	nodeKernelReconciler := controllers.NewNodeKernelReconciler(client, constants.KernelLabel, filterAPI)
 
 	if err = nodeKernelReconciler.SetupWithManager(mgr); err != nil {
@@ -210,7 +222,7 @@ func main() {
 	}
 
 	setupLogger.Info("starting manager")
-	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = mgr.Start(ctx); err != nil {
 		cmd.FatalError(setupLogger, err, "problem running manager")
 	}
 }
