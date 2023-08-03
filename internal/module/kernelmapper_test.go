@@ -1,6 +1,7 @@
 package module
 
 import (
+	"errors"
 	"fmt"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -48,10 +49,17 @@ var _ = Describe("GetModuleLoaderDataForKernel", func() {
 		Expect(res).To(Equal(&mld))
 	})
 
-	It("failed to find kernel mapping", func() {
+	It("failed to find kernel mapping, internal error", func() {
 		kh.EXPECT().findKernelMapping(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(nil, fmt.Errorf("some error"))
 		res, err := km.GetModuleLoaderDataForKernel(&mod, kernelVersion)
 		Expect(err).To(HaveOccurred())
+		Expect(res).To(BeNil())
+	})
+
+	It("failed to find kernel mapping, mapping not present", func() {
+		kh.EXPECT().findKernelMapping(mod.Spec.ModuleLoader.Container.KernelMappings, kernelVersion).Return(nil, ErrNoMatchingKernelMapping)
+		res, err := km.GetModuleLoaderDataForKernel(&mod, kernelVersion)
+		Expect(errors.Is(err, ErrNoMatchingKernelMapping)).To(BeTrue())
 		Expect(res).To(BeNil())
 	})
 
@@ -136,7 +144,7 @@ var _ = Describe("findKernelMapping", func() {
 		}
 
 		m, err := kh.findKernelMapping(mappings, kernelVersion)
-		Expect(err).To(MatchError("no suitable mapping found"))
+		Expect(errors.Is(err, ErrNoMatchingKernelMapping)).To(BeTrue())
 		Expect(m).To(BeNil())
 	})
 })
