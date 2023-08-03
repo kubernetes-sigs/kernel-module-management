@@ -9,6 +9,7 @@ import (
 
 	"go.uber.org/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,11 +23,14 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	mockClient "github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 )
 
 var (
-	mockCtrl *gomock.Controller
-	clnt     *mockClient.MockClient
+	mockCtrl  *gomock.Controller
+	clnt      *mockClient.MockClient
+	nmcHelper *nmc.MockHelper
+	f         *Filter
 )
 
 var _ = Describe("HasLabel", func() {
@@ -66,6 +70,64 @@ var _ = Describe("skipDeletions", func() {
 			BeFalse(),
 		)
 	})
+})
+
+var _ = Describe("skipCreations", func() {
+	It("should return false for create events", func() {
+		Expect(
+			skipCreations.Create(event.CreateEvent{}),
+		).To(
+			BeFalse(),
+		)
+	})
+})
+
+var _ = Describe("nodeBecomesSchedulable", func() {
+	DescribeTable("should work as expected", func(oldNodeSchedulable, newNodeSchedulable, expectedRes bool) {
+		oldNode := v1.Node{}
+		newNode := v1.Node{}
+		if !oldNodeSchedulable {
+			oldNode.Spec.Taints = []v1.Taint{
+				v1.Taint{
+					Effect: v1.TaintEffectNoSchedule,
+				},
+			}
+		}
+		if !newNodeSchedulable {
+			newNode.Spec.Taints = []v1.Taint{
+				v1.Taint{
+					Effect: v1.TaintEffectNoSchedule,
+				},
+			}
+		}
+
+		res := nodeBecomesSchedulable.Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
+		Expect(res).To(Equal(expectedRes))
+
+	},
+		Entry("old schedulable, new schedulable", true, true, false),
+		Entry("old schedulable, new non-schedulable", true, false, false),
+		Entry("old non-schedulable, new non-schedulable", false, false, false),
+		Entry("old non-schedulable, new schedulable", false, true, true),
+	)
+})
+
+var _ = Describe("moduleJobSuccess", func() {
+	DescribeTable("should work as expected", func(jobControlledByModule, jobSucceeded, expectedRes bool) {
+		newJob := batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "someJob", Namespace: "moduleNamespace"},
+		}
+		if jobSucceeded {
+			newJob.Status.Succeeded = 1
+		}
+
+		res := moduleJobSuccess.Update(event.UpdateEvent{ObjectNew: &newJob})
+		Expect(res).To(Equal(expectedRes))
+
+	},
+		Entry("job succeeded", true, true, true),
+		Entry("job not succeeded", true, false, false),
+	)
 })
 
 var _ = Describe("kmmClusterClaimChanged", func() {
@@ -114,7 +176,8 @@ var _ = Describe("ModuleReconcilerNodePredicate", func() {
 	var p predicate.Predicate
 
 	BeforeEach(func() {
-		p = New(nil).ModuleReconcilerNodePredicate(kernelLabel)
+		f = New(nil, nil)
+		p = f.ModuleReconcilerNodePredicate(kernelLabel)
 	})
 
 	It("should return true for creations", func() {
@@ -197,7 +260,8 @@ var _ = Describe("NodeKernelReconcilerPredicate", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		p = New(nil).NodeKernelReconcilerPredicate(labelName)
+		f = New(nil, nil)
+		p = f.NodeKernelReconcilerPredicate(labelName)
 	})
 
 	It("should return true if the node has no labels", func() {
@@ -310,6 +374,7 @@ var _ = Describe("FindModulesForNode", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		clnt = mockClient.NewMockClient(mockCtrl)
+		f = New(clnt, nil)
 	})
 
 	ctx := context.Background()
@@ -317,9 +382,8 @@ var _ = Describe("FindModulesForNode", func() {
 	It("should return nothing if there are no modules", func() {
 		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any())
 
-		p := New(clnt)
 		Expect(
-			p.FindModulesForNode(ctx, &v1.Node{}),
+			f.FindModulesForNode(ctx, &v1.Node{}),
 		).To(
 			BeEmpty(),
 		)
@@ -339,10 +403,8 @@ var _ = Describe("FindModulesForNode", func() {
 			},
 		)
 
-		p := New(clnt)
-
 		Expect(
-			p.FindModulesForNode(ctx, &v1.Node{}),
+			f.FindModulesForNode(ctx, &v1.Node{}),
 		).To(
 			BeEmpty(),
 		)
@@ -375,14 +437,110 @@ var _ = Describe("FindModulesForNode", func() {
 			},
 		)
 
-		p := New(clnt)
-
 		expectedReq := reconcile.Request{
 			NamespacedName: types.NamespacedName{Name: mod1Name},
 		}
 
-		reqs := p.FindModulesForNode(ctx, &node)
+		reqs := f.FindModulesForNode(ctx, &node)
 		Expect(reqs).To(Equal([]reconcile.Request{expectedReq}))
+	})
+})
+
+var _ = Describe("FindModulesForNMCNodeChange", func() {
+	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
+		clnt = mockClient.NewMockClient(mockCtrl)
+		nmcHelper = nmc.NewMockHelper(mockCtrl)
+		f = New(clnt, nmcHelper)
+	})
+
+	ctx := context.Background()
+
+	It("should return nothing if there are no modules and no NMC", func() {
+		node := &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "some node"},
+		}
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(nil),
+			nmcHelper.EXPECT().Get(ctx, node.Name).Return(nil, nil),
+		)
+
+		res := f.FindModulesForNMCNodeChange(ctx, node)
+		Expect(res).To(BeEmpty())
+	})
+
+	It("should return nothing if the node labels match no module and NMC spec is empty", func() {
+		mod := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{
+				Selector: map[string]string{"key": "value"},
+			},
+		}
+		node := &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "some node"},
+		}
+
+		nmc := kmmv1beta1.NodeModulesConfig{}
+
+		gomock.InOrder(
+			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.Module{mod}
+					return nil
+				},
+			),
+			nmcHelper.EXPECT().Get(ctx, node.Name).Return(&nmc, nil),
+		)
+		res := f.FindModulesForNMCNodeChange(ctx, node)
+		Expect(res).To(BeEmpty())
+	})
+
+	It("should return modules matching node's label and modules in the NMC spec", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "module name", Namespace: "module namespace"},
+			Spec: kmmv1beta1.ModuleSpec{
+				Selector: map[string]string{"key": "value"},
+			},
+		}
+		nodeLabels := map[string]string{"key": "value"}
+		node := &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "some node", Labels: nodeLabels},
+		}
+
+		nmc := kmmv1beta1.NodeModulesConfig{
+			Spec: kmmv1beta1.NodeModulesConfigSpec{
+				Modules: []kmmv1beta1.NodeModuleSpec{
+					{
+						Name:      "new module name",
+						Namespace: "new module namespace",
+					},
+					{
+						Name:      "module name",
+						Namespace: "module namespace",
+					},
+				},
+			},
+		}
+
+		gomock.InOrder(
+			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.Module{mod}
+					return nil
+				},
+			),
+			nmcHelper.EXPECT().Get(ctx, node.Name).Return(&nmc, nil),
+		)
+		res := f.FindModulesForNMCNodeChange(ctx, node)
+
+		expectedReq := []reconcile.Request{
+			{
+				NamespacedName: types.NamespacedName{Name: mod.Name, Namespace: mod.Namespace},
+			},
+			{
+				NamespacedName: types.NamespacedName{Name: "new module name", Namespace: "new module namespace"},
+			},
+		}
+		Expect(res).Should(ConsistOf(expectedReq))
 	})
 })
 
@@ -390,6 +548,7 @@ var _ = Describe("FindManagedClusterModulesForCluster", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		clnt = mockClient.NewMockClient(mockCtrl)
+		f = New(clnt, nil)
 	})
 
 	ctx := context.Background()
@@ -397,9 +556,8 @@ var _ = Describe("FindManagedClusterModulesForCluster", func() {
 	It("should return nothing if there are no ManagedClusterModules", func() {
 		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any())
 
-		p := New(clnt)
 		Expect(
-			p.FindManagedClusterModulesForCluster(ctx, &clusterv1.ManagedCluster{}),
+			f.FindManagedClusterModulesForCluster(ctx, &clusterv1.ManagedCluster{}),
 		).To(
 			BeEmpty(),
 		)
@@ -419,10 +577,8 @@ var _ = Describe("FindManagedClusterModulesForCluster", func() {
 			},
 		)
 
-		p := New(clnt)
-
 		Expect(
-			p.FindManagedClusterModulesForCluster(ctx, &clusterv1.ManagedCluster{}),
+			f.FindManagedClusterModulesForCluster(ctx, &clusterv1.ManagedCluster{}),
 		).To(
 			BeEmpty(),
 		)
@@ -458,13 +614,11 @@ var _ = Describe("FindManagedClusterModulesForCluster", func() {
 			},
 		)
 
-		p := New(clnt)
-
 		expectedReq := reconcile.Request{
 			NamespacedName: types.NamespacedName{Name: matchingMod.Name},
 		}
 
-		reqs := p.FindManagedClusterModulesForCluster(ctx, &cluster)
+		reqs := f.FindManagedClusterModulesForCluster(ctx, &cluster)
 		Expect(reqs).To(Equal([]reconcile.Request{expectedReq}))
 	})
 })
@@ -473,7 +627,8 @@ var _ = Describe("ManagedClusterModuleReconcilerManagedClusterPredicate", func()
 	var p predicate.Predicate
 
 	BeforeEach(func() {
-		p = New(nil).ManagedClusterModuleReconcilerManagedClusterPredicate()
+		f = New(nil, nil)
+		p = f.ManagedClusterModuleReconcilerManagedClusterPredicate()
 	})
 
 	It("should return true for creations", func() {
@@ -607,6 +762,7 @@ var _ = Describe("FindPreflightsForModule", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		clnt = mockClient.NewMockClient(mockCtrl)
+		f = New(clnt, nil)
 	})
 
 	ctx := context.Background()
@@ -614,9 +770,7 @@ var _ = Describe("FindPreflightsForModule", func() {
 	It("no preflight exists", func() {
 		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any())
 
-		p := New(clnt)
-
-		res := p.EnqueueAllPreflightValidations(ctx, &kmmv1beta1.Module{})
+		res := f.EnqueueAllPreflightValidations(ctx, &kmmv1beta1.Module{})
 		Expect(res).To(BeEmpty())
 	})
 
@@ -641,8 +795,7 @@ var _ = Describe("FindPreflightsForModule", func() {
 			},
 		}
 
-		p := New(clnt)
-		res := p.EnqueueAllPreflightValidations(ctx, &kmmv1beta1.Module{})
+		res := f.EnqueueAllPreflightValidations(ctx, &kmmv1beta1.Module{})
 		Expect(res).To(Equal(expectedRes))
 	})
 

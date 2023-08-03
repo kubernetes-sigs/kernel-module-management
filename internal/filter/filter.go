@@ -5,8 +5,10 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubectl/pkg/util/podutils"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -18,6 +20,7 @@ import (
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
@@ -29,6 +32,10 @@ func HasLabel(label string) predicate.Predicate {
 
 var skipDeletions predicate.Predicate = predicate.Funcs{
 	DeleteFunc: func(_ event.DeleteEvent) bool { return false },
+}
+
+var skipCreations predicate.Predicate = predicate.Funcs{
+	CreateFunc: func(_ event.CreateEvent) bool { return false },
 }
 
 var nodeBecomesSchedulable predicate.Predicate = predicate.Funcs{
@@ -75,6 +82,20 @@ var kmmClusterClaimChanged predicate.Predicate = predicate.Funcs{
 	},
 }
 
+var moduleJobSuccess predicate.Predicate = predicate.Funcs{
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		job, ok := e.ObjectNew.(*batchv1.Job)
+		if !ok {
+			return true
+		}
+		if job.Status.Succeeded == 1 {
+			return true
+		}
+
+		return false
+	},
+}
+
 func clusterClaim(name string, clusterClaims []clusterv1.ManagedClusterClaim) *clusterv1.ManagedClusterClaim {
 	for _, clusterClaim := range clusterClaims {
 		if clusterClaim.Name == name {
@@ -85,11 +106,15 @@ func clusterClaim(name string, clusterClaims []clusterv1.ManagedClusterClaim) *c
 }
 
 type Filter struct {
-	client client.Client
+	client    client.Client
+	nmcHelper nmc.Helper
 }
 
-func New(client client.Client) *Filter {
-	return &Filter{client: client}
+func New(client client.Client, nmcHelper nmc.Helper) *Filter {
+	return &Filter{
+		client:    client,
+		nmcHelper: nmcHelper,
+	}
 }
 
 func (f *Filter) ModuleReconcilerNodePredicate(kernelLabel string) predicate.Predicate {
@@ -97,6 +122,21 @@ func (f *Filter) ModuleReconcilerNodePredicate(kernelLabel string) predicate.Pre
 		skipDeletions,
 		HasLabel(kernelLabel),
 		predicate.Or(nodeBecomesSchedulable, predicate.LabelChangedPredicate{}),
+	)
+}
+
+func ModuleNMCReconcilerNodePredicate() predicate.Predicate {
+	return predicate.And(
+		skipDeletions,
+		predicate.Or(nodeBecomesSchedulable, predicate.LabelChangedPredicate{}),
+	)
+}
+
+func ModuleNMCReconcileJobPredicate() predicate.Predicate {
+	return predicate.And(
+		skipDeletions,
+		skipCreations,
+		moduleJobSuccess,
 	)
 }
 
@@ -162,6 +202,67 @@ func (f *Filter) FindModulesForNode(ctx context.Context, node client.Object) []r
 
 		reqs = append(reqs, reconcile.Request{NamespacedName: nsn})
 	}
+
+	logger.Info("Adding reconciliation requests", "count", len(reqs))
+	logger.V(1).Info("New requests", "requests", reqs)
+
+	return reqs
+}
+
+// FindModulesForNMCNodeChange finds the modules that are affected by node changes that result
+// in ModuleNMCReconcilerNodePredicate predicate. First it find all the Module that can run on the node, based
+// on the Modules' Selector field and on node's labels. Then, in case NMC for the node exists, it adds all the
+// Modules already set in NMC ( in case they were not added in a previous step).
+func (f *Filter) FindModulesForNMCNodeChange(ctx context.Context, node client.Object) []reconcile.Request {
+	logger := ctrl.LoggerFrom(ctx).WithValues("node", node.GetName())
+
+	logger.Info("Listing all modules")
+
+	mods := kmmv1beta1.ModuleList{}
+
+	err := f.client.List(ctx, &mods)
+	if err != nil {
+		logger.Error(err, "could not list modules")
+		return nil
+	}
+
+	logger.Info("Listed modules", "count", len(mods.Items))
+
+	reqSet := sets.New[reconcile.Request]()
+
+	for _, mod := range mods.Items {
+		logger := logger.WithValues("module name", mod.Name)
+
+		logger.V(1).Info("Processing module")
+
+		moduleSelectorMatchNode, err := utils.IsObjectSelectedByLabels(node.GetLabels(), mod.Spec.Selector)
+		if err != nil {
+			logger.Error(err, "could not determine if node is selected by module", "node", node.GetName(), "module", mod.Name)
+			continue
+		}
+
+		if !moduleSelectorMatchNode {
+			logger.V(1).Info("Node labels do not match the module's selector; skipping")
+			continue
+		}
+
+		nsn := types.NamespacedName{Name: mod.Name, Namespace: mod.Namespace}
+
+		reqSet.Insert(reconcile.Request{NamespacedName: nsn})
+	}
+
+	nms, err := f.nmcHelper.Get(ctx, node.GetName())
+	if err != nil || nms == nil {
+		return reqSet.UnsortedList()
+	}
+
+	// go over modules of NodeModulesConfig and add them to request if they are not there already
+	for _, mod := range nms.Spec.Modules {
+		nsn := types.NamespacedName{Name: mod.Name, Namespace: mod.Namespace}
+		reqSet.Insert(reconcile.Request{NamespacedName: nsn})
+	}
+
+	reqs := reqSet.UnsortedList()
 
 	logger.Info("Adding reconciliation requests", "count", len(reqs))
 	logger.V(1).Info("New requests", "requests", reqs)

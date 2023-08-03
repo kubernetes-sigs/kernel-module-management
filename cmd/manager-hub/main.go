@@ -46,6 +46,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	signjob "github.com/kubernetes-sigs/kernel-module-management/internal/sign/job"
@@ -102,7 +103,8 @@ func main() {
 
 	client := mgr.GetClient()
 
-	filterAPI := filter.New(client)
+	nmcHelper := nmc.NewHelper(client)
+	filterAPI := filter.New(client, nmcHelper)
 
 	metricsAPI := metrics.New()
 	metricsAPI.Register()

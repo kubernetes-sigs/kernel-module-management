@@ -46,6 +46,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
@@ -109,7 +110,8 @@ func main() {
 
 	client := mgr.GetClient()
 
-	filterAPI := filter.New(client)
+	nmcHelper := nmc.NewHelper(client)
+	filterAPI := filter.New(client, nmcHelper)
 
 	metricsAPI := metrics.New()
 	metricsAPI.Register()
@@ -146,9 +148,19 @@ func main() {
 		statusupdater.NewModuleStatusUpdater(client),
 		operatorNamespace,
 	)
-
 	if err = mc.SetupWithManager(mgr, constants.KernelLabel); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleReconcilerName)
+	}
+
+	mnc := controllers.NewModuleNMCReconciler(
+		client,
+		kernelAPI,
+		registryAPI,
+		nmcHelper,
+		filterAPI,
+	)
+	if err = mnc.SetupWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleNMCReconcilerName)
 	}
 
 	nodeKernelReconciler := controllers.NewNodeKernelReconciler(client, constants.KernelLabel, filterAPI)
