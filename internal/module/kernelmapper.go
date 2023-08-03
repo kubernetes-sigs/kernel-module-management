@@ -12,6 +12,8 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
+var ErrNoMatchingKernelMapping = errors.New("kernel mapping not found")
+
 //go:generate mockgen -source=kernelmapper.go -package=module -destination=mock_kernelmapper.go KernelMapper,kernelMapperHelperAPI
 
 type KernelMapper interface {
@@ -32,7 +34,7 @@ func (k *kernelMapper) GetModuleLoaderDataForKernel(mod *kmmv1beta1.Module, kern
 	mappings := mod.Spec.ModuleLoader.Container.KernelMappings
 	foundMapping, err := k.helper.findKernelMapping(mappings, kernelVersion)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find mapping for kernel %s: %v", kernelVersion, err)
+		return nil, fmt.Errorf("failed to find mapping for kernel %s: %w", kernelVersion, err)
 	}
 	mld, err := k.helper.prepareModuleLoaderData(foundMapping, mod, kernelVersion)
 	if err != nil {
@@ -81,7 +83,7 @@ func (kh *kernelMapperHelper) findKernelMapping(mappings []kmmv1beta1.KernelMapp
 		}
 	}
 
-	return nil, errors.New("no suitable mapping found")
+	return nil, ErrNoMatchingKernelMapping
 }
 
 func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.KernelMapping, mod *kmmv1beta1.Module, kernelVersion string) (*api.ModuleLoaderData, error) {
