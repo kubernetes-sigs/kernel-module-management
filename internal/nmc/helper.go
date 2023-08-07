@@ -35,7 +35,7 @@ func (h *helper) Get(ctx context.Context, name string) (*kmmv1beta1.NodeModulesC
 	err := h.client.Get(ctx, types.NamespacedName{Name: name}, &nmc)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return nil, nil
+			return nil, err
 		}
 		return nil, fmt.Errorf("failed to get NodeModulesConfig %s: %v", name, err)
 	}

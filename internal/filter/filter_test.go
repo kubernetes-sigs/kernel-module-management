@@ -11,7 +11,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -462,7 +464,7 @@ var _ = Describe("FindModulesForNMCNodeChange", func() {
 		}
 		gomock.InOrder(
 			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(nil),
-			nmcHelper.EXPECT().Get(ctx, node.Name).Return(nil, nil),
+			nmcHelper.EXPECT().Get(ctx, node.Name).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, node.Name)),
 		)
 
 		res := f.FindModulesForNMCNodeChange(ctx, node)
