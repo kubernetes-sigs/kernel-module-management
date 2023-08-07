@@ -252,7 +252,7 @@ func (f *Filter) FindModulesForNMCNodeChange(ctx context.Context, node client.Ob
 	}
 
 	nms, err := f.nmcHelper.Get(ctx, node.GetName())
-	if err != nil || nms == nil {
+	if err != nil {
 		return reqSet.UnsortedList()
 	}
 

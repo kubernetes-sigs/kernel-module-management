@@ -57,12 +57,13 @@ var _ = Describe("Get", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("no error, nmc does not exists", func() {
+	It("nmc does not exists", func() {
 		clnt.EXPECT().Get(ctx, types.NamespacedName{Name: nmcName}, gomock.Any()).Return(k8serrors.NewNotFound(schema.GroupResource{}, nmcName))
 
 		res, err := nmcHelper.Get(ctx, nmcName)
 
-		Expect(err).NotTo(HaveOccurred())
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(Equal(k8serrors.NewNotFound(schema.GroupResource{}, nmcName)))
 		Expect(res).To(BeNil())
 	})
 

@@ -198,11 +198,11 @@ func (mnrh *moduleNMCReconcilerHelper) disableModuleOnNode(ctx context.Context, 
 	logger := log.FromContext(ctx)
 	nmc, err := mnrh.nmcHelper.Get(ctx, nodeName)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// NodeModulesConfig does not exists, module was never running on the node, we are good
+			return nil
+		}
 		return fmt.Errorf("failed to get the NodeModulesConfig for node %s: %v", nodeName, err)
-	}
-	if nmc == nil {
-		// NodeModulesConfig does not exists, module was never running on the node, we are good
-		return nil
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmc, func() error {

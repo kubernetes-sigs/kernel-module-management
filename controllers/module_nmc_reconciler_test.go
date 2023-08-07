@@ -442,7 +442,7 @@ var _ = Describe("disableModuleOnNode", func() {
 	})
 
 	It("NMC does not exists", func() {
-		helper.EXPECT().Get(ctx, nodeName).Return(nil, nil)
+		helper.EXPECT().Get(ctx, nodeName).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, nodeName))
 
 		err := mnrh.disableModuleOnNode(ctx, moduleNamespace, moduleName, nodeName)
 		Expect(err).NotTo(HaveOccurred())
