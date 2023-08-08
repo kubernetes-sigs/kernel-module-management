@@ -74,3 +74,45 @@ func (h *helper) GetModuleEntry(nmc *kmmv1beta1.NodeModulesConfig, modNamespace,
 	}
 	return nil, 0
 }
+
+func findModuleStatus(statuses []kmmv1beta1.NodeModuleStatus, moduleNamespace, moduleName string) *kmmv1beta1.NodeModuleStatus {
+	for i := 0; i < len(statuses); i++ {
+		s := statuses[i]
+
+		if s.Namespace == moduleNamespace && s.Name == moduleName {
+			return &statuses[i]
+		}
+	}
+
+	return nil
+}
+
+func RemoveModuleStatus(statuses *[]kmmv1beta1.NodeModuleStatus, modNamespace, modName string) {
+	if statuses == nil || len(*statuses) == 0 {
+		return
+	}
+
+	newStatuses := make([]kmmv1beta1.NodeModuleStatus, 0, len(*statuses)-1)
+
+	for _, s := range *statuses {
+		if s.Namespace != modNamespace || s.Name != modName {
+			newStatuses = append(newStatuses, s)
+		}
+	}
+
+	*statuses = newStatuses
+}
+
+func SetModuleStatus(statuses *[]kmmv1beta1.NodeModuleStatus, status kmmv1beta1.NodeModuleStatus) {
+	if statuses == nil {
+		return
+	}
+
+	s := findModuleStatus(*statuses, status.Namespace, status.Name)
+
+	if s != nil {
+		*s = status
+	} else {
+		*statuses = append(*statuses, status)
+	}
+}
