@@ -4,13 +4,13 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.12.0
-  name: nodemodulesconfig.kmm.sigs.x-k8s.io
+  name: nodemodulesconfigs.kmm.sigs.x-k8s.io
 spec:
   group: kmm.sigs.x-k8s.io
   names:
     kind: NodeModulesConfig
     listKind: NodeModulesConfigList
-    plural: nodemodulesconfig
+    plural: nodemodulesconfigs
     shortNames:
     - nmc
     singular: nodemodulesconfig
@@ -55,8 +55,6 @@ spec:
                           type: boolean
                         kernelVersion:
                           type: string
-                        kmodLoaded:
-                          type: boolean
                         modprobe:
                           properties:
                             args:
@@ -145,7 +143,6 @@ spec:
                       - containerImage
                       - insecurePull
                       - kernelVersion
-                      - kmodLoaded
                       - modprobe
                       type: object
                     name:
@@ -169,16 +166,124 @@ spec:
                   state status
                 items:
                   properties:
-                    kmodLoaded:
+                    config:
+                      properties:
+                        containerImage:
+                          type: string
+                        inTreeModuleToRemove:
+                          type: string
+                        insecurePull:
+                          description: When InsecurePull is true, the container image
+                            can be pulled without TLS.
+                          type: boolean
+                        kernelVersion:
+                          type: string
+                        modprobe:
+                          properties:
+                            args:
+                              description: 'Args is an optional list of arguments
+                                to be passed to modprobe before the name of the kernel
+                                module. The resulting commands will be: `modprobe
+                                ${Args} module_name`.'
+                              properties:
+                                load:
+                                  description: Load is an optional list of arguments
+                                    to be used when loading the kernel module.
+                                  items:
+                                    type: string
+                                  minItems: 1
+                                  type: array
+                                unload:
+                                  description: Unload is an optional list of arguments
+                                    to be used when unloading the kernel module.
+                                  items:
+                                    type: string
+                                  minItems: 1
+                                  type: array
+                              type: object
+                            dirName:
+                              default: /opt
+                              description: DirName is the root directory for modules.
+                                It adds `-d ${DirName}` to the modprobe command-line.
+                              type: string
+                            firmwarePath:
+                              description: FirmwarePath is the path of the firmware(s).
+                                The firmware(s) will be copied to the host for the
+                                kernel to find them.
+                              type: string
+                            moduleName:
+                              description: ModuleName is the name of the Module to
+                                be loaded.
+                              type: string
+                            modulesLoadingOrder:
+                              description: 'ModulesLoadingOrder defines the dependency
+                                between kernel modules loading, in case it was not
+                                created by depmod (independent kernel modules). The
+                                list order should be: upmost module, then the module
+                                it depends on and so on. Example: if moduleA depends
+                                on first loading moduleB, and moduleB depends on first
+                                loading moduleC the entry should look: ModulesLoadingOrder:
+                                - moduleA - moduleB - moduleC In order to load all
+                                3 modules, moduleA shoud be defined in the ModuleName
+                                parameter of this struct'
+                              items:
+                                type: string
+                              type: array
+                            parameters:
+                              description: 'Parameters is an optional list of kernel
+                                module parameters to be provided to modprobe. They
+                                should be in the form of key=value and will be separated
+                                by spaces in the modprobe command. The resulting loading
+                                command will be: `modprobe module_name ${Parameters}`.'
+                              items:
+                                type: string
+                              type: array
+                            rawArgs:
+                              description: 'If RawArgs are specified, they are passed
+                                straight to the modprobe binary; all other properties
+                                in this object are ignored. The resulting commands
+                                will be: `modprobe ${RawArgs}`.'
+                              properties:
+                                load:
+                                  description: Load is an optional list of arguments
+                                    to be used when loading the kernel module.
+                                  items:
+                                    type: string
+                                  minItems: 1
+                                  type: array
+                                unload:
+                                  description: Unload is an optional list of arguments
+                                    to be used when unloading the kernel module.
+                                  items:
+                                    type: string
+                                  minItems: 1
+                                  type: array
+                              type: object
+                          required:
+                          - moduleName
+                          type: object
+                      required:
+                      - containerImage
+                      - insecurePull
+                      - kernelVersion
+                      - modprobe
+                      type: object
+                    inProgress:
                       type: boolean
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
                     name:
                       type: string
                     namespace:
                       type: string
+                    serviceAccountName:
+                      type: string
                   required:
-                  - kmodLoaded
+                  - inProgress
                   - name
                   - namespace
+                  - serviceAccountName
                   type: object
                 type: array
             type: object

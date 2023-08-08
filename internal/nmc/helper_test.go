@@ -234,3 +234,77 @@ var _ = Describe("GetModuleEntry", func() {
 		Expect(index).To(Equal(0))
 	})
 })
+
+var _ = Describe("RemoveModuleStatus", func() {
+	const (
+		name      = "test-name"
+		namespace = "test-namespace"
+	)
+
+	It("should do nothing if the list is nil", func() {
+		RemoveModuleStatus(nil, namespace, name)
+	})
+
+	It("should do nothing if the list is empty", func() {
+		statuses := make([]kmmv1beta1.NodeModuleStatus, 0)
+
+		RemoveModuleStatus(&statuses, namespace, name)
+	})
+
+	It("should remove a status if it exists in the list", func() {
+		statuses := []kmmv1beta1.NodeModuleStatus{
+			{Namespace: namespace, Name: name},
+		}
+
+		RemoveModuleStatus(&statuses, namespace, name)
+
+		Expect(statuses).To(BeEmpty())
+	})
+})
+
+var _ = Describe("SetModuleStatus", func() {
+	const (
+		name      = "test-name"
+		namespace = "test-namespace"
+	)
+
+	now := metav1.Now()
+
+	s := kmmv1beta1.NodeModuleStatus{
+		Config: &kmmv1beta1.ModuleConfig{
+			KernelVersion:        "some-kver",
+			ContainerImage:       "some-kernel-image",
+			InsecurePull:         true,
+			InTreeModuleToRemove: "intree",
+		},
+		LastTransitionTime: &now,
+		Name:               name,
+		Namespace:          namespace,
+		ServiceAccountName: "sa",
+	}
+
+	It("should do nothing if the slice is nil", func() {
+		SetModuleStatus(nil, kmmv1beta1.NodeModuleStatus{})
+	})
+
+	It("should add an entry nothing if the list is empty", func() {
+		statuses := make([]kmmv1beta1.NodeModuleStatus, 0)
+
+		SetModuleStatus(&statuses, s)
+
+		Expect(statuses).To(HaveLen(1))
+		Expect(statuses[0]).To(BeComparableTo(s))
+	})
+
+	It("should update an entry if it already exists", func() {
+		statuses := []kmmv1beta1.NodeModuleStatus{s}
+
+		new := s
+		new.InProgress = true
+
+		SetModuleStatus(&statuses, new)
+
+		Expect(statuses).To(HaveLen(1))
+		Expect(statuses[0]).To(BeComparableTo(new))
+	})
+})

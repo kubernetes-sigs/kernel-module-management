@@ -28,7 +28,6 @@ type ModuleConfig struct {
 	//+optional
 	InTreeModuleToRemove string       `json:"inTreeModuleToRemove,omitempty"`
 	Modprobe             ModprobeSpec `json:"modprobe"`
-	KmodLoaded           bool         `json:"kmodLoaded"`
 }
 
 type NodeModuleSpec struct {
@@ -47,9 +46,14 @@ type NodeModulesConfigSpec struct {
 }
 
 type NodeModuleStatus struct {
-	Name       string `json:"name"`
-	Namespace  string `json:"namespace"`
-	KmodLoaded bool   `json:"kmodLoaded"`
+	//+optional
+	Config     *ModuleConfig `json:"config,omitempty"`
+	InProgress bool          `json:"inProgress"`
+	//+optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	Name               string       `json:"name"`
+	Namespace          string       `json:"namespace"`
+	ServiceAccountName string       `json:"serviceAccountName"`
 }
 
 // NodeModuleConfigStatus is the most recently observed status of the KMM modules on node.
@@ -67,8 +71,8 @@ type NodeModulesConfigStatus struct {
 // +kubebuilder:subresource:status
 
 // NodeModulesConfig keeps spec and state of the KMM modules on a node.
-// +kubebuilder:resource:path=nodemodulesconfig,scope=Cluster
-// +kubebuilder:resource:path=nodemodulesconfig,scope=Cluster,shortName=nmc
+// +kubebuilder:resource:path=nodemodulesconfigs,scope=Cluster
+// +kubebuilder:resource:path=nodemodulesconfigs,scope=Cluster,shortName=nmc
 // +operator-sdk:csv:customresourcedefinitions:displayName="Node Modules Config"
 type NodeModulesConfig struct {
 	metav1.TypeMeta   `json:",inline"`
