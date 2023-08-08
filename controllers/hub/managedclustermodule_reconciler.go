@@ -25,7 +25,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
-	batchv1 "k8s.io/api/batch/v1"
+	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -56,7 +56,7 @@ type ManagedClusterModuleReconciler struct {
 //+kubebuilder:rbac:groups=hub.kmm.sigs.x-k8s.io,resources=managedclustermodules/finalizers,verbs=update
 //+kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworks,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;list;watch
-//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=create;list;watch;delete
+//+kubebuilder:rbac:groups=core,resources=pods,verbs=create;list;watch;delete
 //+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups="core",resources=configmaps,verbs=get;list;watch
 
@@ -164,7 +164,7 @@ func (r *ManagedClusterModuleReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&hubv1beta1.ManagedClusterModule{}).
 		Owns(&workv1.ManifestWork{}).
-		Owns(&batchv1.Job{}).
+		Owns(&v1.Pod{}).
 		Watches(
 			&clusterv1.ManagedCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.filter.FindManagedClusterModulesForCluster),

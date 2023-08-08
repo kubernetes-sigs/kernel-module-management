@@ -1,15 +1,5 @@
 #!/usr/bin/env bash
 
-POD_NAME=''
-
-wait_for_pod_and_print_logs () {
-  # we can't exec a command nor get the logs on a pod that isn't `Running` yet.
-  kubectl wait "pod/${POD_NAME}" --for jsonpath='{.status.phase}'=Running --timeout=60s
-
-  echo "Print pod ${POD_NAME} logs..."
-  kubectl logs "pod/${POD_NAME}" -f
-}
-
 set -euxo pipefail
 
 echo "Deploy KMMO..."
@@ -34,20 +24,6 @@ kubectl wait --for=condition=Available deployment/kmm-operator-controller-manage
 
 echo "Add an kmm-ci Module that contains a valid mapping..."
 kubectl apply -f ci/module-kmm-ci-build-sign.yaml
-
-# Wait for the build pod to be created. `kubectl wait` doesn't support such option,
-# see https://github.com/kubernetes/kubernetes/issues/83242.
-echo "Waiting for the build pod to be created..."
-timeout 1m bash -c 'until kubectl get pods -o json | jq -er ".items[].metadata.name | select(.? | match(\"build\"))"; do sleep 1; done'
-POD_NAME=$(kubectl get pods -o json | jq -r '.items[].metadata.name | select(.? | match("build"))')
-
-wait_for_pod_and_print_logs
-
-echo "Waiting for the signing pod to be created..."
-timeout 1m bash -c 'until kubectl get pods -o json | jq -er ".items[].metadata.name | select(.? | match(\"sign\"))"; do sleep 1; done'
-POD_NAME=$(kubectl get pods -o json | jq -r '.items[].metadata.name | select(.? | match("sign"))')
-
-wait_for_pod_and_print_logs
 
 echo "Check that the module gets loaded on the node..."
 timeout 10m bash -c 'until minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'

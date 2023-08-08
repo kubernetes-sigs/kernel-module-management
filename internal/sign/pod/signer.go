@@ -1,4 +1,4 @@
-package signjob
+package signpod
 
 import (
 	"bytes"
@@ -9,12 +9,10 @@ import (
 	"text/template"
 
 	"github.com/mitchellh/hashstructure/v2"
-	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -36,49 +34,50 @@ var tmpl = template.Must(
 	template.ParseFS(templateFS, "templates/Dockerfile.gotmpl"),
 )
 
-//go:generate mockgen -source=signer.go -package=signjob -destination=mock_signer.go
+//go:generate mockgen -source=signer.go -package=signpod -destination=mock_signer.go
 
 type Signer interface {
-	MakeJobTemplate(
+	MakePodTemplate(
 		ctx context.Context,
 		mld *api.ModuleLoaderData,
 		labels map[string]string,
 		imageToSign string,
 		pushImage bool,
 		owner metav1.Object,
-	) (*batchv1.Job, error)
+	) (*v1.Pod, error)
 }
 
 type hashData struct {
 	PrivateKeyData []byte
 	PublicKeyData  []byte
-	PodTemplate    *v1.PodTemplateSpec
+	SignConfig     []byte
+	PodSpec        *v1.PodSpec
 }
 
 type signer struct {
 	client    client.Client
 	scheme    *runtime.Scheme
-	jobHelper utils.JobHelper
+	podHelper utils.PodHelper
 }
 
 func NewSigner(
 	client client.Client,
 	scheme *runtime.Scheme,
-	jobHelper utils.JobHelper) Signer {
+	podHelper utils.PodHelper) Signer {
 	return &signer{
 		client:    client,
 		scheme:    scheme,
-		jobHelper: jobHelper,
+		podHelper: podHelper,
 	}
 }
 
-func (s *signer) MakeJobTemplate(
+func (s *signer) MakePodTemplate(
 	ctx context.Context,
 	mld *api.ModuleLoaderData,
 	labels map[string]string,
 	imageToSign string,
 	pushImage bool,
-	owner metav1.Object) (*batchv1.Job, error) {
+	owner metav1.Object) (*v1.Pod, error) {
 
 	signConfig := mld.Sign
 
@@ -178,52 +177,49 @@ func (s *signer) MakeJobTemplate(
 		return nil, fmt.Errorf("could not execute template: %v", err)
 	}
 
-	specTemplate := v1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{
-			Annotations: map[string]string{dockerfileAnnotationKey: buf.String()},
-		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:         "kaniko",
-					Image:        os.Getenv("RELATED_IMAGES_BUILD"),
-					Args:         args,
-					VolumeMounts: volumeMounts,
-				},
+	podSpec := v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name:         "kaniko",
+				Image:        os.Getenv("RELATED_IMAGES_BUILD"),
+				Args:         args,
+				VolumeMounts: volumeMounts,
 			},
-			RestartPolicy: v1.RestartPolicyNever,
-			Volumes:       volumes,
-			NodeSelector:  mld.Selector,
 		},
+		RestartPolicy: v1.RestartPolicyNever,
+		Volumes:       volumes,
+		NodeSelector:  mld.Selector,
 	}
 
-	specTemplateHash, err := s.getHashAnnotationValue(ctx, signConfig.KeySecret.Name, signConfig.CertSecret.Name, mld.Namespace, &specTemplate)
+	podSpecHash, err := s.getHashAnnotationValue(ctx, signConfig.KeySecret.Name,
+		signConfig.CertSecret.Name, mld.Namespace, buf.Bytes(), &podSpec)
 	if err != nil {
-		return nil, fmt.Errorf("could not hash job's definitions: %v", err)
+		return nil, fmt.Errorf("could not hash pod's definitions: %v", err)
 	}
 
-	job := &batchv1.Job{
+	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-sign-",
 			Namespace:    mld.Namespace,
 			Labels:       labels,
-			Annotations:  map[string]string{constants.JobHashAnnotation: fmt.Sprintf("%d", specTemplateHash)},
+			Annotations: map[string]string{
+				constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash),
+				dockerfileAnnotationKey:     buf.String(),
+			},
 		},
-		Spec: batchv1.JobSpec{
-			Completions:  pointer.Int32(1),
-			Template:     specTemplate,
-			BackoffLimit: pointer.Int32(0),
-		},
+		Spec: podSpec,
 	}
 
-	if err = controllerutil.SetControllerReference(owner, job, s.scheme); err != nil {
+	if err = controllerutil.SetControllerReference(owner, pod, s.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner reference: %v", err)
 	}
 
-	return job, nil
+	return pod, nil
 }
 
-func (s *signer) getHashAnnotationValue(ctx context.Context, privateSecret, publicSecret, namespace string, podTemplate *v1.PodTemplateSpec) (uint64, error) {
+func (s *signer) getHashAnnotationValue(ctx context.Context, privateSecret, publicSecret, namespace string,
+	signConfig []byte, podSpec *v1.PodSpec) (uint64, error) {
+
 	privateKeyData, err := s.getSecretData(ctx, privateSecret, constants.PrivateSignDataKey, namespace)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get private secret %s for signing: %v", privateSecret, err)
@@ -233,7 +229,7 @@ func (s *signer) getHashAnnotationValue(ctx context.Context, privateSecret, publ
 		return 0, fmt.Errorf("failed to get public secret %s for signing: %v", publicSecret, err)
 	}
 
-	return getHashValue(podTemplate, publicKeyData, privateKeyData)
+	return getHashValue(podSpec, publicKeyData, privateKeyData, signConfig)
 }
 
 func (s *signer) getSecretData(ctx context.Context, secretName, secretDataKey, namespace string) ([]byte, error) {
@@ -250,15 +246,16 @@ func (s *signer) getSecretData(ctx context.Context, secretName, secretDataKey, n
 	return data, nil
 }
 
-func getHashValue(podTemplate *v1.PodTemplateSpec, publicKeyData, privateKeyData []byte) (uint64, error) {
+func getHashValue(podSpec *v1.PodSpec, publicKeyData, privateKeyData, signConfig []byte) (uint64, error) {
 	dataToHash := hashData{
 		PrivateKeyData: privateKeyData,
 		PublicKeyData:  publicKeyData,
-		PodTemplate:    podTemplate,
+		SignConfig:     signConfig,
+		PodSpec:        podSpec,
 	}
 	hashValue, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
 	if err != nil {
-		return 0, fmt.Errorf("could not hash job's spec template and dockefile: %v", err)
+		return 0, fmt.Errorf("could not hash pod's spec template and dockefile: %v", err)
 	}
 	return hashValue, nil
 }

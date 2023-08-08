@@ -61,9 +61,9 @@ The `ConfigMap` needs to be located in the same namespace as the `Module`.
 
 KMM will first check if the image name specified in the `containerImage` field exists.
 If it does, the build will be skipped.
-Otherwise, KMM will create a Job to build your image.
+Otherwise, KMM will create a Pod to build your image.
 The [kaniko](https://github.com/GoogleContainerTools/kaniko) build system is used.
-KMM monitors the health of the build job, retrying if necessary.
+KMM monitors the health of the build pod, retrying if necessary.
 
 The following build arguments are automatically set by KMM:
 

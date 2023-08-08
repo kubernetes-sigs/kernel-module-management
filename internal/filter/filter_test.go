@@ -9,7 +9,6 @@ import (
 
 	"go.uber.org/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -114,21 +113,21 @@ var _ = Describe("nodeBecomesSchedulable", func() {
 	)
 })
 
-var _ = Describe("moduleJobSuccess", func() {
-	DescribeTable("should work as expected", func(jobControlledByModule, jobSucceeded, expectedRes bool) {
-		newJob := batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{Name: "someJob", Namespace: "moduleNamespace"},
+var _ = Describe("modulePodSuccess", func() {
+	DescribeTable("should work as expected", func(podControlledByModule, podSucceeded, expectedRes bool) {
+		newPod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "somePod", Namespace: "moduleNamespace"},
 		}
-		if jobSucceeded {
-			newJob.Status.Succeeded = 1
+		if podSucceeded {
+			newPod.Status.Phase = v1.PodSucceeded
 		}
 
-		res := moduleJobSuccess.Update(event.UpdateEvent{ObjectNew: &newJob})
+		res := modulePodSuccess.Update(event.UpdateEvent{ObjectNew: &newPod})
 		Expect(res).To(Equal(expectedRes))
 
 	},
-		Entry("job succeeded", true, true, true),
-		Entry("job not succeeded", true, false, false),
+		Entry("pod succeeded", true, true, true),
+		Entry("pod not succeeded", true, false, false),
 	)
 })
 

@@ -27,7 +27,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
-	batchv1 "k8s.io/api/batch/v1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -71,7 +71,7 @@ func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(PreflightValidationReconcilerName).
 		For(&v1beta12.PreflightValidation{}, builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate())).
-		Owns(&batchv1.Job{}).
+		Owns(&v1.Pod{}).
 		Watches(
 			&v1beta12.Module{},
 			handler.EnqueueRequestsFromMapFunc(r.filter.EnqueueAllPreflightValidations),

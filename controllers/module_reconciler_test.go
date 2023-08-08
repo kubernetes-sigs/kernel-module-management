@@ -391,7 +391,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 		Expect(completed).To(BeTrue())
 	})
 
-	It("should record that a job was created when the build sync returns StatusCreated", func() {
+	It("should record that a pod was created when the build sync returns StatusCreated", func() {
 		mld := api.ModuleLoaderData{
 			Name:           moduleName,
 			Namespace:      namespace,
@@ -411,7 +411,7 @@ var _ = Describe("ModuleReconciler_handleBuild", func() {
 		Expect(completed).To(BeFalse())
 	})
 
-	It("should record that a job was completed, when the build sync returns StatusCompleted", func() {
+	It("should record that a pod was completed, when the build sync returns StatusCompleted", func() {
 		mld := &api.ModuleLoaderData{
 			Name:           moduleName,
 			Namespace:      namespace,
@@ -469,7 +469,7 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 		Expect(completed).To(BeTrue())
 	})
 
-	It("should record that a job was created when the sign sync returns StatusCreated", func() {
+	It("should record that a pod was created when the sign sync returns StatusCreated", func() {
 		mld := api.ModuleLoaderData{
 			Name:           moduleName,
 			Namespace:      namespace,
@@ -489,7 +489,7 @@ var _ = Describe("ModuleReconciler_handleSigning", func() {
 		Expect(completed).To(BeFalse())
 	})
 
-	It("should record that a job was completed when the sign sync returns StatusCompleted", func() {
+	It("should record that a pod was completed when the sign sync returns StatusCompleted", func() {
 		mld := api.ModuleLoaderData{
 			Name:           moduleName,
 			Namespace:      namespace,

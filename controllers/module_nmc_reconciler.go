@@ -13,7 +13,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
-	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -169,7 +168,7 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 		return fmt.Errorf("failed to verify is image %s exists: %v", mld.ContainerImage, err)
 	}
 	if !exists {
-		// skip updating NMC, reconciliation will kick in once the build job is completed
+		// skip updating NMC, reconciliation will kick in once the build pod is completed
 		return nil
 	}
 	moduleConfig := kmmv1beta1.ModuleConfig{
@@ -222,7 +221,7 @@ func (mnr *ModuleNMCReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		NewControllerManagedBy(mgr).
 		For(&kmmv1beta1.Module{}).
 		Owns(&kmmv1beta1.NodeModulesConfig{}).
-		Owns(&batchv1.Job{}, builder.WithPredicates(filter.ModuleNMCReconcileJobPredicate())).
+		Owns(&v1.Pod{}, builder.WithPredicates(filter.ModuleNMCReconcilePodPredicate())).
 		Watches(
 			&v1.Node{},
 			handler.EnqueueRequestsFromMapFunc(mnr.filter.FindModulesForNMCNodeChange),

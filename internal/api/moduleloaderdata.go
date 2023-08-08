@@ -54,6 +54,6 @@ type ModuleLoaderData struct {
 	// InTreeModuleToRemove - in case string not empty, remove the module prior to loading the module specified in moduleName
 	InTreeModuleToRemove string
 
-	// used for setting the owner field of jobs/buildconfigs
+	// used for setting the owner field of pods/buildconfigs
 	Owner metav1.Object
 }

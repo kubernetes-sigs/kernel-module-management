@@ -40,7 +40,7 @@ type TLSOptions struct {
 
 type KanikoParams struct {
 	// +optional
-	// Kaniko image tag to use when creating the build Job
+	// Kaniko image tag to use when creating the build Pod
 	Tag string `json:"tag,omitempty"`
 }
 

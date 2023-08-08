@@ -5,7 +5,6 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
-	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -82,13 +81,13 @@ var kmmClusterClaimChanged predicate.Predicate = predicate.Funcs{
 	},
 }
 
-var moduleJobSuccess predicate.Predicate = predicate.Funcs{
+var modulePodSuccess predicate.Predicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
-		job, ok := e.ObjectNew.(*batchv1.Job)
+		pod, ok := e.ObjectNew.(*v1.Pod)
 		if !ok {
 			return true
 		}
-		if job.Status.Succeeded == 1 {
+		if pod.Status.Phase == v1.PodSucceeded {
 			return true
 		}
 
@@ -132,11 +131,11 @@ func ModuleNMCReconcilerNodePredicate() predicate.Predicate {
 	)
 }
 
-func ModuleNMCReconcileJobPredicate() predicate.Predicate {
+func ModuleNMCReconcilePodPredicate() predicate.Predicate {
 	return predicate.And(
 		skipDeletions,
 		skipCreations,
-		moduleJobSuccess,
+		modulePodSuccess,
 	)
 }
 
