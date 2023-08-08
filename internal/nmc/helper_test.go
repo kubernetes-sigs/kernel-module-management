@@ -70,16 +70,6 @@ var _ = Describe("Get", func() {
 })
 
 var _ = Describe("SetModuleConfig", func() {
-	var (
-		ctx       context.Context
-		nmcHelper Helper
-	)
-
-	BeforeEach(func() {
-		ctx = context.Background()
-		nmcHelper = NewHelper(nil)
-	})
-
 	namespace := "test_namespace"
 	name := "test_name"
 
@@ -93,7 +83,7 @@ var _ = Describe("SetModuleConfig", func() {
 
 		moduleConfig := kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "in-tree-module"}
 
-		err := nmcHelper.SetModuleConfig(ctx, &nmc, namespace, name, &moduleConfig)
+		err := SetModuleConfig(&nmc, namespace, name, &moduleConfig)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(3))
@@ -115,7 +105,7 @@ var _ = Describe("SetModuleConfig", func() {
 
 		moduleConfig := kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "in-tree-module"}
 
-		err := nmcHelper.SetModuleConfig(ctx, &nmc, namespace, name, &moduleConfig)
+		err := SetModuleConfig(&nmc, namespace, name, &moduleConfig)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(2))
@@ -124,16 +114,6 @@ var _ = Describe("SetModuleConfig", func() {
 })
 
 var _ = Describe("RemoveModuleConfig", func() {
-	var (
-		ctx       context.Context
-		nmcHelper Helper
-	)
-
-	BeforeEach(func() {
-		ctx = context.Background()
-		nmcHelper = NewHelper(nil)
-	})
-
 	namespace := "test_namespace"
 	name := "test_name"
 
@@ -153,7 +133,7 @@ var _ = Describe("RemoveModuleConfig", func() {
 			},
 		}
 
-		err := nmcHelper.RemoveModuleConfig(ctx, &nmc, namespace, name)
+		err := RemoveModuleConfig(&nmc, namespace, name)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(2))
@@ -175,7 +155,7 @@ var _ = Describe("RemoveModuleConfig", func() {
 			},
 		}
 
-		err := nmcHelper.RemoveModuleConfig(ctx, &nmc, namespace, name)
+		err := RemoveModuleConfig(&nmc, namespace, name)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(1))
@@ -184,20 +164,12 @@ var _ = Describe("RemoveModuleConfig", func() {
 })
 
 var _ = Describe("GetModuleEntry", func() {
-	var (
-		nmcHelper Helper
-	)
-
-	BeforeEach(func() {
-		nmcHelper = NewHelper(nil)
-	})
-
 	It("empty module list", func() {
 		nmc := kmmv1beta1.NodeModulesConfig{
 			Spec: kmmv1beta1.NodeModulesConfigSpec{},
 		}
 
-		res, _ := nmcHelper.GetModuleEntry(&nmc, "namespace", "name")
+		res, _ := GetModuleEntry(&nmc, "namespace", "name")
 
 		Expect(res).To(BeNil())
 	})
@@ -212,7 +184,7 @@ var _ = Describe("GetModuleEntry", func() {
 			},
 		}
 
-		res, _ := nmcHelper.GetModuleEntry(&nmc, "namespace", "name")
+		res, _ := GetModuleEntry(&nmc, "namespace", "name")
 
 		Expect(res).To(BeNil())
 	})
@@ -227,7 +199,7 @@ var _ = Describe("GetModuleEntry", func() {
 			},
 		}
 
-		res, index := nmcHelper.GetModuleEntry(&nmc, "some namespace 1", "some name 1")
+		res, index := GetModuleEntry(&nmc, "some namespace 1", "some name 1")
 
 		Expect(res.Name).To(Equal("some name 1"))
 		Expect(res.Namespace).To(Equal("some namespace 1"))

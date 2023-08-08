@@ -178,12 +178,12 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 		Modprobe:             mld.Modprobe,
 	}
 
-	nmc := &kmmv1beta1.NodeModulesConfig{
+	nmcObj := &kmmv1beta1.NodeModulesConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 	}
 
-	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmc, func() error {
-		return mnrh.nmcHelper.SetModuleConfig(ctx, nmc, mld.Namespace, mld.Name, &moduleConfig)
+	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmcObj, func() error {
+		return nmc.SetModuleConfig(nmcObj, mld.Namespace, mld.Name, &moduleConfig)
 	})
 
 	if err != nil {
@@ -195,7 +195,7 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 
 func (mnrh *moduleNMCReconcilerHelper) disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error {
 	logger := log.FromContext(ctx)
-	nmc, err := mnrh.nmcHelper.Get(ctx, nodeName)
+	nmcObj, err := mnrh.nmcHelper.Get(ctx, nodeName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// NodeModulesConfig does not exists, module was never running on the node, we are good
@@ -204,8 +204,8 @@ func (mnrh *moduleNMCReconcilerHelper) disableModuleOnNode(ctx context.Context, 
 		return fmt.Errorf("failed to get the NodeModulesConfig for node %s: %v", nodeName, err)
 	}
 
-	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmc, func() error {
-		return mnrh.nmcHelper.RemoveModuleConfig(ctx, nmc, modNamespace, modName)
+	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmcObj, func() error {
+		return nmc.RemoveModuleConfig(nmcObj, modNamespace, modName)
 	})
 
 	if err != nil {

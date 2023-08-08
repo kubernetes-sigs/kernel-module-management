@@ -385,13 +385,21 @@ var _ = Describe("enableModuleOnNode", func() {
 	It("NMC does not exists", func() {
 		nmc := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+			Spec: kmmv1beta1.NodeModulesConfigSpec{
+				Modules: []kmmv1beta1.NodeModuleSpec{
+					{
+						Namespace: mld.Namespace,
+						Name:      mld.Name,
+						Config:    *expectedModuleConfig,
+					},
+				},
+			},
 		}
 
 		gomock.InOrder(
 			rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(true, nil),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-			helper.EXPECT().SetModuleConfig(ctx, nmc, mld.Namespace, mld.Name, expectedModuleConfig).Return(nil),
-			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
+			clnt.EXPECT().Create(ctx, nmc).Return(nil),
 		)
 
 		err := mnrh.enableModuleOnNode(ctx, mld, nodeName, kernelVersion)
@@ -399,8 +407,17 @@ var _ = Describe("enableModuleOnNode", func() {
 	})
 
 	It("NMC exists", func() {
-		nmc := &kmmv1beta1.NodeModulesConfig{
+		nmcObj := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+			Spec: kmmv1beta1.NodeModulesConfigSpec{
+				Modules: []kmmv1beta1.NodeModuleSpec{
+					{
+						Namespace: mld.Namespace,
+						Name:      mld.Name,
+						Config:    *expectedModuleConfig,
+					},
+				},
+			},
 		}
 		gomock.InOrder(
 			rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(true, nil),
@@ -410,7 +427,7 @@ var _ = Describe("enableModuleOnNode", func() {
 					return nil
 				},
 			),
-			helper.EXPECT().SetModuleConfig(ctx, nmc, mld.Namespace, mld.Name, expectedModuleConfig).Return(nil),
+			clnt.EXPECT().Patch(ctx, nmcObj, gomock.Any()),
 		)
 
 		err := mnrh.enableModuleOnNode(ctx, mld, nodeName, kernelVersion)
@@ -467,7 +484,6 @@ var _ = Describe("disableModuleOnNode", func() {
 					return nil
 				},
 			),
-			helper.EXPECT().RemoveModuleConfig(ctx, nmc, moduleNamespace, moduleName).Return(nil),
 		)
 
 		err := mnrh.disableModuleOnNode(ctx, moduleNamespace, moduleName, nodeName)
