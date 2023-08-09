@@ -7,6 +7,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -62,7 +64,22 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should run finalization in case module is being deleted", func() {
+		mod := kmmv1beta1.Module{}
+		mod.SetDeletionTimestamp(&metav1.Time{})
+		gomock.InOrder(
+			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
+			mockReconHelper.EXPECT().finalizeModule(ctx, &mod).Return(nil),
+		)
+
+		res, err := mnr.Reconcile(ctx, req)
+
+		Expect(res).To(Equal(reconcile.Result{}))
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	DescribeTable("check error flows", func(getModuleError,
+		setFinalizerError,
 		getNodesError,
 		getMLDError,
 		shouldRunOnNodeError,
@@ -80,6 +97,11 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil)
+		if setFinalizerError {
+			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(returnedError)
+			goto executeTestFunction
+		}
+		mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil)
 		if getNodesError {
 			mockReconHelper.EXPECT().getNodesList(ctx).Return(nil, returnedError)
 			goto executeTestFunction
@@ -108,12 +130,13 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 
 	},
-		Entry("getRequestedModule failed", true, false, false, false, false),
-		Entry("getNodesList failed", false, true, false, false, false),
-		Entry("getModuleLoaderDataForKernel failed", false, false, true, false, false),
-		Entry("shouldModuleRunOnNode failed", false, false, false, true, false),
-		Entry("enableModuleOnNode failed", false, false, false, false, true),
-		Entry("disableModuleOnNode failed", false, false, false, false, false),
+		Entry("getRequestedModule failed", true, false, false, false, false, false),
+		Entry("setFinalizer failed", false, true, false, false, false, false),
+		Entry("getNodesList failed", false, false, true, false, false, false),
+		Entry("getModuleLoaderDataForKernel failed", false, false, false, true, false, false),
+		Entry("shouldModuleRunOnNode failed", false, false, false, false, true, false),
+		Entry("enableModuleOnNode failed", false, false, false, false, false, true),
+		Entry("disableModuleOnNode failed", false, false, false, false, false, false),
 	)
 
 	It("Good flow, kernel mapping exists, should run on node", func() {
@@ -126,6 +149,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		mld := api.ModuleLoaderData{KernelVersion: kernelVersion}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
+			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil),
 			mockReconHelper.EXPECT().getNodesList(ctx).Return([]v1.Node{node}, nil),
 			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
 			mockReconHelper.EXPECT().shouldModuleRunOnNode(node, &mld).Return(true, nil),
@@ -147,6 +171,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
+			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil),
 			mockReconHelper.EXPECT().getNodesList(ctx).Return([]v1.Node{node}, nil),
 			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, module.ErrNoMatchingKernelMapping),
 			mockReconHelper.EXPECT().shouldModuleRunOnNode(node, nil).Return(false, nil),
@@ -203,6 +228,44 @@ var _ = Describe("ModuleReconciler_getRequestedModule", func() {
 
 })
 
+var _ = Describe("ModuleReconciler_getRequestedModule", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		mnrh moduleNMCReconcilerHelperAPI
+		mod  kmmv1beta1.Module
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil)
+		mod = kmmv1beta1.Module{}
+	})
+
+	ctx := context.Background()
+
+	It("finalizer is already set", func() {
+		controllerutil.AddFinalizer(&mod, constants.ModuleFinalizer)
+		err := mnrh.setFinalizer(ctx, &mod)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("finalizer is not set", func() {
+		clnt.EXPECT().Patch(ctx, &mod, gomock.Any()).Return(nil)
+
+		err := mnrh.setFinalizer(ctx, &mod)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("finalizer is not set, failed to patch the Module", func() {
+		clnt.EXPECT().Patch(ctx, &mod, gomock.Any()).Return(fmt.Errorf("some error"))
+
+		err := mnrh.setFinalizer(ctx, &mod)
+		Expect(err).To(HaveOccurred())
+	})
+})
+
 var _ = Describe("ModuleReconciler_getNodes", func() {
 	var (
 		ctrl *gomock.Controller
@@ -242,6 +305,93 @@ var _ = Describe("ModuleReconciler_getNodes", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(nodes).To(Equal([]v1.Node{node1, node2, node3}))
 
+	})
+})
+
+var _ = Describe("finalizeModule", func() {
+	var (
+		ctx    context.Context
+		ctrl   *gomock.Controller
+		clnt   *client.MockClient
+		helper *nmc.MockHelper
+		mnrh   moduleNMCReconcilerHelperAPI
+		mod    *kmmv1beta1.Module
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		helper = nmc.NewMockHelper(ctrl)
+		mnrh = newModuleNMCReconcilerHelper(clnt, nil, helper)
+		mod = &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
+		}
+	})
+
+	It("failed to get list of NMCs", func() {
+		clnt.EXPECT().List(ctx, gomock.Any()).Return(fmt.Errorf("some error"))
+
+		err := mnrh.finalizeModule(ctx, mod)
+
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("multiple errors occurred", func() {
+		nmc1 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc1"},
+		}
+		nmc2 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc2"},
+		}
+
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.NodeModulesConfig{nmc1, nmc2}
+					return nil
+				},
+			),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error")),
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error")),
+		)
+
+		err := mnrh.finalizeModule(ctx, mod)
+
+		Expect(err).To(HaveOccurred())
+
+	})
+
+	It("no nmcs, patch successfull", func() {
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.NodeModulesConfig{}
+					return nil
+				},
+			),
+			clnt.EXPECT().Patch(ctx, mod, gomock.Any()).Return(nil),
+		)
+
+		err := mnrh.finalizeModule(ctx, mod)
+
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("no nmcs, failed", func() {
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.NodeModulesConfig{}
+					return nil
+				},
+			),
+			clnt.EXPECT().Patch(ctx, mod, gomock.Any()).Return(fmt.Errorf("some error")),
+		)
+
+		err := mnrh.finalizeModule(ctx, mod)
+
+		Expect(err).To(HaveOccurred())
 	})
 })
 
@@ -472,5 +622,65 @@ var _ = Describe("disableModuleOnNode", func() {
 
 		err := mnrh.disableModuleOnNode(ctx, moduleNamespace, moduleName, nodeName)
 		Expect(err).NotTo(HaveOccurred())
+	})
+})
+
+var _ = Describe("removeModuleFromNMC", func() {
+	var (
+		ctx             context.Context
+		ctrl            *gomock.Controller
+		clnt            *client.MockClient
+		mnrh            *moduleNMCReconcilerHelper
+		helper          *nmc.MockHelper
+		nmcName         string
+		moduleName      string
+		moduleNamespace string
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		helper = nmc.NewMockHelper(ctrl)
+		mnrh = &moduleNMCReconcilerHelper{client: clnt, nmcHelper: helper}
+		nmcName = "NMC name"
+		moduleName = "moduleName"
+		moduleNamespace = "moduleNamespace"
+	})
+
+	It("good flow", func() {
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+		}
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, nmc *kmmv1beta1.NodeModulesConfig, _ ...ctrlclient.GetOption) error {
+					nmc.SetName(nmcName)
+					return nil
+				},
+			),
+			helper.EXPECT().RemoveModuleConfig(ctx, nmc, moduleNamespace, moduleName).Return(nil),
+		)
+
+		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("bad flow", func() {
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+		}
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, nmc *kmmv1beta1.NodeModulesConfig, _ ...ctrlclient.GetOption) error {
+					nmc.SetName(nmcName)
+					return nil
+				},
+			),
+			helper.EXPECT().RemoveModuleConfig(ctx, nmc, moduleNamespace, moduleName).Return(fmt.Errorf("some error")),
+		)
+
+		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
+		Expect(err).To(HaveOccurred())
 	})
 })

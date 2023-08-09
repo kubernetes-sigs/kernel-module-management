@@ -8,6 +8,7 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
@@ -52,7 +53,6 @@ func NewModuleNMCReconciler(client client.Client,
 }
 
 func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// get the reconciled module
 	logger := log.FromContext(ctx)
 
 	logger.Info("Starting Module-NMS reconcilation", "module name and namespace", req.NamespacedName)
@@ -60,10 +60,23 @@ func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	mod, err := mnr.reconHelper.getRequestedModule(ctx, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("Module deleted")
+			logger.Info("Module deleted, nothing to do")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to get the requested %s Module: %v", req.NamespacedName, err)
+	}
+	if mod.GetDeletionTimestamp() != nil {
+		//Module is being deleted
+		err = mnr.reconHelper.finalizeModule(ctx, mod)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to finalize %s Module: %v", req.NamespacedName, err)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	err = mnr.reconHelper.setFinalizer(ctx, mod)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to set finalizer on %s Module: %v", req.NamespacedName, err)
 	}
 
 	// get all nodes
@@ -105,8 +118,10 @@ func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 //go:generate mockgen -source=module_nmc_reconciler.go -package=controllers -destination=mock_module_nmc_reconciler.go moduleNMCReconcilerHelperAPI
 
 type moduleNMCReconcilerHelperAPI interface {
+	setFinalizer(ctx context.Context, mod *kmmv1beta1.Module) error
 	getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error)
 	getNodesList(ctx context.Context) ([]v1.Node, error)
+	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	shouldModuleRunOnNode(node v1.Node, mld *api.ModuleLoaderData) (bool, error)
 	enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, nodeName, kernelVersion string) error
 	disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error
@@ -126,6 +141,19 @@ func newModuleNMCReconcilerHelper(client client.Client, registryAPI registry.Reg
 	}
 }
 
+func (mnrh *moduleNMCReconcilerHelper) setFinalizer(ctx context.Context, mod *kmmv1beta1.Module) error {
+	if controllerutil.ContainsFinalizer(mod, constants.ModuleFinalizer) {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+	logger.Info("Adding finalizer", "module name", mod.Name, "module namespace", mod.Namespace)
+
+	modCopy := mod.DeepCopy()
+	controllerutil.AddFinalizer(mod, constants.ModuleFinalizer)
+	return mnrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
+}
+
 func (mnrh *moduleNMCReconcilerHelper) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error) {
 	mod := kmmv1beta1.Module{}
 
@@ -133,6 +161,31 @@ func (mnrh *moduleNMCReconcilerHelper) getRequestedModule(ctx context.Context, n
 		return nil, fmt.Errorf("failed to get Module %s: %w", namespacedName, err)
 	}
 	return &mod, nil
+}
+
+func (mnrh *moduleNMCReconcilerHelper) finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error {
+	nmcList := kmmv1beta1.NodeModulesConfigList{}
+	err := mnrh.client.List(ctx, &nmcList)
+	if err != nil {
+		return fmt.Errorf("failed to list NMCs in the cluster: %v", err)
+	}
+
+	errs := make([]error, 0, len(nmcList.Items))
+	for _, nmc := range nmcList.Items {
+		err = mnrh.removeModuleFromNMC(ctx, &nmc, mod.Namespace, mod.Name)
+		errs = append(errs, err)
+	}
+
+	err = errors.Join(errs...)
+	if err != nil {
+		return fmt.Errorf("failed to remove %s/%s module from some of NMCs: %v", mod.Namespace, mod.Name, err)
+	}
+
+	// remove finalizer
+	modCopy := mod.DeepCopy()
+	controllerutil.RemoveFinalizer(mod, constants.ModuleFinalizer)
+
+	return mnrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
 }
 
 func (mnrh *moduleNMCReconcilerHelper) getNodesList(ctx context.Context) ([]v1.Node, error) {
@@ -194,7 +247,6 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 }
 
 func (mnrh *moduleNMCReconcilerHelper) disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error {
-	logger := log.FromContext(ctx)
 	nmc, err := mnrh.nmcHelper.Get(ctx, nodeName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -204,15 +256,20 @@ func (mnrh *moduleNMCReconcilerHelper) disableModuleOnNode(ctx context.Context, 
 		return fmt.Errorf("failed to get the NodeModulesConfig for node %s: %v", nodeName, err)
 	}
 
+	return mnrh.removeModuleFromNMC(ctx, nmc, modNamespace, modName)
+}
+
+func (mnrh *moduleNMCReconcilerHelper) removeModuleFromNMC(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) error {
+	logger := log.FromContext(ctx)
 	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmc, func() error {
 		return mnrh.nmcHelper.RemoveModuleConfig(ctx, nmc, modNamespace, modName)
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to diable module %s/%s in NMC %s: %v", modNamespace, modName, nodeName, err)
+		return fmt.Errorf("failed to disable module %s/%s in NMC %s: %v", modNamespace, modName, nmc.Name, err)
 	}
 
-	logger.Info("Disable module in NMC", "name", modName, "namespace", modNamespace, "node", nodeName, "result", opRes)
+	logger.Info("Disabled module in NMC", "name", modName, "namespace", modNamespace, "NMC", nmc.Name, "result", opRes)
 	return nil
 }
 

@@ -168,7 +168,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 			),
 				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
 				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
-				kubeClient.EXPECT().Patch(context.TODO(), gomock.AssignableToTypeOf(&v1.Pod{}), gomock.Any()).Do(patchRemoveFinalizerFunc),
+				kubeClient.EXPECT().Patch(ctx, gomock.AssignableToTypeOf(&v1.Pod{}), gomock.Any()).Do(patchRemoveFinalizerFunc),
 			)
 
 			_, err := r.Reconcile(ctx, req)
