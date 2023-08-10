@@ -149,10 +149,13 @@ spec:
                       type: string
                     namespace:
                       type: string
+                    serviceAccountName:
+                      type: string
                   required:
                   - config
                   - name
                   - namespace
+                  - serviceAccountName
                   type: object
                 type: array
             type: object

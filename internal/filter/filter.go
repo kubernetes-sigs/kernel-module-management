@@ -395,3 +395,7 @@ func NodeLabelModuleVersionUpdatePredicate(logger logr.Logger) predicate.Predica
 		},
 	}
 }
+
+func SkipDeletions() predicate.Predicate {
+	return skipDeletions
+}

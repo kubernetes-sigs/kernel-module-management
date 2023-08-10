@@ -101,6 +101,12 @@ rules:
 - apiGroups:
   - kmm.sigs.x-k8s.io
   resources:
+  - nodemodulesconfigs/status
+  verbs:
+  - patch
+- apiGroups:
+  - kmm.sigs.x-k8s.io
+  resources:
   - preflightvalidations
   verbs:
   - create

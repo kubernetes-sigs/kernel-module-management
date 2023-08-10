@@ -4,9 +4,15 @@ kind: Kustomization
 resources:
 - ../manager-base
 
+patches:
+- path: manager_worker_image_patch.yaml
+
 images:
 - name: controller
   newName: gcr.io/k8s-staging-kmm/kernel-module-management-operator
+  newTag: latest
+- name: worker
+  newName: gcr.io/k8s-staging-kmm/kernel-module-management-worker
   newTag: latest
 
 configMapGenerator:
