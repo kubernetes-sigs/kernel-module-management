@@ -66,6 +66,20 @@ func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) enableModuleOnNode(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "enableModuleOnNode", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).enableModuleOnNode), ctx, mld, nodeName, kernelVersion)
 }
 
+// finalizeModule mocks base method.
+func (m *MockmoduleNMCReconcilerHelperAPI) finalizeModule(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "finalizeModule", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// finalizeModule indicates an expected call of finalizeModule.
+func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) finalizeModule(ctx, mod interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "finalizeModule", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).finalizeModule), ctx, mod)
+}
+
 // getNodesList mocks base method.
 func (m *MockmoduleNMCReconcilerHelperAPI) getNodesList(ctx context.Context) ([]v1.Node, error) {
 	m.ctrl.T.Helper()
@@ -94,6 +108,20 @@ func (m *MockmoduleNMCReconcilerHelperAPI) getRequestedModule(ctx context.Contex
 func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getRequestedModule(ctx, namespacedName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getRequestedModule", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getRequestedModule), ctx, namespacedName)
+}
+
+// setFinalizer mocks base method.
+func (m *MockmoduleNMCReconcilerHelperAPI) setFinalizer(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "setFinalizer", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// setFinalizer indicates an expected call of setFinalizer.
+func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) setFinalizer(ctx, mod interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setFinalizer", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).setFinalizer), ctx, mod)
 }
 
 // shouldModuleRunOnNode mocks base method.
