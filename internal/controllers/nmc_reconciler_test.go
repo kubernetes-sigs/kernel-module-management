@@ -31,9 +31,9 @@ const nmcName = "nmc"
 var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 	var (
 		kubeClient *testclient.MockClient
-		wh         *MockWorkerHelper
+		wh         *MockworkerHelper
 
-		r *NodeModulesConfigReconciler
+		r *NMCReconciler
 
 		ctx    = context.TODO()
 		nmcNsn = types.NamespacedName{Name: nmcName}
@@ -43,8 +43,11 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		kubeClient = testclient.NewMockClient(ctrl)
-		wh = NewMockWorkerHelper(ctrl)
-		r = NewNodeModulesConfigReconciler(kubeClient, wh)
+		wh = NewMockworkerHelper(ctrl)
+		r = &NMCReconciler{
+			client: kubeClient,
+			helper: wh,
+		}
 	})
 
 	It("should clean worker Pod finalizers and return if the NMC does not exist", func() {
@@ -169,14 +172,14 @@ var _ = Describe("workerHelper_ProcessModuleSpec", func() {
 		ctx = context.TODO()
 
 		client *testclient.MockClient
-		pm     *MockPodManager
-		wh     WorkerHelper
+		pm     *MockpodManager
+		wh     workerHelper
 	)
 
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client = testclient.NewMockClient(ctrl)
-		pm = NewMockPodManager(ctrl)
+		pm = NewMockpodManager(ctrl)
 		wh = NewWorkerHelper(client, pm)
 	})
 
@@ -355,7 +358,7 @@ var _ = Describe("workerHelper_ProcessOrphanModuleStatus", func() {
 	It("should create an unloader Pod", func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client := testclient.NewMockClient(ctrl)
-		pm := NewMockPodManager(ctrl)
+		pm := NewMockpodManager(ctrl)
 		wh := NewWorkerHelper(client, pm)
 
 		nmc := &kmmv1beta1.NodeModulesConfig{}
@@ -377,15 +380,15 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 
 		ctrl       *gomock.Controller
 		kubeClient *testclient.MockClient
-		pm         *MockPodManager
-		wh         WorkerHelper
+		pm         *MockpodManager
+		wh         workerHelper
 		sw         *testclient.MockStatusWriter
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		kubeClient = testclient.NewMockClient(ctrl)
-		pm = NewMockPodManager(ctrl)
+		pm = NewMockpodManager(ctrl)
 		wh = NewWorkerHelper(kubeClient, pm)
 		sw = testclient.NewMockStatusWriter(ctrl)
 	})
@@ -591,14 +594,14 @@ var _ = Describe("workerHelper_RemoveOrphanFinalizers", func() {
 		ctx = context.TODO()
 
 		kubeClient *testclient.MockClient
-		pm         *MockPodManager
-		wh         WorkerHelper
+		pm         *MockpodManager
+		wh         workerHelper
 	)
 
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		kubeClient = testclient.NewMockClient(ctrl)
-		pm = NewMockPodManager(ctrl)
+		pm = NewMockpodManager(ctrl)
 		wh = NewWorkerHelper(kubeClient, pm)
 	})
 
@@ -760,7 +763,7 @@ var _ = Describe("podManager_ListWorkerPodsOnNode", func() {
 		ctx = context.TODO()
 
 		kubeClient *testclient.MockClient
-		pm         PodManager
+		pm         podManager
 	)
 
 	BeforeEach(func() {

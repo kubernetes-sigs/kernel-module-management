@@ -15,7 +15,6 @@ RUN go mod download
 COPY api api
 COPY api-hub api-hub
 COPY cmd cmd
-COPY controllers controllers
 COPY internal internal
 
 # Copy Makefile
