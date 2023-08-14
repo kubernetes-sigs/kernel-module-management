@@ -224,13 +224,17 @@ func (w *workerHelper) ProcessModuleSpec(
 
 	if status == nil {
 		logger.Info("Missing status; creating loader Pod")
-
 		return w.pm.CreateLoaderPod(ctx, nmc, spec)
 	}
 
 	if status.InProgress {
 		logger.Info("Worker pod is running; skipping")
 		return nil
+	}
+
+	if status.Config == nil {
+		logger.Info("Missing status config and pod is not running: previously failed pod, creating loader Pod")
+		return w.pm.CreateLoaderPod(ctx, nmc, spec)
 	}
 
 	if !reflect.DeepEqual(spec.Config, *status.Config) {

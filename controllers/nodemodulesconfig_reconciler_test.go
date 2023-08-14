@@ -193,6 +193,27 @@ var _ = Describe("workerHelper_ProcessModuleSpec", func() {
 		)
 	})
 
+	It("should create a loader Pod if inStatus is false, but the Config is not define (nil)", func() {
+		nmc := &kmmv1beta1.NodeModulesConfig{}
+		spec := &kmmv1beta1.NodeModuleSpec{
+			Name:      name,
+			Namespace: namespace,
+			Config:    kmmv1beta1.ModuleConfig{ContainerImage: "old-container-image"},
+		}
+
+		status := &kmmv1beta1.NodeModuleStatus{
+			Name:      name,
+			Namespace: namespace,
+		}
+		pm.EXPECT().CreateLoaderPod(ctx, nmc, spec)
+
+		Expect(
+			wh.ProcessModuleSpec(ctx, &kmmv1beta1.NodeModulesConfig{}, spec, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
 	It("should create an unloader Pod if the spec is different from the status", func() {
 		nmc := &kmmv1beta1.NodeModulesConfig{}
 
