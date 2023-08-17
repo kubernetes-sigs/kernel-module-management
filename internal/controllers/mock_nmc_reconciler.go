@@ -172,3 +172,42 @@ func (mr *MockpodManagerMockRecorder) ListWorkerPodsOnNode(ctx, nodeName interfa
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkerPodsOnNode", reflect.TypeOf((*MockpodManager)(nil).ListWorkerPodsOnNode), ctx, nodeName)
 }
+
+// MockpullSecretHelper is a mock of pullSecretHelper interface.
+type MockpullSecretHelper struct {
+	ctrl     *gomock.Controller
+	recorder *MockpullSecretHelperMockRecorder
+}
+
+// MockpullSecretHelperMockRecorder is the mock recorder for MockpullSecretHelper.
+type MockpullSecretHelperMockRecorder struct {
+	mock *MockpullSecretHelper
+}
+
+// NewMockpullSecretHelper creates a new mock instance.
+func NewMockpullSecretHelper(ctrl *gomock.Controller) *MockpullSecretHelper {
+	mock := &MockpullSecretHelper{ctrl: ctrl}
+	mock.recorder = &MockpullSecretHelperMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockpullSecretHelper) EXPECT() *MockpullSecretHelperMockRecorder {
+	return m.recorder
+}
+
+// VolumesAndVolumeMounts mocks base method.
+func (m *MockpullSecretHelper) VolumesAndVolumeMounts(ctx context.Context, nms *v1beta1.ModuleItem) ([]v1.Volume, []v1.VolumeMount, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VolumesAndVolumeMounts", ctx, nms)
+	ret0, _ := ret[0].([]v1.Volume)
+	ret1, _ := ret[1].([]v1.VolumeMount)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// VolumesAndVolumeMounts indicates an expected call of VolumesAndVolumeMounts.
+func (mr *MockpullSecretHelperMockRecorder) VolumesAndVolumeMounts(ctx, nms interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VolumesAndVolumeMounts", reflect.TypeOf((*MockpullSecretHelper)(nil).VolumesAndVolumeMounts), ctx, nms)
+}

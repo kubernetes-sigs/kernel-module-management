@@ -1,0 +1,7 @@
+{
+  "auths": {
+    "dockerconfigjson.registry": {
+      "auth": "dXNlcm5hbWU6ZG9ja2VyY29uZmlnanNvbg=="
+    }
+  }
+}

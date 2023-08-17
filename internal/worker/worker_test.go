@@ -3,45 +3,12 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/types"
 	"go.uber.org/mock/gomock"
 )
-
-type fileExistsMatcher struct {
-	isDir bool
-}
-
-func ExistAsFile(directory bool) types.GomegaMatcher {
-	return &fileExistsMatcher{isDir: directory}
-}
-
-func (fem *fileExistsMatcher) Match(actual interface{}) (success bool, err error) {
-	path, ok := actual.(string)
-	if !ok {
-		return false, errors.New("BeARegularFile expects a file path")
-	}
-
-	fi, err := os.Stat(path)
-	if err != nil {
-		return false, fmt.Errorf("error running stat(%q): %v", path, err)
-	}
-
-	return fem.isDir == fi.IsDir(), nil
-}
-
-func (fem *fileExistsMatcher) FailureMessage(actual interface{}) (message string) {
-	return fmt.Sprintf("Expected %q to be a file (directory: %t)", actual, fem.isDir)
-}
-
-func (fem *fileExistsMatcher) NegatedFailureMessage(actual interface{}) (message string) {
-	return fmt.Sprintf("Expected %q not to be a directory (directory: %t)", actual, fem.isDir)
-}
 
 var _ = Describe("worker_LoadKmod", func() {
 	var (

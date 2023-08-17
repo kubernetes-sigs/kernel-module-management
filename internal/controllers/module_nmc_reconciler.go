@@ -240,7 +240,7 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmc, func() error {
-		return mnrh.nmcHelper.SetModuleConfig(ctx, nmc, mld.Namespace, mld.Name, &moduleConfig)
+		return mnrh.nmcHelper.SetModuleConfig(nmc, mld, &moduleConfig)
 	})
 
 	if err != nil {
@@ -266,7 +266,7 @@ func (mnrh *moduleNMCReconcilerHelper) disableModuleOnNode(ctx context.Context, 
 func (mnrh *moduleNMCReconcilerHelper) removeModuleFromNMC(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) error {
 	logger := log.FromContext(ctx)
 	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmc, func() error {
-		return mnrh.nmcHelper.RemoveModuleConfig(ctx, nmc, modNamespace, modName)
+		return mnrh.nmcHelper.RemoveModuleConfig(nmc, modNamespace, modName)
 	})
 
 	if err != nil {
