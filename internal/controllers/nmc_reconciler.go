@@ -47,19 +47,26 @@ const (
 //+kubebuilder:rbac:groups="core",resources=pods,verbs=create;delete;get;list;watch
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
 
-type NodeModulesConfigReconciler struct {
+type NMCReconciler struct {
 	client client.Client
-	helper WorkerHelper
+	helper workerHelper
 }
 
-func NewNodeModulesConfigReconciler(client client.Client, helper WorkerHelper) *NodeModulesConfigReconciler {
-	return &NodeModulesConfigReconciler{
+func NewNMCReconciler(client client.Client, scheme *runtime.Scheme, workerImage string) *NMCReconciler {
+	return &NMCReconciler{
 		client: client,
-		helper: helper,
+		helper: &workerHelperImpl{
+			client: client,
+			pm: &podManagerImpl{
+				client:      client,
+				scheme:      scheme,
+				workerImage: workerImage,
+			},
+		},
 	}
 }
 
-func (r *NodeModulesConfigReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
 
 	nmcObj := kmmv1beta1.NodeModulesConfig{}
@@ -127,7 +134,7 @@ func (r *NodeModulesConfigReconciler) Reconcile(ctx context.Context, req reconci
 	return ctrl.Result{}, errors.Join(errs...)
 }
 
-func (r *NodeModulesConfigReconciler) SetupWithManager(ctx context.Context, mgr manager.Manager) error {
+func (r *NMCReconciler) SetupWithManager(ctx context.Context, mgr manager.Manager) error {
 	// Cache pods by the name of the node they run on.
 	// Because NMC name == node name, we can efficiently reconcile the NMC status by listing all pods currently running
 	// or completed for it.
@@ -183,22 +190,22 @@ func FindNodeCondition(cond []v1.NodeCondition, conditionType v1.NodeConditionTy
 	return nil
 }
 
-//go:generate mockgen -source=nodemodulesconfig_reconciler.go -package=controllers -destination=mock_nodemodulesconfig_reconciler.go WorkerHelper
+//go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go workerHelper
 
-type WorkerHelper interface {
+type workerHelper interface {
 	ProcessModuleSpec(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, spec *kmmv1beta1.NodeModuleSpec, status *kmmv1beta1.NodeModuleStatus) error
 	ProcessOrphanModuleStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, status *kmmv1beta1.NodeModuleStatus) error
 	SyncStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
 	RemoveOrphanFinalizers(ctx context.Context, nodeName string) error
 }
 
-type workerHelper struct {
+type workerHelperImpl struct {
 	client client.Client
-	pm     PodManager
+	pm     podManager
 }
 
-func NewWorkerHelper(client client.Client, pm PodManager) WorkerHelper {
-	return &workerHelper{
+func NewWorkerHelper(client client.Client, pm podManager) workerHelper {
+	return &workerHelperImpl{
 		client: client,
 		pm:     pm,
 	}
@@ -214,7 +221,7 @@ func NewWorkerHelper(client client.Client, pm PodManager) WorkerHelper {
 //
 // An unloading worker Pod is created when the entry in .spec.modules has a different config compared to the entry in
 // .status.modules.
-func (w *workerHelper) ProcessModuleSpec(
+func (w *workerHelperImpl) ProcessModuleSpec(
 	ctx context.Context,
 	nmc *kmmv1beta1.NodeModulesConfig,
 	spec *kmmv1beta1.NodeModuleSpec,
@@ -265,7 +272,7 @@ func (w *workerHelper) ProcessModuleSpec(
 	return nil
 }
 
-func (w *workerHelper) ProcessOrphanModuleStatus(
+func (w *workerHelperImpl) ProcessOrphanModuleStatus(
 	ctx context.Context,
 	nmc *kmmv1beta1.NodeModulesConfig,
 	status *kmmv1beta1.NodeModuleStatus,
@@ -282,7 +289,7 @@ func (w *workerHelper) ProcessOrphanModuleStatus(
 	return w.pm.CreateUnloaderPod(ctx, nmc, status)
 }
 
-func (w *workerHelper) RemoveOrphanFinalizers(ctx context.Context, nodeName string) error {
+func (w *workerHelperImpl) RemoveOrphanFinalizers(ctx context.Context, nodeName string) error {
 	pods, err := w.pm.ListWorkerPodsOnNode(ctx, nodeName)
 	if err != nil {
 		return fmt.Errorf("could not delete orphan worker Pods on node %s: %v", nodeName, err)
@@ -310,7 +317,7 @@ func (w *workerHelper) RemoveOrphanFinalizers(ctx context.Context, nodeName stri
 	return errors.Join(errs...)
 }
 
-func (w *workerHelper) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.NodeModulesConfig) error {
+func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.NodeModulesConfig) error {
 	logger := ctrl.LoggerFrom(ctx)
 
 	logger.Info("Syncing status")
@@ -427,30 +434,30 @@ const (
 	volMountPoingConfig = "/etc/kmm-worker"
 )
 
-//go:generate mockgen -source=nodemodulesconfig_reconciler.go -package=controllers -destination=mock_nodemodulesconfig_reconciler.go PodManager
+//go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go PodManager
 
-type PodManager interface {
+type podManager interface {
 	CreateLoaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleSpec) error
 	CreateUnloaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleStatus) error
 	DeletePod(ctx context.Context, pod *v1.Pod) error
 	ListWorkerPodsOnNode(ctx context.Context, nodeName string) ([]v1.Pod, error)
 }
 
-type podManager struct {
+type podManagerImpl struct {
 	client      client.Client
 	scheme      *runtime.Scheme
 	workerImage string
 }
 
-func NewPodManager(client client.Client, workerImage string, scheme *runtime.Scheme) PodManager {
-	return &podManager{
+func NewPodManager(client client.Client, workerImage string, scheme *runtime.Scheme) podManager {
+	return &podManagerImpl{
 		client:      client,
 		scheme:      scheme,
 		workerImage: workerImage,
 	}
 }
 
-func (p *podManager) CreateLoaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleSpec) error {
+func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleSpec) error {
 	pod, err := p.baseWorkerPod(nmc.GetName(), nms.Namespace, nms.Name, nms.ServiceAccountName, nmc)
 	if err != nil {
 		return fmt.Errorf("could not create the base Pod: %v", err)
@@ -470,7 +477,7 @@ func (p *podManager) CreateLoaderPod(ctx context.Context, nmc client.Object, nms
 	return p.client.Create(ctx, pod)
 }
 
-func (p *podManager) CreateUnloaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleStatus) error {
+func (p *podManagerImpl) CreateUnloaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleStatus) error {
 	pod, err := p.baseWorkerPod(nmc.GetName(), nms.Namespace, nms.Name, nms.ServiceAccountName, nmc)
 	if err != nil {
 		return fmt.Errorf("could not create the base Pod: %v", err)
@@ -489,7 +496,7 @@ func (p *podManager) CreateUnloaderPod(ctx context.Context, nmc client.Object, n
 	return p.client.Create(ctx, pod)
 }
 
-func (p *podManager) DeletePod(ctx context.Context, pod *v1.Pod) error {
+func (p *podManagerImpl) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	logger := ctrl.LoggerFrom(ctx)
 
 	logger.Info("Removing Pod finalizer")
@@ -515,7 +522,7 @@ func (p *podManager) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	return nil
 }
 
-func (p *podManager) ListWorkerPodsOnNode(ctx context.Context, nodeName string) ([]v1.Pod, error) {
+func (p *podManagerImpl) ListWorkerPodsOnNode(ctx context.Context, nodeName string) ([]v1.Pod, error) {
 	logger := ctrl.LoggerFrom(ctx).WithValues("node name", nodeName)
 
 	pl := v1.PodList{}
@@ -532,7 +539,7 @@ func (p *podManager) ListWorkerPodsOnNode(ctx context.Context, nodeName string) 
 	return pl.Items, nil
 }
 
-func (p *podManager) PodExists(ctx context.Context, nodeName, modName, modNamespace string) (bool, error) {
+func (p *podManagerImpl) PodExists(ctx context.Context, nodeName, modName, modNamespace string) (bool, error) {
 	pod := v1.Pod{}
 
 	nsn := types.NamespacedName{
@@ -551,7 +558,7 @@ func (p *podManager) PodExists(ctx context.Context, nodeName, modName, modNamesp
 	return true, nil
 }
 
-func (p *podManager) baseWorkerPod(nodeName, namespace, modName, serviceAccountName string, owner client.Object) (*v1.Pod, error) {
+func (p *podManagerImpl) baseWorkerPod(nodeName, namespace, modName, serviceAccountName string, owner client.Object) (*v1.Pod, error) {
 	const (
 		volNameLibModules     = "lib-modules"
 		volNameUsrLibModules  = "usr-lib-modules"
