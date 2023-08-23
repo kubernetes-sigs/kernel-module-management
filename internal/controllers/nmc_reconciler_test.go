@@ -355,14 +355,33 @@ var _ = Describe("workerHelper_ProcessOrphanModuleStatus", func() {
 		)
 	})
 
+	It("should remove status in case Config is nil", func() {
+		nmc := &kmmv1beta1.NodeModulesConfig{}
+		status := &kmmv1beta1.NodeModuleStatus{}
+
+		ctrl := gomock.NewController(GinkgoT())
+		client := testclient.NewMockClient(ctrl)
+		sw := testclient.NewMockStatusWriter(ctrl)
+		client.EXPECT().Status().Return(sw)
+		sw.EXPECT().Patch(ctx, nmc, gomock.Any())
+		Expect(
+			NewWorkerHelper(client, nil).ProcessOrphanModuleStatus(ctx, nmc, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
 	It("should create an unloader Pod", func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client := testclient.NewMockClient(ctrl)
+
 		pm := NewMockpodManager(ctrl)
 		wh := NewWorkerHelper(client, pm)
 
 		nmc := &kmmv1beta1.NodeModulesConfig{}
-		status := &kmmv1beta1.NodeModuleStatus{}
+		status := &kmmv1beta1.NodeModuleStatus{
+			Config: &kmmv1beta1.ModuleConfig{},
+		}
 
 		pm.EXPECT().CreateUnloaderPod(ctx, nmc, status)
 

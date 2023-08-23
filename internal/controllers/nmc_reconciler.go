@@ -274,7 +274,7 @@ func (w *workerHelperImpl) ProcessModuleSpec(
 
 func (w *workerHelperImpl) ProcessOrphanModuleStatus(
 	ctx context.Context,
-	nmc *kmmv1beta1.NodeModulesConfig,
+	nmcObj *kmmv1beta1.NodeModulesConfig,
 	status *kmmv1beta1.NodeModuleStatus,
 ) error {
 	logger := ctrl.LoggerFrom(ctx)
@@ -284,9 +284,16 @@ func (w *workerHelperImpl) ProcessOrphanModuleStatus(
 		return nil
 	}
 
+	if status.Config == nil {
+		logger.Info("Missing status config and pod is not running: previously failed pod, no need to unload")
+		patchFrom := client.MergeFrom(nmcObj.DeepCopy())
+		nmc.RemoveModuleStatus(&nmcObj.Status.Modules, status.Namespace, status.Name)
+		return w.client.Status().Patch(ctx, nmcObj, patchFrom)
+	}
+
 	logger.Info("Creating unloader Pod")
 
-	return w.pm.CreateUnloaderPod(ctx, nmc, status)
+	return w.pm.CreateUnloaderPod(ctx, nmcObj, status)
 }
 
 func (w *workerHelperImpl) RemoveOrphanFinalizers(ctx context.Context, nodeName string) error {
@@ -347,26 +354,31 @@ func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.No
 
 		logger.Info("Processing worker Pod")
 
-		status := kmmv1beta1.NodeModuleStatus{
-			Namespace: modNamespace,
-			Name:      modName,
+		status := nmc.FindModuleStatus(nmcObj.Status.Modules, modNamespace, modName)
+		if status == nil {
+			status = &kmmv1beta1.NodeModuleStatus{
+				Namespace: modNamespace,
+				Name:      modName,
+			}
 		}
 
 		deletePod := false
-		statusDeleted := false
+		updateModuleStatus := false
 
 		switch phase {
 		case v1.PodFailed:
+			status.InProgress = false
 			deletePod = true
+			updateModuleStatus = true
 		case v1.PodSucceeded:
 			deletePod = true
 
 			if p.Labels[actionLabelKey] == WorkerActionUnload {
 				nmc.RemoveModuleStatus(&nmcObj.Status.Modules, modNamespace, modName)
-				deletePod = true
-				statusDeleted = true
 				break
 			}
+
+			updateModuleStatus = true
 
 			config := kmmv1beta1.ModuleConfig{}
 
@@ -388,9 +400,9 @@ func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.No
 
 			status.LastTransitionTime = &podLTT
 
-			deletePod = true
 		case v1.PodPending, v1.PodRunning:
 			status.InProgress = true
+			updateModuleStatus = true
 			// TODO: if the NMC's spec changed compared to the Pod's config, recreate the Pod
 		default:
 			errs = append(
@@ -410,8 +422,8 @@ func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.No
 			}
 		}
 
-		if !statusDeleted {
-			nmc.SetModuleStatus(&nmcObj.Status.Modules, status)
+		if updateModuleStatus {
+			nmc.SetModuleStatus(&nmcObj.Status.Modules, *status)
 		}
 	}
 
