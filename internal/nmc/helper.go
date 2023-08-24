@@ -75,7 +75,7 @@ func (h *helper) GetModuleEntry(nmc *kmmv1beta1.NodeModulesConfig, modNamespace,
 	return nil, 0
 }
 
-func findModuleStatus(statuses []kmmv1beta1.NodeModuleStatus, moduleNamespace, moduleName string) *kmmv1beta1.NodeModuleStatus {
+func FindModuleStatus(statuses []kmmv1beta1.NodeModuleStatus, moduleNamespace, moduleName string) *kmmv1beta1.NodeModuleStatus {
 	for i := 0; i < len(statuses); i++ {
 		s := statuses[i]
 
@@ -108,7 +108,7 @@ func SetModuleStatus(statuses *[]kmmv1beta1.NodeModuleStatus, status kmmv1beta1.
 		return
 	}
 
-	s := findModuleStatus(*statuses, status.Namespace, status.Name)
+	s := FindModuleStatus(*statuses, status.Namespace, status.Name)
 
 	if s != nil {
 		*s = status
