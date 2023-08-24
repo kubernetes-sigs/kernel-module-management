@@ -349,6 +349,10 @@ catalog-push: ## Push a catalog image.
 signimage-build: ## Build docker image with the signer.
 	docker build -f Dockerfile.signimage -t $(SIGNER_IMG) .
 
+.PHONY: workerimage-build 
+workerimage-build: ## Build docker image for worker app.
+	docker build -f Dockerfile.worker -t $(WORKER_IMG) .
+
 operatorhub-release:
 	IMG=$(IMG) HUB_IMG=$(HUB_IMG) VERSION=$(VERSION) ./hack/release-operatorhub
 
