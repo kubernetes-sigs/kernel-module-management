@@ -5,6 +5,7 @@ bundle.Dockerfile
 # Operator's binaries
 /manager
 /manager-hub
+/worker
 
 # Binaries for programs and plugins
 *.exe
