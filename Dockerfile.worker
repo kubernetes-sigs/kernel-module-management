@@ -35,6 +35,8 @@ RUN ["apk", "add", "ca-certificates", "kmod"]
 WORKDIR /
 
 COPY --from=builder /workspace/worker /worker
+RUN mkdir -p /mnt/img
+RUN chown 65532:65532 /mnt/img
 USER 65532:65532
 
 ENTRYPOINT ["/worker"]

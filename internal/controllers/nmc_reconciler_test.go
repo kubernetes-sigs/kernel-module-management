@@ -869,10 +869,12 @@ modprobe:
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
-					Name:            "worker",
-					Image:           workerImage,
-					Args:            []string{"kmod", subcommand, "/etc/kmm-worker/config.yaml"},
-					SecurityContext: &v1.SecurityContext{Privileged: pointer.Bool(true)},
+					Name:  "worker",
+					Image: workerImage,
+					Args:  []string{"kmod", subcommand, "/etc/kmm-worker/config.yaml"},
+					SecurityContext: &v1.SecurityContext{
+						Privileged: pointer.Bool(true),
+					},
 					VolumeMounts: []v1.VolumeMount{
 						{
 							Name:      volNameConfig,
