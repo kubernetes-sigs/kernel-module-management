@@ -16,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/cmd/util/podcmd"
-	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -613,7 +612,9 @@ func (p *podManagerImpl) baseWorkerPod(nodeName, namespace, modName, serviceAcco
 						},
 					},
 					SecurityContext: &v1.SecurityContext{
-						Privileged: pointer.Bool(true),
+						Capabilities: &v1.Capabilities{
+							Add: []v1.Capability{"SYS_MODULE"},
+						},
 					},
 				},
 			},
