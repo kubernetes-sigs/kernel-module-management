@@ -19,7 +19,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -873,7 +872,9 @@ modprobe:
 					Image: workerImage,
 					Args:  []string{"kmod", subcommand, "/etc/kmm-worker/config.yaml"},
 					SecurityContext: &v1.SecurityContext{
-						Privileged: pointer.Bool(true),
+						Capabilities: &v1.Capabilities{
+							Add: []v1.Capability{"SYS_MODULE"},
+						},
 					},
 					VolumeMounts: []v1.VolumeMount{
 						{
