@@ -411,6 +411,11 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 		sw = testclient.NewMockStatusWriter(ctrl)
 	})
 
+	const (
+		podName      = "pod-name"
+		podNamespace = "pod-namespace"
+	)
+
 	It("should do nothing if there are no running pods for this NMC", func() {
 		pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName)
 
@@ -425,27 +430,49 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 		)
 	})
 
-	It("should delete the pod if it is failed", func() {
-		const (
-			podName      = "pod-name"
-			podNamespace = "pod-namespace"
-		)
-
-		pod := v1.Pod{
+	It("failed pods", func() {
+		podWithStatus := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: podNamespace,
 				Name:      podName,
+				Labels: map[string]string{
+					constants.ModuleNameLabel: "mod name 1",
+				},
 			},
 			Status: v1.PodStatus{Phase: v1.PodFailed},
 		}
 
+		podWithoutStatus := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: podNamespace,
+				Name:      podName,
+				Labels: map[string]string{
+					constants.ModuleNameLabel: "mod name 2",
+				},
+			},
+			Status: v1.PodStatus{Phase: v1.PodFailed},
+		}
+
+		pods := []v1.Pod{podWithStatus, podWithoutStatus}
+
 		nmc := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			Status: kmmv1beta1.NodeModulesConfigStatus{
+				Modules: []kmmv1beta1.NodeModuleStatus{
+					kmmv1beta1.NodeModuleStatus{
+						InProgress: true,
+						Config:     &kmmv1beta1.ModuleConfig{ContainerImage: "some image"},
+						Name:       "mod name 1",
+						Namespace:  podNamespace,
+					},
+				},
+			},
 		}
 
 		gomock.InOrder(
-			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{pod}, nil),
-			pm.EXPECT().DeletePod(ctx, &pod),
+			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return(pods, nil),
+			pm.EXPECT().DeletePod(ctx, &podWithStatus),
+			pm.EXPECT().DeletePod(ctx, &podWithoutStatus),
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
 		)
@@ -455,6 +482,12 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 		).NotTo(
 			HaveOccurred(),
 		)
+
+		Expect(nmc.Status.Modules).To(HaveLen(2))
+		Expect(nmc.Status.Modules[0].InProgress).To(BeFalse())
+		Expect(nmc.Status.Modules[0].Config).NotTo(BeNil())
+		Expect(nmc.Status.Modules[1].InProgress).To(BeFalse())
+		Expect(nmc.Status.Modules[1].Config).To(BeNil())
 	})
 
 	It("should set the in progress status if pods are pending or running", func() {
@@ -464,9 +497,23 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 
 		pods := []v1.Pod{
 			{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: podNamespace,
+					Name:      podName,
+					Labels: map[string]string{
+						constants.ModuleNameLabel: "mod name 1",
+					},
+				},
 				Status: v1.PodStatus{Phase: v1.PodRunning},
 			},
 			{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: podNamespace,
+					Name:      podName,
+					Labels: map[string]string{
+						constants.ModuleNameLabel: "mod name 2",
+					},
+				},
 				Status: v1.PodStatus{Phase: v1.PodPending},
 			},
 		}
@@ -483,8 +530,9 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 			HaveOccurred(),
 		)
 
-		Expect(nmc.Status.Modules).To(HaveLen(1))
+		Expect(nmc.Status.Modules).To(HaveLen(2))
 		Expect(nmc.Status.Modules[0].InProgress).To(BeTrue())
+		Expect(nmc.Status.Modules[1].InProgress).To(BeTrue())
 	})
 
 	It("should remove the status if an unloader pod was successful", func() {
@@ -540,6 +588,15 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 
 		nmc := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			Status: kmmv1beta1.NodeModulesConfigStatus{
+				Modules: []kmmv1beta1.NodeModuleStatus{
+					kmmv1beta1.NodeModuleStatus{
+						InProgress: true,
+						Name:       modName,
+						Namespace:  modNamespace,
+					},
+				},
+			},
 		}
 
 		now := metav1.Now()
@@ -599,6 +656,7 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 			LastTransitionTime: &now,
 			Name:               modName,
 			Namespace:          modNamespace,
+			InProgress:         false,
 		}
 
 		Expect(nmc.Status.Modules[0]).To(BeComparableTo(expectedStatus))
