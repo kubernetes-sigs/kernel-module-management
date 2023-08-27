@@ -391,6 +391,7 @@ func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.No
 			}
 
 			status.Config = &config
+			status.InProgress = false
 
 			podLTT := GetContainerStatus(p.Status.ContainerStatuses, workerContainerName).
 				State.
