@@ -145,11 +145,6 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			mldLogger.Info("Signing has not finished successfully yet; skipping handling driver container for now")
 			continue
 		}
-
-		err = r.reconHelperAPI.handleDriverContainer(ctx, mld, existingModuleDS)
-		if err != nil {
-			return res, fmt.Errorf("failed to handle driver container for kernel version %s: %v", kernelVersion, err)
-		}
 	}
 
 	logger.Info("Handle device plugin")
@@ -183,7 +178,6 @@ type moduleReconcilerHelperAPI interface {
 	getRelevantKernelMappingsAndNodes(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, []v1.Node, error)
 	handleBuild(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
 	handleSigning(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
-	handleDriverContainer(ctx context.Context, mld *api.ModuleLoaderData, existingModuleDS []appsv1.DaemonSet) error
 	handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingModuleDS []appsv1.DaemonSet) error
 	garbageCollect(ctx context.Context, mod *kmmv1beta1.Module, mldMappings map[string]*api.ModuleLoaderData, existingDS []appsv1.DaemonSet) error
 }
@@ -336,30 +330,6 @@ func (mrh *moduleReconcilerHelper) handleSigning(ctx context.Context, mld *api.M
 	}
 
 	return completedSuccessfully, nil
-}
-
-func (mrh *moduleReconcilerHelper) handleDriverContainer(ctx context.Context,
-	mld *api.ModuleLoaderData,
-	existingModuleDS []appsv1.DaemonSet) error {
-
-	logger := log.FromContext(ctx)
-	ds := getExistingDS(existingModuleDS, mld.Namespace, mld.Name, mld.KernelVersion, mld.ModuleVersion, false)
-	if ds == nil {
-		logger.Info("creating new driver container DS", "kernel version", mld.KernelVersion, "image", mld.ContainerImage, "version", mld.ModuleVersion)
-		ds = &appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: mld.Namespace, GenerateName: mld.Name + "-"},
-		}
-	}
-
-	opRes, err := controllerutil.CreateOrPatch(ctx, mrh.client, ds, func() error {
-		return mrh.daemonAPI.SetDriverContainerAsDesired(ctx, ds, mld)
-	})
-
-	if err == nil {
-		logger.Info("Reconciled Driver Container", "name", ds.Name, "result", opRes)
-	}
-
-	return err
 }
 
 func (mrh *moduleReconcilerHelper) handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingModuleDS []appsv1.DaemonSet) error {
