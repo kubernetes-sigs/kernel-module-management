@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
@@ -27,14 +28,16 @@ type ImagePuller interface {
 }
 
 type imagePuller struct {
-	baseDir string
-	logger  logr.Logger
+	baseDir  string
+	keyChain authn.Keychain
+	logger   logr.Logger
 }
 
-func NewImagePuller(baseDir string, logger logr.Logger) ImagePuller {
+func NewImagePuller(baseDir string, keyChain authn.Keychain, logger logr.Logger) ImagePuller {
 	return &imagePuller{
-		baseDir: baseDir,
-		logger:  logger,
+		baseDir:  baseDir,
+		keyChain: keyChain,
+		logger:   logger,
 	}
 }
 
@@ -43,6 +46,7 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 
 	opts := []crane.Option{
 		crane.WithContext(ctx),
+		crane.WithAuthFromKeychain(i.keyChain),
 	}
 
 	if insecurePull {

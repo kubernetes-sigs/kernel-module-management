@@ -540,7 +540,7 @@ var _ = Describe("enableModuleOnNode", func() {
 		gomock.InOrder(
 			rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(true, nil),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
-			helper.EXPECT().SetModuleConfig(ctx, nmc, mld.Namespace, mld.Name, expectedModuleConfig).Return(nil),
+			helper.EXPECT().SetModuleConfig(nmc, mld, expectedModuleConfig).Return(nil),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 		)
 
@@ -560,7 +560,7 @@ var _ = Describe("enableModuleOnNode", func() {
 					return nil
 				},
 			),
-			helper.EXPECT().SetModuleConfig(ctx, nmc, mld.Namespace, mld.Name, expectedModuleConfig).Return(nil),
+			helper.EXPECT().SetModuleConfig(nmc, mld, expectedModuleConfig).Return(nil),
 		)
 
 		err := mnrh.enableModuleOnNode(ctx, mld, nodeName, kernelVersion)
@@ -617,7 +617,7 @@ var _ = Describe("disableModuleOnNode", func() {
 					return nil
 				},
 			),
-			helper.EXPECT().RemoveModuleConfig(ctx, nmc, moduleNamespace, moduleName).Return(nil),
+			helper.EXPECT().RemoveModuleConfig(nmc, moduleNamespace, moduleName).Return(nil),
 		)
 
 		err := mnrh.disableModuleOnNode(ctx, moduleNamespace, moduleName, nodeName)
@@ -659,7 +659,7 @@ var _ = Describe("removeModuleFromNMC", func() {
 					return nil
 				},
 			),
-			helper.EXPECT().RemoveModuleConfig(ctx, nmc, moduleNamespace, moduleName).Return(nil),
+			helper.EXPECT().RemoveModuleConfig(nmc, moduleNamespace, moduleName).Return(nil),
 		)
 
 		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
@@ -677,7 +677,7 @@ var _ = Describe("removeModuleFromNMC", func() {
 					return nil
 				},
 			),
-			helper.EXPECT().RemoveModuleConfig(ctx, nmc, moduleNamespace, moduleName).Return(fmt.Errorf("some error")),
+			helper.EXPECT().RemoveModuleConfig(nmc, moduleNamespace, moduleName).Return(fmt.Errorf("some error")),
 		)
 
 		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)

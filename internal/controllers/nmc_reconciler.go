@@ -4,18 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/cmd/util/podcmd"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,6 +48,7 @@ const (
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=nodemodulesconfigs/status,verbs=patch
 //+kubebuilder:rbac:groups="core",resources=pods,verbs=create;delete;get;list;watch
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
+//+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
 
 type NMCReconciler struct {
 	client client.Client
@@ -356,8 +360,12 @@ func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.No
 		status := nmc.FindModuleStatus(nmcObj.Status.Modules, modNamespace, modName)
 		if status == nil {
 			status = &kmmv1beta1.NodeModuleStatus{
-				Namespace: modNamespace,
-				Name:      modName,
+				ModuleItem: kmmv1beta1.ModuleItem{
+					ImageRepoSecret:    nil,
+					Name:               modName,
+					Namespace:          modNamespace,
+					ServiceAccountName: "",
+				},
 			}
 		}
 
@@ -446,7 +454,7 @@ const (
 	volMountPoingConfig = "/etc/kmm-worker"
 )
 
-//go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go PodManager
+//go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go podManager
 
 type podManager interface {
 	CreateLoaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleSpec) error
@@ -457,6 +465,7 @@ type podManager interface {
 
 type podManagerImpl struct {
 	client      client.Client
+	psh         pullSecretHelper
 	scheme      *runtime.Scheme
 	workerImage string
 }
@@ -464,13 +473,14 @@ type podManagerImpl struct {
 func NewPodManager(client client.Client, workerImage string, scheme *runtime.Scheme) podManager {
 	return &podManagerImpl{
 		client:      client,
+		psh:         &pullSecretHelperImpl{client: client},
 		scheme:      scheme,
 		workerImage: workerImage,
 	}
 }
 
 func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleSpec) error {
-	pod, err := p.baseWorkerPod(nmc.GetName(), nms.Namespace, nms.Name, nms.ServiceAccountName, nmc)
+	pod, err := p.baseWorkerPod(ctx, nmc.GetName(), &nms.ModuleItem, nmc)
 	if err != nil {
 		return fmt.Errorf("could not create the base Pod: %v", err)
 	}
@@ -490,7 +500,7 @@ func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object,
 }
 
 func (p *podManagerImpl) CreateUnloaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleStatus) error {
-	pod, err := p.baseWorkerPod(nmc.GetName(), nms.Namespace, nms.Name, nms.ServiceAccountName, nmc)
+	pod, err := p.baseWorkerPod(ctx, nmc.GetName(), &nms.ModuleItem, nmc)
 	if err != nil {
 		return fmt.Errorf("could not create the base Pod: %v", err)
 	}
@@ -570,7 +580,12 @@ func (p *podManagerImpl) PodExists(ctx context.Context, nodeName, modName, modNa
 	return true, nil
 }
 
-func (p *podManagerImpl) baseWorkerPod(nodeName, namespace, modName, serviceAccountName string, owner client.Object) (*v1.Pod, error) {
+func (p *podManagerImpl) baseWorkerPod(
+	ctx context.Context,
+	nodeName string,
+	item *kmmv1beta1.ModuleItem,
+	owner client.Object,
+) (*v1.Pod, error) {
 	const (
 		volNameLibModules     = "lib-modules"
 		volNameUsrLibModules  = "usr-lib-modules"
@@ -580,38 +595,90 @@ func (p *podManagerImpl) baseWorkerPod(nodeName, namespace, modName, serviceAcco
 	hostPathDirectory := v1.HostPathDirectory
 	hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
 
+	psv, psvm, err := p.psh.VolumesAndVolumeMounts(ctx, item)
+	if err != nil {
+		return nil, fmt.Errorf("could not list pull secrets for worker Pod: %v", err)
+	}
+
+	volumes := []v1.Volume{
+		{
+			Name: volumeNameConfig,
+			VolumeSource: v1.VolumeSource{
+				DownwardAPI: &v1.DownwardAPIVolumeSource{
+					Items: []v1.DownwardAPIVolumeFile{
+						{
+							Path: configFileName,
+							FieldRef: &v1.ObjectFieldSelector{
+								FieldPath: fmt.Sprintf("metadata.annotations['%s']", configAnnotationKey),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: volNameLibModules,
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/lib/modules",
+					Type: &hostPathDirectory,
+				},
+			},
+		},
+		{
+			Name: volNameUsrLibModules,
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/usr/lib/modules",
+					Type: &hostPathDirectory,
+				},
+			},
+		},
+		{
+			Name: volNameVarLibFirmware,
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/var/lib/firmware",
+					Type: &hostPathDirectoryOrCreate,
+				},
+			},
+		},
+	}
+
+	volumeMounts := []v1.VolumeMount{
+		{
+			Name:      volNameConfig,
+			MountPath: volMountPoingConfig,
+			ReadOnly:  true,
+		},
+		{
+			Name:      volNameLibModules,
+			MountPath: "/lib/modules",
+			ReadOnly:  true,
+		},
+		{
+			Name:      volNameUsrLibModules,
+			MountPath: "/usr/lib/modules",
+			ReadOnly:  true,
+		},
+		{
+			Name:      volNameVarLibFirmware,
+			MountPath: "/var/lib/firmware",
+		},
+	}
+
 	pod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      workerPodName(nodeName, modName),
-			Labels:    map[string]string{constants.ModuleNameLabel: modName},
+			Namespace: item.Namespace,
+			Name:      workerPodName(nodeName, item.Name),
+			Labels:    map[string]string{constants.ModuleNameLabel: item.Name},
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
-					Name:  workerContainerName,
-					Image: p.workerImage,
-					VolumeMounts: []v1.VolumeMount{
-						{
-							Name:      volNameConfig,
-							MountPath: volMountPoingConfig,
-							ReadOnly:  true,
-						},
-						{
-							Name:      volNameLibModules,
-							MountPath: "/lib/modules",
-							ReadOnly:  true,
-						},
-						{
-							Name:      volNameUsrLibModules,
-							MountPath: "/usr/lib/modules",
-							ReadOnly:  true,
-						},
-						{
-							Name:      volNameVarLibFirmware,
-							MountPath: "/var/lib/firmware",
-						},
-					},
+					Name:         workerContainerName,
+					Image:        p.workerImage,
+					VolumeMounts: append(volumeMounts, psvm...),
 					SecurityContext: &v1.SecurityContext{
 						Capabilities: &v1.Capabilities{
 							Add: []v1.Capability{"SYS_MODULE"},
@@ -621,55 +688,12 @@ func (p *podManagerImpl) baseWorkerPod(nodeName, namespace, modName, serviceAcco
 			},
 			NodeName:           nodeName,
 			RestartPolicy:      v1.RestartPolicyNever,
-			ServiceAccountName: serviceAccountName,
-			Volumes: []v1.Volume{
-				{
-					Name: volumeNameConfig,
-					VolumeSource: v1.VolumeSource{
-						DownwardAPI: &v1.DownwardAPIVolumeSource{
-							Items: []v1.DownwardAPIVolumeFile{
-								{
-									Path: configFileName,
-									FieldRef: &v1.ObjectFieldSelector{
-										FieldPath: fmt.Sprintf("metadata.annotations['%s']", configAnnotationKey),
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Name: volNameLibModules,
-					VolumeSource: v1.VolumeSource{
-						HostPath: &v1.HostPathVolumeSource{
-							Path: "/lib/modules",
-							Type: &hostPathDirectory,
-						},
-					},
-				},
-				{
-					Name: volNameUsrLibModules,
-					VolumeSource: v1.VolumeSource{
-						HostPath: &v1.HostPathVolumeSource{
-							Path: "/usr/lib/modules",
-							Type: &hostPathDirectory,
-						},
-					},
-				},
-				{
-					Name: volNameVarLibFirmware,
-					VolumeSource: v1.VolumeSource{
-						HostPath: &v1.HostPathVolumeSource{
-							Path: "/var/lib/firmware",
-							Type: &hostPathDirectoryOrCreate,
-						},
-					},
-				},
-			},
+			ServiceAccountName: item.ServiceAccountName,
+			Volumes:            append(volumes, psv...),
 		},
 	}
 
-	if err := ctrl.SetControllerReference(owner, &pod, p.scheme); err != nil {
+	if err = ctrl.SetControllerReference(owner, &pod, p.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner as controller: %v", err)
 	}
 
@@ -718,4 +742,68 @@ func setWorkerContainerArgs(pod *v1.Pod, args []string) error {
 	container.Args = args
 
 	return nil
+}
+
+//go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go pullSecretHelper
+
+type pullSecretHelper interface {
+	VolumesAndVolumeMounts(ctx context.Context, nms *kmmv1beta1.ModuleItem) ([]v1.Volume, []v1.VolumeMount, error)
+}
+
+type pullSecretHelperImpl struct {
+	client client.Client
+}
+
+func (p *pullSecretHelperImpl) VolumesAndVolumeMounts(ctx context.Context, item *kmmv1beta1.ModuleItem) ([]v1.Volume, []v1.VolumeMount, error) {
+	logger := ctrl.LoggerFrom(ctx)
+
+	var pullSecretNames []string
+
+	if irs := item.ImageRepoSecret; irs != nil {
+		pullSecretNames = append(pullSecretNames, irs.Name)
+	}
+
+	if san := item.ServiceAccountName; san != "" {
+		sa := v1.ServiceAccount{}
+		nsn := types.NamespacedName{Namespace: item.Namespace, Name: san}
+
+		logger.V(1).Info("Getting service account", "name", nsn)
+
+		if err := p.client.Get(ctx, nsn, &sa); err != nil {
+			return nil, nil, fmt.Errorf("could not get ServiceAccount %s: %v", nsn, err)
+		}
+
+		for _, s := range sa.ImagePullSecrets {
+			pullSecretNames = append(pullSecretNames, s.Name)
+		}
+	}
+
+	volumes := make([]v1.Volume, 0, len(pullSecretNames))
+	volumeMounts := make([]v1.VolumeMount, 0, len(pullSecretNames))
+
+	for _, s := range pullSecretNames {
+		volumeName := "pull-secret-" + s
+
+		v := v1.Volume{
+			Name: volumeName,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: s,
+					Optional:   pointer.Bool(true),
+				},
+			},
+		}
+
+		volumes = append(volumes, v)
+
+		vm := v1.VolumeMount{
+			Name:      volumeName,
+			ReadOnly:  true,
+			MountPath: filepath.Join(worker.PullSecretsDir, s),
+		}
+
+		volumeMounts = append(volumeMounts, vm)
+	}
+
+	return volumes, volumeMounts, nil
 }

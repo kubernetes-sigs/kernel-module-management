@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -30,11 +31,17 @@ type ModuleConfig struct {
 	Modprobe             ModprobeSpec `json:"modprobe"`
 }
 
+type ModuleItem struct {
+	ImageRepoSecret    *v1.LocalObjectReference `json:"imageRepoSecret,omitempty"`
+	Name               string                   `json:"name"`
+	Namespace          string                   `json:"namespace"`
+	ServiceAccountName string                   `json:"serviceAccountName"`
+}
+
 type NodeModuleSpec struct {
-	Name               string       `json:"name"`
-	Namespace          string       `json:"namespace"`
-	Config             ModuleConfig `json:"config"`
-	ServiceAccountName string       `json:"serviceAccountName"`
+	ModuleItem `json:",inline"`
+
+	Config ModuleConfig `json:"config"`
 }
 
 // NodeModulesConfigSpec describes the desired state of modules on the node
@@ -47,14 +54,13 @@ type NodeModulesConfigSpec struct {
 }
 
 type NodeModuleStatus struct {
+	ModuleItem `json:",inline"`
+
 	//+optional
 	Config     *ModuleConfig `json:"config,omitempty"`
 	InProgress bool          `json:"inProgress"`
 	//+optional
 	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
-	Name               string       `json:"name"`
-	Namespace          string       `json:"namespace"`
-	ServiceAccountName string       `json:"serviceAccountName"`
 }
 
 // NodeModuleConfigStatus is the most recently observed status of the KMM modules on node.

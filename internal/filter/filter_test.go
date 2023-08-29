@@ -511,12 +511,16 @@ var _ = Describe("FindModulesForNMCNodeChange", func() {
 			Spec: kmmv1beta1.NodeModulesConfigSpec{
 				Modules: []kmmv1beta1.NodeModuleSpec{
 					{
-						Name:      "new module name",
-						Namespace: "new module namespace",
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Name:      "new module name",
+							Namespace: "new module namespace",
+						},
 					},
 					{
-						Name:      "module name",
-						Namespace: "module namespace",
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Name:      "module name",
+							Namespace: "module namespace",
+						},
 					},
 				},
 			},

@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -66,29 +67,29 @@ func (mr *MockHelperMockRecorder) GetModuleEntry(nmc, modNamespace, modName inte
 }
 
 // RemoveModuleConfig mocks base method.
-func (m *MockHelper) RemoveModuleConfig(ctx context.Context, nmc *v1beta1.NodeModulesConfig, namespace, name string) error {
+func (m *MockHelper) RemoveModuleConfig(nmc *v1beta1.NodeModulesConfig, namespace, name string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveModuleConfig", ctx, nmc, namespace, name)
+	ret := m.ctrl.Call(m, "RemoveModuleConfig", nmc, namespace, name)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RemoveModuleConfig indicates an expected call of RemoveModuleConfig.
-func (mr *MockHelperMockRecorder) RemoveModuleConfig(ctx, nmc, namespace, name interface{}) *gomock.Call {
+func (mr *MockHelperMockRecorder) RemoveModuleConfig(nmc, namespace, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveModuleConfig", reflect.TypeOf((*MockHelper)(nil).RemoveModuleConfig), ctx, nmc, namespace, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveModuleConfig", reflect.TypeOf((*MockHelper)(nil).RemoveModuleConfig), nmc, namespace, name)
 }
 
 // SetModuleConfig mocks base method.
-func (m *MockHelper) SetModuleConfig(ctx context.Context, nmc *v1beta1.NodeModulesConfig, namespace, name string, moduleConfig *v1beta1.ModuleConfig) error {
+func (m *MockHelper) SetModuleConfig(nmc *v1beta1.NodeModulesConfig, mld *api.ModuleLoaderData, moduleConfig *v1beta1.ModuleConfig) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetModuleConfig", ctx, nmc, namespace, name, moduleConfig)
+	ret := m.ctrl.Call(m, "SetModuleConfig", nmc, mld, moduleConfig)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetModuleConfig indicates an expected call of SetModuleConfig.
-func (mr *MockHelperMockRecorder) SetModuleConfig(ctx, nmc, namespace, name, moduleConfig interface{}) *gomock.Call {
+func (mr *MockHelperMockRecorder) SetModuleConfig(nmc, mld, moduleConfig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetModuleConfig", reflect.TypeOf((*MockHelper)(nil).SetModuleConfig), ctx, nmc, namespace, name, moduleConfig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetModuleConfig", reflect.TypeOf((*MockHelper)(nil).SetModuleConfig), nmc, mld, moduleConfig)
 }

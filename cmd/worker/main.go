@@ -89,7 +89,7 @@ func main() {
 	rootCmd.PersistentFlags().AddGoFlagSet(klogFlagSet)
 	rootCmd.PersistentFlags().StringVar(&imgBaseDir, "img-base-dir", "/mnt/img", "path to the base directory for extracted images")
 
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		logger = klogr.New().WithName("kmm-worker")
 
 		commit, err := kmmcmd.GitCommit()
@@ -99,10 +99,18 @@ func main() {
 		}
 
 		logger.Info("Starting worker", "version", rootCmd.Version, "git commit", commit)
+		logger.Info("Reading pull secrets", "base dir", worker.PullSecretsDir)
 
-		ip := worker.NewImagePuller(imgBaseDir, logger)
+		keyChain, err := worker.ReadKubernetesSecrets(cmd.Context(), worker.PullSecretsDir, logger)
+		if err != nil {
+			return fmt.Errorf("could not read pull secrets: %v", err)
+		}
+
+		ip := worker.NewImagePuller(imgBaseDir, keyChain, logger)
 		mr := worker.NewModprobeRunner(logger)
 		w = worker.NewWorker(ip, mr, logger)
+
+		return nil
 	}
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
