@@ -17,6 +17,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -43,8 +44,9 @@ func NewModuleNMCReconciler(client client.Client,
 	kernelAPI module.KernelMapper,
 	registryAPI registry.Registry,
 	nmcHelper nmc.Helper,
-	filter *filter.Filter) *ModuleNMCReconciler {
-	reconHelper := newModuleNMCReconcilerHelper(client, registryAPI, nmcHelper)
+	filter *filter.Filter,
+	scheme *runtime.Scheme) *ModuleNMCReconciler {
+	reconHelper := newModuleNMCReconcilerHelper(client, registryAPI, nmcHelper, scheme)
 	return &ModuleNMCReconciler{
 		kernelAPI:   kernelAPI,
 		filter:      filter,
@@ -101,7 +103,7 @@ func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			continue
 		}
 		if shouldBeOnNode {
-			err = mnr.reconHelper.enableModuleOnNode(ctx, mld, node.Name, kernelVersion)
+			err = mnr.reconHelper.enableModuleOnNode(ctx, mld, &node, kernelVersion)
 		} else {
 			err = mnr.reconHelper.disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name)
 		}
@@ -123,7 +125,7 @@ type moduleNMCReconcilerHelperAPI interface {
 	getNodesList(ctx context.Context) ([]v1.Node, error)
 	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	shouldModuleRunOnNode(node v1.Node, mld *api.ModuleLoaderData) (bool, error)
-	enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, nodeName, kernelVersion string) error
+	enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node, kernelVersion string) error
 	disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error
 }
 
@@ -131,13 +133,15 @@ type moduleNMCReconcilerHelper struct {
 	client      client.Client
 	registryAPI registry.Registry
 	nmcHelper   nmc.Helper
+	scheme      *runtime.Scheme
 }
 
-func newModuleNMCReconcilerHelper(client client.Client, registryAPI registry.Registry, nmcHelper nmc.Helper) moduleNMCReconcilerHelperAPI {
+func newModuleNMCReconcilerHelper(client client.Client, registryAPI registry.Registry, nmcHelper nmc.Helper, scheme *runtime.Scheme) moduleNMCReconcilerHelperAPI {
 	return &moduleNMCReconcilerHelper{
 		client:      client,
 		registryAPI: registryAPI,
 		nmcHelper:   nmcHelper,
+		scheme:      scheme,
 	}
 }
 
@@ -214,7 +218,7 @@ func (mnrh *moduleNMCReconcilerHelper) shouldModuleRunOnNode(node v1.Node, mld *
 	return utils.IsObjectSelectedByLabels(node.GetLabels(), mld.Selector)
 }
 
-func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, nodeName, kernelVersion string) error {
+func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node, kernelVersion string) error {
 	logger := log.FromContext(ctx)
 	exists, err := module.ImageExists(ctx, mnrh.client, mnrh.registryAPI, mld, mld.Namespace, mld.ContainerImage)
 	if err != nil {
@@ -236,17 +240,21 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 	}
 
 	nmc := &kmmv1beta1.NodeModulesConfig{
-		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+		ObjectMeta: metav1.ObjectMeta{Name: node.Name},
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmc, func() error {
-		return mnrh.nmcHelper.SetModuleConfig(nmc, mld, &moduleConfig)
+		err = mnrh.nmcHelper.SetModuleConfig(nmc, mld, &moduleConfig)
+		if err != nil {
+			return err
+		}
+		return controllerutil.SetOwnerReference(node, nmc, mnrh.scheme)
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to enable module %s/%s in NMC %s: %v", mld.Namespace, mld.Name, nodeName, err)
+		return fmt.Errorf("failed to enable module %s/%s in NMC %s: %v", mld.Namespace, mld.Name, node.Name, err)
 	}
-	logger.Info("Enable module in NMC", "name", mld.Name, "namespace", mld.Namespace, "node", nodeName, "result", opRes)
+	logger.Info("Enable module in NMC", "name", mld.Name, "namespace", mld.Namespace, "node", node.Name, "result", opRes)
 	return nil
 }
 
