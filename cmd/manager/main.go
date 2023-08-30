@@ -159,6 +159,7 @@ func main() {
 		registryAPI,
 		nmcHelper,
 		filterAPI,
+		scheme,
 	)
 	if err = mnc.SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleNMCReconcilerName)

@@ -53,17 +53,17 @@ func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) disableModuleOnNode(ctx,
 }
 
 // enableModuleOnNode mocks base method.
-func (m *MockmoduleNMCReconcilerHelperAPI) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, nodeName, kernelVersion string) error {
+func (m *MockmoduleNMCReconcilerHelperAPI) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node, kernelVersion string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "enableModuleOnNode", ctx, mld, nodeName, kernelVersion)
+	ret := m.ctrl.Call(m, "enableModuleOnNode", ctx, mld, node, kernelVersion)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // enableModuleOnNode indicates an expected call of enableModuleOnNode.
-func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) enableModuleOnNode(ctx, mld, nodeName, kernelVersion interface{}) *gomock.Call {
+func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) enableModuleOnNode(ctx, mld, node, kernelVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "enableModuleOnNode", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).enableModuleOnNode), ctx, mld, nodeName, kernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "enableModuleOnNode", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).enableModuleOnNode), ctx, mld, node, kernelVersion)
 }
 
 // finalizeModule mocks base method.
