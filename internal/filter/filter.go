@@ -139,14 +139,6 @@ func ModuleNMCReconcilePodPredicate() predicate.Predicate {
 	)
 }
 
-func (f *Filter) NodeKernelReconcilerPredicate(labelName string) predicate.Predicate {
-	labelMismatch := predicate.NewPredicateFuncs(func(o client.Object) bool {
-		return o.GetLabels()[labelName] != o.(*v1.Node).Status.NodeInfo.KernelVersion
-	})
-
-	return predicate.And(skipDeletions, labelMismatch)
-}
-
 func NodeUpdateKernelChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(updateEvent event.UpdateEvent) bool {

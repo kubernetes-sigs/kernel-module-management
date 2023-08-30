@@ -128,20 +128,6 @@ func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDevicePlugin(ctx, mod
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDevicePlugin", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDevicePlugin), ctx, mod, existingModuleDS)
 }
 
-// handleDriverContainer mocks base method.
-func (m *MockmoduleReconcilerHelperAPI) handleDriverContainer(ctx context.Context, mld *api.ModuleLoaderData, existingModuleDS []v1.DaemonSet) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "handleDriverContainer", ctx, mld, existingModuleDS)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// handleDriverContainer indicates an expected call of handleDriverContainer.
-func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDriverContainer(ctx, mld, existingModuleDS interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDriverContainer", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDriverContainer), ctx, mld, existingModuleDS)
-}
-
 // handleSigning mocks base method.
 func (m *MockmoduleReconcilerHelperAPI) handleSigning(ctx context.Context, mld *api.ModuleLoaderData) (bool, error) {
 	m.ctrl.T.Helper()

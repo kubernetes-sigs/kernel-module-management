@@ -57,9 +57,7 @@ kubectl apply -f ci/managedclustermodule-kmm-ci-build-sign.yaml
 timeout 1m bash -c 'until kubectl -n ${MINIKUBE} get manifestwork/mod-example; do sleep 1; done'
 kubectl get manifestwork/mod-example -n ${MINIKUBE} -o yaml | yq '.spec.workload.manifests'
 
-# Validate that the Module and the ModuleLoader are running and make sure it has no `build`/`sign` sections
+# Validate that the Module has no `build`/`sign` sections
 timeout 1m bash -c 'until kubectl -n ${OPERATOR_NAMESPACE} get module/mod-example; do sleep 1; done'
-export moduleloader_pod=$(kubectl -n ${OPERATOR_NAMESPACE} get pods | grep mod-example | grep -v build | grep -v sign | cut -d" " -f1)
-kubectl -n ${OPERATOR_NAMESPACE} wait --for=condition=Ready --timeout=1m pod/${moduleloader_pod}
 kubectl -n ${OPERATOR_NAMESPACE} get module/mod-example -o json | \
     jq '.spec.moduleLoader.container.kernelMappings[] | (.build | type) == "null" and (.sign // null | type) == "null"' | grep true
