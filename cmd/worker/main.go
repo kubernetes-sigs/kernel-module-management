@@ -74,8 +74,6 @@ var kmodUnloadCmd = &cobra.Command{
 }
 
 func main() {
-	var imgBaseDir string
-
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 	defer cancel()
 
@@ -87,7 +85,6 @@ func main() {
 	klog.InitFlags(klogFlagSet)
 
 	rootCmd.PersistentFlags().AddGoFlagSet(klogFlagSet)
-	rootCmd.PersistentFlags().StringVar(&imgBaseDir, "img-base-dir", "/mnt/img", "path to the base directory for extracted images")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		logger = klogr.New().WithName("kmm-worker")
@@ -106,7 +103,7 @@ func main() {
 			return fmt.Errorf("could not read pull secrets: %v", err)
 		}
 
-		ip := worker.NewImagePuller(imgBaseDir, keyChain, logger)
+		ip := worker.NewImagePuller(worker.ImagesDir, keyChain, logger)
 		mr := worker.NewModprobeRunner(logger)
 		w = worker.NewWorker(ip, mr, logger)
 
