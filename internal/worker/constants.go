@@ -1,3 +1,6 @@
 package worker
 
-const PullSecretsDir = "/var/run/kmm/pull-secrets"
+const (
+	ImagesDir      = "/var/run/kmm/images"
+	PullSecretsDir = "/var/run/kmm/pull-secrets"
+)

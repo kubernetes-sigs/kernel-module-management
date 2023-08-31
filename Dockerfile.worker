@@ -35,6 +35,6 @@ RUN ["apk", "add", "ca-certificates", "kmod"]
 WORKDIR /
 
 COPY --from=builder /workspace/worker /worker
-RUN ["mkdir", "-p", "/mnt/img", "/var/run/kmm/pull-secrets"]
+RUN ["mkdir", "-p", "/var/run/kmm/images", "/var/run/kmm/pull-secrets"]
 
 ENTRYPOINT ["/worker"]
