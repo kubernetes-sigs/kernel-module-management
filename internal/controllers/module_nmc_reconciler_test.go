@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -27,24 +28,21 @@ import (
 var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 	var (
 		ctrl            *gomock.Controller
-		mockKernel      *module.MockKernelMapper
 		mockReconHelper *MockmoduleNMCReconcilerHelperAPI
 		mnr             *ModuleNMCReconciler
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		mockKernel = module.NewMockKernelMapper(ctrl)
 		mockReconHelper = NewMockmoduleNMCReconcilerHelperAPI(ctrl)
 
 		mnr = &ModuleNMCReconciler{
-			kernelAPI:   mockKernel,
 			reconHelper: mockReconHelper,
 		}
 	})
 
 	const moduleName = "test-module"
-	const kernelVersion = "kernel version"
+	const nodeName = "nodeName"
 
 	nsn := types.NamespacedName{
 		Name:      moduleName,
@@ -54,6 +52,16 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 	req := reconcile.Request{NamespacedName: nsn}
 
 	ctx := context.Background()
+	mod := kmmv1beta1.Module{}
+	node := v1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+	}
+	targetedNodes := []v1.Node{node}
+	currentNMCs := sets.New[string](nodeName)
+	mld := api.ModuleLoaderData{KernelVersion: "some version"}
+	enableSchedulingData := schedulingData{mld: &mld, node: &node}
+	disableSchedulingData := schedulingData{mld: nil, nmcExists: true}
+	disableSchedulingDataNoNMC := schedulingData{mld: nil, nmcExists: false}
 
 	It("should return ok if module has been deleted", func() {
 		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "whatever"))
@@ -81,17 +89,14 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 	DescribeTable("check error flows", func(getModuleError,
 		setFinalizerError,
 		getNodesError,
-		getMLDError,
-		shouldRunOnNodeError,
+		getNMCsMapError,
+		prepareSchedulingError,
 		shouldBeOnNode bool) {
-		mod := kmmv1beta1.Module{}
-		node := v1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: moduleName},
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-			},
+
+		nmcMLDConfigs := map[string]schedulingData{"nodeName": disableSchedulingData}
+		if shouldBeOnNode {
+			nmcMLDConfigs = map[string]schedulingData{"nodeName": enableSchedulingData}
 		}
-		mld := api.ModuleLoaderData{KernelVersion: kernelVersion}
 		returnedError := fmt.Errorf("some error")
 		if getModuleError {
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(nil, returnedError)
@@ -104,22 +109,22 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		}
 		mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil)
 		if getNodesError {
-			mockReconHelper.EXPECT().getNodesList(ctx).Return(nil, returnedError)
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().getNodesList(ctx).Return([]v1.Node{node}, nil)
-		if getMLDError {
-			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, returnedError)
+		mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil)
+		if getNMCsMapError {
+			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
-		if shouldRunOnNodeError {
-			mockReconHelper.EXPECT().shouldModuleRunOnNode(node, &mld).Return(shouldBeOnNode, returnedError)
+		mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil)
+		if prepareSchedulingError {
+			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nil, []error{returnedError})
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().shouldModuleRunOnNode(node, &mld).Return(shouldBeOnNode, nil)
+		mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, []error{})
 		if shouldBeOnNode {
-			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node, kernelVersion).Return(returnedError)
+			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(returnedError)
 		} else {
 			mockReconHelper.EXPECT().disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name).Return(returnedError)
 		}
@@ -133,28 +138,22 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 	},
 		Entry("getRequestedModule failed", true, false, false, false, false, false),
 		Entry("setFinalizer failed", false, true, false, false, false, false),
-		Entry("getNodesList failed", false, false, true, false, false, false),
-		Entry("getModuleLoaderDataForKernel failed", false, false, false, true, false, false),
-		Entry("shouldModuleRunOnNode failed", false, false, false, false, true, false),
+		Entry("getNodesListBySelector failed", false, false, true, false, false, false),
+		Entry("getNMCsByModuleMap failed", false, false, false, true, false, false),
+		Entry("prepareSchedulingData failed", false, false, false, false, true, false),
 		Entry("enableModuleOnNode failed", false, false, false, false, false, true),
 		Entry("disableModuleOnNode failed", false, false, false, false, false, false),
 	)
 
-	It("Good flow, kernel mapping exists, should run on node", func() {
-		mod := kmmv1beta1.Module{}
-		node := v1.Node{
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-			},
-		}
-		mld := api.ModuleLoaderData{KernelVersion: kernelVersion}
+	It("Good flow, should run on node", func() {
+		nmcMLDConfigs := map[string]schedulingData{nodeName: enableSchedulingData}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
 			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil),
-			mockReconHelper.EXPECT().getNodesList(ctx).Return([]v1.Node{node}, nil),
-			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
-			mockReconHelper.EXPECT().shouldModuleRunOnNode(node, &mld).Return(true, nil),
-			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node, kernelVersion).Return(nil),
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
+			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
+			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(nil),
 		)
 
 		res, err := mnr.Reconcile(ctx, req)
@@ -163,20 +162,31 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Good flow, kernel mapping missing, should not run on node", func() {
-		mod := kmmv1beta1.Module{}
-		node := v1.Node{
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-			},
-		}
+	It("Good flow, should not run on node, nmc exists", func() {
+		nmcMLDConfigs := map[string]schedulingData{nodeName: disableSchedulingData}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
 			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil),
-			mockReconHelper.EXPECT().getNodesList(ctx).Return([]v1.Node{node}, nil),
-			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, module.ErrNoMatchingKernelMapping),
-			mockReconHelper.EXPECT().shouldModuleRunOnNode(node, nil).Return(false, nil),
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
+			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 			mockReconHelper.EXPECT().disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name).Return(nil),
+		)
+
+		res, err := mnr.Reconcile(ctx, req)
+
+		Expect(res).To(Equal(reconcile.Result{}))
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("Good flow, should not run on node, nmc does not exist", func() {
+		nmcMLDConfigs := map[string]schedulingData{nodeName: disableSchedulingDataNoNMC}
+		gomock.InOrder(
+			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
+			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil),
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
+			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 		)
 
 		res, err := mnr.Reconcile(ctx, req)
@@ -197,7 +207,7 @@ var _ = Describe("ModuleReconciler_getRequestedModule", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, scheme)
+		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, nil, scheme)
 	})
 
 	ctx := context.Background()
@@ -229,7 +239,7 @@ var _ = Describe("ModuleReconciler_getRequestedModule", func() {
 
 })
 
-var _ = Describe("ModuleReconciler_getRequestedModule", func() {
+var _ = Describe("setFinalizer", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
@@ -240,7 +250,7 @@ var _ = Describe("ModuleReconciler_getRequestedModule", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, scheme)
+		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, nil, scheme)
 		mod = kmmv1beta1.Module{}
 	})
 
@@ -267,7 +277,7 @@ var _ = Describe("ModuleReconciler_getRequestedModule", func() {
 	})
 })
 
-var _ = Describe("ModuleReconciler_getNodes", func() {
+var _ = Describe("getNodesListBySelector", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
@@ -277,7 +287,7 @@ var _ = Describe("ModuleReconciler_getNodes", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, scheme)
+		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, nil, scheme)
 	})
 
 	ctx := context.Background()
@@ -285,7 +295,7 @@ var _ = Describe("ModuleReconciler_getNodes", func() {
 	It("list failed", func() {
 		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
 
-		nodes, err := mnrh.getNodesList(ctx)
+		nodes, err := mnrh.getNodesListBySelector(ctx, &kmmv1beta1.Module{})
 
 		Expect(err).To(HaveOccurred())
 		Expect(nodes).To(BeNil())
@@ -301,7 +311,7 @@ var _ = Describe("ModuleReconciler_getNodes", func() {
 				return nil
 			},
 		)
-		nodes, err := mnrh.getNodesList(ctx)
+		nodes, err := mnrh.getNodesListBySelector(ctx, &kmmv1beta1.Module{})
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(nodes).To(Equal([]v1.Node{node1, node2, node3}))
@@ -324,7 +334,7 @@ var _ = Describe("finalizeModule", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, helper, scheme)
+		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, helper, scheme)
 		mod = &kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
 		}
@@ -396,90 +406,141 @@ var _ = Describe("finalizeModule", func() {
 	})
 })
 
-var _ = Describe("shouldModuleRunOnNode", func() {
+var _ = Describe("getNMCsByModuleSet", func() {
 	var (
-		mnrh          moduleNMCReconcilerHelperAPI
-		kernelVersion string
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		mnrh moduleNMCReconcilerHelperAPI
 	)
 
 	BeforeEach(func() {
-		mnrh = newModuleNMCReconcilerHelper(nil, nil, nil, scheme)
-		kernelVersion = "some version"
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, nil, scheme)
 	})
 
-	It("kernel version not equal", func() {
-		node := v1.Node{
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{
-					KernelVersion: kernelVersion,
-				},
-			},
-		}
-		mld := &api.ModuleLoaderData{
-			KernelVersion: "other kernelVersion",
-		}
+	ctx := context.Background()
 
-		res, err := mnrh.shouldModuleRunOnNode(node, mld)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(res).To(BeFalse())
+	It("list failed", func() {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		nodes, err := mnrh.getNMCsByModuleSet(ctx, &kmmv1beta1.Module{})
+
+		Expect(err).To(HaveOccurred())
+		Expect(nodes).To(BeNil())
 	})
 
-	It("node not schedulable", func() {
-		node := v1.Node{
-			Spec: v1.NodeSpec{
-				Taints: []v1.Taint{
-					v1.Taint{
-						Effect: v1.TaintEffectNoSchedule,
-					},
-				},
-			},
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{
-					KernelVersion: kernelVersion,
-				},
-			},
+	It("Return NMCs", func() {
+		nmc1 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc1"},
 		}
-
-		mld := &api.ModuleLoaderData{
-			KernelVersion: kernelVersion,
+		nmc2 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc2"},
 		}
+		nmc3 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc3"},
+		}
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+				list.Items = []kmmv1beta1.NodeModulesConfig{nmc1, nmc2, nmc3}
+				return nil
+			},
+		)
 
-		res, err := mnrh.shouldModuleRunOnNode(node, mld)
+		nmcsSet, err := mnrh.getNMCsByModuleSet(ctx, &kmmv1beta1.Module{})
+
+		expectedSet := sets.New[string]([]string{"nmc1", "nmc2", "nmc3"}...)
+
 		Expect(err).NotTo(HaveOccurred())
-		Expect(res).To(BeFalse())
+		Expect(nmcsSet.Equal(expectedSet)).To(BeTrue())
+
 	})
+})
 
-	DescribeTable("selector vs node labels verification", func(mldSelector, nodeLabels map[string]string, expectedResult bool) {
-		mld := &api.ModuleLoaderData{
-			KernelVersion: kernelVersion,
-			Selector:      mldSelector,
-		}
-		node := v1.Node{
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{
-					KernelVersion: kernelVersion,
-				},
-			},
-		}
-		node.SetLabels(nodeLabels)
-
-		res, err := mnrh.shouldModuleRunOnNode(node, mld)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(res).To(Equal(expectedResult))
-	},
-		Entry("selector label not present in nodes'",
-			map[string]string{"label_1": "label_1_value", "label_2": "label_2_value"},
-			map[string]string{"label_1": "label_1_value", "label_3": "label_3_value"},
-			false),
-		Entry("selector labels present in nodes'",
-			map[string]string{"label_1": "label_1_value", "label_2": "label_2_value"},
-			map[string]string{"label_1": "label_1_value", "label_2": "label_2_value"},
-			true),
-		Entry("no selector labels'",
-			nil,
-			map[string]string{"label_1": "label_1_value", "label_2": "label_2_value"},
-			true),
+var _ = Describe("prepareSchedulingData", func() {
+	var (
+		ctrl       *gomock.Controller
+		clnt       *client.MockClient
+		mockKernel *module.MockKernelMapper
+		mockHelper *nmc.MockHelper
+		mnrh       moduleNMCReconcilerHelperAPI
 	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mockKernel = module.NewMockKernelMapper(ctrl)
+		mockHelper = nmc.NewMockHelper(ctrl)
+		mnrh = newModuleNMCReconcilerHelper(clnt, mockKernel, nil, mockHelper, scheme)
+	})
+
+	const kernelVersion = "some kernel version"
+	const nodeName = "nodeName"
+
+	ctx := context.Background()
+	mod := kmmv1beta1.Module{}
+	node := v1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+		Status: v1.NodeStatus{
+			NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
+		},
+	}
+	targetedNodes := []v1.Node{node}
+	mld := api.ModuleLoaderData{KernelVersion: "some version"}
+
+	It("failed to determine mld", func() {
+		currentNMCs := sets.New[string](nodeName)
+		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
+
+		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+
+		Expect(len(errs)).To(Equal(1))
+		Expect(scheduleData).To(Equal(map[string]schedulingData{}))
+	})
+
+	It("mld for kernel version does not exists", func() {
+		currentNMCs := sets.New[string](nodeName)
+		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, module.ErrNoMatchingKernelMapping)
+
+		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+
+		expectedScheduleData := map[string]schedulingData{nodeName: schedulingData{mld: nil, node: &node, nmcExists: true}}
+		Expect(errs).To(BeEmpty())
+		Expect(scheduleData).To(Equal(expectedScheduleData))
+	})
+
+	It("mld exists", func() {
+		currentNMCs := sets.New[string](nodeName)
+		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
+
+		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+
+		expectedScheduleData := map[string]schedulingData{nodeName: schedulingData{mld: &mld, node: &node, nmcExists: true}}
+		Expect(errs).To(BeEmpty())
+		Expect(scheduleData).To(Equal(expectedScheduleData))
+	})
+
+	It("mld exists, nmc exists for other node", func() {
+		currentNMCs := sets.New[string]("some other node")
+		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
+
+		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+
+		Expect(errs).To(BeEmpty())
+		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{mld: &mld, node: &node, nmcExists: false}))
+		Expect(scheduleData).To(HaveKeyWithValue("some other node", schedulingData{mld: nil, nmcExists: true}))
+	})
+
+	It("failed to determine mld for one of the nodes/nmcs", func() {
+		currentNMCs := sets.New[string]("some other node")
+		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
+
+		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+
+		Expect(errs).NotTo(BeEmpty())
+		expectedScheduleData := map[string]schedulingData{"some other node": schedulingData{mld: nil, nmcExists: true}}
+		Expect(scheduleData).To(Equal(expectedScheduleData))
+	})
 })
 
 var _ = Describe("enableModuleOnNode", func() {
@@ -501,7 +562,7 @@ var _ = Describe("enableModuleOnNode", func() {
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
 		rgst = registry.NewMockRegistry(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, rgst, helper, scheme)
+		mnrh = newModuleNMCReconcilerHelper(clnt, nil, rgst, helper, scheme)
 		node = v1.Node{
 			ObjectMeta: metav1.ObjectMeta{Name: "nodeName"},
 		}
@@ -525,13 +586,13 @@ var _ = Describe("enableModuleOnNode", func() {
 
 	It("Image does not exists", func() {
 		rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(false, nil)
-		err := mnrh.enableModuleOnNode(ctx, mld, &node, kernelVersion)
+		err := mnrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("Failed to check if image exists", func() {
 		rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(false, fmt.Errorf("some error"))
-		err := mnrh.enableModuleOnNode(ctx, mld, &node, kernelVersion)
+		err := mnrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -547,7 +608,7 @@ var _ = Describe("enableModuleOnNode", func() {
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 		)
 
-		err := mnrh.enableModuleOnNode(ctx, mld, &node, kernelVersion)
+		err := mnrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -567,7 +628,7 @@ var _ = Describe("enableModuleOnNode", func() {
 			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil),
 		)
 
-		err := mnrh.enableModuleOnNode(ctx, mld, &node, kernelVersion)
+		err := mnrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
@@ -589,24 +650,10 @@ var _ = Describe("disableModuleOnNode", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, helper, scheme)
+		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, helper, scheme)
 		nodeName = "node name"
 		moduleName = "moduleName"
 		moduleNamespace = "moduleNamespace"
-	})
-
-	It("NMC does not exists", func() {
-		helper.EXPECT().Get(ctx, nodeName).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, nodeName))
-
-		err := mnrh.disableModuleOnNode(ctx, moduleNamespace, moduleName, nodeName)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	It("failed to get NMC", func() {
-		helper.EXPECT().Get(ctx, nodeName).Return(nil, fmt.Errorf("some error"))
-
-		err := mnrh.disableModuleOnNode(ctx, moduleNamespace, moduleName, nodeName)
-		Expect(err).To(HaveOccurred())
 	})
 
 	It("NMC exists", func() {
@@ -614,7 +661,6 @@ var _ = Describe("disableModuleOnNode", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 		}
 		gomock.InOrder(
-			helper.EXPECT().Get(ctx, nodeName).Return(nmc, nil),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, nmc *kmmv1beta1.NodeModulesConfig, _ ...ctrlclient.GetOption) error {
 					nmc.SetName(nodeName)

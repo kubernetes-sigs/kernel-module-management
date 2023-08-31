@@ -13,7 +13,8 @@ const (
 	DevicePluginVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-device-plugin"
 	ModuleVersionLabelPrefix       = "kmm.node.kubernetes.io/version-module"
 
-	ModuleFinalizer = "kmm.node.kubernetes.io/module-finalizer"
+	ModuleFinalizer      = "kmm.node.kubernetes.io/module-finalizer"
+	ModuleNMCLabelPrefix = "beta.kmm.node.kubernetes.io/nmc"
 
 	ManagedClusterModuleNameLabel  = "kmm.node.kubernetes.io/managedclustermodule.name"
 	KernelVersionsClusterClaimName = "kernel-versions.kmm.node.kubernetes.io"
