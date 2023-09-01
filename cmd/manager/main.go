@@ -167,7 +167,7 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
-	if err = controllers.NewNMCReconciler(client, scheme, workerImage).SetupWithManager(ctx, mgr); err != nil {
+	if err = controllers.NewNMCReconciler(client, scheme, workerImage, &cfg.Worker).SetupWithManager(ctx, mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeModulesConfigReconcilerName)
 	}
 

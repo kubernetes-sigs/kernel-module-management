@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
@@ -55,8 +56,13 @@ type NMCReconciler struct {
 	helper workerHelper
 }
 
-func NewNMCReconciler(client client.Client, scheme *runtime.Scheme, workerImage string) *NMCReconciler {
-	pm := newPodManager(client, workerImage, scheme)
+func NewNMCReconciler(
+	client client.Client,
+	scheme *runtime.Scheme,
+	workerImage string,
+	workerCfg *config.Worker,
+) *NMCReconciler {
+	pm := newPodManager(client, workerImage, scheme, workerCfg)
 	helper := newWorkerHelper(client, pm)
 	return &NMCReconciler{
 		client: client,
@@ -462,14 +468,16 @@ type podManagerImpl struct {
 	client      client.Client
 	psh         pullSecretHelper
 	scheme      *runtime.Scheme
+	workerCfg   *config.Worker
 	workerImage string
 }
 
-func newPodManager(client client.Client, workerImage string, scheme *runtime.Scheme) podManager {
+func newPodManager(client client.Client, workerImage string, scheme *runtime.Scheme, workerCfg *config.Worker) podManager {
 	return &podManagerImpl{
 		client:      client,
 		psh:         &pullSecretHelperImpl{client: client},
 		scheme:      scheme,
+		workerCfg:   workerCfg,
 		workerImage: workerImage,
 	}
 }
@@ -678,6 +686,8 @@ func (p *podManagerImpl) baseWorkerPod(
 						Capabilities: &v1.Capabilities{
 							Add: []v1.Capability{"SYS_MODULE"},
 						},
+						RunAsUser:      p.workerCfg.RunAsUser,
+						SELinuxOptions: &v1.SELinuxOptions{Type: p.workerCfg.SELinuxType},
 					},
 				},
 			},

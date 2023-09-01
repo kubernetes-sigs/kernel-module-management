@@ -4,4 +4,7 @@ webhookPort: 9443
 leaderElection:
   enabled: true
   resourceID: some-resource-id
+worker:
+  runAsUser: 1234
+  seLinuxType: mySELinuxType
 
