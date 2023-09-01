@@ -13,6 +13,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	types "k8s.io/apimachinery/pkg/types"
+	sets "k8s.io/apimachinery/pkg/util/sets"
 )
 
 // MockmoduleNMCReconcilerHelperAPI is a mock of moduleNMCReconcilerHelperAPI interface.
@@ -53,17 +54,17 @@ func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) disableModuleOnNode(ctx,
 }
 
 // enableModuleOnNode mocks base method.
-func (m *MockmoduleNMCReconcilerHelperAPI) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node, kernelVersion string) error {
+func (m *MockmoduleNMCReconcilerHelperAPI) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "enableModuleOnNode", ctx, mld, node, kernelVersion)
+	ret := m.ctrl.Call(m, "enableModuleOnNode", ctx, mld, node)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // enableModuleOnNode indicates an expected call of enableModuleOnNode.
-func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) enableModuleOnNode(ctx, mld, node, kernelVersion interface{}) *gomock.Call {
+func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) enableModuleOnNode(ctx, mld, node interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "enableModuleOnNode", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).enableModuleOnNode), ctx, mld, node, kernelVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "enableModuleOnNode", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).enableModuleOnNode), ctx, mld, node)
 }
 
 // finalizeModule mocks base method.
@@ -80,19 +81,34 @@ func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) finalizeModule(ctx, mod 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "finalizeModule", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).finalizeModule), ctx, mod)
 }
 
-// getNodesList mocks base method.
-func (m *MockmoduleNMCReconcilerHelperAPI) getNodesList(ctx context.Context) ([]v1.Node, error) {
+// getNMCsByModuleSet mocks base method.
+func (m *MockmoduleNMCReconcilerHelperAPI) getNMCsByModuleSet(ctx context.Context, mod *v1beta1.Module) (sets.Set[string], error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getNodesList", ctx)
+	ret := m.ctrl.Call(m, "getNMCsByModuleSet", ctx, mod)
+	ret0, _ := ret[0].(sets.Set[string])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// getNMCsByModuleSet indicates an expected call of getNMCsByModuleSet.
+func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getNMCsByModuleSet(ctx, mod interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNMCsByModuleSet", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getNMCsByModuleSet), ctx, mod)
+}
+
+// getNodesListBySelector mocks base method.
+func (m *MockmoduleNMCReconcilerHelperAPI) getNodesListBySelector(ctx context.Context, mod *v1beta1.Module) ([]v1.Node, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getNodesListBySelector", ctx, mod)
 	ret0, _ := ret[0].([]v1.Node)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// getNodesList indicates an expected call of getNodesList.
-func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getNodesList(ctx interface{}) *gomock.Call {
+// getNodesListBySelector indicates an expected call of getNodesListBySelector.
+func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getNodesListBySelector(ctx, mod interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNodesList", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getNodesList), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNodesListBySelector", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getNodesListBySelector), ctx, mod)
 }
 
 // getRequestedModule mocks base method.
@@ -110,6 +126,21 @@ func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getRequestedModule(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getRequestedModule", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getRequestedModule), ctx, namespacedName)
 }
 
+// prepareSchedulingData mocks base method.
+func (m *MockmoduleNMCReconcilerHelperAPI) prepareSchedulingData(ctx context.Context, mod *v1beta1.Module, targetedNodes []v1.Node, currentNMCs sets.Set[string]) (map[string]schedulingData, []error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "prepareSchedulingData", ctx, mod, targetedNodes, currentNMCs)
+	ret0, _ := ret[0].(map[string]schedulingData)
+	ret1, _ := ret[1].([]error)
+	return ret0, ret1
+}
+
+// prepareSchedulingData indicates an expected call of prepareSchedulingData.
+func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareSchedulingData", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).prepareSchedulingData), ctx, mod, targetedNodes, currentNMCs)
+}
+
 // setFinalizer mocks base method.
 func (m *MockmoduleNMCReconcilerHelperAPI) setFinalizer(ctx context.Context, mod *v1beta1.Module) error {
 	m.ctrl.T.Helper()
@@ -122,19 +153,4 @@ func (m *MockmoduleNMCReconcilerHelperAPI) setFinalizer(ctx context.Context, mod
 func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) setFinalizer(ctx, mod interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setFinalizer", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).setFinalizer), ctx, mod)
-}
-
-// shouldModuleRunOnNode mocks base method.
-func (m *MockmoduleNMCReconcilerHelperAPI) shouldModuleRunOnNode(node v1.Node, mld *api.ModuleLoaderData) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "shouldModuleRunOnNode", node, mld)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// shouldModuleRunOnNode indicates an expected call of shouldModuleRunOnNode.
-func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) shouldModuleRunOnNode(node, mld interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "shouldModuleRunOnNode", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).shouldModuleRunOnNode), node, mld)
 }

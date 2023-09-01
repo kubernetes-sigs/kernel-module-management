@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"go.uber.org/mock/gomock"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -99,6 +100,7 @@ var _ = Describe("SetModuleConfig", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(3))
 		Expect(nmc.Spec.Modules[2].Config.InTreeModuleToRemove).To(Equal("in-tree-module"))
+		Expect(nmc.GetLabels()).To(HaveKeyWithValue(utils.GetModuleNMCLabel(namespace, name), ""))
 	})
 
 	It("changing existing module config", func() {
@@ -125,6 +127,7 @@ var _ = Describe("SetModuleConfig", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(2))
 		Expect(nmc.Spec.Modules[1].Config.InTreeModuleToRemove).To(Equal("in-tree-module"))
+		Expect(nmc.GetLabels()).To(HaveKeyWithValue(utils.GetModuleNMCLabel(namespace, name), ""))
 	})
 })
 
@@ -164,9 +167,11 @@ var _ = Describe("RemoveModuleConfig", func() {
 		Expect(len(nmc.Spec.Modules)).To(Equal(2))
 		Expect(nmc.Spec.Modules[0].Config.InTreeModuleToRemove).To(Equal("some-in-tree-module-1"))
 		Expect(nmc.Spec.Modules[1].Config.InTreeModuleToRemove).To(Equal("some-in-tree-module-2"))
+		Expect(nmc.GetLabels()).NotTo(HaveKeyWithValue(utils.GetModuleNMCLabel(namespace, name), ""))
 	})
 
 	It("deleting existing module", func() {
+		nmc.SetLabels(map[string]string{utils.GetModuleNMCLabel(namespace, name): ""})
 		nmc.Spec.Modules = []kmmv1beta1.NodeModuleSpec{
 			{
 				ModuleItem: kmmv1beta1.ModuleItem{
@@ -189,6 +194,7 @@ var _ = Describe("RemoveModuleConfig", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(1))
 		Expect(nmc.Spec.Modules[0].Config.InTreeModuleToRemove).To(Equal("some-in-tree-module-1"))
+		Expect(nmc.GetLabels()).NotTo(HaveKeyWithValue(utils.GetModuleNMCLabel(namespace, name), ""))
 	})
 })
 
