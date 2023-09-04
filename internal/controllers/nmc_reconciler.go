@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
@@ -267,7 +268,7 @@ func (w *workerHelperImpl) ProcessModuleSpec(
 	}
 
 	if readyCondition.Status == v1.ConditionTrue && status.LastTransitionTime.Before(&readyCondition.LastTransitionTime) {
-		logger.Info("Outdated last transition time status; creating unloader Pod")
+		logger.Info("Outdated last transition time status; creating loader Pod")
 
 		return w.pm.CreateLoaderPod(ctx, nmc, spec)
 	}
@@ -497,6 +498,12 @@ func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object,
 		return fmt.Errorf("could not set worker config: %v", err)
 	}
 
+	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
+		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
+			return fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
+		}
+	}
+
 	setWorkerActionLabel(pod, WorkerActionLoad)
 	pod.Spec.RestartPolicy = v1.RestartPolicyNever
 
@@ -515,6 +522,12 @@ func (p *podManagerImpl) CreateUnloaderPod(ctx context.Context, nmc client.Objec
 
 	if err = setWorkerConfigAnnotation(pod, *nms.Config); err != nil {
 		return fmt.Errorf("could not set worker config: %v", err)
+	}
+
+	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
+		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
+			return fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
+		}
 	}
 
 	setWorkerActionLabel(pod, WorkerActionUnload)
@@ -725,16 +738,7 @@ func setWorkerConfigAnnotation(pod *v1.Pod, cfg kmmv1beta1.ModuleConfig) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal the ModuleConfig to YAML: %v", err)
 	}
-
-	annotations := pod.GetAnnotations()
-
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-
-	annotations[configAnnotationKey] = string(b)
-
-	pod.SetAnnotations(annotations)
+	setWorkerPodAnnotation(pod, configAnnotationKey, string(b))
 
 	return nil
 }
@@ -748,6 +752,54 @@ func setWorkerContainerArgs(pod *v1.Pod, args []string) error {
 	container.Args = args
 
 	return nil
+}
+
+func setWorkerSofdepConfig(pod *v1.Pod, modulesLoadingOrder []string) error {
+	softdepAnnotationValue := getModulesOrderAnnotationValue(modulesLoadingOrder)
+	setWorkerPodAnnotation(pod, "modules-order", softdepAnnotationValue)
+
+	softdepVolume := v1.Volume{
+		Name: "modules-order",
+		VolumeSource: v1.VolumeSource{
+			DownwardAPI: &v1.DownwardAPIVolumeSource{
+				Items: []v1.DownwardAPIVolumeFile{
+					{
+						Path:     "softdep.conf",
+						FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.annotations['modules-order']"},
+					},
+				},
+			},
+		},
+	}
+	softDepVolumeMount := v1.VolumeMount{
+		Name:      "modules-order",
+		ReadOnly:  true,
+		MountPath: "/etc/modprobe.d",
+	}
+	pod.Spec.Volumes = append(pod.Spec.Volumes, softdepVolume)
+	container, _ := podcmd.FindContainerByName(pod, workerContainerName)
+	if container == nil {
+		return errors.New("could not find the worker container")
+	}
+	container.VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, softDepVolumeMount)
+	return nil
+}
+
+func getModulesOrderAnnotationValue(modulesNames []string) string {
+	var softDepData strings.Builder
+	for i := 0; i < len(modulesNames)-1; i++ {
+		fmt.Fprintf(&softDepData, "softdep %s pre: %s\n", modulesNames[i], modulesNames[i+1])
+	}
+	return softDepData.String()
+}
+
+func setWorkerPodAnnotation(pod *v1.Pod, key, value string) {
+	annotations := pod.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[key] = value
+	pod.SetAnnotations(annotations)
 }
 
 //go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go pullSecretHelper

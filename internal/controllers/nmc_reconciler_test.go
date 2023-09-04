@@ -998,6 +998,9 @@ modprobe:
   - a
   - b
 `,
+				"modules-order": `softdep a pre: b
+softdep b pre: c
+`,
 			},
 		},
 		Spec: v1.PodSpec{
@@ -1032,6 +1035,11 @@ modprobe:
 						{
 							Name:      volNameVarLibFirmware,
 							MountPath: "/var/lib/firmware",
+						},
+						{
+							Name:      "modules-order",
+							ReadOnly:  true,
+							MountPath: "/etc/modprobe.d",
 						},
 					},
 				},
@@ -1079,6 +1087,19 @@ modprobe:
 						HostPath: &v1.HostPathVolumeSource{
 							Path: "/var/lib/firmware",
 							Type: &hostPathDirectoryOrCreate,
+						},
+					},
+				},
+				{
+					Name: "modules-order",
+					VolumeSource: v1.VolumeSource{
+						DownwardAPI: &v1.DownwardAPIVolumeSource{
+							Items: []v1.DownwardAPIVolumeFile{
+								{
+									Path:     "softdep.conf",
+									FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.annotations['modules-order']"},
+								},
+							},
 						},
 					},
 				},
