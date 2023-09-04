@@ -26,7 +26,7 @@ COPY docs.mk docs.mk
 COPY .git .git
 
 # Build
-RUN make worker
+RUN ["make", "worker"]
 
 FROM alpine:3.18
 
@@ -34,7 +34,13 @@ RUN ["apk", "add", "ca-certificates", "kmod"]
 
 WORKDIR /
 
-COPY --from=builder /workspace/worker /worker
-RUN ["mkdir", "-p", "/var/run/kmm/images", "/var/run/kmm/pull-secrets"]
+COPY --from=builder /workspace/worker /usr/local/bin/worker
 
-ENTRYPOINT ["/worker"]
+RUN ["addgroup", "-Sg", "201", "kmm"]
+RUN ["adduser", "-DSs", "/sbin/nologin", "-u", "201", "-G", "kmm", "kmm"]
+RUN ["mkdir", "-p", "/var/run/kmm/images", "/var/run/kmm/pull-secrets"]
+RUN ["chown", "-R", "201:201", "/var/run/kmm/images", "/var/run/kmm/pull-secrets"]
+
+USER 201:201
+
+ENTRYPOINT ["/usr/local/bin/worker"]

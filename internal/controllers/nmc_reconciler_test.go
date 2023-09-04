@@ -11,6 +11,7 @@ import (
 	"github.com/budougumi0617/cmpmock"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	testclient "github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
 	. "github.com/onsi/ginkgo/v2"
@@ -771,6 +772,11 @@ const (
 	workerImage        = "worker-image"
 )
 
+var workerCfg = &config.Worker{
+	RunAsUser:   pointer.Int64(1234),
+	SELinuxType: "someType",
+}
+
 var _ = Describe("podManagerImpl_CreateLoaderPod", func() {
 	It("should work as expected", func() {
 		ctrl := gomock.NewController(GinkgoT())
@@ -814,6 +820,7 @@ var _ = Describe("podManagerImpl_CreateLoaderPod", func() {
 			psh:         psh,
 			scheme:      scheme,
 			workerImage: workerImage,
+			workerCfg:   workerCfg,
 		}
 
 		Expect(
@@ -854,7 +861,7 @@ var _ = Describe("podManagerImpl_CreateUnloaderPod", func() {
 			client.EXPECT().Create(ctx, cmpmock.DiffEq(expected)),
 		)
 
-		pm := newPodManager(client, workerImage, scheme)
+		pm := newPodManager(client, workerImage, scheme, workerCfg)
 		pm.(*podManagerImpl).psh = psh
 
 		Expect(
@@ -892,7 +899,7 @@ var _ = Describe("podManagerImpl_DeletePod", func() {
 			}
 
 			Expect(
-				newPodManager(kubeclient, workerImage, scheme).DeletePod(ctx, patchedPod),
+				newPodManager(kubeclient, workerImage, scheme, workerCfg).DeletePod(ctx, patchedPod),
 			).NotTo(
 				HaveOccurred(),
 			)
@@ -915,7 +922,7 @@ var _ = Describe("podManagerImpl_ListWorkerPodsOnNode", func() {
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		kubeClient = testclient.NewMockClient(ctrl)
-		pm = newPodManager(kubeClient, workerImage, scheme)
+		pm = newPodManager(kubeClient, workerImage, scheme, nil)
 	})
 
 	opts := []interface{}{
@@ -1003,6 +1010,8 @@ modprobe:
 						Capabilities: &v1.Capabilities{
 							Add: []v1.Capability{"SYS_MODULE"},
 						},
+						RunAsUser:      workerCfg.RunAsUser,
+						SELinuxOptions: &v1.SELinuxOptions{Type: workerCfg.SELinuxType},
 					},
 					VolumeMounts: []v1.VolumeMount{
 						{

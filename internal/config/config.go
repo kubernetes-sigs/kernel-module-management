@@ -9,6 +9,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
+type Worker struct {
+	RunAsUser   *int64 `yaml:"runAsUser"`
+	SELinuxType string `yaml:"seLinuxType"`
+}
+
 type LeaderElection struct {
 	Enabled    bool   `yaml:"enabled"`
 	ResourceID string `yaml:"resourceID"`
@@ -19,6 +24,7 @@ type Config struct {
 	MetricsBindAddress     string         `yaml:"metricsBindAddress"`
 	LeaderElection         LeaderElection `yaml:"leaderElection"`
 	WebhookPort            int            `yaml:"webhookPort"`
+	Worker                 Worker         `yaml:"worker"`
 }
 
 func ParseFile(path string) (*Config, error) {

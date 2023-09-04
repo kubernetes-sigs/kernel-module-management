@@ -3,6 +3,7 @@ package config
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/utils/pointer"
 )
 
 var _ = Describe("ParseFile", func() {
@@ -20,6 +21,10 @@ var _ = Describe("ParseFile", func() {
 				ResourceID: "some-resource-id",
 			},
 			WebhookPort: 9443,
+			Worker: Worker{
+				RunAsUser:   pointer.Int64(1234),
+				SELinuxType: "mySELinuxType",
+			},
 		}
 
 		Expect(
