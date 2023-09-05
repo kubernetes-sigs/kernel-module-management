@@ -119,12 +119,12 @@ func (ph *podHelper) CreatePod(ctx context.Context, pod *v1.Pod) error {
 // GetPodStatus returns the status of a Pod, whether the latter is in progress or not and
 // whether there was an error or not
 func (ph *podHelper) GetPodStatus(pod *v1.Pod) (Status, error) {
-	switch {
-	case pod.Status.Phase == v1.PodSucceeded:
+	switch pod.Status.Phase {
+	case v1.PodSucceeded:
 		return StatusCompleted, nil
-	case pod.Status.Phase == v1.PodRunning:
+	case v1.PodRunning, v1.PodPending:
 		return StatusInProgress, nil
-	case pod.Status.Phase == v1.PodFailed:
+	case v1.PodFailed:
 		return StatusFailed, nil
 	default:
 		return "", fmt.Errorf("unknown status: %v", pod.Status)
