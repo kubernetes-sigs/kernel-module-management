@@ -76,11 +76,47 @@ jobs:
           path: kmm-signimage_local.tar
           retention-days: 1
 
+  build-worker-image:
+    runs-on: ubuntu-20.04
+
+    name: Build the worker image
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build the image
+        run:  make workerimage-build WORKER_IMG=kmm-worker:local
+
+      - name: Export the image
+        run: docker save -o kmm-worker_local.tar kmm-worker:local
+
+      - name: Upload the image
+        uses: actions/upload-artifact@v3
+        with:
+          name: ci-images
+          if-no-files-found: error
+          path: kmm-worker_local.tar
+          retention-days: 1
+
   e2e:
+    strategy:
+      matrix:
+        include:
+          - name: e2e
+            env:
+              KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
+            script: ./ci/prow/e2e-incluster-build
+          - name: e2e-hub
+            env:
+              KUSTOMIZE_CONFIG_HUB_DEFAULT: ci/install-ci-hub
+              KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci-spoke
+            import_hub_image: true
+            script: ./ci/prow/e2e-hub-spoke-incluster-build
 
     runs-on: ubuntu-20.04
-    name: e2e
-    needs: [build-operator-image, build-signing-image]
+    name: ${{ matrix.name }}
+    needs: [build-operator-image, build-operator-hub-image, build-signing-image, build-worker-image]
 
     services:
       registry:
@@ -104,76 +140,21 @@ jobs:
 
       - name: Import the KMM operator image into minikube
         run: minikube image load kmm_local.tar
-
-      - name: Copy the signing image to the registry
-        run: |
-          docker load -i kmm-signimage_local.tar
-          docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
-          docker push localhost:5000/kmm/signimage:local
-
-      - name: Set some Ubuntu environment variables
-        run: |
-          grep 'ID=' /etc/os-release >> "$GITHUB_ENV"
-          grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
-
-      - name: Cache binaries needed by Makefile
-        id: cache-bin
-        uses: actions/cache@v3
-        with:
-          path: ./bin
-          key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
-
-      - uses: actions/setup-go@v4
-        with:
-          go-version: ${{ env.GO_VERSION }}
-        if: steps.cache-bin.outputs.cache-hit != 'true'
-
-      - name: Run test
-        run: ./ci/prow/e2e-incluster-build
-        env:
-          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
-
-      - name: Collect troubleshooting data
-        uses: ./.github/actions/collect-troubleshooting
-        if: ${{ always() }}
-
-  e2e-hub:
-
-    runs-on: ubuntu-20.04
-    name: e2e-hub
-    needs: [build-operator-image, build-operator-hub-image, build-signing-image]
-
-    services:
-      registry:
-        image: registry:2
-        ports: ['5000:5000/tcp']
-
-    steps:
-
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Create the minikube cluster
-        uses: ./.github/actions/create-minikube-cluster
-        with:
-          start-args: --insecure-registry=host.minikube.internal:5000
-
-      - name: Download container images
-        uses: actions/download-artifact@v3
-        with:
-          name: ci-images
 
       - name: Import the KMM-hub operator image into minikube
         run: minikube image load kmm-hub_local.tar
+        if: ${{ matrix.import_hub_image }}
 
-      - name: Import the KMM operator image into minikube
-        run: minikube image load kmm_local.tar
-
-      - name: Copy the signing image to the registry
+      - name: Copy the signing and worker images to the registry
         run: |
           docker load -i kmm-signimage_local.tar
+          docker load -i kmm-worker_local.tar
+          
           docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
+          docker tag kmm-worker:local localhost:5000/kmm/worker:local
+          
           docker push localhost:5000/kmm/signimage:local
+          docker push localhost:5000/kmm/worker:local
 
       - name: Set some Ubuntu environment variables
         run: |
@@ -193,10 +174,9 @@ jobs:
         if: steps.cache-bin.outputs.cache-hit != 'true'
 
       - name: Run test
-        run: ./ci/prow/e2e-hub-spoke-incluster-build
+        run: ${{ matrix.script }}
         env:
-          KUSTOMIZE_CONFIG_HUB_DEFAULT: ci/install-ci-hub
-          KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci-spoke
+          ${{ matrix.env }}
 
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
