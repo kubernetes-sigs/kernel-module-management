@@ -71,6 +71,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - kmm.sigs.x-k8s.io
   resources:
   - modules

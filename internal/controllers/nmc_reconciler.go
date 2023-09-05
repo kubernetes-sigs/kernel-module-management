@@ -50,6 +50,7 @@ const (
 //+kubebuilder:rbac:groups="core",resources=pods,verbs=create;delete;get;list;watch
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
 //+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
+//+kubebuilder:rbac:groups="core",resources=serviceaccounts,verbs=get;list;watch
 
 type NMCReconciler struct {
 	client client.Client
