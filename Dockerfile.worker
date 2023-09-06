@@ -30,7 +30,7 @@ RUN ["make", "worker"]
 
 FROM alpine:3.18
 
-RUN ["apk", "add", "ca-certificates", "kmod"]
+RUN ["apk", "add", "ca-certificates", "kmod", "sudo"]
 
 WORKDIR /
 
@@ -40,6 +40,8 @@ RUN ["addgroup", "-Sg", "201", "kmm"]
 RUN ["adduser", "-DSs", "/sbin/nologin", "-u", "201", "-G", "kmm", "kmm"]
 RUN ["mkdir", "-p", "/var/run/kmm/images", "/var/run/kmm/pull-secrets"]
 RUN ["chown", "-R", "201:201", "/var/run/kmm/images", "/var/run/kmm/pull-secrets"]
+
+RUN echo "kmm ALL=(root) NOPASSWD:/sbin/modprobe" >> /etc/sudoers
 
 USER 201:201
 

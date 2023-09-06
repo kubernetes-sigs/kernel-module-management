@@ -23,7 +23,8 @@ func NewModprobeRunner(logger logr.Logger) ModprobeRunner {
 }
 
 func (mr *modprobeRunnerImpl) Run(ctx context.Context, args ...string) error {
-	cmd := exec.CommandContext(ctx, "modprobe", args...)
+	args = append([]string{"modprobe"}, args...)
+	cmd := exec.CommandContext(ctx, "sudo", args...)
 
 	cl, err := NewCommandLogger(cmd, mr.logger.WithName("modprobe"))
 	if err != nil {

@@ -4,6 +4,3 @@ webhookPort: 9443
 leaderElection:
   enabled: true
   resourceID: kmm.sigs.x-k8s.io
-worker:
-  runAsUser: 0
-  seLinuxType: spc_t
