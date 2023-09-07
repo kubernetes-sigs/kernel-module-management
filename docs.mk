@@ -5,4 +5,4 @@ docs: bin/plantuml.jar
 
 bin/plantuml.jar:
 	mkdir -p bin
-	curl -Lo $@ https://sourceforge.net/projects/plantuml/files/1.2022.2/plantuml.1.2022.2.jar/download
+	curl -Lo $@ https://github.com/plantuml/plantuml/releases/download/v1.2023.10/plantuml-1.2023.10.jar
