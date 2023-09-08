@@ -11,6 +11,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -59,9 +60,8 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 	targetedNodes := []v1.Node{node}
 	currentNMCs := sets.New[string](nodeName)
 	mld := api.ModuleLoaderData{KernelVersion: "some version"}
-	enableSchedulingData := schedulingData{mld: &mld, node: &node}
-	disableSchedulingData := schedulingData{mld: nil, nmcExists: true}
-	disableSchedulingDataNoNMC := schedulingData{mld: nil, nmcExists: false}
+	enableSchedulingData := schedulingData{action: actionAdd, mld: &mld, node: &node}
+	disableSchedulingData := schedulingData{action: actionDelete, mld: nil}
 
 	It("should return ok if module has been deleted", func() {
 		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "whatever"))
@@ -162,7 +162,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Good flow, should not run on node, nmc exists", func() {
+	It("Good flow, should not run on node", func() {
 		nmcMLDConfigs := map[string]schedulingData{nodeName: disableSchedulingData}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
@@ -178,23 +178,6 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 	})
-
-	It("Good flow, should not run on node, nmc does not exist", func() {
-		nmcMLDConfigs := map[string]schedulingData{nodeName: disableSchedulingDataNoNMC}
-		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
-			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil),
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil),
-			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
-			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
-		)
-
-		res, err := mnr.Reconcile(ctx, req)
-
-		Expect(res).To(Equal(reconcile.Result{}))
-		Expect(err).NotTo(HaveOccurred())
-	})
-
 })
 
 var _ = Describe("ModuleReconciler_getRequestedModule", func() {
@@ -458,12 +441,20 @@ var _ = Describe("getNMCsByModuleSet", func() {
 })
 
 var _ = Describe("prepareSchedulingData", func() {
+	const (
+		kernelVersion   = "some kernel version"
+		nodeName        = "nodeName"
+		moduleName      = "moduleName"
+		moduleNamespace = "moduleNamespace"
+	)
 	var (
-		ctrl       *gomock.Controller
-		clnt       *client.MockClient
-		mockKernel *module.MockKernelMapper
-		mockHelper *nmc.MockHelper
-		mnrh       moduleNMCReconcilerHelperAPI
+		ctrl          *gomock.Controller
+		clnt          *client.MockClient
+		mockKernel    *module.MockKernelMapper
+		mockHelper    *nmc.MockHelper
+		mnrh          moduleNMCReconcilerHelperAPI
+		node          v1.Node
+		targetedNodes []v1.Node
 	)
 
 	BeforeEach(func() {
@@ -472,26 +463,26 @@ var _ = Describe("prepareSchedulingData", func() {
 		mockKernel = module.NewMockKernelMapper(ctrl)
 		mockHelper = nmc.NewMockHelper(ctrl)
 		mnrh = newModuleNMCReconcilerHelper(clnt, mockKernel, nil, mockHelper, scheme)
+		node = v1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+			Status: v1.NodeStatus{
+				NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
+			},
+		}
+		targetedNodes = []v1.Node{node}
+		fmt.Printf("YEV - kernel version <%s>\n", node.Status.NodeInfo.KernelVersion)
 	})
-
-	const kernelVersion = "some kernel version"
-	const nodeName = "nodeName"
 
 	ctx := context.Background()
 	mod := kmmv1beta1.Module{}
-	node := v1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
-		Status: v1.NodeStatus{
-			NodeInfo: v1.NodeSystemInfo{KernelVersion: kernelVersion},
-		},
-	}
-	targetedNodes := []v1.Node{node}
-	mld := api.ModuleLoaderData{KernelVersion: "some version"}
+	//targetedNodes := []v1.Node{node}
+	mld := api.ModuleLoaderData{KernelVersion: "some version", Name: moduleName, Namespace: moduleNamespace}
 
 	It("failed to determine mld", func() {
 		currentNMCs := sets.New[string](nodeName)
 		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
 
+		fmt.Printf("YEV - in test, before call: <%s>\n", targetedNodes[0].Status.NodeInfo.KernelVersion)
 		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(len(errs)).To(Equal(1))
@@ -504,7 +495,7 @@ var _ = Describe("prepareSchedulingData", func() {
 
 		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
-		expectedScheduleData := map[string]schedulingData{nodeName: schedulingData{mld: nil, node: &node, nmcExists: true}}
+		expectedScheduleData := map[string]schedulingData{nodeName: schedulingData{action: actionDelete}}
 		Expect(errs).To(BeEmpty())
 		Expect(scheduleData).To(Equal(expectedScheduleData))
 	})
@@ -515,7 +506,7 @@ var _ = Describe("prepareSchedulingData", func() {
 
 		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
-		expectedScheduleData := map[string]schedulingData{nodeName: schedulingData{mld: &mld, node: &node, nmcExists: true}}
+		expectedScheduleData := map[string]schedulingData{nodeName: schedulingData{action: actionAdd, mld: &mld, node: &node}}
 		Expect(errs).To(BeEmpty())
 		Expect(scheduleData).To(Equal(expectedScheduleData))
 	})
@@ -527,8 +518,8 @@ var _ = Describe("prepareSchedulingData", func() {
 		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(errs).To(BeEmpty())
-		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{mld: &mld, node: &node, nmcExists: false}))
-		Expect(scheduleData).To(HaveKeyWithValue("some other node", schedulingData{mld: nil, nmcExists: true}))
+		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{action: actionAdd, mld: &mld, node: &node}))
+		Expect(scheduleData).To(HaveKeyWithValue("some other node", schedulingData{action: actionDelete}))
 	})
 
 	It("failed to determine mld for one of the nodes/nmcs", func() {
@@ -538,8 +529,45 @@ var _ = Describe("prepareSchedulingData", func() {
 		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(errs).NotTo(BeEmpty())
-		expectedScheduleData := map[string]schedulingData{"some other node": schedulingData{mld: nil, nmcExists: true}}
+		expectedScheduleData := map[string]schedulingData{"some other node": schedulingData{action: actionDelete}}
 		Expect(scheduleData).To(Equal(expectedScheduleData))
+	})
+
+	It("module version exists, moduleLoader version label exists, versions are equal", func() {
+		node.SetLabels(map[string]string{utils.GetModuleLoaderVersionLabelName(moduleNamespace, moduleName): "moduleVersion1"})
+		targetedNodes[0] = node
+		currentNMCs := sets.New[string](nodeName)
+		mld.ModuleVersion = "moduleVersion1"
+		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
+
+		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+
+		Expect(errs).To(BeEmpty())
+		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{action: actionAdd, mld: &mld, node: &node}))
+	})
+
+	It("module version exists, moduleLoader version label exists, versions are different", func() {
+		node.SetLabels(map[string]string{utils.GetModuleLoaderVersionLabelName(moduleNamespace, moduleName): "moduleVersion1"})
+		targetedNodes[0] = node
+		currentNMCs := sets.New[string](nodeName)
+		mld.ModuleVersion = "moduleVersion2"
+		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
+
+		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+
+		Expect(errs).To(BeEmpty())
+		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{}))
+	})
+
+	It("module version exists, moduleLoader version label does not exist", func() {
+		currentNMCs := sets.New[string](nodeName)
+		mld.ModuleVersion = "moduleVersion2"
+		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
+
+		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+
+		Expect(errs).To(BeEmpty())
+		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{action: actionDelete}))
 	})
 })
 

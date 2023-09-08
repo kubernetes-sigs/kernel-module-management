@@ -55,6 +55,17 @@ func GetNodesVersionLabels(nodeLabels map[string]string) map[string]string {
 	return versionLabels
 }
 
+func GetNodesModuleLoaderVersionLabel(nodeLabels map[string]string, namespace, name string) (string, bool) {
+	if nodeLabels == nil {
+		return "", false
+	}
+	labelValue, ok := nodeLabels[GetModuleLoaderVersionLabelName(namespace, name)]
+	if !ok {
+		return "", false
+	}
+	return labelValue, true
+}
+
 func GetModuleNMCLabel(namespace, name string) string {
 	return fmt.Sprintf("%s.%s.%s", constants.ModuleNMCLabelPrefix, namespace, name)
 }
