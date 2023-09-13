@@ -12,7 +12,6 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/apps/v1"
 	v10 "k8s.io/api/core/v1"
-	sets "k8s.io/apimachinery/pkg/util/sets"
 )
 
 // MockDaemonSetCreator is a mock of DaemonSetCreator interface.
@@ -39,18 +38,18 @@ func (m *MockDaemonSetCreator) EXPECT() *MockDaemonSetCreatorMockRecorder {
 }
 
 // GarbageCollect mocks base method.
-func (m *MockDaemonSetCreator) GarbageCollect(ctx context.Context, mod *v1beta1.Module, existingDS []v1.DaemonSet, validKernels sets.Set[string]) ([]string, error) {
+func (m *MockDaemonSetCreator) GarbageCollect(ctx context.Context, mod *v1beta1.Module, existingDS []v1.DaemonSet) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GarbageCollect", ctx, mod, existingDS, validKernels)
+	ret := m.ctrl.Call(m, "GarbageCollect", ctx, mod, existingDS)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GarbageCollect indicates an expected call of GarbageCollect.
-func (mr *MockDaemonSetCreatorMockRecorder) GarbageCollect(ctx, mod, existingDS, validKernels interface{}) *gomock.Call {
+func (mr *MockDaemonSetCreatorMockRecorder) GarbageCollect(ctx, mod, existingDS interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockDaemonSetCreator)(nil).GarbageCollect), ctx, mod, existingDS, validKernels)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockDaemonSetCreator)(nil).GarbageCollect), ctx, mod, existingDS)
 }
 
 // GetModuleDaemonSets mocks base method.

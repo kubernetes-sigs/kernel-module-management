@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -646,9 +645,8 @@ var _ = Describe("ModuleReconciler_garbageCollect", func() {
 			"kernelVersion1": &api.ModuleLoaderData{}, "kernelVersion2": &api.ModuleLoaderData{},
 		}
 		existingDS := []appsv1.DaemonSet{appsv1.DaemonSet{}, appsv1.DaemonSet{}}
-		kernelSet := sets.New[string]("kernelVersion1", "kernelVersion2")
 		gomock.InOrder(
-			mockDC.EXPECT().GarbageCollect(context.Background(), mod, existingDS, kernelSet).Return(nil, nil),
+			mockDC.EXPECT().GarbageCollect(context.Background(), mod, existingDS).Return(nil, nil),
 			mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, nil),
 			mockSM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, nil),
 		)
@@ -664,12 +662,11 @@ var _ = Describe("ModuleReconciler_garbageCollect", func() {
 			"kernelVersion1": &api.ModuleLoaderData{}, "kernelVersion2": &api.ModuleLoaderData{},
 		}
 		existingDS := []appsv1.DaemonSet{appsv1.DaemonSet{}, appsv1.DaemonSet{}}
-		kernelSet := sets.New[string]("kernelVersion1", "kernelVersion2")
 		if dcError {
-			mockDC.EXPECT().GarbageCollect(context.Background(), mod, existingDS, kernelSet).Return(nil, returnedError)
+			mockDC.EXPECT().GarbageCollect(context.Background(), mod, existingDS).Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mockDC.EXPECT().GarbageCollect(context.Background(), mod, existingDS, kernelSet).Return(nil, nil)
+		mockDC.EXPECT().GarbageCollect(context.Background(), mod, existingDS).Return(nil, nil)
 		if buildError {
 			mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, returnedError)
 			goto executeTestFunction

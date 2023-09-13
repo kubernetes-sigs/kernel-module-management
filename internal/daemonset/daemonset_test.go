@@ -16,7 +16,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/pointer"
 )
 
@@ -299,23 +298,9 @@ var _ = Describe("GarbageCollect", func() {
 			},
 		},
 	}
-	moduleLoaderVersionLabel := utils.GetModuleLoaderVersionLabelName(mod.Namespace, mod.Name)
 	devicePluginVersionLabel := utils.GetDevicePluginVersionLabelName(mod.Namespace, mod.Name)
 
-	DescribeTable("device-plugin and module-loader GC", func(devicePluginFormerLabel, moduleLoaderFormerLabel, moduleLoaderInvalidKernel bool,
-		devicePluginFormerDesired, moduleLoaderFormerDesired int) {
-		moduleLoaderDS := appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "moduleLoader",
-				Namespace: "namespace",
-				Labels: map[string]string{
-					kernelLabel:               legitKernelVersion,
-					constants.DaemonSetRole:   constants.ModuleLoaderRoleLabelValue,
-					moduleLoaderVersionLabel:  currentModuleVersion,
-					constants.ModuleNameLabel: mod.Name,
-				},
-			},
-		}
+	DescribeTable("device-plugin GC", func(devicePluginFormerLabel bool, devicePluginFormerDesired int) {
 		devicePluginDS := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "devicePlugin",
@@ -328,10 +313,8 @@ var _ = Describe("GarbageCollect", func() {
 			},
 		}
 		devicePluginFormerVersionDS := &appsv1.DaemonSet{}
-		moduleLoaderFormerVersionDS := &appsv1.DaemonSet{}
-		moduleLoaderIllegalKernelVersionDS := &appsv1.DaemonSet{}
 
-		existingDS := []appsv1.DaemonSet{moduleLoaderDS, devicePluginDS}
+		existingDS := []appsv1.DaemonSet{devicePluginDS}
 		expectedDeleteNames := []string{}
 		if devicePluginFormerLabel {
 			devicePluginFormerVersionDS = devicePluginDS.DeepCopy()
@@ -340,65 +323,34 @@ var _ = Describe("GarbageCollect", func() {
 			devicePluginFormerVersionDS.Status.DesiredNumberScheduled = int32(devicePluginFormerDesired)
 			existingDS = append(existingDS, *devicePluginFormerVersionDS)
 		}
-		if moduleLoaderFormerLabel {
-			moduleLoaderFormerVersionDS = moduleLoaderDS.DeepCopy()
-			moduleLoaderFormerVersionDS.SetName("moduleLoaderFormer")
-			moduleLoaderFormerVersionDS.Labels[moduleLoaderVersionLabel] = "former label"
-			moduleLoaderFormerVersionDS.Status.DesiredNumberScheduled = int32(moduleLoaderFormerDesired)
-			existingDS = append(existingDS, *moduleLoaderFormerVersionDS)
-		}
-		if moduleLoaderInvalidKernel {
-			moduleLoaderIllegalKernelVersionDS = moduleLoaderDS.DeepCopy()
-			moduleLoaderIllegalKernelVersionDS.SetName("moduleLoaderInvalidKernel")
-			moduleLoaderIllegalKernelVersionDS.Labels[kernelLabel] = notLegitKernelVersion
-			existingDS = append(existingDS, *moduleLoaderIllegalKernelVersionDS)
-		}
-
 		if devicePluginFormerLabel && devicePluginFormerDesired == 0 {
 			expectedDeleteNames = append(expectedDeleteNames, "devicePluginFormer")
 			clnt.EXPECT().Delete(context.Background(), devicePluginFormerVersionDS).Return(nil)
 		}
-		if moduleLoaderFormerLabel && moduleLoaderFormerDesired == 0 {
-			expectedDeleteNames = append(expectedDeleteNames, "moduleLoaderFormer")
-			clnt.EXPECT().Delete(context.Background(), moduleLoaderFormerVersionDS).Return(nil)
-		}
-		if moduleLoaderInvalidKernel {
-			expectedDeleteNames = append(expectedDeleteNames, "moduleLoaderInvalidKernel")
-			clnt.EXPECT().Delete(context.Background(), moduleLoaderIllegalKernelVersionDS).Return(nil)
-		}
 
-		res, err := dc.GarbageCollect(context.Background(), mod, existingDS, sets.New[string](legitKernelVersion))
+		res, err := dc.GarbageCollect(context.Background(), mod, existingDS)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(res).To(Equal(expectedDeleteNames))
 	},
-		Entry("no deletes", false, false, false, 0, 0),
-		Entry("former device plugin", true, false, false, 0, 0),
-		Entry("former device plugin has desired", true, false, false, 1, 0),
-		Entry("former module loader", false, true, false, 0, 0),
-		Entry("former module loader has desired", false, true, false, 0, 1),
+		Entry("no deletes", false, 0),
+		Entry("former device plugin", true, 0),
+		Entry("former device plugin has desired", true, 1),
 	)
 
 	It("should return an error if a deletion failed", func() {
 		deleteDS := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "moduleLoader",
+				Name:      "devicePlugin",
 				Namespace: "namespace",
-				Labels:    map[string]string{kernelLabel: notLegitKernelVersion, constants.DaemonSetRole: constants.ModuleLoaderRoleLabelValue, moduleLoaderVersionLabel: currentModuleVersion},
+				Labels:    map[string]string{constants.DaemonSetRole: constants.DevicePluginRoleLabelValue, devicePluginVersionLabel: "formerVersion"},
 			},
 		}
 		clnt.EXPECT().Delete(context.Background(), &deleteDS).Return(fmt.Errorf("some error"))
 
 		existingDS := []appsv1.DaemonSet{deleteDS}
 
-		_, err := dc.GarbageCollect(context.Background(), mod, existingDS, sets.New[string](legitKernelVersion))
-		Expect(err).To(HaveOccurred())
-
-		deleteDS.Labels[moduleLoaderVersionLabel] = "former label"
-		clnt.EXPECT().Delete(context.Background(), &deleteDS).Return(fmt.Errorf("some error"))
-
-		existingDS = []appsv1.DaemonSet{deleteDS}
-		_, err = dc.GarbageCollect(context.Background(), mod, existingDS, sets.New[string](legitKernelVersion))
+		_, err := dc.GarbageCollect(context.Background(), mod, existingDS)
 		Expect(err).To(HaveOccurred())
 	})
 })

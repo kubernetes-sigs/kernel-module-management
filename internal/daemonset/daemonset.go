@@ -12,7 +12,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -27,7 +26,7 @@ const (
 //go:generate mockgen -source=daemonset.go -package=daemonset -destination=mock_daemonset.go
 
 type DaemonSetCreator interface {
-	GarbageCollect(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet, validKernels sets.Set[string]) ([]string, error)
+	GarbageCollect(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) ([]string, error)
 	GetModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *kmmv1beta1.Module) error
 	GetNodeLabelFromPod(pod *v1.Pod, moduleName string, useDeprecatedLabel bool) string
@@ -47,7 +46,7 @@ func NewCreator(client client.Client, kernelLabel string, scheme *runtime.Scheme
 	}
 }
 
-func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet, validKernels sets.Set[string]) ([]string, error) {
+func (dc *daemonSetGenerator) GarbageCollect(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) ([]string, error) {
 	deleted := make([]string, 0)
 
 	for _, ds := range existingDS {
@@ -182,10 +181,7 @@ func getDevicePluginNodeLabel(namespace, moduleName string, useDeprecatedLabel b
 func isOlderVersionUnusedDaemonset(ds *appsv1.DaemonSet, moduleVersion string) bool {
 	moduleName := ds.Labels[constants.ModuleNameLabel]
 	moduleNamespace := ds.Namespace
-	versionLabel := utils.GetModuleLoaderVersionLabelName(moduleNamespace, moduleName)
-	if IsDevicePluginDS(ds) {
-		versionLabel = utils.GetDevicePluginVersionLabelName(moduleNamespace, moduleName)
-	}
+	versionLabel := utils.GetDevicePluginVersionLabelName(moduleNamespace, moduleName)
 	return ds.Labels[versionLabel] != moduleVersion && ds.Status.DesiredNumberScheduled == 0
 }
 

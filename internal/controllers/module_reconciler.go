@@ -37,7 +37,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -362,9 +361,7 @@ func (mrh *moduleReconcilerHelper) garbageCollect(ctx context.Context,
 	existingDS []appsv1.DaemonSet) error {
 	logger := log.FromContext(ctx)
 	// Garbage collect old DaemonSets for which there are no nodes.
-	validKernels := sets.KeySet[string](mldMappings)
-
-	deleted, err := mrh.daemonAPI.GarbageCollect(ctx, mod, existingDS, validKernels)
+	deleted, err := mrh.daemonAPI.GarbageCollect(ctx, mod, existingDS)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect DaemonSets: %v", err)
 	}
