@@ -14,7 +14,7 @@ const (
 
 type labelActionKey struct {
 	module       string
-	moduleLoader string
+	workerPod    string
 	devicePlugin string
 }
 
@@ -26,41 +26,41 @@ type labelAction struct {
 var labelActionTable = map[labelActionKey]labelAction{
 	labelActionKey{
 		module:       labelMissing,
-		moduleLoader: labelMissing,
+		workerPod:    labelMissing,
 		devicePlugin: labelMissing}: labelAction{getLabelName: nil, action: noneAction},
 
 	labelActionKey{
 		module:       labelMissing,
-		moduleLoader: labelPresent,
+		workerPod:    labelPresent,
 		devicePlugin: labelPresent}: labelAction{getLabelName: utils.GetDevicePluginVersionLabelName, action: deleteAction},
 
 	labelActionKey{
 		module:       labelMissing,
-		moduleLoader: labelPresent,
-		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetModuleLoaderVersionLabelName, action: deleteAction},
+		workerPod:    labelPresent,
+		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetWorkerPodVersionLabelName, action: deleteAction},
 
 	labelActionKey{
 		module:       labelPresent,
-		moduleLoader: labelMissing,
-		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetModuleLoaderVersionLabelName, action: addAction},
+		workerPod:    labelMissing,
+		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetWorkerPodVersionLabelName, action: addAction},
 
 	labelActionKey{
 		module:       labelPresent,
-		moduleLoader: labelPresent,
+		workerPod:    labelPresent,
 		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetDevicePluginVersionLabelName, action: addAction},
 
 	labelActionKey{
 		module:       labelPresent,
-		moduleLoader: labelPresent,
+		workerPod:    labelPresent,
 		devicePlugin: labelPresent}: labelAction{getLabelName: nil, action: noneAction},
 
 	labelActionKey{
 		module:       labelPresent,
-		moduleLoader: labelDifferent,
+		workerPod:    labelDifferent,
 		devicePlugin: labelDifferent}: labelAction{getLabelName: utils.GetDevicePluginVersionLabelName, action: deleteAction},
 
 	labelActionKey{
 		module:       labelPresent,
-		moduleLoader: labelDifferent,
-		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetModuleLoaderVersionLabelName, action: deleteAction},
+		workerPod:    labelDifferent,
+		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetWorkerPodVersionLabelName, action: deleteAction},
 }

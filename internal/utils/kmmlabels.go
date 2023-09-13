@@ -11,8 +11,8 @@ func GetModuleVersionLabelName(namespace, name string) string {
 	return fmt.Sprintf("%s.%s.%s", constants.ModuleVersionLabelPrefix, namespace, name)
 }
 
-func GetModuleLoaderVersionLabelName(namespace, name string) string {
-	return fmt.Sprintf("%s.%s.%s", constants.ModuleLoaderVersionLabelPrefix, namespace, name)
+func GetWorkerPodVersionLabelName(namespace, name string) string {
+	return fmt.Sprintf("%s.%s.%s", constants.WorkerPodVersionLabelPrefix, namespace, name)
 }
 
 func GetDevicePluginVersionLabelName(namespace, name string) string {
@@ -28,15 +28,15 @@ func GetNamespaceNameFromVersionLabel(label string) (string, string, error) {
 }
 
 func IsVersionLabel(label string) bool {
-	return IsModuleVersionLabel(label) || IsModuleLoaderVersionLabel(label) || IsDevicePluginVersionLabel(label)
+	return IsModuleVersionLabel(label) || IsWorkerPodVersionLabel(label) || IsDevicePluginVersionLabel(label)
 }
 
 func IsModuleVersionLabel(label string) bool {
 	return strings.HasPrefix(label, constants.ModuleVersionLabelPrefix)
 }
 
-func IsModuleLoaderVersionLabel(label string) bool {
-	return strings.HasPrefix(label, constants.ModuleLoaderVersionLabelPrefix)
+func IsWorkerPodVersionLabel(label string) bool {
+	return strings.HasPrefix(label, constants.WorkerPodVersionLabelPrefix)
 }
 
 func IsDevicePluginVersionLabel(label string) bool {
@@ -46,7 +46,7 @@ func IsDevicePluginVersionLabel(label string) bool {
 func GetNodesVersionLabels(nodeLabels map[string]string) map[string]string {
 	versionLabels := map[string]string{}
 	for label, labelValue := range nodeLabels {
-		if strings.HasPrefix(label, constants.ModuleLoaderVersionLabelPrefix) ||
+		if strings.HasPrefix(label, constants.WorkerPodVersionLabelPrefix) ||
 			strings.HasPrefix(label, constants.DevicePluginVersionLabelPrefix) ||
 			strings.HasPrefix(label, constants.ModuleVersionLabelPrefix) {
 			versionLabels[label] = labelValue
@@ -55,11 +55,11 @@ func GetNodesVersionLabels(nodeLabels map[string]string) map[string]string {
 	return versionLabels
 }
 
-func GetNodesModuleLoaderVersionLabel(nodeLabels map[string]string, namespace, name string) (string, bool) {
+func GetNodeWorkerPodVersionLabel(nodeLabels map[string]string, namespace, name string) (string, bool) {
 	if nodeLabels == nil {
 		return "", false
 	}
-	labelValue, ok := nodeLabels[GetModuleLoaderVersionLabelName(namespace, name)]
+	labelValue, ok := nodeLabels[GetWorkerPodVersionLabelName(namespace, name)]
 	if !ok {
 		return "", false
 	}
