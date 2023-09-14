@@ -9,7 +9,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
@@ -791,11 +790,6 @@ var _ = Describe("ModuleReconciler_getExistingDS", func() {
 		moduleVersion   = "moduleVersion"
 	)
 
-	moduleLoaderLabels := map[string]string{
-		constants.KernelLabel: kernelVersion,
-		utils.GetModuleLoaderVersionLabelName(moduleNamespace, moduleName): moduleVersion,
-	}
-
 	devicePluginLabels := map[string]string{
 		utils.GetDevicePluginVersionLabelName(moduleNamespace, moduleName): moduleVersion,
 	}
@@ -804,44 +798,23 @@ var _ = Describe("ModuleReconciler_getExistingDS", func() {
 		ObjectMeta: metav1.ObjectMeta{Namespace: moduleNamespace, Name: moduleName},
 	}
 
-	It("empty list", func() {
+	It("various scenarios", func() {
 		By("empty daemonset list")
-		res := getExistingDS(nil, moduleNamespace, moduleName, kernelVersion, moduleVersion, false)
+		res := getExistingDS(nil, moduleNamespace, moduleName, moduleVersion)
 		Expect(res).To(BeNil())
-
-		By("module loader, kernel version and module version are equal")
-		ds.SetLabels(moduleLoaderLabels)
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, kernelVersion, moduleVersion, false)
-		Expect(res).To(Equal(&ds))
-
-		By("module loader, kernel version not equal, module version equal")
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "some version", moduleVersion, false)
-		Expect(res).To(BeNil())
-
-		By("module loader, kernel version equal, module version not equal")
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, kernelVersion, "some version", false)
-		Expect(res).To(BeNil())
-
-		By("module loader, kernel version equal, module version label missing and module version parameter is empty")
-		newLabels := map[string]string{
-			constants.KernelLabel: kernelVersion,
-		}
-		ds.SetLabels(newLabels)
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, kernelVersion, "", false)
-		Expect(res).To(Equal(&ds))
 
 		By("device plugin, module version equal")
 		ds.SetLabels(devicePluginLabels)
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "", moduleVersion, true)
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, moduleVersion)
 		Expect(res).To(Equal(&ds))
 
 		By("device plugin, module version not equal")
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "", "some version", true)
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "some version")
 		Expect(res).To(BeNil())
 
 		By("device plugin, module version label missing, and module version parameter is empty")
 		ds.SetLabels(map[string]string{})
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "", "", true)
+		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "")
 		Expect(res).To(Equal(&ds))
 	})
 })

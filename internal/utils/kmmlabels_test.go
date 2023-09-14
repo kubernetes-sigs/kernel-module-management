@@ -12,10 +12,10 @@ var _ = Describe("GetModuleVersionLabelName", func() {
 	})
 })
 
-var _ = Describe("GetModuleLoaderVersionLabelName", func() {
+var _ = Describe("GetWorkerPodVersionLabelName", func() {
 	It("should work as expected", func() {
-		res := GetModuleLoaderVersionLabelName("some-namespace", "some-name")
-		Expect(res).To(Equal("beta.kmm.node.kubernetes.io/version-module-loader.some-namespace.some-name"))
+		res := GetWorkerPodVersionLabelName("some-namespace", "some-name")
+		Expect(res).To(Equal("beta.kmm.node.kubernetes.io/version-worker-pod.some-namespace.some-name"))
 	})
 })
 
@@ -39,7 +39,7 @@ var _ = Describe("GetNamespaceNameFromVersionLabel", func() {
 			Expect(namespace).To(Equal(expectedNamespace))
 			Expect(name).To(Equal(expectedName))
 		},
-		Entry("moduleLoader label", "beta.kmm.node.kubernetes.io/version-module-loader.some-namespace.some-name", "some-namespace", "some-name", false),
+		Entry("workerPod label", "beta.kmm.node.kubernetes.io/version-worker-pod.some-namespace.some-name", "some-namespace", "some-name", false),
 		Entry("devicePlugin label", "beta.kmm.node.kubernetes.io/version-device-plugin.some-namespace.some-name", "some-namespace", "some-name", false),
 		Entry("module label", "kmm.node.kubernetes.io/version-module.some-namespace.some-name", "some-namespace", "some-name", false),
 		Entry("with error", "version-module-some-namespace-some-name", "some-namespace", "some-name", true),

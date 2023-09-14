@@ -22,7 +22,7 @@ type modulesVersionLabels struct {
 	name                     string
 	namespace                string
 	moduleVersionLabel       string
-	moduleLoaderVersionLabel string
+	workerPodVersionLabel    string
 	devicePluginVersionLabel string
 }
 
@@ -57,12 +57,12 @@ func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, re
 
 	modulesVersionLabels := nlmvr.helperAPI.getLabelsPerModules(ctx, node.Labels)
 
-	modulesPods, err := nlmvr.helperAPI.getModuleLoaderAndDevicePluginPods(ctx, node.Name)
+	devicePluginPods, err := nlmvr.helperAPI.getDevicePluginPods(ctx, node.Name)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("could get module loader pods for the node %s: %v", node.Name, err)
+		return ctrl.Result{}, fmt.Errorf("could get device plugin pods for the node %s: %v", node.Name, err)
 	}
 
-	reconLabelsRes := nlmvr.helperAPI.reconcileLabels(modulesVersionLabels, modulesPods)
+	reconLabelsRes := nlmvr.helperAPI.reconcileLabels(modulesVersionLabels, devicePluginPods)
 
 	logger := log.FromContext(ctx).WithValues("node name", node.Name)
 	logLabelsUpdateData(logger, reconLabelsRes)
@@ -79,8 +79,8 @@ func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, re
 
 type nodeLabelModuleVersionHelperAPI interface {
 	getLabelsPerModules(ctx context.Context, nodeLabels map[string]string) map[string]*modulesVersionLabels
-	getModuleLoaderAndDevicePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error)
-	reconcileLabels(modulesLabels map[string]*modulesVersionLabels, moduleLoaderPods []v1.Pod) *reconcileLabelsResult
+	getDevicePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error)
+	reconcileLabels(modulesLabels map[string]*modulesVersionLabels, devicePluginPods []v1.Pod) *reconcileLabelsResult
 	updateNodeLabels(ctx context.Context, nodeName string, reconLabelsRes *reconcileLabelsResult) error
 }
 
@@ -109,8 +109,8 @@ func (nlmvha *nodeLabelModuleVersionHelper) getLabelsPerModules(ctx context.Cont
 			switch {
 			case utils.IsModuleVersionLabel(key):
 				labelsPerModule[mapKey].moduleVersionLabel = value
-			case utils.IsModuleLoaderVersionLabel(key):
-				labelsPerModule[mapKey].moduleLoaderVersionLabel = value
+			case utils.IsWorkerPodVersionLabel(key):
+				labelsPerModule[mapKey].workerPodVersionLabel = value
 			case utils.IsDevicePluginVersionLabel(key):
 				labelsPerModule[mapKey].devicePluginVersionLabel = value
 			}
@@ -120,15 +120,15 @@ func (nlmvha *nodeLabelModuleVersionHelper) getLabelsPerModules(ctx context.Cont
 	return labelsPerModule
 }
 
-func (nlmvha *nodeLabelModuleVersionHelper) getModuleLoaderAndDevicePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error) {
-	var modulePodsList v1.PodList
+func (nlmvha *nodeLabelModuleVersionHelper) getDevicePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error) {
+	var devicePluginPodsList v1.PodList
 	fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
 	labelSelector := client.HasLabels{constants.DaemonSetRole}
-	err := nlmvha.client.List(ctx, &modulePodsList, labelSelector, fieldSelector)
+	err := nlmvha.client.List(ctx, &devicePluginPodsList, labelSelector, fieldSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get list of all module loader pods for on node %s: %v", nodeName, err)
+		return nil, fmt.Errorf("failed to get list of all device plugin pods for on node %s: %v", nodeName, err)
 	}
-	return modulePodsList.Items, nil
+	return devicePluginPodsList.Items, nil
 }
 
 func (nlmvha *nodeLabelModuleVersionHelper) updateNodeLabels(ctx context.Context, nodeName string, reconLabelsRes *reconcileLabelsResult) error {
@@ -155,7 +155,7 @@ func (nlmvha *nodeLabelModuleVersionHelper) updateNodeLabels(ctx context.Context
 }
 
 func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[string]*modulesVersionLabels,
-	modulesPods []v1.Pod) *reconcileLabelsResult {
+	devicePluginPods []v1.Pod) *reconcileLabelsResult {
 
 	reconRes := reconcileLabelsResult{
 		labelsToAdd:    map[string]string{},
@@ -165,34 +165,27 @@ func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[st
 		label, labelValue, action := getLabelAndAction(moduleLabels)
 		switch action {
 		case deleteAction:
-			validAction := verifyLabelActionValidity(moduleLabels.name, moduleLabels.namespace, constants.DevicePluginRoleLabelValue, modulesPods)
+			validAction := verifyLabelActionValidity(moduleLabels.name, moduleLabels.namespace, devicePluginPods)
 			if validAction {
 				reconRes.labelsToDelete = append(reconRes.labelsToDelete, label)
 			} else {
 				reconRes.requeue = true
 			}
 		case addAction:
-			validAction := verifyLabelActionValidity(moduleLabels.name, moduleLabels.namespace, constants.ModuleLoaderRoleLabelValue, modulesPods)
-			if validAction {
-				reconRes.labelsToAdd[label] = labelValue
-			} else {
-				reconRes.requeue = true
-			}
+			reconRes.labelsToAdd[label] = labelValue
 		}
 	}
 
 	return &reconRes
 }
 
-// validity is checked by verifying that moduleLoader/devicePlugin pod defined
+// validity is checked by verifying that devicePlugin pod defined
 // by name, namespace,role is missing. In case the pod is present, no matter in
 // what state, then the action is invalid
-func verifyLabelActionValidity(name, namespace, podRole string, modulesPods []v1.Pod) bool {
-	for _, pod := range modulesPods {
+func verifyLabelActionValidity(name, namespace string, devicePluginPods []v1.Pod) bool {
+	for _, pod := range devicePluginPods {
 		podLabels := pod.GetLabels()
-		if pod.Namespace == namespace &&
-			podLabels[constants.ModuleNameLabel] == name &&
-			podLabels[constants.DaemonSetRole] == podRole {
+		if pod.Namespace == namespace && podLabels[constants.ModuleNameLabel] == name {
 			return false
 		}
 	}
@@ -219,16 +212,16 @@ func getLabelAndAction(moduleLabels *modulesVersionLabels) (string, string, stri
 func getModuleVersionLabelsState(moduleLabels *modulesVersionLabels) labelActionKey {
 	key := labelActionKey{
 		module:       labelPresent,
-		moduleLoader: labelPresent,
+		workerPod:    labelPresent,
 		devicePlugin: labelPresent,
 	}
 	if moduleLabels.moduleVersionLabel == "" {
 		key.module = labelMissing
 	}
-	if moduleLabels.moduleLoaderVersionLabel == "" {
-		key.moduleLoader = labelMissing
-	} else if moduleLabels.moduleVersionLabel != "" && moduleLabels.moduleLoaderVersionLabel != moduleLabels.moduleVersionLabel {
-		key.moduleLoader = labelDifferent
+	if moduleLabels.workerPodVersionLabel == "" {
+		key.workerPod = labelMissing
+	} else if moduleLabels.moduleVersionLabel != "" && moduleLabels.workerPodVersionLabel != moduleLabels.moduleVersionLabel {
+		key.workerPod = labelDifferent
 	}
 	if moduleLabels.devicePluginVersionLabel == "" {
 		key.devicePlugin = labelMissing

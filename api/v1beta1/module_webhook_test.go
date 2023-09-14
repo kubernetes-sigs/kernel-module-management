@@ -63,7 +63,7 @@ var _ = Describe("maxCombinedLength", func() {
 			utils.GetModuleVersionLabelName("", ""),
 		)
 
-		if l := getLengthAfterSlash(utils.GetModuleLoaderVersionLabelName("", "")); l > baseLength {
+		if l := getLengthAfterSlash(utils.GetWorkerPodVersionLabelName("", "")); l > baseLength {
 			baseLength = l
 		}
 

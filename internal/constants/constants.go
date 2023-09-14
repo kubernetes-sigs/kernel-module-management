@@ -9,7 +9,7 @@ const (
 	PodHashAnnotation    = "kmm.node.kubernetes.io/last-hash"
 	KernelLabel          = "kmm.node.kubernetes.io/kernel-version.full"
 
-	ModuleLoaderVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-module-loader"
+	WorkerPodVersionLabelPrefix    = "beta.kmm.node.kubernetes.io/version-worker-pod"
 	DevicePluginVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-device-plugin"
 	ModuleVersionLabelPrefix       = "kmm.node.kubernetes.io/version-module"
 

@@ -361,7 +361,7 @@ func prepareNodeSchedulingData(node *v1.Node, mld *api.ModuleLoaderData, current
 	versionLabel := ""
 	present := false
 	if mld != nil {
-		versionLabel, present = utils.GetNodesModuleLoaderVersionLabel(node.GetLabels(), mld.Namespace, mld.Name)
+		versionLabel, present = utils.GetNodeWorkerPodVersionLabel(node.GetLabels(), mld.Namespace, mld.Name)
 	}
 	switch {
 	case mld == nil && currentNMCs.Has(node.Name):

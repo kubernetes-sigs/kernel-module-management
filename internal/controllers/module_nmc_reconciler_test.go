@@ -470,7 +470,6 @@ var _ = Describe("prepareSchedulingData", func() {
 			},
 		}
 		targetedNodes = []v1.Node{node}
-		fmt.Printf("YEV - kernel version <%s>\n", node.Status.NodeInfo.KernelVersion)
 	})
 
 	ctx := context.Background()
@@ -482,7 +481,6 @@ var _ = Describe("prepareSchedulingData", func() {
 		currentNMCs := sets.New[string](nodeName)
 		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
 
-		fmt.Printf("YEV - in test, before call: <%s>\n", targetedNodes[0].Status.NodeInfo.KernelVersion)
 		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(len(errs)).To(Equal(1))
@@ -533,8 +531,8 @@ var _ = Describe("prepareSchedulingData", func() {
 		Expect(scheduleData).To(Equal(expectedScheduleData))
 	})
 
-	It("module version exists, moduleLoader version label exists, versions are equal", func() {
-		node.SetLabels(map[string]string{utils.GetModuleLoaderVersionLabelName(moduleNamespace, moduleName): "moduleVersion1"})
+	It("module version exists, workerPod version label exists, versions are equal", func() {
+		node.SetLabels(map[string]string{utils.GetWorkerPodVersionLabelName(moduleNamespace, moduleName): "moduleVersion1"})
 		targetedNodes[0] = node
 		currentNMCs := sets.New[string](nodeName)
 		mld.ModuleVersion = "moduleVersion1"
@@ -546,8 +544,8 @@ var _ = Describe("prepareSchedulingData", func() {
 		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{action: actionAdd, mld: &mld, node: &node}))
 	})
 
-	It("module version exists, moduleLoader version label exists, versions are different", func() {
-		node.SetLabels(map[string]string{utils.GetModuleLoaderVersionLabelName(moduleNamespace, moduleName): "moduleVersion1"})
+	It("module version exists, workerPod version label exists, versions are different", func() {
+		node.SetLabels(map[string]string{utils.GetWorkerPodVersionLabelName(moduleNamespace, moduleName): "moduleVersion1"})
 		targetedNodes[0] = node
 		currentNMCs := sets.New[string](nodeName)
 		mld.ModuleVersion = "moduleVersion2"
