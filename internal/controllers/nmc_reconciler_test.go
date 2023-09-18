@@ -510,10 +510,10 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 
 		gomock.InOrder(
 			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return(pods, nil),
-			pm.EXPECT().DeletePod(ctx, &podWithStatus),
-			pm.EXPECT().DeletePod(ctx, &podWithoutStatus),
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
+			pm.EXPECT().DeletePod(ctx, &podWithStatus),
+			pm.EXPECT().DeletePod(ctx, &podWithoutStatus),
 		)
 
 		Expect(
@@ -607,9 +607,9 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 
 		gomock.InOrder(
 			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{pod}, nil),
-			pm.EXPECT().DeletePod(ctx, &pod),
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
+			pm.EXPECT().DeletePod(ctx, &pod),
 		)
 
 		Expect(
@@ -681,9 +681,9 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 
 		gomock.InOrder(
 			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{pod}, nil),
-			pm.EXPECT().DeletePod(ctx, &pod),
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
+			pm.EXPECT().DeletePod(ctx, &pod),
 		)
 
 		Expect(
@@ -705,6 +705,50 @@ var _ = Describe("workerHelper_SyncStatus", func() {
 		}
 
 		Expect(nmc.Status.Modules[0]).To(BeComparableTo(expectedStatus))
+	})
+
+	It("pod should not be deleted if NMC patch failed", func() {
+		const (
+			modName      = "module"
+			modNamespace = "namespace"
+		)
+
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			Status: kmmv1beta1.NodeModulesConfigStatus{
+				Modules: []kmmv1beta1.NodeModuleStatus{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Name:      modName,
+							Namespace: modNamespace,
+						},
+					},
+				},
+			},
+		}
+
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: modNamespace,
+				Labels: map[string]string{
+					actionLabelKey:            WorkerActionUnload,
+					constants.ModuleNameLabel: modName,
+				},
+			},
+			Status: v1.PodStatus{Phase: v1.PodSucceeded},
+		}
+
+		gomock.InOrder(
+			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{pod}, nil),
+			kubeClient.EXPECT().Status().Return(sw),
+			sw.EXPECT().Patch(ctx, nmc, gomock.Any()).Return(fmt.Errorf("some error")),
+		)
+
+		Expect(
+			wh.SyncStatus(ctx, nmc),
+		).To(
+			HaveOccurred(),
+		)
 	})
 })
 
