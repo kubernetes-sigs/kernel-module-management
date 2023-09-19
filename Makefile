@@ -236,7 +236,7 @@ golangci-lint: ## Download golangci-lint locally if necessary.
 
 .PHONY: mockgen
 mockgen: ## Install mockgen locally.
-	go install go.uber.org/mock/mockgen@v0.2.0
+	go install go.uber.org/mock/mockgen@v0.3.0
 
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 .PHONY: kustomize
