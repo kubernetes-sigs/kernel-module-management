@@ -348,6 +348,7 @@ func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.No
 
 	patchFrom := client.MergeFrom(nmcObj.DeepCopy())
 	errs := make([]error, 0, len(pods))
+	podsToDelete := make([]v1.Pod, 0, len(pods))
 
 	for _, p := range pods {
 		podNSN := types.NamespacedName{Namespace: p.Namespace, Name: p.Name}
@@ -372,18 +373,17 @@ func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.No
 			}
 		}
 
-		deletePod := false
 		updateModuleStatus := false
 
 		switch phase {
 		case v1.PodFailed:
 			status.InProgress = false
-			deletePod = true
 			updateModuleStatus = true
-		case v1.PodSucceeded:
-			deletePod = true
+			podsToDelete = append(podsToDelete, p)
 
+		case v1.PodSucceeded:
 			if p.Labels[actionLabelKey] == WorkerActionUnload {
+				podsToDelete = append(podsToDelete, p)
 				nmc.RemoveModuleStatus(&nmcObj.Status.Modules, modNamespace, modName)
 				break
 			}
@@ -410,6 +410,7 @@ func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.No
 				FinishedAt
 
 			status.LastTransitionTime = &podLTT
+			podsToDelete = append(podsToDelete, p)
 
 		case v1.PodPending, v1.PodRunning:
 			status.InProgress = true
@@ -422,31 +423,28 @@ func (w *workerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.No
 			)
 		}
 
-		if deletePod {
-			if err = w.pm.DeletePod(ctx, &p); err != nil {
-				errs = append(
-					errs,
-					fmt.Errorf("could not delete worker Pod %s: %v", podNSN, errs),
-				)
-
-				continue
-			}
-		}
-
 		if updateModuleStatus {
 			nmc.SetModuleStatus(&nmcObj.Status.Modules, *status)
 		}
 	}
 
+	err = w.client.Status().Patch(ctx, nmcObj, patchFrom)
+	errs = append(errs, err)
 	if err = errors.Join(errs...); err != nil {
 		return fmt.Errorf("encountered errors while reconciling NMC %s status: %v", nmcObj.Name, err)
 	}
 
-	if err = w.client.Status().Patch(ctx, nmcObj, patchFrom); err != nil {
-		return fmt.Errorf("could not patch NodeModulesConfig %s status: %v", nmcObj.Name, err)
+	// Delete the pod after the NMC status was updated successfully. Otherwise, in case NMC status update has failed, but the
+	// pod was already deleted, we have no way to know how to update NMC status, and it will always be stuck in the previous
+	// status without any real way to see/affect. In case we fail to delete pod after NMC status is updated, we will be stuck
+	// in the reconcile loop, and in that case we can always try to delete the pod manually, and after that the flow will be able to continue
+	errs = errs[:0]
+	for _, pod := range podsToDelete {
+		err = w.pm.DeletePod(ctx, &pod)
+		errs = append(errs, err)
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 const (
