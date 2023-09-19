@@ -15,10 +15,14 @@ var _ = Describe("ParseFile", func() {
 	It("should parse the file correctly", func() {
 		expected := &Config{
 			HealthProbeBindAddress: ":8081",
-			MetricsBindAddress:     "127.0.0.1:8080",
 			LeaderElection: LeaderElection{
 				Enabled:    true,
 				ResourceID: "some-resource-id",
+			},
+			Metrics: Metrics{
+				BindAddress:      "0.0.0.0:8443",
+				EnableAuthnAuthz: true,
+				SecureServing:    true,
 			},
 			WebhookPort: 9443,
 			Worker: Worker{
@@ -33,4 +37,25 @@ var _ = Describe("ParseFile", func() {
 			Equal(expected),
 		)
 	})
+})
+
+var _ = Describe("ManagerOptions", func() {
+	DescribeTable(
+		"should enable authn/authz if configured",
+		func(enabled bool) {
+			c := &Config{
+				Metrics: Metrics{EnableAuthnAuthz: enabled},
+			}
+
+			mo := c.ManagerOptions()
+
+			if enabled {
+				Expect(mo.Metrics.FilterProvider).NotTo(BeNil())
+			} else {
+				Expect(mo.Metrics.FilterProvider).To(BeNil())
+			}
+		},
+		Entry(nil, false),
+		Entry(nil, true),
+	)
 })

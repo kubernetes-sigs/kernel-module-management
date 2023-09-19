@@ -132,7 +132,7 @@ lint: golangci-lint ## Run golangci-lint against code.
 		echo There are some malformed files, please make sure to run \'make fmt\'; \
 		exit 1; \
 	fi
-	$(GOLANGCI_LINT) run -v --timeout 5m0s
+	$(GOLANGCI_LINT) run -v --timeout 10m
 
 ##@ Build
 

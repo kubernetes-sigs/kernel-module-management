@@ -6,6 +6,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
@@ -19,10 +21,16 @@ type LeaderElection struct {
 	ResourceID string `yaml:"resourceID"`
 }
 
+type Metrics struct {
+	BindAddress      string `yaml:"bindAddress"`
+	EnableAuthnAuthz bool   `yaml:"enableAuthnAuthz"`
+	SecureServing    bool   `yaml:"secureServing"`
+}
+
 type Config struct {
 	HealthProbeBindAddress string         `yaml:"healthProbeBindAddress"`
-	MetricsBindAddress     string         `yaml:"metricsBindAddress"`
 	LeaderElection         LeaderElection `yaml:"leaderElection"`
+	Metrics                Metrics        `yaml:"metrics"`
 	WebhookPort            int            `yaml:"webhookPort"`
 	Worker                 Worker         `yaml:"worker"`
 }
@@ -44,11 +52,20 @@ func ParseFile(path string) (*Config, error) {
 }
 
 func (c *Config) ManagerOptions() *manager.Options {
+	metrics := server.Options{
+		BindAddress:   c.Metrics.BindAddress,
+		SecureServing: c.Metrics.SecureServing,
+	}
+
+	if c.Metrics.EnableAuthnAuthz {
+		metrics.FilterProvider = filters.WithAuthenticationAndAuthorization
+	}
+
 	return &manager.Options{
 		HealthProbeBindAddress: c.HealthProbeBindAddress,
 		LeaderElection:         c.LeaderElection.Enabled,
 		LeaderElectionID:       c.LeaderElection.ResourceID,
-		MetricsBindAddress:     c.MetricsBindAddress,
+		Metrics:                metrics,
 		WebhookServer:          webhook.NewServer(webhook.Options{Port: c.WebhookPort}),
 	}
 }
