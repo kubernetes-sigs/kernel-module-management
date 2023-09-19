@@ -65,7 +65,3 @@ func GetNodeWorkerPodVersionLabel(nodeLabels map[string]string, namespace, name 
 	}
 	return labelValue, true
 }
-
-func GetModuleNMCLabel(namespace, name string) string {
-	return fmt.Sprintf("%s.%s.%s", constants.ModuleNMCLabelPrefix, namespace, name)
-}

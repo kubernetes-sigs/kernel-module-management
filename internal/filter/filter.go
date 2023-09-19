@@ -124,6 +124,28 @@ func (f *Filter) ModuleReconcilerNodePredicate(kernelLabel string) predicate.Pre
 	)
 }
 
+func ListModulesForNMC(_ context.Context, obj client.Object) []reconcile.Request {
+	modules := sets.New[reconcile.Request]()
+
+	for k := range obj.GetLabels() {
+		if ok, ns, name := nmc.IsModuleConfiguredLabel(k); ok {
+			modules.Insert(reconcile.Request{
+				NamespacedName: types.NamespacedName{Namespace: ns, Name: name},
+			})
+
+			continue
+		}
+
+		if ok, ns, name := nmc.IsModuleInUseLabel(k); ok {
+			modules.Insert(reconcile.Request{
+				NamespacedName: types.NamespacedName{Namespace: ns, Name: name},
+			})
+		}
+	}
+
+	return modules.UnsortedList()
+}
+
 func ModuleNMCReconcilerNodePredicate() predicate.Predicate {
 	return predicate.And(
 		skipDeletions,
