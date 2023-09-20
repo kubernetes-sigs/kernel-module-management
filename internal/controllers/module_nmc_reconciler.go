@@ -10,6 +10,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/labels"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
@@ -115,9 +116,29 @@ func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	err = errors.Join(errs...)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile module %s/%s with nodes: %v", mod.Namespace, mod.Name, err)
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile module %s/%s config: %v", mod.Namespace, mod.Name, err)
 	}
 	return ctrl.Result{}, nil
+}
+
+func (mnr *ModuleNMCReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.
+		NewControllerManagedBy(mgr).
+		For(&kmmv1beta1.Module{}).
+		Owns(&v1.Pod{}, builder.WithPredicates(filter.ModuleNMCReconcilePodPredicate())).
+		Watches(
+			&v1.Node{},
+			handler.EnqueueRequestsFromMapFunc(mnr.filter.FindModulesForNMCNodeChange),
+			builder.WithPredicates(
+				filter.ModuleNMCReconcilerNodePredicate(),
+			),
+		).
+		Watches(
+			&kmmv1beta1.NodeModulesConfig{},
+			handler.EnqueueRequestsFromMapFunc(filter.ListModulesForNMC),
+		).
+		Named(ModuleNMCReconcilerName).
+		Complete(mnr)
 }
 
 //go:generate mockgen -source=module_nmc_reconciler.go -package=controllers -destination=mock_module_nmc_reconciler.go moduleNMCReconcilerHelperAPI
@@ -180,20 +201,42 @@ func (mnrh *moduleNMCReconcilerHelper) getRequestedModule(ctx context.Context, n
 
 func (mnrh *moduleNMCReconcilerHelper) finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error {
 	nmcList := kmmv1beta1.NodeModulesConfigList{}
-	err := mnrh.client.List(ctx, &nmcList)
-	if err != nil {
-		return fmt.Errorf("failed to list NMCs in the cluster: %v", err)
+
+	modNSN := types.NamespacedName{Namespace: mod.Namespace, Name: mod.Name}
+
+	matchesConfigured := client.MatchingLabels{
+		nmc.ModuleConfiguredLabel(mod.Namespace, mod.Name): "",
+	}
+
+	if err := mnrh.client.List(ctx, &nmcList, matchesConfigured); err != nil {
+		return fmt.Errorf("failed to list NMCs with %s configured in the cluster: %v", modNSN, err)
 	}
 
 	errs := make([]error, 0, len(nmcList.Items))
 	for _, nmc := range nmcList.Items {
-		err = mnrh.removeModuleFromNMC(ctx, &nmc, mod.Namespace, mod.Name)
+		err := mnrh.removeModuleFromNMC(ctx, &nmc, mod.Namespace, mod.Name)
 		errs = append(errs, err)
 	}
 
-	err = errors.Join(errs...)
+	err := errors.Join(errs...)
 	if err != nil {
-		return fmt.Errorf("failed to remove %s/%s module from some of NMCs: %v", mod.Namespace, mod.Name, err)
+		return fmt.Errorf("failed to remove %s module from some of NMCs: %v", modNSN, err)
+	}
+
+	// Now, list all NMCs that still have the Module loaded
+	nmcList = kmmv1beta1.NodeModulesConfigList{}
+
+	matchesInUse := client.MatchingLabels{
+		nmc.ModuleInUseLabel(mod.Namespace, mod.Name): "",
+	}
+
+	if err := mnrh.client.List(ctx, &nmcList, matchesInUse); err != nil {
+		return fmt.Errorf("failed to list NMCs with %s loaded in the cluster: %v", modNSN, err)
+	}
+
+	if l := len(nmcList.Items); l > 0 {
+		ctrl.LoggerFrom(ctx).Info("Some NMCs still list the Module as in-use; not removing the finalizer", "count", l)
+		return nil
 	}
 
 	// remove finalizer
@@ -233,7 +276,7 @@ func (mnrh *moduleNMCReconcilerHelper) getNMCsByModuleSet(ctx context.Context, m
 
 func (mnrh *moduleNMCReconcilerHelper) getNMCsNamesForModule(ctx context.Context, mod *kmmv1beta1.Module) ([]string, error) {
 	logger := log.FromContext(ctx)
-	moduleNMCLabel := utils.GetModuleNMCLabel(mod.Namespace, mod.Name)
+	moduleNMCLabel := nmc.ModuleConfiguredLabel(mod.Namespace, mod.Name)
 	logger.V(1).Info("Listing nmcs", "selector", moduleNMCLabel)
 	selectedNMCs := kmmv1beta1.NodeModulesConfigList{}
 	opt := client.MatchingLabels(map[string]string{moduleNMCLabel: ""})
@@ -299,16 +342,20 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 		moduleConfig.InsecurePull = tls.Insecure || tls.InsecureSkipTLSVerify
 	}
 
-	nmc := &kmmv1beta1.NodeModulesConfig{
+	nmcObj := &kmmv1beta1.NodeModulesConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: node.Name},
 	}
 
-	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmc, func() error {
-		err = mnrh.nmcHelper.SetModuleConfig(nmc, mld, &moduleConfig)
+	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmcObj, func() error {
+		err = mnrh.nmcHelper.SetModuleConfig(nmcObj, mld, &moduleConfig)
 		if err != nil {
 			return err
 		}
-		return controllerutil.SetOwnerReference(node, nmc, mnrh.scheme)
+
+		labels.SetLabel(nmcObj, nmc.ModuleConfiguredLabel(mld.Namespace, mld.Name), "")
+		labels.SetLabel(nmcObj, nmc.ModuleInUseLabel(mld.Namespace, mld.Name), "")
+
+		return controllerutil.SetOwnerReference(node, nmcObj, mnrh.scheme)
 	})
 
 	if err != nil {
@@ -326,35 +373,24 @@ func (mnrh *moduleNMCReconcilerHelper) disableModuleOnNode(ctx context.Context, 
 	return mnrh.removeModuleFromNMC(ctx, nmc, modNamespace, modName)
 }
 
-func (mnrh *moduleNMCReconcilerHelper) removeModuleFromNMC(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) error {
+func (mnrh *moduleNMCReconcilerHelper) removeModuleFromNMC(ctx context.Context, nmcObj *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) error {
 	logger := log.FromContext(ctx)
-	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmc, func() error {
-		return mnrh.nmcHelper.RemoveModuleConfig(nmc, modNamespace, modName)
+	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmcObj, func() error {
+		if err := mnrh.nmcHelper.RemoveModuleConfig(nmcObj, modNamespace, modName); err != nil {
+			return err
+		}
+
+		labels.RemoveLabel(nmcObj, nmc.ModuleConfiguredLabel(modNamespace, modName))
+
+		return nil
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to disable module %s/%s in NMC %s: %v", modNamespace, modName, nmc.Name, err)
+		return fmt.Errorf("failed to disable module %s/%s in NMC %s: %v", modNamespace, modName, nmcObj.Name, err)
 	}
 
-	logger.Info("Disabled module in NMC", "name", modName, "namespace", modNamespace, "NMC", nmc.Name, "result", opRes)
+	logger.Info("Disabled module in NMC", "name", modName, "namespace", modNamespace, "NMC", nmcObj.Name, "result", opRes)
 	return nil
-}
-
-func (mnr *ModuleNMCReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.
-		NewControllerManagedBy(mgr).
-		For(&kmmv1beta1.Module{}).
-		Owns(&kmmv1beta1.NodeModulesConfig{}).
-		Owns(&v1.Pod{}, builder.WithPredicates(filter.ModuleNMCReconcilePodPredicate())).
-		Watches(
-			&v1.Node{},
-			handler.EnqueueRequestsFromMapFunc(mnr.filter.FindModulesForNMCNodeChange),
-			builder.WithPredicates(
-				filter.ModuleNMCReconcilerNodePredicate(),
-			),
-		).
-		Named(ModuleNMCReconcilerName).
-		Complete(mnr)
 }
 
 func prepareNodeSchedulingData(node *v1.Node, mld *api.ModuleLoaderData, currentNMCs sets.Set[string]) schedulingData {

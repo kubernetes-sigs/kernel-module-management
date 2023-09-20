@@ -29,7 +29,10 @@ echo "Check that the module gets loaded on the node..."
 timeout 10m bash -c 'until minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
 
 echo "Remove the Module..."
-kubectl delete -f ci/module-kmm-ci-build-sign.yaml
+kubectl delete -f ci/module-kmm-ci-build-sign.yaml --wait=false
 
 echo "Check that the module gets unloaded from the node..."
 timeout 1m bash -c 'until ! minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
+
+echo "Wait for the Module to be deleted..."
+kubectl wait --for delete modules.kmm.sigs.x-k8s.io/kmm-ci

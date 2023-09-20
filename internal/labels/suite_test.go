@@ -1,4 +1,4 @@
-package nmc
+package labels
 
 import (
 	"testing"
@@ -9,5 +9,5 @@ import (
 
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "NMC Suite")
+	RunSpecs(t, "Labels Suite")
 }

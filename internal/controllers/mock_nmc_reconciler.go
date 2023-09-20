@@ -18,31 +18,45 @@ import (
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// MockworkerHelper is a mock of workerHelper interface.
-type MockworkerHelper struct {
+// MocknmcReconcilerHelper is a mock of nmcReconcilerHelper interface.
+type MocknmcReconcilerHelper struct {
 	ctrl     *gomock.Controller
-	recorder *MockworkerHelperMockRecorder
+	recorder *MocknmcReconcilerHelperMockRecorder
 }
 
-// MockworkerHelperMockRecorder is the mock recorder for MockworkerHelper.
-type MockworkerHelperMockRecorder struct {
-	mock *MockworkerHelper
+// MocknmcReconcilerHelperMockRecorder is the mock recorder for MocknmcReconcilerHelper.
+type MocknmcReconcilerHelperMockRecorder struct {
+	mock *MocknmcReconcilerHelper
 }
 
-// NewMockworkerHelper creates a new mock instance.
-func NewMockworkerHelper(ctrl *gomock.Controller) *MockworkerHelper {
-	mock := &MockworkerHelper{ctrl: ctrl}
-	mock.recorder = &MockworkerHelperMockRecorder{mock}
+// NewMocknmcReconcilerHelper creates a new mock instance.
+func NewMocknmcReconcilerHelper(ctrl *gomock.Controller) *MocknmcReconcilerHelper {
+	mock := &MocknmcReconcilerHelper{ctrl: ctrl}
+	mock.recorder = &MocknmcReconcilerHelperMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockworkerHelper) EXPECT() *MockworkerHelperMockRecorder {
+func (m *MocknmcReconcilerHelper) EXPECT() *MocknmcReconcilerHelperMockRecorder {
 	return m.recorder
 }
 
+// GarbageCollectInUseLabels mocks base method.
+func (m *MocknmcReconcilerHelper) GarbageCollectInUseLabels(ctx context.Context, nmc *v1beta1.NodeModulesConfig) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GarbageCollectInUseLabels", ctx, nmc)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GarbageCollectInUseLabels indicates an expected call of GarbageCollectInUseLabels.
+func (mr *MocknmcReconcilerHelperMockRecorder) GarbageCollectInUseLabels(ctx, nmc any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollectInUseLabels", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).GarbageCollectInUseLabels), ctx, nmc)
+}
+
 // ProcessModuleSpec mocks base method.
-func (m *MockworkerHelper) ProcessModuleSpec(ctx context.Context, nmc *v1beta1.NodeModulesConfig, spec *v1beta1.NodeModuleSpec, status *v1beta1.NodeModuleStatus) error {
+func (m *MocknmcReconcilerHelper) ProcessModuleSpec(ctx context.Context, nmc *v1beta1.NodeModulesConfig, spec *v1beta1.NodeModuleSpec, status *v1beta1.NodeModuleStatus) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ProcessModuleSpec", ctx, nmc, spec, status)
 	ret0, _ := ret[0].(error)
@@ -50,27 +64,27 @@ func (m *MockworkerHelper) ProcessModuleSpec(ctx context.Context, nmc *v1beta1.N
 }
 
 // ProcessModuleSpec indicates an expected call of ProcessModuleSpec.
-func (mr *MockworkerHelperMockRecorder) ProcessModuleSpec(ctx, nmc, spec, status any) *gomock.Call {
+func (mr *MocknmcReconcilerHelperMockRecorder) ProcessModuleSpec(ctx, nmc, spec, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessModuleSpec", reflect.TypeOf((*MockworkerHelper)(nil).ProcessModuleSpec), ctx, nmc, spec, status)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessModuleSpec", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).ProcessModuleSpec), ctx, nmc, spec, status)
 }
 
-// ProcessOrphanModuleStatus mocks base method.
-func (m *MockworkerHelper) ProcessOrphanModuleStatus(ctx context.Context, nmc *v1beta1.NodeModulesConfig, status *v1beta1.NodeModuleStatus) error {
+// ProcessUnconfiguredModuleStatus mocks base method.
+func (m *MocknmcReconcilerHelper) ProcessUnconfiguredModuleStatus(ctx context.Context, nmc *v1beta1.NodeModulesConfig, status *v1beta1.NodeModuleStatus) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessOrphanModuleStatus", ctx, nmc, status)
+	ret := m.ctrl.Call(m, "ProcessUnconfiguredModuleStatus", ctx, nmc, status)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ProcessOrphanModuleStatus indicates an expected call of ProcessOrphanModuleStatus.
-func (mr *MockworkerHelperMockRecorder) ProcessOrphanModuleStatus(ctx, nmc, status any) *gomock.Call {
+// ProcessUnconfiguredModuleStatus indicates an expected call of ProcessUnconfiguredModuleStatus.
+func (mr *MocknmcReconcilerHelperMockRecorder) ProcessUnconfiguredModuleStatus(ctx, nmc, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessOrphanModuleStatus", reflect.TypeOf((*MockworkerHelper)(nil).ProcessOrphanModuleStatus), ctx, nmc, status)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessUnconfiguredModuleStatus", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).ProcessUnconfiguredModuleStatus), ctx, nmc, status)
 }
 
 // RemoveOrphanFinalizers mocks base method.
-func (m *MockworkerHelper) RemoveOrphanFinalizers(ctx context.Context, nodeName string) error {
+func (m *MocknmcReconcilerHelper) RemoveOrphanFinalizers(ctx context.Context, nodeName string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveOrphanFinalizers", ctx, nodeName)
 	ret0, _ := ret[0].(error)
@@ -78,13 +92,13 @@ func (m *MockworkerHelper) RemoveOrphanFinalizers(ctx context.Context, nodeName 
 }
 
 // RemoveOrphanFinalizers indicates an expected call of RemoveOrphanFinalizers.
-func (mr *MockworkerHelperMockRecorder) RemoveOrphanFinalizers(ctx, nodeName any) *gomock.Call {
+func (mr *MocknmcReconcilerHelperMockRecorder) RemoveOrphanFinalizers(ctx, nodeName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveOrphanFinalizers", reflect.TypeOf((*MockworkerHelper)(nil).RemoveOrphanFinalizers), ctx, nodeName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveOrphanFinalizers", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).RemoveOrphanFinalizers), ctx, nodeName)
 }
 
 // SyncStatus mocks base method.
-func (m *MockworkerHelper) SyncStatus(ctx context.Context, nmc *v1beta1.NodeModulesConfig) error {
+func (m *MocknmcReconcilerHelper) SyncStatus(ctx context.Context, nmc *v1beta1.NodeModulesConfig) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncStatus", ctx, nmc)
 	ret0, _ := ret[0].(error)
@@ -92,9 +106,9 @@ func (m *MockworkerHelper) SyncStatus(ctx context.Context, nmc *v1beta1.NodeModu
 }
 
 // SyncStatus indicates an expected call of SyncStatus.
-func (mr *MockworkerHelperMockRecorder) SyncStatus(ctx, nmc any) *gomock.Call {
+func (mr *MocknmcReconcilerHelperMockRecorder) SyncStatus(ctx, nmc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncStatus", reflect.TypeOf((*MockworkerHelper)(nil).SyncStatus), ctx, nmc)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncStatus", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).SyncStatus), ctx, nmc)
 }
 
 // MockpodManager is a mock of podManager interface.

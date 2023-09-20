@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 //go:generate mockgen -source=helper.go -package=nmc -destination=mock_helper.go
@@ -67,7 +65,6 @@ func (h *helper) SetModuleConfig(
 		saName = "default"
 	}
 
-	setLabel(nmc, mld.Namespace, mld.Name)
 	foundEntry.Config = *moduleConfig
 	foundEntry.ImageRepoSecret = mld.ImageRepoSecret
 	foundEntry.ServiceAccountName = saName
@@ -80,7 +77,6 @@ func (h *helper) RemoveModuleConfig(nmc *kmmv1beta1.NodeModulesConfig, namespace
 	if foundEntry != nil {
 		nmc.Spec.Modules = append(nmc.Spec.Modules[:index], nmc.Spec.Modules[index+1:]...)
 	}
-	removeLabel(nmc, namespace, name)
 	return nil
 }
 
@@ -132,24 +128,5 @@ func SetModuleStatus(statuses *[]kmmv1beta1.NodeModuleStatus, status kmmv1beta1.
 		*s = status
 	} else {
 		*statuses = append(*statuses, status)
-	}
-}
-
-func setLabel(nmc *kmmv1beta1.NodeModulesConfig, namespace, name string) {
-	moduleNMCLabel := utils.GetModuleNMCLabel(namespace, name)
-	nmcLabels := nmc.GetLabels()
-	if nmcLabels == nil {
-		nmcLabels = map[string]string{}
-	}
-	nmcLabels[moduleNMCLabel] = ""
-	nmc.SetLabels(nmcLabels)
-}
-
-func removeLabel(nmc *kmmv1beta1.NodeModulesConfig, namespace, name string) {
-	moduleNMCLabel := utils.GetModuleNMCLabel(namespace, name)
-	nmcLabels := nmc.GetLabels()
-	if nmcLabels != nil {
-		delete(nmcLabels, moduleNMCLabel)
-		nmc.SetLabels(nmcLabels)
 	}
 }

@@ -303,13 +303,20 @@ var _ = Describe("getNodesListBySelector", func() {
 })
 
 var _ = Describe("finalizeModule", func() {
+	const (
+		moduleName      = "moduleName"
+		moduleNamespace = "moduleNamespace"
+	)
+
 	var (
-		ctx    context.Context
-		ctrl   *gomock.Controller
-		clnt   *client.MockClient
-		helper *nmc.MockHelper
-		mnrh   moduleNMCReconcilerHelperAPI
-		mod    *kmmv1beta1.Module
+		ctx                    context.Context
+		ctrl                   *gomock.Controller
+		clnt                   *client.MockClient
+		helper                 *nmc.MockHelper
+		mnrh                   moduleNMCReconcilerHelperAPI
+		mod                    *kmmv1beta1.Module
+		matchConfiguredModules = map[string]string{nmc.ModuleConfiguredLabel(moduleNamespace, moduleName): ""}
+		matchLoadedModules     = map[string]string{nmc.ModuleInUseLabel(moduleNamespace, moduleName): ""}
 	)
 
 	BeforeEach(func() {
@@ -319,12 +326,15 @@ var _ = Describe("finalizeModule", func() {
 		helper = nmc.NewMockHelper(ctrl)
 		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, helper, scheme)
 		mod = &kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
+			ObjectMeta: metav1.ObjectMeta{Name: moduleName, Namespace: moduleNamespace},
 		}
 	})
 
 	It("failed to get list of NMCs", func() {
-		clnt.EXPECT().List(ctx, gomock.Any()).Return(fmt.Errorf("some error"))
+		clnt.
+			EXPECT().
+			List(ctx, &kmmv1beta1.NodeModulesConfigList{}, matchConfiguredModules).
+			Return(fmt.Errorf("some error"))
 
 		err := mnrh.finalizeModule(ctx, mod)
 
@@ -358,12 +368,13 @@ var _ = Describe("finalizeModule", func() {
 
 	It("no nmcs, patch successfull", func() {
 		gomock.InOrder(
-			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			clnt.EXPECT().List(ctx, &kmmv1beta1.NodeModulesConfigList{}, matchConfiguredModules).DoAndReturn(
 				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
 					list.Items = []kmmv1beta1.NodeModulesConfig{}
 					return nil
 				},
 			),
+			clnt.EXPECT().List(ctx, &kmmv1beta1.NodeModulesConfigList{}, matchLoadedModules),
 			clnt.EXPECT().Patch(ctx, mod, gomock.Any()).Return(nil),
 		)
 
@@ -372,14 +383,38 @@ var _ = Describe("finalizeModule", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("no nmcs, failed", func() {
+	It("some nmcs have the Module loaded, does not patch", func() {
 		gomock.InOrder(
-			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			clnt.EXPECT().List(ctx, &kmmv1beta1.NodeModulesConfigList{}, matchConfiguredModules).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+					list.Items = make([]kmmv1beta1.NodeModulesConfig, 0)
+					return nil
+				},
+			),
+			clnt.EXPECT().List(ctx, &kmmv1beta1.NodeModulesConfigList{}, matchLoadedModules).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+					list.Items = make([]kmmv1beta1.NodeModulesConfig, 1)
+					return nil
+				},
+			),
+		)
+
+		Expect(
+			mnrh.finalizeModule(ctx, mod),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("no nmcs, patch failed", func() {
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, &kmmv1beta1.NodeModulesConfigList{}, matchConfiguredModules).DoAndReturn(
 				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
 					list.Items = []kmmv1beta1.NodeModulesConfig{}
 					return nil
 				},
 			),
+			clnt.EXPECT().List(ctx, &kmmv1beta1.NodeModulesConfigList{}, matchLoadedModules),
 			clnt.EXPECT().Patch(ctx, mod, gomock.Any()).Return(fmt.Errorf("some error")),
 		)
 
@@ -570,6 +605,11 @@ var _ = Describe("prepareSchedulingData", func() {
 })
 
 var _ = Describe("enableModuleOnNode", func() {
+	const (
+		moduleNamespace = "moduleNamespace"
+		moduleName      = "moduleName"
+	)
+
 	var (
 		ctx                  context.Context
 		ctrl                 *gomock.Controller
@@ -596,8 +636,8 @@ var _ = Describe("enableModuleOnNode", func() {
 		ctx = context.Background()
 		mld = &api.ModuleLoaderData{
 			KernelVersion:        kernelVersion,
-			Name:                 "moduleName",
-			Namespace:            "moduleNamespace",
+			Name:                 moduleName,
+			Namespace:            moduleNamespace,
 			InTreeModuleToRemove: "InTreeModuleToRemove",
 			ContainerImage:       "containerImage",
 		}
@@ -639,9 +679,22 @@ var _ = Describe("enableModuleOnNode", func() {
 	})
 
 	It("NMC exists", func() {
-		nmc := &kmmv1beta1.NodeModulesConfig{
+		nmcObj := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: node.Name},
 		}
+
+		nmcWithLabels := *nmcObj
+		nmcWithLabels.SetLabels(map[string]string{
+			nmc.ModuleConfiguredLabel(moduleNamespace, moduleName): "",
+			nmc.ModuleInUseLabel(moduleNamespace, moduleName):      "",
+		})
+
+		Expect(
+			controllerutil.SetOwnerReference(&node, &nmcWithLabels, scheme),
+		).NotTo(
+			HaveOccurred(),
+		)
+
 		gomock.InOrder(
 			rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(true, nil),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
@@ -650,8 +703,8 @@ var _ = Describe("enableModuleOnNode", func() {
 					return nil
 				},
 			),
-			helper.EXPECT().SetModuleConfig(nmc, mld, expectedModuleConfig).Return(nil),
-			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil),
+			helper.EXPECT().SetModuleConfig(nmcObj, mld, expectedModuleConfig).Return(nil),
+			clnt.EXPECT().Patch(ctx, &nmcWithLabels, gomock.Any()).Return(nil),
 		)
 
 		err := mnrh.enableModuleOnNode(ctx, mld, &node)
@@ -758,5 +811,31 @@ var _ = Describe("removeModuleFromNMC", func() {
 
 		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("removes the configured label", func() {
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   nmcName,
+				Labels: map[string]string{nmc.ModuleConfiguredLabel(moduleNamespace, moduleName): ""},
+			},
+		}
+
+		nmcWithoutLabel := *nmc
+		nmcWithoutLabel.SetLabels(make(map[string]string))
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, nmc *kmmv1beta1.NodeModulesConfig, _ ...ctrlclient.GetOption) error {
+					nmc.SetName(nmcName)
+					return nil
+				},
+			),
+			helper.EXPECT().RemoveModuleConfig(nmc, moduleNamespace, moduleName).Return(nil),
+			clnt.EXPECT().Patch(ctx, &nmcWithoutLabel, gomock.Any()),
+		)
+
+		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
+		Expect(err).NotTo(HaveOccurred())
 	})
 })

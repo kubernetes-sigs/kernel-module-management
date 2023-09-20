@@ -172,6 +172,41 @@ var _ = Describe("kmmClusterClaimChanged", func() {
 	)
 })
 
+var _ = Describe("ListModulesForNMC", func() {
+	const (
+		namespace0 = "namespace0"
+		name0      = "name0"
+		namespace1 = "namespace1"
+		name1      = "name1"
+		namespace2 = "namespace2"
+		name2      = "name2"
+	)
+
+	It("should work as expected", func() {
+		nmcObj := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					"abc": "def",
+					nmc.ModuleConfiguredLabel(namespace0, name0): "",
+					nmc.ModuleInUseLabel(namespace0, name0):      "",
+					nmc.ModuleConfiguredLabel(namespace1, name1): "",
+					nmc.ModuleInUseLabel(namespace2, name2):      "",
+				},
+			},
+		}
+
+		Expect(
+			ListModulesForNMC(context.TODO(), nmcObj),
+		).To(
+			ConsistOf(
+				reconcile.Request{NamespacedName: types.NamespacedName{Namespace: namespace0, Name: name0}},
+				reconcile.Request{NamespacedName: types.NamespacedName{Namespace: namespace1, Name: name1}},
+				reconcile.Request{NamespacedName: types.NamespacedName{Namespace: namespace2, Name: name2}},
+			),
+		)
+	})
+})
+
 var _ = Describe("ModuleReconcilerNodePredicate", func() {
 	const kernelLabel = "kernel-label"
 	var p predicate.Predicate
