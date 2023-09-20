@@ -1,9 +1,12 @@
 healthProbeBindAddress: :8081
-metricsBindAddress: 127.0.0.1:8080
 webhookPort: 9443
 leaderElection:
   enabled: true
   resourceID: some-resource-id
+metrics:
+  enableAuthnAuthz: true
+  bindAddress: 0.0.0.0:8443
+  secureServing: true
 worker:
   runAsUser: 1234
   seLinuxType: mySELinuxType

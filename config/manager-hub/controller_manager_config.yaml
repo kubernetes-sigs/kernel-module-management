@@ -4,3 +4,7 @@ webhookPort: 9443
 leaderElection:
   enabled: true
   resourceID: kmm-hub.sigs.x-k8s.io
+metrics:
+  enableAuthnAuthz: true
+  bindAddress: 0.0.0.0:8443
+  secureServing: true
