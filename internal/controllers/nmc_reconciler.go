@@ -14,6 +14,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/labels"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -424,13 +425,23 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 		if status == nil {
 			status = &kmmv1beta1.NodeModuleStatus{
 				ModuleItem: kmmv1beta1.ModuleItem{
-					ImageRepoSecret:    nil,
-					Name:               modName,
-					Namespace:          modNamespace,
-					ServiceAccountName: "",
+					Name:      modName,
+					Namespace: modNamespace,
 				},
 			}
 		}
+
+		if irsName, err := getImageRepoSecretName(&p); err != nil {
+			logger.Info(
+				utils.WarnString("Error while looking for the imageRepoSecret volume"),
+				"error",
+				err,
+			)
+		} else if irsName != "" {
+			status.ImageRepoSecret = &v1.LocalObjectReference{Name: irsName}
+		}
+
+		status.ServiceAccountName = p.Spec.ServiceAccountName
 
 		updateModuleStatus := false
 
@@ -506,10 +517,11 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 
 const (
 	configFileName = "config.yaml"
-	configFullPath = volMountPoingConfig + "/" + configFileName
+	configFullPath = volMountPointConfig + "/" + configFileName
 
-	volNameConfig       = "config"
-	volMountPoingConfig = "/etc/kmm-worker"
+	volNameConfig          = "config"
+	volNameImageRepoSecret = "image-repo-secret"
+	volMountPointConfig    = "/etc/kmm-worker"
 )
 
 //go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go podManager
@@ -560,6 +572,7 @@ func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object,
 	}
 
 	labels.SetLabel(pod, actionLabelKey, WorkerActionLoad)
+
 	pod.Spec.RestartPolicy = v1.RestartPolicyNever
 
 	return p.client.Create(ctx, pod)
@@ -720,7 +733,7 @@ func (p *podManagerImpl) baseWorkerPod(
 	volumeMounts := []v1.VolumeMount{
 		{
 			Name:      volNameConfig,
-			MountPath: volMountPoingConfig,
+			MountPath: volMountPointConfig,
 			ReadOnly:  true,
 		},
 		{
@@ -828,6 +841,22 @@ func setWorkerSofdepConfig(pod *v1.Pod, modulesLoadingOrder []string) error {
 	return nil
 }
 
+func getImageRepoSecretName(pod *v1.Pod) (string, error) {
+	for _, v := range pod.Spec.Volumes {
+		if v.Name == volNameImageRepoSecret {
+			svs := v.VolumeSource.Secret
+
+			if svs == nil {
+				return "", fmt.Errorf("volume %s is not of type secret", volNameImageRepoSecret)
+			}
+
+			return svs.SecretName, nil
+		}
+	}
+
+	return "", nil
+}
+
 func getModulesOrderAnnotationValue(modulesNames []string) string {
 	var softDepData strings.Builder
 	for i := 0; i < len(modulesNames)-1; i++ {
@@ -858,10 +887,25 @@ type pullSecretHelperImpl struct {
 func (p *pullSecretHelperImpl) VolumesAndVolumeMounts(ctx context.Context, item *kmmv1beta1.ModuleItem) ([]v1.Volume, []v1.VolumeMount, error) {
 	logger := ctrl.LoggerFrom(ctx)
 
-	var pullSecretNames []string
+	secretNames := sets.New[string]()
+
+	type pullSecret struct {
+		secretName string
+		volumeName string
+		optional   bool
+	}
+
+	pullSecrets := make([]pullSecret, 0)
 
 	if irs := item.ImageRepoSecret; irs != nil {
-		pullSecretNames = append(pullSecretNames, irs.Name)
+		secretNames.Insert(irs.Name)
+
+		ps := pullSecret{
+			secretName: irs.Name,
+			volumeName: volNameImageRepoSecret,
+		}
+
+		pullSecrets = append(pullSecrets, ps)
 	}
 
 	if san := item.ServiceAccountName; san != "" {
@@ -875,22 +919,32 @@ func (p *pullSecretHelperImpl) VolumesAndVolumeMounts(ctx context.Context, item 
 		}
 
 		for _, s := range sa.ImagePullSecrets {
-			pullSecretNames = append(pullSecretNames, s.Name)
+			if secretNames.Has(s.Name) {
+				continue
+			}
+
+			secretNames.Insert(s.Name)
+
+			ps := pullSecret{
+				secretName: s.Name,
+				volumeName: "pull-secret-" + s.Name,
+				optional:   true, // to match the node's container runtime behaviour
+			}
+
+			pullSecrets = append(pullSecrets, ps)
 		}
 	}
 
-	volumes := make([]v1.Volume, 0, len(pullSecretNames))
-	volumeMounts := make([]v1.VolumeMount, 0, len(pullSecretNames))
+	volumes := make([]v1.Volume, 0, len(pullSecrets))
+	volumeMounts := make([]v1.VolumeMount, 0, len(pullSecrets))
 
-	for _, s := range pullSecretNames {
-		volumeName := "pull-secret-" + s
-
+	for _, s := range pullSecrets {
 		v := v1.Volume{
-			Name: volumeName,
+			Name: s.volumeName,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: s,
-					Optional:   pointer.Bool(true),
+					SecretName: s.secretName,
+					Optional:   pointer.Bool(s.optional),
 				},
 			},
 		}
@@ -898,9 +952,9 @@ func (p *pullSecretHelperImpl) VolumesAndVolumeMounts(ctx context.Context, item 
 		volumes = append(volumes, v)
 
 		vm := v1.VolumeMount{
-			Name:      volumeName,
+			Name:      s.volumeName,
 			ReadOnly:  true,
-			MountPath: filepath.Join(worker.PullSecretsDir, s),
+			MountPath: filepath.Join(worker.PullSecretsDir, s.secretName),
 		}
 
 		volumeMounts = append(volumeMounts, vm)
