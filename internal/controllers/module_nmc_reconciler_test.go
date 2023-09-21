@@ -509,7 +509,6 @@ var _ = Describe("prepareSchedulingData", func() {
 
 	ctx := context.Background()
 	mod := kmmv1beta1.Module{}
-	//targetedNodes := []v1.Node{node}
 	mld := api.ModuleLoaderData{KernelVersion: "some version", Name: moduleName, Namespace: moduleNamespace}
 
 	It("failed to determine mld", func() {
