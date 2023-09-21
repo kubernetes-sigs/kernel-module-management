@@ -713,8 +713,10 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 
 	It("should add the status if a loader pod was successful", func() {
 		const (
-			modName      = "module"
-			modNamespace = "namespace"
+			irsName            = "some-secret"
+			modName            = "module"
+			modNamespace       = "namespace"
+			serviceAccountName = "some-sa"
 		)
 
 		nmc := &kmmv1beta1.NodeModulesConfig{
@@ -748,6 +750,17 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 				Labels: map[string]string{
 					actionLabelKey:            WorkerActionLoad,
 					constants.ModuleNameLabel: modName,
+				},
+			},
+			Spec: v1.PodSpec{
+				ServiceAccountName: serviceAccountName,
+				Volumes: []v1.Volume{
+					{
+						Name: volNameImageRepoSecret,
+						VolumeSource: v1.VolumeSource{
+							Secret: &v1.SecretVolumeSource{SecretName: irsName},
+						},
+					},
 				},
 			},
 			Status: v1.PodStatus{
@@ -786,8 +799,10 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 
 		expectedStatus := kmmv1beta1.NodeModuleStatus{
 			ModuleItem: kmmv1beta1.ModuleItem{
-				Name:      modName,
-				Namespace: modNamespace,
+				ImageRepoSecret:    &v1.LocalObjectReference{Name: irsName},
+				Name:               modName,
+				Namespace:          modNamespace,
+				ServiceAccountName: serviceAccountName,
 			},
 			Config:             &cfg,
 			LastTransitionTime: &now,
@@ -921,7 +936,10 @@ var _ = Describe("podManagerImpl_CreateLoaderPod", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
 		}
 
+		const irsName = "some-secret"
+
 		mi := kmmv1beta1.ModuleItem{
+			ImageRepoSecret:    &v1.LocalObjectReference{Name: irsName},
 			Name:               moduleName,
 			Namespace:          namespace,
 			ServiceAccountName: serviceAccountName,
@@ -1275,17 +1293,18 @@ var _ = Describe("pullSecretHelperImpl_VolumesAndVolumeMounts", func() {
 			Do(func(_ context.Context, _ types.NamespacedName, sa *v1.ServiceAccount, _ ...ctrlclient.GetOption) {
 				sa.ImagePullSecrets = []v1.LocalObjectReference{
 					{Name: "pull-secret-1"},
+					{Name: "pull-secret-1"}, // intentional duplicate, should not be in the volume list
 					{Name: "pull-secret-2"},
 				}
 			})
 
 		vols := []v1.Volume{
 			{
-				Name: "pull-secret-pull-secret-0",
+				Name: volNameImageRepoSecret,
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
 						SecretName: "pull-secret-0",
-						Optional:   pointer.Bool(true),
+						Optional:   pointer.Bool(false),
 					},
 				},
 			},
@@ -1311,7 +1330,7 @@ var _ = Describe("pullSecretHelperImpl_VolumesAndVolumeMounts", func() {
 
 		volMounts := []v1.VolumeMount{
 			{
-				Name:      "pull-secret-pull-secret-0",
+				Name:      volNameImageRepoSecret,
 				ReadOnly:  true,
 				MountPath: filepath.Join(worker.PullSecretsDir, "pull-secret-0"),
 			},
