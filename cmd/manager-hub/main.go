@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -149,6 +150,12 @@ func main() {
 
 	if err = mcmr.SetupWithManager(mgr); err != nil {
 		cmd.FatalError(ctrlLogger, err, "unable to create controller")
+	}
+
+	eventRecorder := mgr.GetEventRecorderFor("kmm")
+
+	if err = controllers.NewJobEventReconciler(client, eventRecorder).SetupWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.JobEventReconcilerName)
 	}
 
 	if err = (&v1beta1.ManagedClusterModule{}).SetupWebhookWithManager(mgr); err != nil {

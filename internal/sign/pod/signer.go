@@ -206,6 +206,7 @@ func (s *signer) MakePodTemplate(
 				constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash),
 				dockerfileAnnotationKey:     buf.String(),
 			},
+			Finalizers: []string{constants.JobEventFinalizer},
 		},
 		Spec: podSpec,
 	}

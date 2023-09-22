@@ -1,4 +1,4 @@
-package labels
+package meta
 
 import (
 	. "github.com/onsi/ginkgo/v2"
