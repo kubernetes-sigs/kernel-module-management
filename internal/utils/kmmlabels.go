@@ -2,10 +2,13 @@ package utils
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 )
+
+var reKernelModuleReadyLabel = regexp.MustCompile(`^kmm\.node\.kubernetes\.io/[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.ready$`)
 
 func GetModuleVersionLabelName(namespace, name string) string {
 	return fmt.Sprintf("%s.%s.%s", constants.ModuleVersionLabelPrefix, namespace, name)
@@ -64,4 +67,12 @@ func GetNodeWorkerPodVersionLabel(nodeLabels map[string]string, namespace, name 
 		return "", false
 	}
 	return labelValue, true
+}
+
+func GetKernelModuleReadyNodeLabel(namespace, moduleName string) string {
+	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.ready", namespace, moduleName)
+}
+
+func IsKernelModuleReadyNodeLabel(label string) bool {
+	return reKernelModuleReadyLabel.MatchString(label)
 }
