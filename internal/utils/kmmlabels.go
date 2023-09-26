@@ -73,6 +73,10 @@ func GetKernelModuleReadyNodeLabel(namespace, moduleName string) string {
 	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.ready", namespace, moduleName)
 }
 
+func GetDevicePluginNodeLabel(namespace, moduleName string) string {
+	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-ready", namespace, moduleName)
+}
+
 func IsKernelModuleReadyNodeLabel(label string) bool {
 	return reKernelModuleReadyLabel.MatchString(label)
 }
