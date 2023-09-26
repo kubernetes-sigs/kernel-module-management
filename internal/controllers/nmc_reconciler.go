@@ -150,6 +150,10 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		return reconcile.Result{}, fmt.Errorf("could not garbage collect in-use labels for NMC %s: %v", req.NamespacedName, err)
 	}
 
+	if err := r.helper.UpdateNodeLabels(ctx, &nmcObj); err != nil {
+		return reconcile.Result{}, fmt.Errorf("could not update node's labels for NMC %s: %v", req.NamespacedName, err)
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -217,6 +221,7 @@ type nmcReconcilerHelper interface {
 	ProcessUnconfiguredModuleStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, status *kmmv1beta1.NodeModuleStatus) error
 	RemoveOrphanFinalizers(ctx context.Context, nodeName string) error
 	SyncStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
+	UpdateNodeLabels(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
 }
 
 type nmcReconcilerHelperImpl struct {
@@ -513,6 +518,58 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 	}
 
 	return errors.Join(errs...)
+}
+
+func (h *nmcReconcilerHelperImpl) UpdateNodeLabels(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error {
+	node := v1.Node{}
+	if err := h.client.Get(ctx, types.NamespacedName{Name: nmc.Name}, &node); err != nil {
+		return fmt.Errorf("could not get node %s: %v", nmc.Name, err)
+	}
+
+	// get all the kernel module ready labels of the node
+	nodeModuleReadyLabels := sets.New[string]()
+	for label := range node.GetLabels() {
+		if utils.IsKernelModuleReadyNodeLabel(label) {
+			nodeModuleReadyLabels.Insert(label)
+		}
+	}
+
+	// get spec labels and their config
+	specLabels := make(map[string]kmmv1beta1.ModuleConfig)
+	for _, module := range nmc.Spec.Modules {
+		label := utils.GetKernelModuleReadyNodeLabel(module.Namespace, module.Name)
+		specLabels[label] = module.Config
+	}
+
+	// get status labels and their config
+	statusLabels := make(map[string]kmmv1beta1.ModuleConfig)
+	for _, module := range nmc.Status.Modules {
+		label := utils.GetKernelModuleReadyNodeLabel(module.Namespace, module.Name)
+		statusLabels[label] = kmmv1beta1.ModuleConfig{}
+		if module.Config != nil {
+			statusLabels[label] = *module.Config
+		}
+	}
+
+	patchFrom := client.MergeFrom(node.DeepCopy())
+	// label in node but not in spec or status - should be removed
+	for label := range nodeModuleReadyLabels {
+		_, inSpec := specLabels[label]
+		_, inStatus := statusLabels[label]
+		if !inSpec && !inStatus {
+			labels.RemoveLabel(&node, label)
+		}
+	}
+
+	// label in spec and status and config equal - should be added
+	for label, specConfig := range specLabels {
+		statusConfig, ok := statusLabels[label]
+		if ok && reflect.DeepEqual(specConfig, statusConfig) {
+			labels.SetLabel(&node, label, "")
+		}
+	}
+
+	return h.client.Patch(ctx, &node, patchFrom)
 }
 
 const (

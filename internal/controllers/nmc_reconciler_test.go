@@ -14,6 +14,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -149,6 +150,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec1, nil),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc),
+			wh.EXPECT().UpdateNodeLabels(ctx, nmc),
 		)
 
 		Expect(
@@ -916,7 +918,115 @@ var _ = Describe("nmcReconcilerHelperImpl_RemoveOrphanFinalizers", func() {
 })
 
 const (
-	moduleName         = "my-module"
+	moduleName      = "my-module"
+	moduleNamespace = "my-module-namespace"
+)
+
+var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabels", func() {
+	var (
+		ctx          = context.TODO()
+		client       *testclient.MockClient
+		expectedNode v1.Node
+		nmc          kmmv1beta1.NodeModulesConfig
+		wh           nmcReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctrl := gomock.NewController(GinkgoT())
+		client = testclient.NewMockClient(ctrl)
+		expectedNode = v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "node name",
+				Labels: map[string]string{},
+			},
+		}
+		nmc = kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmcName"},
+		}
+		wh = newWorkerHelper(client, nil)
+	})
+
+	moduleConfig := kmmv1beta1.ModuleConfig{
+		KernelVersion:        "some version",
+		ContainerImage:       "some image",
+		InTreeModuleToRemove: "some kernel module",
+	}
+
+	It("failed to get node", func() {
+		client.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		err := wh.UpdateNodeLabels(ctx, &nmc)
+		Expect(err).To(HaveOccurred())
+	})
+
+	DescribeTable("nodes labels scenarios", func(nodeLabelPresent, specPresent, statusPresent, statusConfigPresent, configsEqual, resultLabelPresent bool) {
+		nodeLabels := make(map[string]string)
+		if nodeLabelPresent {
+			nodeLabels[utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName)] = ""
+		}
+		if specPresent {
+			nmc.Spec.Modules = []kmmv1beta1.NodeModuleSpec{
+				{
+					ModuleItem: kmmv1beta1.ModuleItem{
+						Name:      moduleName,
+						Namespace: moduleNamespace,
+					},
+					Config: moduleConfig,
+				},
+			}
+		}
+		if statusPresent {
+			nmc.Status.Modules = []kmmv1beta1.NodeModuleStatus{
+				{
+					ModuleItem: kmmv1beta1.ModuleItem{
+						Name:      moduleName,
+						Namespace: moduleNamespace,
+					},
+				},
+			}
+			if statusConfigPresent {
+				statusConfig := moduleConfig
+				if !configsEqual {
+					statusConfig.ContainerImage = "some other container image"
+				}
+				nmc.Status.Modules[0].Config = &statusConfig
+			}
+		}
+
+		if resultLabelPresent {
+			resultLabels := map[string]string{utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName): ""}
+			expectedNode.SetLabels(resultLabels)
+		}
+
+		gomock.InOrder(
+			client.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, node *v1.Node, _ ...ctrlclient.GetOption) error {
+					node.SetName("node name")
+					node.SetLabels(nodeLabels)
+					return nil
+				},
+			),
+			client.EXPECT().Patch(ctx, &expectedNode, gomock.Any()).Return(nil),
+		)
+
+		err := wh.UpdateNodeLabels(ctx, &nmc)
+		Expect(err).NotTo(HaveOccurred())
+
+	},
+		Entry("node label present, spec missing, status missing", true, false, false, false, false, false),
+		Entry("node label present, spec present, status missing", true, true, false, false, false, true),
+		Entry("node label present, spec present, status present, status config missing", true, true, true, false, false, true),
+		Entry("node label present, spec present, status present, status config present, configs not equal", true, true, true, true, false, true),
+		Entry("node label present, spec present, status present, status config present, configs equal", true, true, true, true, true, true),
+		Entry("node label missing, spec missing, status missing", false, false, false, false, false, false),
+		Entry("node label missing, spec present, status missing", false, true, false, false, false, false),
+		Entry("node label missing, spec present, status present, status config missing", false, true, true, false, false, false),
+		Entry("node label missing, spec present, status present, status config present, configs not equal", false, true, true, true, false, false),
+		Entry("node label missing, spec present, status present, status config present, configs equal", false, true, true, true, true, true),
+	)
+})
+
+const (
 	serviceAccountName = "some-sa"
 	workerImage        = "worker-image"
 )
