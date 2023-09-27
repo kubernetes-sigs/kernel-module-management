@@ -29,7 +29,6 @@ type DaemonSetCreator interface {
 	GarbageCollect(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) ([]string, error)
 	GetModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	SetDevicePluginAsDesired(ctx context.Context, ds *appsv1.DaemonSet, mod *kmmv1beta1.Module) error
-	GetNodeLabelFromPod(pod *v1.Pod, moduleName string, useDeprecatedLabel bool) string
 }
 
 type daemonSetGenerator struct {
@@ -94,7 +93,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 	}
 
 	standardLabels := map[string]string{constants.ModuleNameLabel: mod.Name}
-	nodeSelector := map[string]string{getDriverContainerNodeLabel(mod.Namespace, mod.Name, true): ""}
+	nodeSelector := map[string]string{utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name): ""}
 
 	if mod.Spec.ModuleLoader.Container.Version != "" {
 		versionLabel := utils.GetDevicePluginVersionLabelName(mod.Namespace, mod.Name)
@@ -139,10 +138,6 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 	return controllerutil.SetControllerReference(mod, ds, dc.scheme)
 }
 
-func (dc *daemonSetGenerator) GetNodeLabelFromPod(pod *v1.Pod, moduleName string, useDeprecatedLabel bool) string {
-	return getDevicePluginNodeLabel(pod.Namespace, moduleName, useDeprecatedLabel)
-}
-
 func (dc *daemonSetGenerator) GetModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
 	dsList := appsv1.DaemonSetList{}
 	opts := []client.ListOption{
@@ -153,22 +148,6 @@ func (dc *daemonSetGenerator) GetModuleDaemonSets(ctx context.Context, name, nam
 		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
 	}
 	return dsList.Items, nil
-}
-
-func getDriverContainerNodeLabel(namespace, moduleName string, useDeprecatedLabel bool) string {
-	// TODO: "kmm.node.kubernetes.io/<module-name>.ready" is needed for backward compatibility. Remove for 2.0
-	if useDeprecatedLabel {
-		return fmt.Sprintf("kmm.node.kubernetes.io/%s.ready", moduleName)
-	}
-	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.ready", namespace, moduleName)
-}
-
-func getDevicePluginNodeLabel(namespace, moduleName string, useDeprecatedLabel bool) string {
-	// TODO: "kmm.node.kubernetes.io/<module-name>.device-plugin-ready" is needed for backward compatibility. Remove for 2.0
-	if useDeprecatedLabel {
-		return fmt.Sprintf("kmm.node.kubernetes.io/%s.device-plugin-ready", moduleName)
-	}
-	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-ready", namespace, moduleName)
 }
 
 func isOlderVersionUnusedDaemonset(ds *appsv1.DaemonSet, moduleVersion string) bool {

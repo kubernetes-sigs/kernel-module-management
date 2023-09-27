@@ -7,6 +7,7 @@ import (
 	mock_client "github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -20,12 +21,10 @@ import (
 var _ = Describe("PodNodeModuleReconciler", func() {
 	Describe("Reconcile", func() {
 		const (
-			moduleName          = "module-name"
-			nodeName            = "node-name"
-			podName             = "pod-name"
-			podNamespace        = "pod-namespace"
-			nodeLabel           = "some node label"
-			deprecatedNodeLabel = "some deprecated node label"
+			moduleName   = "module-name"
+			nodeName     = "node-name"
+			podName      = "pod-name"
+			podNamespace = "pod-namespace"
 		)
 
 		var (
@@ -67,8 +66,6 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 						pod.Name = podName
 					},
 				),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
 				kubeClient.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some error")),
 			)
 
@@ -90,14 +87,13 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 						pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
 						pod.Spec.NodeName = nodeName
 						pod.Name = podName
+						pod.Namespace = podNamespace
 					},
 				),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
 				kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Return(nil),
 				kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Do(
 					func(_ interface{}, _ interface{}, node *v1.Node, _ ...client.GetOption) {
-						node.SetLabels(map[string]string{nodeLabel: "", deprecatedNodeLabel: ""})
+						node.SetLabels(map[string]string{utils.GetDevicePluginNodeLabel(podNamespace, moduleName): ""})
 					},
 				),
 				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(
@@ -119,15 +115,14 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 				fieldSelector = client.MatchingFields{"spec.nodeName": nodeName}
 			)
 
-			gomock.InOrder(kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
-				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
-					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-					pod.Spec.NodeName = nodeName
-					pod.Name = podName
-				},
-			),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
+			gomock.InOrder(
+				kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
+					func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
+						pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
+						pod.Spec.NodeName = nodeName
+						pod.Name = podName
+					},
+				),
 				kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Do(
 					func(_ interface{}, modulePodsList *v1.PodList, _ ...client.ListOption) {
 						modulePodsList.Items = []v1.Pod{
@@ -158,16 +153,15 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 		}
 
 		It("should NOT label or unlabel when the Pod has no .spec.nodeName", func() {
-			gomock.InOrder(kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
-				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
-					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-					pod.Finalizers = []string{constants.NodeLabelerFinalizer}
-					pod.DeletionTimestamp = &now
-					pod.Name = podName
-				},
-			),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
+			gomock.InOrder(
+				kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
+					func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
+						pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
+						pod.Finalizers = []string{constants.NodeLabelerFinalizer}
+						pod.DeletionTimestamp = &now
+						pod.Name = podName
+					},
+				),
 				kubeClient.EXPECT().Patch(ctx, gomock.AssignableToTypeOf(&v1.Pod{}), gomock.Any()).Do(patchRemoveFinalizerFunc),
 			)
 
@@ -181,6 +175,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 				kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
 					func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
 						pod.Name = podName
+						pod.Namespace = podNamespace
 						pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
 						pod.Spec.NodeName = nodeName
 						pod.Status = v1.PodStatus{
@@ -193,8 +188,6 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 						}
 					},
 				),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
 				kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil),
 				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(
 					func(_ interface{}, node *v1.Node, p client.Patch, _ ...client.GetOption) {
@@ -202,8 +195,7 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 						data, err := p.Data(node)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(data).To(ContainSubstring("labels"))
-						Expect(data).To(ContainSubstring(nodeLabel))
-						Expect(data).To(ContainSubstring(deprecatedNodeLabel))
+						Expect(data).To(ContainSubstring(utils.GetDevicePluginNodeLabel(podNamespace, moduleName)))
 					},
 				),
 			)
@@ -229,14 +221,8 @@ var _ = Describe("PodNodeModuleReconciler", func() {
 						pod.Name = podName
 					},
 				),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, false).Return(nodeLabel),
-				mockDC.EXPECT().GetNodeLabelFromPod(gomock.Any(), moduleName, true).Return(deprecatedNodeLabel),
 				kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Return(nil),
-				kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Do(
-					func(_ interface{}, _ interface{}, node *v1.Node, _ ...client.GetOption) {
-						node.SetLabels(map[string]string{nodeLabel: "", deprecatedNodeLabel: ""})
-					},
-				),
+				kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil),
 				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil),
 				kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(patchRemoveFinalizerFunc),
 			)

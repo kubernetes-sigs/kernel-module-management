@@ -15,7 +15,6 @@ import (
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/apps/v1"
-	v10 "k8s.io/api/core/v1"
 )
 
 // MockDaemonSetCreator is a mock of DaemonSetCreator interface.
@@ -69,20 +68,6 @@ func (m *MockDaemonSetCreator) GetModuleDaemonSets(ctx context.Context, name, na
 func (mr *MockDaemonSetCreatorMockRecorder) GetModuleDaemonSets(ctx, name, namespace any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleDaemonSets", reflect.TypeOf((*MockDaemonSetCreator)(nil).GetModuleDaemonSets), ctx, name, namespace)
-}
-
-// GetNodeLabelFromPod mocks base method.
-func (m *MockDaemonSetCreator) GetNodeLabelFromPod(pod *v10.Pod, moduleName string, useDeprecatedLabel bool) string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNodeLabelFromPod", pod, moduleName, useDeprecatedLabel)
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetNodeLabelFromPod indicates an expected call of GetNodeLabelFromPod.
-func (mr *MockDaemonSetCreatorMockRecorder) GetNodeLabelFromPod(pod, moduleName, useDeprecatedLabel any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeLabelFromPod", reflect.TypeOf((*MockDaemonSetCreator)(nil).GetNodeLabelFromPod), pod, moduleName, useDeprecatedLabel)
 }
 
 // SetDevicePluginAsDesired mocks base method.
