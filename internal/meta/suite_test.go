@@ -1,4 +1,4 @@
-package labels
+package meta
 
 import (
 	"testing"

@@ -1,4 +1,4 @@
-package labels
+package meta
 
 import "sigs.k8s.io/controller-runtime/pkg/client"
 

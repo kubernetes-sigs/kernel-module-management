@@ -124,6 +124,7 @@ var _ = Describe("MakePodTemplate", func() {
 						BlockOwnerDeletion: pointer.Bool(true),
 					},
 				},
+				Finalizers: []string{constants.JobEventFinalizer},
 			},
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{

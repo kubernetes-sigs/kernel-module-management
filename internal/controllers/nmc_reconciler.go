@@ -12,7 +12,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/labels"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
@@ -557,7 +557,7 @@ func (h *nmcReconcilerHelperImpl) UpdateNodeLabels(ctx context.Context, nmc *kmm
 		_, inSpec := specLabels[label]
 		_, inStatus := statusLabels[label]
 		if !inSpec && !inStatus {
-			labels.RemoveLabel(&node, label)
+			meta.RemoveLabel(&node, label)
 		}
 	}
 
@@ -565,7 +565,7 @@ func (h *nmcReconcilerHelperImpl) UpdateNodeLabels(ctx context.Context, nmc *kmm
 	for label, specConfig := range specLabels {
 		statusConfig, ok := statusLabels[label]
 		if ok && reflect.DeepEqual(specConfig, statusConfig) {
-			labels.SetLabel(&node, label, "")
+			meta.SetLabel(&node, label, "")
 		}
 	}
 
@@ -628,7 +628,7 @@ func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object,
 		}
 	}
 
-	labels.SetLabel(pod, actionLabelKey, WorkerActionLoad)
+	meta.SetLabel(pod, actionLabelKey, WorkerActionLoad)
 
 	pod.Spec.RestartPolicy = v1.RestartPolicyNever
 
@@ -655,7 +655,7 @@ func (p *podManagerImpl) CreateUnloaderPod(ctx context.Context, nmc client.Objec
 		}
 	}
 
-	labels.SetLabel(pod, actionLabelKey, WorkerActionUnload)
+	meta.SetLabel(pod, actionLabelKey, WorkerActionUnload)
 
 	return p.client.Create(ctx, pod)
 }
@@ -851,7 +851,7 @@ func setWorkerConfigAnnotation(pod *v1.Pod, cfg kmmv1beta1.ModuleConfig) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal the ModuleConfig to YAML: %v", err)
 	}
-	setWorkerPodAnnotation(pod, configAnnotationKey, string(b))
+	meta.SetAnnotation(pod, configAnnotationKey, string(b))
 
 	return nil
 }
@@ -869,7 +869,7 @@ func setWorkerContainerArgs(pod *v1.Pod, args []string) error {
 
 func setWorkerSofdepConfig(pod *v1.Pod, modulesLoadingOrder []string) error {
 	softdepAnnotationValue := getModulesOrderAnnotationValue(modulesLoadingOrder)
-	setWorkerPodAnnotation(pod, "modules-order", softdepAnnotationValue)
+	meta.SetAnnotation(pod, "modules-order", softdepAnnotationValue)
 
 	softdepVolume := v1.Volume{
 		Name: "modules-order",
@@ -920,15 +920,6 @@ func getModulesOrderAnnotationValue(modulesNames []string) string {
 		fmt.Fprintf(&softDepData, "softdep %s pre: %s\n", modulesNames[i], modulesNames[i+1])
 	}
 	return softDepData.String()
-}
-
-func setWorkerPodAnnotation(pod *v1.Pod, key, value string) {
-	annotations := pod.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-	annotations[key] = value
-	pod.SetAnnotations(annotations)
 }
 
 //go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go pullSecretHelper

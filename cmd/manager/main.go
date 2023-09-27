@@ -196,6 +196,12 @@ func main() {
 		if err = controllers.NewNodeKernelClusterClaimReconciler(client).SetupWithManager(mgr); err != nil {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeKernelClusterClaimReconcilerName)
 		}
+	} else {
+		eventRecorder := mgr.GetEventRecorderFor("kmm-hub")
+
+		if err = controllers.NewJobEventReconciler(client, eventRecorder).SetupWithManager(mgr); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.JobEventReconcilerName)
+		}
 	}
 
 	if err = (&v1beta12.Module{}).SetupWebhookWithManager(mgr); err != nil {
