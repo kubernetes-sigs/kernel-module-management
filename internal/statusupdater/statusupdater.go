@@ -14,7 +14,6 @@ import (
 
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 )
 
 //go:generate mockgen -source=statusupdater.go -package=statusupdater -destination=mock_statusupdater.go
@@ -81,20 +80,14 @@ func (m *moduleStatusUpdater) ModuleUpdateStatus(ctx context.Context,
 	nodesMatchingSelectorNumber := int32(len(targetedNodes))
 	numDesired := int32(len(kernelMappingNodes))
 	var numAvailableDevicePlugin int32
-	var numAvailableKernelModule int32
 	for _, ds := range existingDS {
-		if daemonset.IsDevicePluginDS(&ds) {
-			numAvailableDevicePlugin += ds.Status.NumberAvailable
-		} else {
-			numAvailableKernelModule += ds.Status.NumberAvailable
-		}
+		numAvailableDevicePlugin += ds.Status.NumberAvailable
 	}
 
 	unmodifiedMod := mod.DeepCopy()
 
 	mod.Status.ModuleLoader.NodesMatchingSelectorNumber = nodesMatchingSelectorNumber
 	mod.Status.ModuleLoader.DesiredNumber = numDesired
-	mod.Status.ModuleLoader.AvailableNumber = numAvailableKernelModule
 	if mod.Spec.DevicePlugin != nil {
 		mod.Status.DevicePlugin.NodesMatchingSelectorNumber = nodesMatchingSelectorNumber
 		mod.Status.DevicePlugin.DesiredNumber = numDesired

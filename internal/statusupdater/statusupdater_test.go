@@ -17,14 +17,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 )
-
-type daemonSetConfig struct {
-	desiredNumber   int
-	numberAvailable int
-	isDevicePlugin  bool
-}
 
 var _ = Describe("module status update", func() {
 	const (
@@ -47,19 +40,13 @@ var _ = Describe("module status update", func() {
 	})
 
 	DescribeTable("checking status updater based on module",
-		func(mappingsNodes []v1.Node, targetedNodes []v1.Node, existingDS []appsv1.DaemonSet, devicePluginPresent bool) {
-			if devicePluginPresent {
-				mod.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{}
-			}
-			var moduleLoaderAvailable int32
+		func(mappingsNodes []v1.Node, targetedNodes []v1.Node, devicePluginDS *appsv1.DaemonSet) {
+			existingDS := []appsv1.DaemonSet{}
 			var devicePluginAvailable int32
-
-			for _, ds := range existingDS {
-				if daemonset.IsDevicePluginDS(&ds) {
-					devicePluginAvailable = ds.Status.NumberAvailable
-				} else {
-					moduleLoaderAvailable += ds.Status.NumberAvailable
-				}
+			if devicePluginDS != nil {
+				mod.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{}
+				devicePluginAvailable = devicePluginDS.Status.NumberAvailable
+				existingDS = append(existingDS, *devicePluginDS)
 			}
 
 			statusWrite := client.NewMockStatusWriter(ctrl)
@@ -71,40 +58,28 @@ var _ = Describe("module status update", func() {
 			Expect(res).To(BeNil())
 			Expect(mod.Status.ModuleLoader.NodesMatchingSelectorNumber).To(Equal(int32(len(targetedNodes))))
 			Expect(mod.Status.ModuleLoader.DesiredNumber).To(Equal(int32(len(mappingsNodes))))
-			Expect(mod.Status.ModuleLoader.AvailableNumber).To(Equal(moduleLoaderAvailable))
+			Expect(mod.Status.ModuleLoader.AvailableNumber).To(Equal(int32(0)))
 			Expect(mod.Status.DevicePlugin.AvailableNumber).To(Equal(devicePluginAvailable))
 		},
-		Entry("0 nodes, 0 module-loaders, 0 device plugins",
+		Entry("0 nodes, 0 device plugins",
 			[]v1.Node{},
 			[]v1.Node{},
-			prepareDsByKernel([]daemonSetConfig{}),
-			false,
+			nil,
 		),
-		Entry("2 nodes, 2 module-loaders, 0 device plugins",
+		Entry("2 nodes, 0 device plugins",
 			[]v1.Node{v1.Node{}, v1.Node{}},
 			[]v1.Node{v1.Node{}, v1.Node{}},
-			prepareDsByKernel([]daemonSetConfig{
-				daemonSetConfig{desiredNumber: 2, numberAvailable: 2, isDevicePlugin: false},
-				daemonSetConfig{desiredNumber: 3, numberAvailable: 2, isDevicePlugin: false},
-			}),
-			false,
+			nil,
 		),
-		Entry("2 nodes, 1 module-loaders, 1 device plugins",
+		Entry("2 nodes, 1 device plugins",
 			[]v1.Node{v1.Node{}, v1.Node{}},
 			[]v1.Node{v1.Node{}, v1.Node{}},
-			prepareDsByKernel([]daemonSetConfig{
-				daemonSetConfig{desiredNumber: 4, numberAvailable: 2, isDevicePlugin: true},
-			}),
-			true,
+			prepareDaemonSet(4, 2),
 		),
-		Entry("2 nodes, 3 targeted nodes, 1 module-loaders, 1 device plugins",
+		Entry("2 nodes, 3 targeted nodes, 1 device plugins",
 			[]v1.Node{v1.Node{}, v1.Node{}},
 			[]v1.Node{v1.Node{}, v1.Node{}, v1.Node{}},
-			prepareDsByKernel([]daemonSetConfig{
-				daemonSetConfig{desiredNumber: 4, numberAvailable: 4, isDevicePlugin: true},
-				daemonSetConfig{desiredNumber: 4, numberAvailable: 2, isDevicePlugin: false},
-			}),
-			true,
+			prepareDaemonSet(4, 4),
 		),
 	)
 })
@@ -255,26 +230,13 @@ var _ = Describe("preflight status updates", func() {
 	})
 })
 
-func getDaemonSet(dsConfig daemonSetConfig) appsv1.DaemonSet {
-	roleLabel := map[string]string{constants.DaemonSetRole: "module-loader"}
-	if dsConfig.isDevicePlugin {
-		roleLabel[constants.DaemonSetRole] = "device-plugin"
-	}
+func prepareDaemonSet(desiredNumber, numberAvailable int) *appsv1.DaemonSet {
 	ds := appsv1.DaemonSet{
 		Status: appsv1.DaemonSetStatus{
-			NumberAvailable:        int32(dsConfig.numberAvailable),
-			DesiredNumberScheduled: int32(dsConfig.numberAvailable),
+			NumberAvailable:        int32(numberAvailable),
+			DesiredNumberScheduled: int32(numberAvailable),
 		},
 	}
-	ds.SetLabels(roleLabel)
-	return ds
-}
-
-func prepareDsByKernel(dsConfigs []daemonSetConfig) []appsv1.DaemonSet {
-	dsSlice := make([]appsv1.DaemonSet, 0, len(dsConfigs))
-	for _, dsConfig := range dsConfigs {
-		ds := getDaemonSet(dsConfig)
-		dsSlice = append(dsSlice, ds)
-	}
-	return dsSlice
+	ds.SetLabels(map[string]string{constants.ModuleNameLabel: "moduleName"})
+	return &ds
 }
