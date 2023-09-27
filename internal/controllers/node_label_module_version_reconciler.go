@@ -121,14 +121,24 @@ func (nlmvha *nodeLabelModuleVersionHelper) getLabelsPerModules(ctx context.Cont
 }
 
 func (nlmvha *nodeLabelModuleVersionHelper) getDevicePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error) {
-	var devicePluginPodsList v1.PodList
+	var kmmPodsList v1.PodList
 	fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
-	labelSelector := client.HasLabels{constants.DaemonSetRole}
-	err := nlmvha.client.List(ctx, &devicePluginPodsList, labelSelector, fieldSelector)
+	labelSelector := client.HasLabels{constants.ModuleNameLabel}
+	err := nlmvha.client.List(ctx, &kmmPodsList, labelSelector, fieldSelector)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get list of all device plugin pods for on node %s: %v", nodeName, err)
 	}
-	return devicePluginPodsList.Items, nil
+
+	devicePluginPods := make([]v1.Pod, 0, len(kmmPodsList.Items))
+	for _, pod := range kmmPodsList.Items {
+		for _, ownerReference := range pod.ObjectMeta.OwnerReferences {
+			if ownerReference.Kind == "DaemonSet" {
+				devicePluginPods = append(devicePluginPods, pod)
+				break
+			}
+		}
+	}
+	return devicePluginPods, nil
 }
 
 func (nlmvha *nodeLabelModuleVersionHelper) updateNodeLabels(ctx context.Context, nodeName string, reconLabelsRes *reconcileLabelsResult) error {

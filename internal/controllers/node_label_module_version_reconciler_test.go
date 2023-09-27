@@ -167,17 +167,44 @@ var _ = Describe("getDevicePluginPods", func() {
 	ctx := context.Background()
 
 	It("good flow", func() {
-		fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
-		labelSelector := client.HasLabels{constants.DaemonSetRole}
-		kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector)
+		pod1 := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{constants.ModuleNameLabel: "module name"},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						Kind: "some kind",
+					},
+					{
+						Kind: "DaemonSet",
+					},
+				},
+			},
+		}
+		pod2 := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{constants.ModuleNameLabel: "other module name"},
+			},
+		}
 
-		_, err := helper.getDevicePluginPods(ctx, nodeName)
+		fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
+		labelSelector := client.HasLabels{constants.ModuleNameLabel}
+		kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).DoAndReturn(
+			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
+				list.Items = append(list.Items, pod1)
+				list.Items = append(list.Items, pod2)
+				return nil
+			},
+		)
+
+		res, err := helper.getDevicePluginPods(ctx, nodeName)
 		Expect(err).ToNot(HaveOccurred())
+		Expect(len(res)).To(Equal(1))
+		Expect(res[0]).To(Equal(pod1))
 	})
 
 	It("error flow", func() {
 		fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
-		labelSelector := client.HasLabels{constants.DaemonSetRole}
+		labelSelector := client.HasLabels{constants.ModuleNameLabel}
 		kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Return(fmt.Errorf("some error"))
 
 		res, err := helper.getDevicePluginPods(ctx, nodeName)
@@ -256,7 +283,7 @@ var _ = Describe("reconcileLabels", func() {
 			workerPodVersionLabel:    "1",
 			devicePluginVersionLabel: "1",
 		}
-		pod.SetLabels(map[string]string{constants.ModuleNameLabel: "moduleName", constants.DaemonSetRole: constants.DevicePluginRoleLabelValue})
+		pod.SetLabels(map[string]string{constants.ModuleNameLabel: "moduleName"})
 
 		res := helper.reconcileLabels(map[string]*modulesVersionLabels{"key": moduleLabels}, []v1.Pod{pod})
 

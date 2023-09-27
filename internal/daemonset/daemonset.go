@@ -93,10 +93,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 		},
 	}
 
-	standardLabels := map[string]string{
-		constants.ModuleNameLabel: mod.Name,
-		constants.DaemonSetRole:   constants.DevicePluginRoleLabelValue,
-	}
+	standardLabels := map[string]string{constants.ModuleNameLabel: mod.Name}
 	nodeSelector := map[string]string{getDriverContainerNodeLabel(mod.Namespace, mod.Name, true): ""}
 
 	if mod.Spec.ModuleLoader.Container.Version != "" {
@@ -143,11 +140,7 @@ func (dc *daemonSetGenerator) SetDevicePluginAsDesired(
 }
 
 func (dc *daemonSetGenerator) GetNodeLabelFromPod(pod *v1.Pod, moduleName string, useDeprecatedLabel bool) string {
-	podRole := pod.Labels[constants.DaemonSetRole]
-	if podRole == constants.DevicePluginRoleLabelValue {
-		return getDevicePluginNodeLabel(pod.Namespace, moduleName, useDeprecatedLabel)
-	}
-	return getDriverContainerNodeLabel(pod.Namespace, moduleName, useDeprecatedLabel)
+	return getDevicePluginNodeLabel(pod.Namespace, moduleName, useDeprecatedLabel)
 }
 
 func (dc *daemonSetGenerator) GetModuleDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
@@ -183,11 +176,6 @@ func isOlderVersionUnusedDaemonset(ds *appsv1.DaemonSet, moduleVersion string) b
 	moduleNamespace := ds.Namespace
 	versionLabel := utils.GetDevicePluginVersionLabelName(moduleNamespace, moduleName)
 	return ds.Labels[versionLabel] != moduleVersion && ds.Status.DesiredNumberScheduled == 0
-}
-
-func IsDevicePluginDS(ds *appsv1.DaemonSet) bool {
-	dsLabels := ds.GetLabels()
-	return dsLabels[constants.DaemonSetRole] == constants.DevicePluginRoleLabelValue
 }
 
 func GetPodPullSecrets(secret *v1.LocalObjectReference) []v1.LocalObjectReference {

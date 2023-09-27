@@ -190,10 +190,7 @@ var _ = Describe("SetDevicePluginAsDesired", func() {
 		err := dc.SetDevicePluginAsDesired(context.Background(), &ds, &mod)
 		Expect(err).NotTo(HaveOccurred())
 
-		podLabels := map[string]string{
-			constants.ModuleNameLabel: moduleName,
-			constants.DaemonSetRole:   "device-plugin",
-		}
+		podLabels := map[string]string{constants.ModuleNameLabel: moduleName}
 
 		directory := v1.HostPathDirectory
 
@@ -306,7 +303,6 @@ var _ = Describe("GarbageCollect", func() {
 				Name:      "devicePlugin",
 				Namespace: "namespace",
 				Labels: map[string]string{
-					constants.DaemonSetRole:   constants.DevicePluginRoleLabelValue,
 					devicePluginVersionLabel:  currentModuleVersion,
 					constants.ModuleNameLabel: mod.Name,
 				},
@@ -343,7 +339,7 @@ var _ = Describe("GarbageCollect", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "devicePlugin",
 				Namespace: "namespace",
-				Labels:    map[string]string{constants.DaemonSetRole: constants.DevicePluginRoleLabelValue, devicePluginVersionLabel: "formerVersion"},
+				Labels:    map[string]string{constants.ModuleNameLabel: mod.Name, devicePluginVersionLabel: "formerVersion"},
 			},
 		}
 		clnt.EXPECT().Delete(context.Background(), &deleteDS).Return(fmt.Errorf("some error"))
@@ -467,29 +463,10 @@ var _ = Describe("GetNodeLabelFromPod", func() {
 		dc = NewCreator(clnt, kernelLabel, scheme)
 	})
 
-	It("should return a driver container label", func() {
-		pod := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{
-					constants.ModuleNameLabel: moduleName,
-					constants.DaemonSetRole:   "module-loader",
-				},
-				Namespace: namespace,
-			},
-		}
-		res := dc.GetNodeLabelFromPod(&pod, "module-name", false)
-		Expect(res).To(Equal(getDriverContainerNodeLabel(namespace, "module-name", false)))
-		res = dc.GetNodeLabelFromPod(&pod, "module-name", true)
-		Expect(res).To(Equal(getDriverContainerNodeLabel(namespace, "module-name", true)))
-	})
-
 	It("should return a device plugin label", func() {
 		pod := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{
-					constants.ModuleNameLabel: moduleName,
-					constants.DaemonSetRole:   "device-plugin",
-				},
+				Labels:    map[string]string{constants.ModuleNameLabel: moduleName},
 				Namespace: namespace,
 			},
 		}
