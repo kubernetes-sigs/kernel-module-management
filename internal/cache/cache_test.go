@@ -113,8 +113,6 @@ var _ = Describe("StartCollecting", func() {
 		ctx := context.Background()
 		c := New[string](1 * time.Nanosecond)
 
-		c.StartCollecting(ctx, 10*time.Millisecond)
-
 		c.items["not-expired"] = item{
 			Object:     1,
 			Expiration: time.Now().Add(1 * time.Minute),
@@ -123,6 +121,8 @@ var _ = Describe("StartCollecting", func() {
 			Object:     1,
 			Expiration: time.Now().Add(-1 * time.Minute),
 		}
+
+		c.StartCollecting(ctx, 10*time.Millisecond)
 
 		// make sure at least on run of DeleteItems() has run
 		time.Sleep(25 * time.Millisecond)
