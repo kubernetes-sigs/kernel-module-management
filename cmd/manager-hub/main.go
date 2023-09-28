@@ -152,7 +152,7 @@ func main() {
 		cmd.FatalError(ctrlLogger, err, "unable to create controller")
 	}
 
-	eventRecorder := mgr.GetEventRecorderFor("kmm")
+	eventRecorder := mgr.GetEventRecorderFor("kmm-hub")
 
 	if err = controllers.NewJobEventReconciler(client, eventRecorder).SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.JobEventReconcilerName)

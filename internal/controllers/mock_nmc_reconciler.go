@@ -111,18 +111,18 @@ func (mr *MocknmcReconcilerHelperMockRecorder) SyncStatus(ctx, nmc any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncStatus", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).SyncStatus), ctx, nmc)
 }
 
-// UpdateNodeLabels mocks base method.
-func (m *MocknmcReconcilerHelper) UpdateNodeLabels(ctx context.Context, nmc *v1beta1.NodeModulesConfig) error {
+// UpdateNodeLabelsAndRecordEvents mocks base method.
+func (m *MocknmcReconcilerHelper) UpdateNodeLabelsAndRecordEvents(ctx context.Context, nmc *v1beta1.NodeModulesConfig) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNodeLabels", ctx, nmc)
+	ret := m.ctrl.Call(m, "UpdateNodeLabelsAndRecordEvents", ctx, nmc)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// UpdateNodeLabels indicates an expected call of UpdateNodeLabels.
-func (mr *MocknmcReconcilerHelperMockRecorder) UpdateNodeLabels(ctx, nmc any) *gomock.Call {
+// UpdateNodeLabelsAndRecordEvents indicates an expected call of UpdateNodeLabelsAndRecordEvents.
+func (mr *MocknmcReconcilerHelperMockRecorder) UpdateNodeLabelsAndRecordEvents(ctx, nmc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNodeLabels", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).UpdateNodeLabels), ctx, nmc)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNodeLabelsAndRecordEvents", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).UpdateNodeLabelsAndRecordEvents), ctx, nmc)
 }
 
 // MockpodManager is a mock of podManager interface.

@@ -8,7 +8,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 )
 
-var reKernelModuleReadyLabel = regexp.MustCompile(`^kmm\.node\.kubernetes\.io/[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.ready$`)
+var reKernelModuleReadyLabel = regexp.MustCompile(`^kmm\.node\.kubernetes\.io/([a-zA-Z0-9-]+)\.([a-zA-Z0-9-]+)\.ready$`)
 
 func GetModuleVersionLabelName(namespace, name string) string {
 	return fmt.Sprintf("%s.%s.%s", constants.ModuleVersionLabelPrefix, namespace, name)
@@ -77,6 +77,12 @@ func GetDevicePluginNodeLabel(namespace, moduleName string) string {
 	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-ready", namespace, moduleName)
 }
 
-func IsKernelModuleReadyNodeLabel(label string) bool {
-	return reKernelModuleReadyLabel.MatchString(label)
+func IsKernelModuleReadyNodeLabel(label string) (bool, string, string) {
+	matches := reKernelModuleReadyLabel.FindStringSubmatch(label)
+
+	if len(matches) != 3 {
+		return false, "", ""
+	}
+
+	return true, matches[1], matches[2]
 }
