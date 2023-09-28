@@ -124,18 +124,16 @@ var _ = Describe("StartCollecting", func() {
 
 		c.StartCollecting(ctx, 10*time.Millisecond)
 
-		// make sure at least on run of DeleteItems() has run
-		time.Sleep(25 * time.Millisecond)
+		Eventually(func() bool {
+			_, found := c.items["expired"]
+			return found
+		}).Should(BeFalse())
 
 		// this key should not be removed yet
 		item, found := c.items["not-expired"]
 		Expect(found).To(BeTrue())
 		Expect(item).ToNot(BeNil())
 		Expect(item.Object).To(Equal(1))
-
-		// this key should already be removed
-		_, found = c.items["expired"]
-		Expect(found).To(BeFalse())
 	})
 
 	It("should return when its context is cancelled", func() {
