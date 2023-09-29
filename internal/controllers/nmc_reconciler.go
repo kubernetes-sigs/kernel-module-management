@@ -845,7 +845,7 @@ func (p *podManagerImpl) baseWorkerPod(
 				},
 			},
 			NodeName:           nodeName,
-			RestartPolicy:      v1.RestartPolicyNever,
+			RestartPolicy:      v1.RestartPolicyOnFailure,
 			ServiceAccountName: item.ServiceAccountName,
 			Volumes:            append(volumes, psv...),
 		},
