@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
@@ -137,6 +139,53 @@ var _ = Describe("worker_LoadKmod", func() {
 			HaveOccurred(),
 		)
 	})
+})
+
+var _ = Describe("worker_SetFirmwareClassPath", func() {
+	w := NewWorker(nil, nil, GinkgoLogr)
+
+	AfterEach(func() {
+		firmwareClassPathLocation = FirmwareClassPathLocation
+	})
+
+	It("should return an error if the sysfile does not exist", func() {
+		firmwareClassPathLocation = "/non/existent/path"
+
+		Expect(
+			w.SetFirmwareClassPath("some value"),
+		).To(
+			HaveOccurred(),
+		)
+	})
+
+	DescribeTable(
+		"should work as expected",
+		func(oldValue string) {
+			firmwareClassPathLocation = filepath.Join(GinkgoT().TempDir(), "firmwareClassPath")
+
+			Expect(
+				os.WriteFile(firmwareClassPathLocation, []byte(oldValue), 0666),
+			).NotTo(
+				HaveOccurred(),
+			)
+
+			const value = "new value"
+
+			Expect(
+				w.SetFirmwareClassPath(value),
+			).NotTo(
+				HaveOccurred(),
+			)
+
+			Expect(
+				os.ReadFile(firmwareClassPathLocation),
+			).To(
+				Equal([]byte(value)),
+			)
+		},
+		Entry(nil, ""),
+		Entry(nil, "old value not empty"),
+	)
 })
 
 var _ = Describe("worker_UnloadKmod", func() {

@@ -8,6 +8,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
+//go:generate mockgen -source=config.go -package=worker -destination=mock_config.go
+
 type ConfigHelper interface {
 	ReadConfigFile(path string) (*kmmv1beta1.ModuleConfig, error)
 }
