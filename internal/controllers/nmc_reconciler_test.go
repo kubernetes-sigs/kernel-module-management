@@ -1271,6 +1271,10 @@ softdep b pre: c
 					Name:  "worker",
 					Image: workerImage,
 					Args:  []string{"kmod", subcommand, "/etc/kmm-worker/config.yaml"},
+					Resources: v1.ResourceRequirements{
+						Limits:   limits,
+						Requests: requests,
+					},
 					SecurityContext: &v1.SecurityContext{
 						Capabilities: &v1.Capabilities{
 							Add: []v1.Capability{"SYS_MODULE"},
