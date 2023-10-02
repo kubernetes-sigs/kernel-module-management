@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	JobEventReconcilerName = "JobEvent"
+	BuildSignEventsReconcilerName = "BuildSignEvents"
 
 	createdAnnotationKey = "kmm.node.kubernetes.io/created-event-sent"
 )
@@ -70,7 +70,7 @@ type JobEventReconciler struct {
 	recorder record.EventRecorder
 }
 
-func NewJobEventReconciler(client client.Client, eventRecorder record.EventRecorder) *JobEventReconciler {
+func NewBuildSignEventsReconciler(client client.Client, eventRecorder record.EventRecorder) *JobEventReconciler {
 	return &JobEventReconciler{
 		client:   client,
 		recorder: eventRecorder,
@@ -194,7 +194,7 @@ func (r *JobEventReconciler) SetupWithManager(mgr manager.Manager) error {
 			&v1.Pod{},
 			builder.WithPredicates(jobEventPredicate),
 		).
-		Named(JobEventReconcilerName).
+		Named(BuildSignEventsReconcilerName).
 		Complete(r)
 }
 

@@ -107,7 +107,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		ctrl := gomock.NewController(GinkgoT())
 		fakeRecorder = record.NewFakeRecorder(2)
 		mockClient = testclient.NewMockClient(ctrl)
-		r = NewJobEventReconciler(mockClient, fakeRecorder)
+		r = NewBuildSignEventsReconciler(mockClient, fakeRecorder)
 	})
 
 	closeAndGetAllEvents := func(events chan string) []string {
