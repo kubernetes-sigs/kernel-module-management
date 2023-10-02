@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/kubectl/pkg/cmd/util/podcmd"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -67,9 +68,10 @@ func NewNMCReconciler(
 	scheme *runtime.Scheme,
 	workerImage string,
 	workerCfg *config.Worker,
+	recorder record.EventRecorder,
 ) *NMCReconciler {
 	pm := newPodManager(client, workerImage, scheme, workerCfg)
-	helper := newWorkerHelper(client, pm)
+	helper := newNMCReconcilerHelper(client, pm, recorder)
 	return &NMCReconciler{
 		client: client,
 		helper: helper,
@@ -151,7 +153,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		return reconcile.Result{}, fmt.Errorf("could not garbage collect in-use labels for NMC %s: %v", req.NamespacedName, err)
 	}
 
-	if err := r.helper.UpdateNodeLabels(ctx, &nmcObj); err != nil {
+	if err := r.helper.UpdateNodeLabelsAndRecordEvents(ctx, &nmcObj); err != nil {
 		return reconcile.Result{}, fmt.Errorf("could not update node's labels for NMC %s: %v", req.NamespacedName, err)
 	}
 
@@ -222,18 +224,20 @@ type nmcReconcilerHelper interface {
 	ProcessUnconfiguredModuleStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, status *kmmv1beta1.NodeModuleStatus) error
 	RemoveOrphanFinalizers(ctx context.Context, nodeName string) error
 	SyncStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
-	UpdateNodeLabels(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
+	UpdateNodeLabelsAndRecordEvents(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
 }
 
 type nmcReconcilerHelperImpl struct {
-	client client.Client
-	pm     podManager
+	client   client.Client
+	pm       podManager
+	recorder record.EventRecorder
 }
 
-func newWorkerHelper(client client.Client, pm podManager) nmcReconcilerHelper {
+func newNMCReconcilerHelper(client client.Client, pm podManager, recorder record.EventRecorder) nmcReconcilerHelper {
 	return &nmcReconcilerHelperImpl{
-		client: client,
-		pm:     pm,
+		client:   client,
+		pm:       pm,
+		recorder: recorder,
 	}
 }
 
@@ -521,56 +525,97 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 	return errors.Join(errs...)
 }
 
-func (h *nmcReconcilerHelperImpl) UpdateNodeLabels(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error {
+func (h *nmcReconcilerHelperImpl) UpdateNodeLabelsAndRecordEvents(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error {
 	node := v1.Node{}
 	if err := h.client.Get(ctx, types.NamespacedName{Name: nmc.Name}, &node); err != nil {
 		return fmt.Errorf("could not get node %s: %v", nmc.Name, err)
 	}
 
 	// get all the kernel module ready labels of the node
-	nodeModuleReadyLabels := sets.New[string]()
+	nodeModuleReadyLabels := sets.New[types.NamespacedName]()
+
 	for label := range node.GetLabels() {
-		if utils.IsKernelModuleReadyNodeLabel(label) {
-			nodeModuleReadyLabels.Insert(label)
+		if ok, namespace, name := utils.IsKernelModuleReadyNodeLabel(label); ok {
+			nodeModuleReadyLabels.Insert(types.NamespacedName{Namespace: namespace, Name: name})
 		}
 	}
 
 	// get spec labels and their config
-	specLabels := make(map[string]kmmv1beta1.ModuleConfig)
+	specLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
 	for _, module := range nmc.Spec.Modules {
-		label := utils.GetKernelModuleReadyNodeLabel(module.Namespace, module.Name)
-		specLabels[label] = module.Config
+		specLabels[types.NamespacedName{Namespace: module.Namespace, Name: module.Name}] = module.Config
 	}
 
 	// get status labels and their config
-	statusLabels := make(map[string]kmmv1beta1.ModuleConfig)
+	statusLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
 	for _, module := range nmc.Status.Modules {
-		label := utils.GetKernelModuleReadyNodeLabel(module.Namespace, module.Name)
+		label := types.NamespacedName{Namespace: module.Namespace, Name: module.Name}
 		statusLabels[label] = kmmv1beta1.ModuleConfig{}
 		if module.Config != nil {
 			statusLabels[label] = *module.Config
 		}
 	}
 
+	unloaded := make([]types.NamespacedName, 0, len(nodeModuleReadyLabels))
+	loaded := make([]types.NamespacedName, 0, len(specLabels))
+
 	patchFrom := client.MergeFrom(node.DeepCopy())
+
 	// label in node but not in spec or status - should be removed
-	for label := range nodeModuleReadyLabels {
-		_, inSpec := specLabels[label]
-		_, inStatus := statusLabels[label]
+	for nsn := range nodeModuleReadyLabels {
+		_, inSpec := specLabels[nsn]
+		_, inStatus := statusLabels[nsn]
 		if !inSpec && !inStatus {
-			meta.RemoveLabel(&node, label)
+			meta.RemoveLabel(
+				&node,
+				utils.GetKernelModuleReadyNodeLabel(nsn.Namespace, nsn.Name),
+			)
+
+			unloaded = append(unloaded, nsn)
 		}
 	}
 
 	// label in spec and status and config equal - should be added
-	for label, specConfig := range specLabels {
-		statusConfig, ok := statusLabels[label]
-		if ok && reflect.DeepEqual(specConfig, statusConfig) {
-			meta.SetLabel(&node, label, "")
+	for nsn, specConfig := range specLabels {
+		statusConfig, ok := statusLabels[nsn]
+		if ok && reflect.DeepEqual(specConfig, statusConfig) && !nodeModuleReadyLabels.Has(nsn) {
+			meta.SetLabel(
+				&node,
+				utils.GetKernelModuleReadyNodeLabel(nsn.Namespace, nsn.Name),
+				"",
+			)
+
+			loaded = append(loaded, nsn)
 		}
 	}
 
-	return h.client.Patch(ctx, &node, patchFrom)
+	if err := h.client.Patch(ctx, &node, patchFrom); err != nil {
+		return fmt.Errorf("could not patch node: %v", err)
+	}
+
+	for _, nsn := range unloaded {
+		h.recorder.AnnotatedEventf(
+			&node,
+			map[string]string{"module": nsn.String()},
+			v1.EventTypeNormal,
+			"ModuleUnloaded",
+			"Module %s unloaded from the kernel",
+			nsn.String(),
+		)
+	}
+
+	for _, nsn := range loaded {
+		h.recorder.AnnotatedEventf(
+			&node,
+			map[string]string{"module": nsn.String()},
+			v1.EventTypeNormal,
+			"ModuleLoaded",
+			"Module %s loaded into the kernel",
+			nsn.String(),
+		)
+	}
+
+	return nil
 }
 
 const (

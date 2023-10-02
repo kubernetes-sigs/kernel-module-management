@@ -45,3 +45,29 @@ var _ = Describe("GetNamespaceNameFromVersionLabel", func() {
 		Entry("with error", "version-module-some-namespace-some-name", "some-namespace", "some-name", true),
 	)
 })
+
+var _ = Describe("IsKernelModuleReadyNodeLabel", func() {
+	DescribeTable(
+		"should work as expected",
+		func(input string, expectedOK bool, expectedNamespace, expectedName string) {
+			ok, namespace, name := IsKernelModuleReadyNodeLabel(input)
+
+			if !expectedOK {
+				Expect(ok).To(BeFalse())
+				return
+			}
+
+			Expect(ok).To(BeTrue())
+			Expect(namespace).To(Equal(expectedNamespace))
+			Expect(name).To(Equal(expectedName))
+		},
+		Entry(nil, "kmm.node.kubernetes.io/..ready", false, "", ""),
+		Entry(nil, "kmm.node.kubernetes.io/a..ready", false, "", ""),
+		Entry(nil, "kmm.node.kubernetes.io/.b.ready", false, "", ""),
+		Entry(nil, "kmm.node.kubernetes.io/a.b", false, "", ""),
+		Entry(nil, "kmm.node.kubernetes.io/a.b.read", false, "", ""),
+		Entry(nil, "a.b.read", false, "", ""),
+		Entry(nil, "kmm.node.kubernetes.io/a.b.ready", true, "a", "b"),
+		Entry(nil, "kmm.node.kubernetes.io/a1-2b.c3-4d.ready", true, "a1-2b", "c3-4d"),
+	)
+})

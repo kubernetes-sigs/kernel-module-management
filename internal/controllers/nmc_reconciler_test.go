@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -150,7 +151,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec1, nil),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc),
-			wh.EXPECT().UpdateNodeLabels(ctx, nmc),
+			wh.EXPECT().UpdateNodeLabelsAndRecordEvents(ctx, nmc),
 		)
 
 		Expect(
@@ -188,7 +189,7 @@ var _ = Describe("nmcReconcilerHelperImpl_GarbageCollectInUseLabels", func() {
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client = testclient.NewMockClient(ctrl)
-		wh = newWorkerHelper(client, nil)
+		wh = newNMCReconcilerHelper(client, nil, nil)
 	})
 
 	It("should do nothing if no labels should be collected", func() {
@@ -283,7 +284,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client = testclient.NewMockClient(ctrl)
 		pm = NewMockpodManager(ctrl)
-		wh = newWorkerHelper(client, pm)
+		wh = newNMCReconcilerHelper(client, pm, nil)
 	})
 
 	It("should create a loader Pod if the corresponding status is missing", func() {
@@ -477,7 +478,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		status := &kmmv1beta1.NodeModuleStatus{InProgress: true}
 
 		Expect(
-			newWorkerHelper(nil, nil).ProcessUnconfiguredModuleStatus(ctx, nmc, status),
+			newNMCReconcilerHelper(nil, nil, nil).ProcessUnconfiguredModuleStatus(ctx, nmc, status),
 		).NotTo(
 			HaveOccurred(),
 		)
@@ -493,7 +494,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		client.EXPECT().Status().Return(sw)
 		sw.EXPECT().Patch(ctx, nmc, gomock.Any())
 		Expect(
-			newWorkerHelper(client, nil).ProcessUnconfiguredModuleStatus(ctx, nmc, status),
+			newNMCReconcilerHelper(client, nil, nil).ProcessUnconfiguredModuleStatus(ctx, nmc, status),
 		).NotTo(
 			HaveOccurred(),
 		)
@@ -504,7 +505,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		client := testclient.NewMockClient(ctrl)
 
 		pm := NewMockpodManager(ctrl)
-		wh := newWorkerHelper(client, pm)
+		wh := newNMCReconcilerHelper(client, pm, nil)
 
 		nmc := &kmmv1beta1.NodeModulesConfig{}
 		status := &kmmv1beta1.NodeModuleStatus{
@@ -536,7 +537,7 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		kubeClient = testclient.NewMockClient(ctrl)
 		pm = NewMockpodManager(ctrl)
-		wh = newWorkerHelper(kubeClient, pm)
+		wh = newNMCReconcilerHelper(kubeClient, pm, nil)
 		sw = testclient.NewMockStatusWriter(ctrl)
 	})
 
@@ -874,7 +875,7 @@ var _ = Describe("nmcReconcilerHelperImpl_RemoveOrphanFinalizers", func() {
 		ctrl := gomock.NewController(GinkgoT())
 		kubeClient = testclient.NewMockClient(ctrl)
 		pm = NewMockpodManager(ctrl)
-		wh = newWorkerHelper(kubeClient, pm)
+		wh = newNMCReconcilerHelper(kubeClient, pm, nil)
 	})
 
 	It("should do nothing if no pods are present", func() {
@@ -922,11 +923,12 @@ const (
 	moduleNamespace = "my-module-namespace"
 )
 
-var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabels", func() {
+var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func() {
 	var (
 		ctx          = context.TODO()
 		client       *testclient.MockClient
 		expectedNode v1.Node
+		fakeRecorder *record.FakeRecorder
 		nmc          kmmv1beta1.NodeModulesConfig
 		wh           nmcReconcilerHelper
 	)
@@ -943,7 +945,8 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabels", func() {
 		nmc = kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: "nmcName"},
 		}
-		wh = newWorkerHelper(client, nil)
+		fakeRecorder = record.NewFakeRecorder(10)
+		wh = newNMCReconcilerHelper(client, nil, fakeRecorder)
 	})
 
 	moduleConfig := kmmv1beta1.ModuleConfig{
@@ -952,77 +955,189 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabels", func() {
 		InTreeModuleToRemove: "some kernel module",
 	}
 
+	closeAndGetAllEvents := func(events chan string) []string {
+		elems := make([]string, 0)
+
+		close(events)
+
+		for s := range events {
+			elems = append(elems, s)
+		}
+
+		return elems
+	}
+
+	_ = closeAndGetAllEvents(make(chan string))
+
 	It("failed to get node", func() {
 		client.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
 
-		err := wh.UpdateNodeLabels(ctx, &nmc)
+		err := wh.UpdateNodeLabelsAndRecordEvents(ctx, &nmc)
 		Expect(err).To(HaveOccurred())
 	})
 
-	DescribeTable("nodes labels scenarios", func(nodeLabelPresent, specPresent, statusPresent, statusConfigPresent, configsEqual, resultLabelPresent bool) {
-		nodeLabels := make(map[string]string)
-		if nodeLabelPresent {
-			nodeLabels[utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName)] = ""
-		}
-		if specPresent {
-			nmc.Spec.Modules = []kmmv1beta1.NodeModuleSpec{
-				{
-					ModuleItem: kmmv1beta1.ModuleItem{
-						Name:      moduleName,
-						Namespace: moduleNamespace,
-					},
-					Config: moduleConfig,
-				},
+	type testCase struct {
+		nodeLabelPresent    bool
+		specPresent         bool
+		statusPresent       bool
+		statusConfigPresent bool
+		configsEqual        bool
+		resultLabelPresent  bool
+		addsReadyLabel      bool
+		removesReadyLabel   bool
+	}
+
+	DescribeTable(
+		"nodes labels scenarios",
+		func(tc testCase) {
+			nodeLabels := make(map[string]string)
+			if tc.nodeLabelPresent {
+				nodeLabels[utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName)] = ""
 			}
-		}
-		if statusPresent {
-			nmc.Status.Modules = []kmmv1beta1.NodeModuleStatus{
-				{
-					ModuleItem: kmmv1beta1.ModuleItem{
-						Name:      moduleName,
-						Namespace: moduleNamespace,
+			if tc.specPresent {
+				nmc.Spec.Modules = []kmmv1beta1.NodeModuleSpec{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Name:      moduleName,
+							Namespace: moduleNamespace,
+						},
+						Config: moduleConfig,
 					},
-				},
-			}
-			if statusConfigPresent {
-				statusConfig := moduleConfig
-				if !configsEqual {
-					statusConfig.ContainerImage = "some other container image"
 				}
-				nmc.Status.Modules[0].Config = &statusConfig
 			}
-		}
+			if tc.statusPresent {
+				nmc.Status.Modules = []kmmv1beta1.NodeModuleStatus{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Name:      moduleName,
+							Namespace: moduleNamespace,
+						},
+					},
+				}
+				if tc.statusConfigPresent {
+					statusConfig := moduleConfig
+					if !tc.configsEqual {
+						statusConfig.ContainerImage = "some other container image"
+					}
+					nmc.Status.Modules[0].Config = &statusConfig
+				}
+			}
 
-		if resultLabelPresent {
-			resultLabels := map[string]string{utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName): ""}
-			expectedNode.SetLabels(resultLabels)
-		}
+			if tc.resultLabelPresent {
+				resultLabels := map[string]string{utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName): ""}
+				expectedNode.SetLabels(resultLabels)
+			}
 
-		gomock.InOrder(
-			client.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ interface{}, _ interface{}, node *v1.Node, _ ...ctrlclient.GetOption) error {
-					node.SetName("node name")
-					node.SetLabels(nodeLabels)
-					return nil
-				},
-			),
-			client.EXPECT().Patch(ctx, &expectedNode, gomock.Any()).Return(nil),
-		)
+			gomock.InOrder(
+				client.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, node *v1.Node, _ ...ctrlclient.GetOption) error {
+						node.SetName("node name")
+						node.SetLabels(nodeLabels)
+						return nil
+					},
+				),
+				client.EXPECT().Patch(ctx, &expectedNode, gomock.Any()).Return(nil),
+			)
 
-		err := wh.UpdateNodeLabels(ctx, &nmc)
-		Expect(err).NotTo(HaveOccurred())
+			err := wh.UpdateNodeLabelsAndRecordEvents(ctx, &nmc)
+			Expect(err).NotTo(HaveOccurred())
 
-	},
-		Entry("node label present, spec missing, status missing", true, false, false, false, false, false),
-		Entry("node label present, spec present, status missing", true, true, false, false, false, true),
-		Entry("node label present, spec present, status present, status config missing", true, true, true, false, false, true),
-		Entry("node label present, spec present, status present, status config present, configs not equal", true, true, true, true, false, true),
-		Entry("node label present, spec present, status present, status config present, configs equal", true, true, true, true, true, true),
-		Entry("node label missing, spec missing, status missing", false, false, false, false, false, false),
-		Entry("node label missing, spec present, status missing", false, true, false, false, false, false),
-		Entry("node label missing, spec present, status present, status config missing", false, true, true, false, false, false),
-		Entry("node label missing, spec present, status present, status config present, configs not equal", false, true, true, true, false, false),
-		Entry("node label missing, spec present, status present, status config present, configs equal", false, true, true, true, true, true),
+			events := closeAndGetAllEvents(fakeRecorder.Events)
+
+			if !tc.addsReadyLabel && !tc.removesReadyLabel {
+				Expect(events).To(BeEmpty())
+				return
+			}
+
+			Expect(events).To(HaveLen(1))
+
+			if tc.removesReadyLabel {
+				Expect(events[0]).To(ContainSubstring("Normal ModuleUnloaded Module my-module-namespace/my-module unloaded from the kernel"))
+			}
+
+			if tc.addsReadyLabel {
+				Expect(events[0]).To(ContainSubstring("Normal ModuleLoaded Module my-module-namespace/my-module loaded into the kernel"))
+			}
+		},
+		Entry(
+			"node label present, spec missing, status missing",
+			testCase{
+				nodeLabelPresent:  true,
+				removesReadyLabel: true,
+			},
+		),
+		Entry(
+			"node label present, spec present, status missing",
+			testCase{
+				nodeLabelPresent:   true,
+				specPresent:        true,
+				resultLabelPresent: true,
+			},
+		),
+		Entry(
+			"node label present, spec present, status present, status config missing",
+			testCase{
+				nodeLabelPresent:   true,
+				specPresent:        true,
+				statusPresent:      true,
+				resultLabelPresent: true,
+			},
+		),
+		Entry(
+			"node label present, spec present, status present, status config present, configs not equal",
+			testCase{
+				nodeLabelPresent:    true,
+				specPresent:         true,
+				statusPresent:       true,
+				statusConfigPresent: true,
+				resultLabelPresent:  true,
+			},
+		),
+		Entry(
+			"node label present, spec present, status present, status config present, configs equal",
+			testCase{
+				nodeLabelPresent:    true,
+				specPresent:         true,
+				statusPresent:       true,
+				statusConfigPresent: true,
+				configsEqual:        true,
+				resultLabelPresent:  true,
+			},
+		),
+		Entry(
+			"node label missing, spec missing, status missing",
+			testCase{},
+		),
+		Entry(
+			"node label missing, spec present, status missing",
+			testCase{specPresent: true},
+		),
+		Entry(
+			"node label missing, spec present, status present, status config missing",
+			testCase{
+				specPresent:   true,
+				statusPresent: true,
+			},
+		),
+		Entry(
+			"node label missing, spec present, status present, status config present, configs not equal",
+			testCase{
+				specPresent:         true,
+				statusPresent:       true,
+				statusConfigPresent: true,
+			},
+		),
+		Entry(
+			"node label missing, spec present, status present, status config present, configs equal",
+			testCase{
+				specPresent:         true,
+				statusPresent:       true,
+				statusConfigPresent: true,
+				configsEqual:        true,
+				resultLabelPresent:  true,
+				addsReadyLabel:      true,
+			},
+		),
 	)
 })
 
