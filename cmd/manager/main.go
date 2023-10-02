@@ -199,8 +199,8 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeKernelClusterClaimReconcilerName)
 		}
 	} else {
-		if err = controllers.NewJobEventReconciler(client, eventRecorder).SetupWithManager(mgr); err != nil {
-			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.JobEventReconcilerName)
+		if err = controllers.NewBuildSignEventsReconciler(client, eventRecorder).SetupWithManager(mgr); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignEventsReconcilerName)
 		}
 	}
 
