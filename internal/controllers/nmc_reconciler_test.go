@@ -1426,7 +1426,7 @@ softdep b pre: c
 				},
 			},
 			NodeName:           nmcName,
-			RestartPolicy:      v1.RestartPolicyNever,
+			RestartPolicy:      v1.RestartPolicyOnFailure,
 			ServiceAccountName: serviceAccountName,
 			Volumes: []v1.Volume{
 				{
