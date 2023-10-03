@@ -74,7 +74,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	DescribeTable("check error flows", func(getModuleError, getNodesError, getMappingsError, getDSError, handleBuildError,
+	DescribeTable("check error flows", func(getModuleError, getDSError, getNodesError, getMappingsError, handleBuildError,
 		handleSignError, handlePluginError, gcError bool) {
 		mod := kmmv1beta1.Module{}
 		selectNodesList := []v1.Node{v1.Node{}}
@@ -87,6 +87,11 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil)
+		if getDSError {
+			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, returnedError)
+			goto executeTestFunction
+		}
+		mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil)
 		mockReconHelper.EXPECT().setKMMOMetrics(ctx)
 		if getNodesError {
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(nil, returnedError)
@@ -98,11 +103,6 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().getRelevantKernelMappingsAndNodes(ctx, &mod, selectNodesList).Return(mappings, kernelNodesList, nil)
-		if getDSError {
-			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, returnedError)
-			goto executeTestFunction
-		}
-		mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil)
 		if handleBuildError {
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(false, returnedError)
 			goto executeTestFunction
@@ -133,13 +133,12 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 	},
 		Entry("getRequestedModule failed", true, false, false, false, false, false, false, false),
-		Entry("getNodesListBySelector failed", false, true, false, false, false, false, false, false),
-		Entry("getRelevantKernelMappingsAndNodes failed", false, false, true, false, false, false, false, false),
-		Entry("ModuleDaemonSetsByKernelVersion failed", false, false, false, true, false, false, false, false),
-		Entry("handleBuild failed ", false, false, false, false, true, false, false, false),
-		Entry("handleSig failedn", false, false, false, false, false, true, false, false),
-		Entry("handleDriverContainer failed", false, false, false, false, false, false, false, false),
-		Entry("handleDevicePlugin failed", false, false, false, false, false, false, true, false),
+		Entry("getModuleDaemonSets failed", false, true, false, false, false, false, false, false),
+		Entry("getNodesListBySelector failed", false, false, true, false, false, false, false, false),
+		Entry("getRelevantKernelMappingsAndNodes failed", false, false, false, true, false, false, false, false),
+		Entry("handleBuild failed ", false, false, false, false, false, true, false, false),
+		Entry("handleSig failed", false, false, false, false, false, false, true, false),
+		Entry("handleDevicePlugin failed", false, false, false, false, false, false, false, true),
 		Entry("garbageCollect failed", false, false, false, false, false, false, false, true),
 		Entry("moduleUpdateStatus failed", false, false, false, false, false, false, false, false),
 	)
@@ -152,10 +151,10 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		moduleDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
+			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappingsAndNodes(ctx, &mod, selectNodesList).Return(mappings, kernelNodesList, nil),
-			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(false, nil),
 			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, moduleDS).Return(nil),
 			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings, moduleDS).Return(nil),
@@ -177,10 +176,10 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		moduleDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
+			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappingsAndNodes(ctx, &mod, selectNodesList).Return(mappings, kernelNodesList, nil),
-			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(false, nil),
 			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, moduleDS).Return(nil),
@@ -202,10 +201,10 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		moduleDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
+			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappingsAndNodes(ctx, &mod, selectNodesList).Return(mappings, kernelNodesList, nil),
-			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, moduleDS).Return(nil),
@@ -218,6 +217,35 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 	})
+
+	It("module deletion flow", func() {
+		mod := kmmv1beta1.Module{}
+		mod.SetDeletionTimestamp(&metav1.Time{})
+		moduleDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
+
+		By("good flow")
+		gomock.InOrder(
+			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
+			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
+			mockReconHelper.EXPECT().handleModuleDeletion(ctx, moduleDS).Return(nil),
+		)
+
+		res, err := mr.Reconcile(ctx, req)
+		Expect(res).To(Equal(reconcile.Result{}))
+		Expect(err).NotTo(HaveOccurred())
+
+		By("error flow")
+		gomock.InOrder(
+			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
+			mockDC.EXPECT().GetModuleDaemonSets(ctx, mod.Name, mod.Namespace).Return(moduleDS, nil),
+			mockReconHelper.EXPECT().handleModuleDeletion(ctx, moduleDS).Return(fmt.Errorf("some error")),
+		)
+
+		res, err = mr.Reconcile(ctx, req)
+		Expect(res).To(Equal(reconcile.Result{}))
+		Expect(err).To(HaveOccurred())
+	})
+
 })
 
 var _ = Describe("ModuleReconciler_getNodesListBySelector", func() {
@@ -682,6 +710,37 @@ var _ = Describe("ModuleReconciler_garbageCollect", func() {
 		Entry("sign GC failed", false, false),
 	)
 
+})
+
+var _ = Describe("ModuleReconciler_handleModuleDeletion", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		mhr  moduleReconcilerHelperAPI
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mhr = newModuleReconcilerHelper(clnt, nil, nil, nil, nil, nil)
+	})
+
+	existingDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
+	ctx := context.Background()
+
+	It("good flow", func() {
+		clnt.EXPECT().Delete(ctx, &existingDS[0]).Return(nil)
+
+		err := mhr.handleModuleDeletion(ctx, existingDS)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("error flow", func() {
+		clnt.EXPECT().Delete(ctx, &existingDS[0]).Return(fmt.Errorf("some error"))
+
+		err := mhr.handleModuleDeletion(ctx, existingDS)
+		Expect(err).To(HaveOccurred())
+	})
 })
 
 var _ = Describe("ModuleReconciler_setKMMOMetrics", func() {
