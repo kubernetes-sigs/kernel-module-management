@@ -119,17 +119,31 @@ func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleBuild(ctx, mld any) *
 }
 
 // handleDevicePlugin mocks base method.
-func (m *MockmoduleReconcilerHelperAPI) handleDevicePlugin(ctx context.Context, mod *v1beta1.Module, existingModuleDS []v1.DaemonSet) error {
+func (m *MockmoduleReconcilerHelperAPI) handleDevicePlugin(ctx context.Context, mod *v1beta1.Module, existingDevicePluginDS []v1.DaemonSet) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "handleDevicePlugin", ctx, mod, existingModuleDS)
+	ret := m.ctrl.Call(m, "handleDevicePlugin", ctx, mod, existingDevicePluginDS)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // handleDevicePlugin indicates an expected call of handleDevicePlugin.
-func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDevicePlugin(ctx, mod, existingModuleDS any) *gomock.Call {
+func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleDevicePlugin(ctx, mod, existingDevicePluginDS any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDevicePlugin", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDevicePlugin), ctx, mod, existingModuleDS)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDevicePlugin", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleDevicePlugin), ctx, mod, existingDevicePluginDS)
+}
+
+// handleModuleDeletion mocks base method.
+func (m *MockmoduleReconcilerHelperAPI) handleModuleDeletion(ctx context.Context, existingDevicePluginDS []v1.DaemonSet) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "handleModuleDeletion", ctx, existingDevicePluginDS)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// handleModuleDeletion indicates an expected call of handleModuleDeletion.
+func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleModuleDeletion(ctx, existingDevicePluginDS any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleModuleDeletion", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleModuleDeletion), ctx, existingDevicePluginDS)
 }
 
 // handleSigning mocks base method.

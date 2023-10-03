@@ -104,6 +104,16 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return res, fmt.Errorf("failed to get the requested %s KMMO CR: %w", req.NamespacedName, err)
 	}
 
+	existingDevicePluginDS, err := r.daemonAPI.GetModuleDaemonSets(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		return res, fmt.Errorf("could not get DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
+	}
+
+	if mod.GetDeletionTimestamp() != nil {
+		err = r.reconHelperAPI.handleModuleDeletion(ctx, existingDevicePluginDS)
+		return ctrl.Result{}, err
+	}
+
 	r.reconHelperAPI.setKMMOMetrics(ctx)
 
 	targetedNodes, err := r.reconHelperAPI.getNodesListBySelector(ctx, mod)
@@ -114,11 +124,6 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	mldMappings, nodesWithMapping, err := r.reconHelperAPI.getRelevantKernelMappingsAndNodes(ctx, mod, targetedNodes)
 	if err != nil {
 		return res, fmt.Errorf("could get kernel mappings and nodes for modules %s: %w", mod.Name, err)
-	}
-
-	existingModuleDS, err := r.daemonAPI.GetModuleDaemonSets(ctx, mod.Name, mod.Namespace)
-	if err != nil {
-		return res, fmt.Errorf("could not get DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
 	}
 
 	for kernelVersion, mld := range mldMappings {
@@ -146,18 +151,18 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	logger.Info("Handle device plugin")
-	err = r.reconHelperAPI.handleDevicePlugin(ctx, mod, existingModuleDS)
+	err = r.reconHelperAPI.handleDevicePlugin(ctx, mod, existingDevicePluginDS)
 	if err != nil {
 		return res, fmt.Errorf("could handle device plugin: %w", err)
 	}
 
 	logger.Info("Run garbage collection")
-	err = r.reconHelperAPI.garbageCollect(ctx, mod, mldMappings, existingModuleDS)
+	err = r.reconHelperAPI.garbageCollect(ctx, mod, mldMappings, existingDevicePluginDS)
 	if err != nil {
 		return res, fmt.Errorf("failed to run garbage collection: %v", err)
 	}
 
-	err = r.statusUpdaterAPI.ModuleUpdateStatus(ctx, mod, nodesWithMapping, targetedNodes, existingModuleDS)
+	err = r.statusUpdaterAPI.ModuleUpdateStatus(ctx, mod, nodesWithMapping, targetedNodes, existingDevicePluginDS)
 	if err != nil {
 		return res, fmt.Errorf("failed to update status of the module: %w", err)
 	}
@@ -176,8 +181,9 @@ type moduleReconcilerHelperAPI interface {
 	getRelevantKernelMappingsAndNodes(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, []v1.Node, error)
 	handleBuild(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
 	handleSigning(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
-	handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingModuleDS []appsv1.DaemonSet) error
+	handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingDevicePluginDS []appsv1.DaemonSet) error
 	garbageCollect(ctx context.Context, mod *kmmv1beta1.Module, mldMappings map[string]*api.ModuleLoaderData, existingDS []appsv1.DaemonSet) error
+	handleModuleDeletion(ctx context.Context, existingDevicePluginDS []appsv1.DaemonSet) error
 }
 
 type moduleReconcilerHelper struct {
@@ -330,13 +336,13 @@ func (mrh *moduleReconcilerHelper) handleSigning(ctx context.Context, mld *api.M
 	return completedSuccessfully, nil
 }
 
-func (mrh *moduleReconcilerHelper) handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingModuleDS []appsv1.DaemonSet) error {
+func (mrh *moduleReconcilerHelper) handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingDevicePluginDS []appsv1.DaemonSet) error {
 	if mod.Spec.DevicePlugin == nil {
 		return nil
 	}
 
 	logger := log.FromContext(ctx)
-	ds := getExistingDS(existingModuleDS, mod.Namespace, mod.Name, mod.Spec.ModuleLoader.Container.Version)
+	ds := getExistingDS(existingDevicePluginDS, mod.Namespace, mod.Name, mod.Spec.ModuleLoader.Container.Version)
 	if ds == nil {
 		logger.Info("creating new device plugin DS", "version", mod.Spec.ModuleLoader.Container.Version)
 		ds = &appsv1.DaemonSet{
@@ -383,6 +389,17 @@ func (mrh *moduleReconcilerHelper) garbageCollect(ctx context.Context,
 
 	logger.Info("Garbage-collected Sign objects", "names", deleted)
 
+	return nil
+}
+
+func (mrh *moduleReconcilerHelper) handleModuleDeletion(ctx context.Context, existingDevicePluginDS []appsv1.DaemonSet) error {
+	// delete all the Device Plugin Daemonset, in order to allow worker pods to delete kernel modules
+	for _, ds := range existingDevicePluginDS {
+		err := mrh.client.Delete(ctx, &ds)
+		if err != nil {
+			return fmt.Errorf("failed to delete device-plugin Daemonset %s/%s: %v", ds.Namespace, ds.Name, err)
+		}
+	}
 	return nil
 }
 
