@@ -565,6 +565,37 @@ var _ = Describe("prepareSchedulingData", func() {
 		Expect(scheduleData).To(Equal(expectedScheduleData))
 	})
 
+	It("should produce correct scheduling data when there are two nodes", func() {
+		const (
+			otherNodeName          = "other-node-name"
+			otherNodeKernelVersion = "some other kernel version"
+		)
+
+		otherNode := node
+		otherNode.ObjectMeta.Name = otherNodeName
+		otherNode.Status.NodeInfo.KernelVersion = otherNodeKernelVersion
+
+		targetedNodes = append(targetedNodes, otherNode)
+
+		otherNodeMLD := mld
+		otherNodeMLD.KernelVersion = otherNodeKernelVersion
+
+		gomock.InOrder(
+			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
+			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, otherNodeKernelVersion).Return(&otherNodeMLD, nil),
+		)
+
+		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, sets.New[string]())
+		Expect(errs).To(BeEmpty())
+
+		expected := map[string]schedulingData{
+			nodeName:      {action: actionAdd, mld: &mld, node: &node},
+			otherNodeName: {action: actionAdd, mld: &otherNodeMLD, node: &otherNode},
+		}
+
+		Expect(scheduleData).To(Equal(expected))
+	})
+
 	It("module version exists, workerPod version label exists, versions are equal", func() {
 		node.SetLabels(map[string]string{utils.GetWorkerPodVersionLabelName(moduleNamespace, moduleName): "moduleVersion1"})
 		targetedNodes[0] = node

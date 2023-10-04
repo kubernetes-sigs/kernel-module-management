@@ -312,7 +312,7 @@ func (mnrh *moduleNMCReconcilerHelper) prepareSchedulingData(ctx context.Context
 			errs = append(errs, err)
 			continue
 		}
-		result[node.Name] = prepareNodeSchedulingData(&node, mld, currentNMCs)
+		result[node.Name] = prepareNodeSchedulingData(node, mld, currentNMCs)
 		currentNMCs.Delete(node.Name)
 	}
 	for _, nmcName := range currentNMCs.UnsortedList() {
@@ -393,7 +393,7 @@ func (mnrh *moduleNMCReconcilerHelper) removeModuleFromNMC(ctx context.Context, 
 	return nil
 }
 
-func prepareNodeSchedulingData(node *v1.Node, mld *api.ModuleLoaderData, currentNMCs sets.Set[string]) schedulingData {
+func prepareNodeSchedulingData(node v1.Node, mld *api.ModuleLoaderData, currentNMCs sets.Set[string]) schedulingData {
 	versionLabel := ""
 	present := false
 	if mld != nil {
@@ -405,10 +405,10 @@ func prepareNodeSchedulingData(node *v1.Node, mld *api.ModuleLoaderData, current
 		return schedulingData{action: actionDelete}
 	case mld.ModuleVersion == "":
 		// mld exists, Version not define, should be running
-		return schedulingData{action: actionAdd, mld: mld, node: node}
+		return schedulingData{action: actionAdd, mld: mld, node: &node}
 	case present && versionLabel == mld.ModuleVersion:
 		// mld exists, version label defined and equal to Module's version, should be running
-		return schedulingData{action: actionAdd, mld: mld, node: node}
+		return schedulingData{action: actionAdd, mld: mld, node: &node}
 	case present && versionLabel != mld.ModuleVersion:
 		// mld exists, version label defined but not equal to Module's version, nothing needs to be changed in NMC (the previous version should run)
 		return schedulingData{}
