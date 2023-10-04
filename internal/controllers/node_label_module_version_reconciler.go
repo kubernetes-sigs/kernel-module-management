@@ -62,7 +62,9 @@ func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, re
 		return ctrl.Result{}, fmt.Errorf("could get device plugin pods for the node %s: %v", node.Name, err)
 	}
 
-	reconLabelsRes := nlmvr.helperAPI.reconcileLabels(modulesVersionLabels, devicePluginPods)
+	loadedKernelModules := nlmvr.helperAPI.getLoadedKernelModules(node.GetLabels())
+
+	reconLabelsRes := nlmvr.helperAPI.reconcileLabels(modulesVersionLabels, devicePluginPods, loadedKernelModules)
 
 	logger := log.FromContext(ctx).WithValues("node name", node.Name)
 	logLabelsUpdateData(logger, reconLabelsRes)
@@ -80,7 +82,8 @@ func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, re
 type nodeLabelModuleVersionHelperAPI interface {
 	getLabelsPerModules(ctx context.Context, nodeLabels map[string]string) map[string]*modulesVersionLabels
 	getDevicePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error)
-	reconcileLabels(modulesLabels map[string]*modulesVersionLabels, devicePluginPods []v1.Pod) *reconcileLabelsResult
+	getLoadedKernelModules(labels map[string]string) []types.NamespacedName
+	reconcileLabels(modulesLabels map[string]*modulesVersionLabels, devicePluginPods []v1.Pod, kernelModuleReadyLabels []types.NamespacedName) *reconcileLabelsResult
 	updateNodeLabels(ctx context.Context, nodeName string, reconLabelsRes *reconcileLabelsResult) error
 }
 
@@ -141,6 +144,17 @@ func (nlmvha *nodeLabelModuleVersionHelper) getDevicePluginPods(ctx context.Cont
 	return devicePluginPods, nil
 }
 
+func (nlmvha *nodeLabelModuleVersionHelper) getLoadedKernelModules(nodeLabels map[string]string) []types.NamespacedName {
+	loadedKernelModules := make([]types.NamespacedName, 0, len(nodeLabels))
+	for label := range nodeLabels {
+		isReadyLabel, namespace, name := utils.IsKernelModuleReadyNodeLabel(label)
+		if isReadyLabel {
+			loadedKernelModules = append(loadedKernelModules, types.NamespacedName{Namespace: namespace, Name: name})
+		}
+	}
+	return loadedKernelModules
+}
+
 func (nlmvha *nodeLabelModuleVersionHelper) updateNodeLabels(ctx context.Context, nodeName string, reconLabelsRes *reconcileLabelsResult) error {
 	node := v1.Node{}
 
@@ -165,7 +179,8 @@ func (nlmvha *nodeLabelModuleVersionHelper) updateNodeLabels(ctx context.Context
 }
 
 func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[string]*modulesVersionLabels,
-	devicePluginPods []v1.Pod) *reconcileLabelsResult {
+	devicePluginPods []v1.Pod,
+	loadedKernelModules []types.NamespacedName) *reconcileLabelsResult {
 
 	reconRes := reconcileLabelsResult{
 		labelsToAdd:    map[string]string{},
@@ -175,14 +190,17 @@ func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[st
 		label, labelValue, action := getLabelAndAction(moduleLabels)
 		switch action {
 		case deleteAction:
-			validAction := verifyLabelActionValidity(moduleLabels.name, moduleLabels.namespace, devicePluginPods)
-			if validAction {
-				reconRes.labelsToDelete = append(reconRes.labelsToDelete, label)
-			} else {
+			if utils.IsWorkerPodVersionLabel(label) && !verifyLabelDeleteValidity(moduleLabels.name, moduleLabels.namespace, devicePluginPods) {
 				reconRes.requeue = true
+			} else {
+				reconRes.labelsToDelete = append(reconRes.labelsToDelete, label)
 			}
 		case addAction:
-			reconRes.labelsToAdd[label] = labelValue
+			if utils.IsWorkerPodVersionLabel(label) && !verifyLabelAddValidity(moduleLabels.name, moduleLabels.namespace, loadedKernelModules) {
+				reconRes.requeue = true
+			} else {
+				reconRes.labelsToAdd[label] = labelValue
+			}
 		}
 	}
 
@@ -192,10 +210,22 @@ func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[st
 // validity is checked by verifying that devicePlugin pod defined
 // by name, namespace,role is missing. In case the pod is present, no matter in
 // what state, then the action is invalid
-func verifyLabelActionValidity(name, namespace string, devicePluginPods []v1.Pod) bool {
+func verifyLabelDeleteValidity(name, namespace string, devicePluginPods []v1.Pod) bool {
 	for _, pod := range devicePluginPods {
 		podLabels := pod.GetLabels()
 		if pod.Namespace == namespace && podLabels[constants.ModuleNameLabel] == name {
+			return false
+		}
+	}
+	return true
+}
+
+// validity is checked by verifying that kernel module defined
+// by name and namespace is not loaded. In case the kernel module is loaded, then the action is invalid
+func verifyLabelAddValidity(name, namespace string, loadedKernelModules []types.NamespacedName) bool {
+	nsn := types.NamespacedName{Name: name, Namespace: namespace}
+	for _, kernelModule := range loadedKernelModules {
+		if kernelModule == nsn {
 			return false
 		}
 	}

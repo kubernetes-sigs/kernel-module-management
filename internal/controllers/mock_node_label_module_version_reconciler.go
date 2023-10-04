@@ -14,6 +14,7 @@ import (
 
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
+	types "k8s.io/apimachinery/pkg/types"
 )
 
 // MocknodeLabelModuleVersionHelperAPI is a mock of nodeLabelModuleVersionHelperAPI interface.
@@ -68,18 +69,32 @@ func (mr *MocknodeLabelModuleVersionHelperAPIMockRecorder) getLabelsPerModules(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getLabelsPerModules", reflect.TypeOf((*MocknodeLabelModuleVersionHelperAPI)(nil).getLabelsPerModules), ctx, nodeLabels)
 }
 
-// reconcileLabels mocks base method.
-func (m *MocknodeLabelModuleVersionHelperAPI) reconcileLabels(modulesLabels map[string]*modulesVersionLabels, devicePluginPods []v1.Pod) *reconcileLabelsResult {
+// getLoadedKernelModules mocks base method.
+func (m *MocknodeLabelModuleVersionHelperAPI) getLoadedKernelModules(labels map[string]string) []types.NamespacedName {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "reconcileLabels", modulesLabels, devicePluginPods)
+	ret := m.ctrl.Call(m, "getLoadedKernelModules", labels)
+	ret0, _ := ret[0].([]types.NamespacedName)
+	return ret0
+}
+
+// getLoadedKernelModules indicates an expected call of getLoadedKernelModules.
+func (mr *MocknodeLabelModuleVersionHelperAPIMockRecorder) getLoadedKernelModules(labels any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getLoadedKernelModules", reflect.TypeOf((*MocknodeLabelModuleVersionHelperAPI)(nil).getLoadedKernelModules), labels)
+}
+
+// reconcileLabels mocks base method.
+func (m *MocknodeLabelModuleVersionHelperAPI) reconcileLabels(modulesLabels map[string]*modulesVersionLabels, devicePluginPods []v1.Pod, kernelModuleReadyLabels []types.NamespacedName) *reconcileLabelsResult {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "reconcileLabels", modulesLabels, devicePluginPods, kernelModuleReadyLabels)
 	ret0, _ := ret[0].(*reconcileLabelsResult)
 	return ret0
 }
 
 // reconcileLabels indicates an expected call of reconcileLabels.
-func (mr *MocknodeLabelModuleVersionHelperAPIMockRecorder) reconcileLabels(modulesLabels, devicePluginPods any) *gomock.Call {
+func (mr *MocknodeLabelModuleVersionHelperAPIMockRecorder) reconcileLabels(modulesLabels, devicePluginPods, kernelModuleReadyLabels any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "reconcileLabels", reflect.TypeOf((*MocknodeLabelModuleVersionHelperAPI)(nil).reconcileLabels), modulesLabels, devicePluginPods)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "reconcileLabels", reflect.TypeOf((*MocknodeLabelModuleVersionHelperAPI)(nil).reconcileLabels), modulesLabels, devicePluginPods, kernelModuleReadyLabels)
 }
 
 // updateNodeLabels mocks base method.
