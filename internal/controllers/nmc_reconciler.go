@@ -660,12 +660,25 @@ func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object,
 		return fmt.Errorf("could not create the base Pod: %v", err)
 	}
 
-	if err = setWorkerContainerArgs(pod, []string{"kmod", "load", configFullPath}); err != nil {
+	args := []string{"kmod", "load", configFullPath}
+
+	privileged := false
+
+	if p.workerCfg.SetFirmwareClassPath != nil {
+		args = append(args, "--"+worker.FlagFirmwareClassPath, *p.workerCfg.SetFirmwareClassPath)
+		privileged = true
+	}
+
+	if err = setWorkerContainerArgs(pod, args); err != nil {
 		return fmt.Errorf("could not set worker container args: %v", err)
 	}
 
 	if err = setWorkerConfigAnnotation(pod, nms.Config); err != nil {
 		return fmt.Errorf("could not set worker config: %v", err)
+	}
+
+	if err = setWorkerSecurityContext(pod, p.workerCfg, privileged); err != nil {
+		return fmt.Errorf("could not set the worker Pod as privileged: %v", err)
 	}
 
 	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
@@ -691,6 +704,10 @@ func (p *podManagerImpl) CreateUnloaderPod(ctx context.Context, nmc client.Objec
 
 	if err = setWorkerConfigAnnotation(pod, *nms.Config); err != nil {
 		return fmt.Errorf("could not set worker config: %v", err)
+	}
+
+	if err = setWorkerSecurityContext(pod, p.workerCfg, false); err != nil {
+		return fmt.Errorf("could not set the worker Pod's security context: %v", err)
 	}
 
 	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
@@ -876,13 +893,6 @@ func (p *podManagerImpl) baseWorkerPod(
 					Name:         workerContainerName,
 					Image:        p.workerImage,
 					VolumeMounts: append(volumeMounts, psvm...),
-					SecurityContext: &v1.SecurityContext{
-						Capabilities: &v1.Capabilities{
-							Add: []v1.Capability{"SYS_MODULE"},
-						},
-						RunAsUser:      p.workerCfg.RunAsUser,
-						SELinuxOptions: &v1.SELinuxOptions{Type: p.workerCfg.SELinuxType},
-					},
 					Resources: v1.ResourceRequirements{
 						Requests: requests,
 						Limits:   limits,
@@ -922,6 +932,29 @@ func setWorkerContainerArgs(pod *v1.Pod, args []string) error {
 	}
 
 	container.Args = args
+
+	return nil
+}
+
+func setWorkerSecurityContext(pod *v1.Pod, workerCfg *config.Worker, privileged bool) error {
+	container, _ := podcmd.FindContainerByName(pod, workerContainerName)
+	if container == nil {
+		return errors.New("could not find the worker container")
+	}
+
+	sc := &v1.SecurityContext{}
+
+	if privileged {
+		sc.Privileged = &privileged
+	} else {
+		sc.Capabilities = &v1.Capabilities{
+			Add: []v1.Capability{"SYS_MODULE"},
+		}
+		sc.RunAsUser = workerCfg.RunAsUser
+		sc.SELinuxOptions = &v1.SELinuxOptions{Type: workerCfg.SELinuxType}
+	}
+
+	container.SecurityContext = sc
 
 	return nil
 }

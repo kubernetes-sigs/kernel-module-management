@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/kubectl/pkg/cmd/util/podcmd"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -1152,60 +1153,88 @@ var workerCfg = &config.Worker{
 }
 
 var _ = Describe("podManagerImpl_CreateLoaderPod", func() {
-	It("should work as expected", func() {
-		ctrl := gomock.NewController(GinkgoT())
-		client := testclient.NewMockClient(ctrl)
-		psh := NewMockpullSecretHelper(ctrl)
+	DescribeTable(
+		"should work as expected",
+		func(firmwareClassPath *string) {
+			ctrl := gomock.NewController(GinkgoT())
+			client := testclient.NewMockClient(ctrl)
+			psh := NewMockpullSecretHelper(ctrl)
 
-		nmc := &kmmv1beta1.NodeModulesConfig{
-			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
-		}
+			nmc := &kmmv1beta1.NodeModulesConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			}
 
-		const irsName = "some-secret"
+			const irsName = "some-secret"
 
-		mi := kmmv1beta1.ModuleItem{
-			ImageRepoSecret:    &v1.LocalObjectReference{Name: irsName},
-			Name:               moduleName,
-			Namespace:          namespace,
-			ServiceAccountName: serviceAccountName,
-		}
+			mi := kmmv1beta1.ModuleItem{
+				ImageRepoSecret:    &v1.LocalObjectReference{Name: irsName},
+				Name:               moduleName,
+				Namespace:          namespace,
+				ServiceAccountName: serviceAccountName,
+			}
 
-		nms := &kmmv1beta1.NodeModuleSpec{
-			ModuleItem: mi,
-			Config:     moduleConfig,
-		}
+			nms := &kmmv1beta1.NodeModuleSpec{
+				ModuleItem: mi,
+				Config:     moduleConfig,
+			}
 
-		expected := getBaseWorkerPod("load", WorkerActionLoad, nmc)
+			expected := getBaseWorkerPod("load", WorkerActionLoad, nmc)
 
-		Expect(
-			controllerutil.SetControllerReference(nmc, expected, scheme),
-		).NotTo(
-			HaveOccurred(),
-		)
+			Expect(
+				controllerutil.SetControllerReference(nmc, expected, scheme),
+			).NotTo(
+				HaveOccurred(),
+			)
 
-		controllerutil.AddFinalizer(expected, nodeModulesConfigFinalizer)
+			controllerutil.AddFinalizer(expected, nodeModulesConfigFinalizer)
 
-		ctx := context.TODO()
+			container, _ := podcmd.FindContainerByName(expected, "worker")
+			Expect(container).NotTo(BeNil())
 
-		gomock.InOrder(
-			psh.EXPECT().VolumesAndVolumeMounts(ctx, &mi),
-			client.EXPECT().Create(ctx, cmpmock.DiffEq(expected)),
-		)
+			if firmwareClassPath != nil {
+				container.SecurityContext = &v1.SecurityContext{
+					Privileged: pointer.Bool(true),
+				}
 
-		pm := &podManagerImpl{
-			client:      client,
-			psh:         psh,
-			scheme:      scheme,
-			workerImage: workerImage,
-			workerCfg:   workerCfg,
-		}
+				container.Args = append(container.Args, "--set-firmware-class-path", *firmwareClassPath)
+			} else {
+				container.SecurityContext = &v1.SecurityContext{
+					Capabilities: &v1.Capabilities{
+						Add: []v1.Capability{"SYS_MODULE"},
+					},
+					RunAsUser:      workerCfg.RunAsUser,
+					SELinuxOptions: &v1.SELinuxOptions{Type: workerCfg.SELinuxType},
+				}
+			}
 
-		Expect(
-			pm.CreateLoaderPod(ctx, nmc, nms),
-		).NotTo(
-			HaveOccurred(),
-		)
-	})
+			ctx := context.TODO()
+
+			gomock.InOrder(
+				psh.EXPECT().VolumesAndVolumeMounts(ctx, &mi),
+				client.EXPECT().Create(ctx, cmpmock.DiffEq(expected)),
+			)
+
+			workerCfg := *workerCfg
+			workerCfg.SetFirmwareClassPath = firmwareClassPath
+
+			pm := &podManagerImpl{
+				client:      client,
+				psh:         psh,
+				scheme:      scheme,
+				workerImage: workerImage,
+				workerCfg:   &workerCfg,
+			}
+
+			Expect(
+				pm.CreateLoaderPod(ctx, nmc, nms),
+			).NotTo(
+				HaveOccurred(),
+			)
+		},
+		Entry(nil, nil),
+		Entry(nil, pointer.String("")),
+		Entry(nil, pointer.String("some-path")),
+	)
 })
 
 var _ = Describe("podManagerImpl_CreateUnloaderPod", func() {
@@ -1230,6 +1259,17 @@ var _ = Describe("podManagerImpl_CreateUnloaderPod", func() {
 		}
 
 		expected := getBaseWorkerPod("unload", WorkerActionUnload, nmc)
+
+		container, _ := podcmd.FindContainerByName(expected, "worker")
+		Expect(container).NotTo(BeNil())
+
+		container.SecurityContext = &v1.SecurityContext{
+			Capabilities: &v1.Capabilities{
+				Add: []v1.Capability{"SYS_MODULE"},
+			},
+			RunAsUser:      workerCfg.RunAsUser,
+			SELinuxOptions: &v1.SELinuxOptions{Type: workerCfg.SELinuxType},
+		}
 
 		ctx := context.TODO()
 
@@ -1389,13 +1429,6 @@ softdep b pre: c
 					Resources: v1.ResourceRequirements{
 						Limits:   limits,
 						Requests: requests,
-					},
-					SecurityContext: &v1.SecurityContext{
-						Capabilities: &v1.Capabilities{
-							Add: []v1.Capability{"SYS_MODULE"},
-						},
-						RunAsUser:      workerCfg.RunAsUser,
-						SELinuxOptions: &v1.SELinuxOptions{Type: workerCfg.SELinuxType},
 					},
 					VolumeMounts: []v1.VolumeMount{
 						{

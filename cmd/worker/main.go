@@ -41,18 +41,7 @@ var kmodLoadCmd = &cobra.Command{
 	Use:   "load",
 	Short: "Load a kernel module",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cfgPath := args[0]
-
-		logger.V(1).Info("Reading config", "path", cfgPath)
-
-		cfg, err := configHelper.ReadConfigFile(cfgPath)
-		if err != nil {
-			return fmt.Errorf("could not read config file %s: %v", cfgPath, err)
-		}
-
-		return w.LoadKmod(cmd.Context(), cfg)
-	},
+	RunE:  kmodLoadFunc,
 }
 
 var kmodUnloadCmd = &cobra.Command{
@@ -85,6 +74,12 @@ func main() {
 	klog.InitFlags(klogFlagSet)
 
 	rootCmd.PersistentFlags().AddGoFlagSet(klogFlagSet)
+
+	kmodLoadCmd.Flags().String(
+		worker.FlagFirmwareClassPath,
+		"",
+		"if set, this value will be written to "+worker.FirmwareClassPathLocation,
+	)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		logger = klogr.New().WithName("kmm-worker")

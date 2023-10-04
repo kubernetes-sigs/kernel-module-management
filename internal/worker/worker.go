@@ -3,14 +3,18 @@ package worker
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/go-logr/logr"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 )
 
+//go:generate mockgen -source=worker.go -package=worker -destination=mock_worker.go
+
 type Worker interface {
 	LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig) error
+	SetFirmwareClassPath(value string) error
 	UnloadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig) error
 }
 
@@ -67,6 +71,30 @@ func (w *worker) LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig) err
 	}
 
 	return w.mr.Run(ctx, args...)
+}
+
+var firmwareClassPathLocation = FirmwareClassPathLocation
+
+func (w *worker) SetFirmwareClassPath(value string) error {
+	orig, err := os.ReadFile(firmwareClassPathLocation)
+	if err != nil {
+		return fmt.Errorf("could not read %s: %v", firmwareClassPathLocation, err)
+	}
+
+	origStr := string(orig)
+
+	w.logger.V(1).Info("Read current firmware_class.path", "value", origStr)
+
+	if string(orig) != value {
+		w.logger.V(1).Info("Writing new firmware_class.path", "value", value)
+
+		// 0666 set by os.Create; reuse that
+		if err = os.WriteFile(firmwareClassPathLocation, []byte(value), 0666); err != nil {
+			return fmt.Errorf("could not write %q into %s: %v", value, firmwareClassPathLocation, err)
+		}
+	}
+
+	return nil
 }
 
 func (w *worker) UnloadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig) error {

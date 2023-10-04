@@ -26,8 +26,9 @@ var _ = Describe("ParseFile", func() {
 			},
 			WebhookPort: 9443,
 			Worker: Worker{
-				RunAsUser:   pointer.Int64(1234),
-				SELinuxType: "mySELinuxType",
+				RunAsUser:            pointer.Int64(1234),
+				SELinuxType:          "mySELinuxType",
+				SetFirmwareClassPath: pointer.String("/some/path"),
 			},
 		}
 

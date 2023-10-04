@@ -12,8 +12,9 @@ import (
 )
 
 type Worker struct {
-	RunAsUser   *int64 `yaml:"runAsUser"`
-	SELinuxType string `yaml:"seLinuxType"`
+	RunAsUser            *int64  `yaml:"runAsUser"`
+	SELinuxType          string  `yaml:"seLinuxType"`
+	SetFirmwareClassPath *string `yaml:"setFirmwareClassPath,omitempty"`
 }
 
 type LeaderElection struct {
