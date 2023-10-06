@@ -61,7 +61,13 @@ func (ph *podHelper) IsPodChanged(existingPod *v1.Pod, newPod *v1.Pod) (bool, er
 }
 
 func (ph *podHelper) PodLabels(modName string, targetKernel string, podType string) map[string]string {
-	return moduleKernelLabels(modName, targetKernel, podType)
+	labels := moduleKernelLabels(modName, targetKernel, podType)
+
+	labels["app.kubernetes.io/name"] = "kmm"
+	labels["app.kubernetes.io/component"] = podType
+	labels["app.kubernetes.io/part-of"] = "kmm"
+
+	return labels
 }
 
 func (ph *podHelper) GetModulePodByKernel(ctx context.Context, modName, namespace, targetKernel, podType string, owner metav1.Object) (*v1.Pod, error) {

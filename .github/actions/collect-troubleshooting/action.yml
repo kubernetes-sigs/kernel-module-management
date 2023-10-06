@@ -2,6 +2,11 @@ name: Collect troubleshooting data
 
 description: This action fetches some troubleshooting data for KMM
 
+inputs:
+  output-file:
+    description: Name of the archive file
+    required: true
+
 runs:
   using: composite
 
@@ -12,15 +17,11 @@ runs:
         echo "PATH=${KREW_ROOT:-$HOME/.krew}/bin:$PATH" >> "$GITHUB_ENV"
       shell: bash
 
-    - name: Set the output file
-      run: echo "OUTPUT_FILE=${{ github.job }}-support-bundle.tar.gz" >> "$GITHUB_ENV"
-      shell: bash
-
     - name: Collect a support bundle
-      run: kubectl support-bundle -o $OUTPUT_FILE ./support/kmm.spec.yaml
+      run: kubectl support-bundle -o ${{ inputs.output-file }} ./support/kmm.spec.yaml
       shell: bash
 
     - uses: actions/upload-artifact@v3
       with:
         name: support-bundle
-        path: ${{ env.OUTPUT_FILE }}
+        path: ${{ inputs.output-file }}

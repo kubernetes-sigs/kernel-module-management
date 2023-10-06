@@ -181,3 +181,5 @@ jobs:
       - name: Collect troubleshooting data
         uses: ./.github/actions/collect-troubleshooting
         if: ${{ always() }}
+        with:
+          output-file: ${{ matrix.name }}-support-bundle.tar.gz

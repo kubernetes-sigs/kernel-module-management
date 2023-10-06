@@ -1432,12 +1432,16 @@ softdep b pre: c
 			Name:      workerPodName(nmcName, moduleName),
 			Namespace: namespace,
 			Labels: map[string]string{
-				actionLabelKey:            string(action),
-				constants.ModuleNameLabel: moduleName,
+				"app.kubernetes.io/component": "worker",
+				"app.kubernetes.io/name":      "kmm",
+				"app.kubernetes.io/part-of":   "kmm",
+				actionLabelKey:                string(action),
+				constants.ModuleNameLabel:     moduleName,
 			},
 			Annotations: map[string]string{
 				configAnnotationKey: configAnnotationValue,
-				modulesOrderKey:     modulesOrderValue},
+				modulesOrderKey:     modulesOrderValue,
+			},
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
