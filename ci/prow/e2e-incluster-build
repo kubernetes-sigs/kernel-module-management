@@ -18,6 +18,12 @@ make deploy
 check_module_not_loaded "kmm_ci_a"
 check_module_not_loaded "kmm_ci_b"
 
+echo "Load the dummy module to be removed by the worker Pod before loading kmm-ci"
+minikube ssh -- sudo modprobe dummy
+
+echo "Verify that dummy is loaded"
+minikube ssh -- lsmod | grep dummy
+
 echo "Create a build secret..."
 oc create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
 
@@ -40,6 +46,8 @@ if ! minikube ssh -- lsmod | grep kmm_ci_b; then
   echo "Unexpected lsmod output - kmm_ci_b is not loaded on the node"
   return 1
 fi
+
+check_module_not_loaded "dummy"
 
 echo "Remove the Module..."
 kubectl delete -f ci/module-kmm-ci-build-sign.yaml --wait=false
