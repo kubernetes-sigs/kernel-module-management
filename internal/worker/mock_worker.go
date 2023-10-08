@@ -40,17 +40,17 @@ func (m *MockWorker) EXPECT() *MockWorkerMockRecorder {
 }
 
 // LoadKmod mocks base method.
-func (m *MockWorker) LoadKmod(ctx context.Context, cfg *v1beta1.ModuleConfig) error {
+func (m *MockWorker) LoadKmod(ctx context.Context, cfg *v1beta1.ModuleConfig, firmwareMountPath string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LoadKmod", ctx, cfg)
+	ret := m.ctrl.Call(m, "LoadKmod", ctx, cfg, firmwareMountPath)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // LoadKmod indicates an expected call of LoadKmod.
-func (mr *MockWorkerMockRecorder) LoadKmod(ctx, cfg any) *gomock.Call {
+func (mr *MockWorkerMockRecorder) LoadKmod(ctx, cfg, firmwareMountPath any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadKmod", reflect.TypeOf((*MockWorker)(nil).LoadKmod), ctx, cfg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadKmod", reflect.TypeOf((*MockWorker)(nil).LoadKmod), ctx, cfg, firmwareMountPath)
 }
 
 // SetFirmwareClassPath mocks base method.
@@ -68,15 +68,15 @@ func (mr *MockWorkerMockRecorder) SetFirmwareClassPath(value any) *gomock.Call {
 }
 
 // UnloadKmod mocks base method.
-func (m *MockWorker) UnloadKmod(ctx context.Context, cfg *v1beta1.ModuleConfig) error {
+func (m *MockWorker) UnloadKmod(ctx context.Context, cfg *v1beta1.ModuleConfig, firmwareMountPath string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnloadKmod", ctx, cfg)
+	ret := m.ctrl.Call(m, "UnloadKmod", ctx, cfg, firmwareMountPath)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UnloadKmod indicates an expected call of UnloadKmod.
-func (mr *MockWorkerMockRecorder) UnloadKmod(ctx, cfg any) *gomock.Call {
+func (mr *MockWorkerMockRecorder) UnloadKmod(ctx, cfg, firmwareMountPath any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnloadKmod", reflect.TypeOf((*MockWorker)(nil).UnloadKmod), ctx, cfg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnloadKmod", reflect.TypeOf((*MockWorker)(nil).UnloadKmod), ctx, cfg, firmwareMountPath)
 }

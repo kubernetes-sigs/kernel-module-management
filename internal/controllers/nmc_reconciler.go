@@ -46,6 +46,7 @@ const (
 
 	actionLabelKey             = "kmm.node.kubernetes.io/worker-action"
 	configAnnotationKey        = "kmm.node.kubernetes.io/worker-config"
+	modulesOrderKey            = "kmm.node.kubernetes.io/modules-order"
 	nodeModulesConfigFinalizer = "kmm.node.kubernetes.io/nodemodulesconfig-reconciler"
 	volumeNameConfig           = "config"
 	workerContainerName        = "worker"
@@ -669,10 +670,6 @@ func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object,
 		privileged = true
 	}
 
-	if err = setWorkerContainerArgs(pod, args); err != nil {
-		return fmt.Errorf("could not set worker container args: %v", err)
-	}
-
 	if err = setWorkerConfigAnnotation(pod, nms.Config); err != nil {
 		return fmt.Errorf("could not set worker config: %v", err)
 	}
@@ -687,6 +684,17 @@ func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object,
 		}
 	}
 
+	if nms.Config.Modprobe.FirmwarePath != "" {
+		args = append(args, "--"+worker.FlagFirmwareMountPath, worker.FirmwareMountPath)
+		if err = setFirmwareVolume(pod, p.workerCfg.SetFirmwareClassPath); err != nil {
+			return fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
+		}
+	}
+
+	if err = setWorkerContainerArgs(pod, args); err != nil {
+		return fmt.Errorf("could not set worker container args: %v", err)
+	}
+
 	meta.SetLabel(pod, actionLabelKey, WorkerActionLoad)
 
 	return p.client.Create(ctx, pod)
@@ -698,9 +706,7 @@ func (p *podManagerImpl) CreateUnloaderPod(ctx context.Context, nmc client.Objec
 		return fmt.Errorf("could not create the base Pod: %v", err)
 	}
 
-	if err = setWorkerContainerArgs(pod, []string{"kmod", "unload", configFullPath}); err != nil {
-		return fmt.Errorf("could not set worker container args: %v", err)
-	}
+	args := []string{"kmod", "unload", configFullPath}
 
 	if err = setWorkerConfigAnnotation(pod, *nms.Config); err != nil {
 		return fmt.Errorf("could not set worker config: %v", err)
@@ -714,6 +720,17 @@ func (p *podManagerImpl) CreateUnloaderPod(ctx context.Context, nmc client.Objec
 		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
 			return fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
 		}
+	}
+
+	if nms.Config.Modprobe.FirmwarePath != "" {
+		args = append(args, "--"+worker.FlagFirmwareMountPath, worker.FirmwareMountPath)
+		if err = setFirmwareVolume(pod, p.workerCfg.SetFirmwareClassPath); err != nil {
+			return fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
+		}
+	}
+
+	if err = setWorkerContainerArgs(pod, args); err != nil {
+		return fmt.Errorf("could not set worker container args: %v", err)
 	}
 
 	meta.SetLabel(pod, actionLabelKey, WorkerActionUnload)
@@ -801,13 +818,11 @@ func (p *podManagerImpl) baseWorkerPod(
 	owner client.Object,
 ) (*v1.Pod, error) {
 	const (
-		volNameLibModules     = "lib-modules"
-		volNameUsrLibModules  = "usr-lib-modules"
-		volNameVarLibFirmware = "var-lib-firmware"
+		volNameLibModules    = "lib-modules"
+		volNameUsrLibModules = "usr-lib-modules"
 	)
 
 	hostPathDirectory := v1.HostPathDirectory
-	hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
 
 	psv, psvm, err := p.psh.VolumesAndVolumeMounts(ctx, item)
 	if err != nil {
@@ -848,15 +863,6 @@ func (p *podManagerImpl) baseWorkerPod(
 				},
 			},
 		},
-		{
-			Name: volNameVarLibFirmware,
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
-					Path: "/var/lib/firmware",
-					Type: &hostPathDirectoryOrCreate,
-				},
-			},
-		},
 	}
 
 	volumeMounts := []v1.VolumeMount{
@@ -874,10 +880,6 @@ func (p *podManagerImpl) baseWorkerPod(
 			Name:      volNameUsrLibModules,
 			MountPath: "/usr/lib/modules",
 			ReadOnly:  true,
-		},
-		{
-			Name:      volNameVarLibFirmware,
-			MountPath: "/var/lib/firmware",
 		},
 	}
 
@@ -961,7 +963,7 @@ func setWorkerSecurityContext(pod *v1.Pod, workerCfg *config.Worker, privileged 
 
 func setWorkerSofdepConfig(pod *v1.Pod, modulesLoadingOrder []string) error {
 	softdepAnnotationValue := getModulesOrderAnnotationValue(modulesLoadingOrder)
-	meta.SetAnnotation(pod, "modules-order", softdepAnnotationValue)
+	meta.SetAnnotation(pod, modulesOrderKey, softdepAnnotationValue)
 
 	softdepVolume := v1.Volume{
 		Name: "modules-order",
@@ -970,7 +972,7 @@ func setWorkerSofdepConfig(pod *v1.Pod, modulesLoadingOrder []string) error {
 				Items: []v1.DownwardAPIVolumeFile{
 					{
 						Path:     "softdep.conf",
-						FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.annotations['modules-order']"},
+						FieldRef: &v1.ObjectFieldSelector{FieldPath: fmt.Sprintf("metadata.annotations['%s']", modulesOrderKey)},
 					},
 				},
 			},
@@ -986,7 +988,40 @@ func setWorkerSofdepConfig(pod *v1.Pod, modulesLoadingOrder []string) error {
 	if container == nil {
 		return errors.New("could not find the worker container")
 	}
-	container.VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, softDepVolumeMount)
+	container.VolumeMounts = append(container.VolumeMounts, softDepVolumeMount)
+	return nil
+}
+
+func setFirmwareVolume(pod *v1.Pod, hostFirmwarePath *string) error {
+	const volNameVarLibFirmware = "var-lib-firmware"
+	container, _ := podcmd.FindContainerByName(pod, workerContainerName)
+	if container == nil {
+		return errors.New("could not find the worker container")
+	}
+
+	firmwareVolumeMount := v1.VolumeMount{
+		Name:      volNameVarLibFirmware,
+		MountPath: worker.FirmwareMountPath,
+	}
+
+	hostMountPath := "/var/lib/firmware"
+	if hostFirmwarePath != nil {
+		hostMountPath = *hostFirmwarePath
+	}
+
+	hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
+	firmwareVolume := v1.Volume{
+		Name: volNameVarLibFirmware,
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: hostMountPath,
+				Type: &hostPathDirectoryOrCreate,
+			},
+		},
+	}
+
+	pod.Spec.Volumes = append(pod.Spec.Volumes, firmwareVolume)
+	container.VolumeMounts = append(container.VolumeMounts, firmwareVolumeMount)
 	return nil
 }
 
