@@ -2,14 +2,21 @@
 
 set -euxo pipefail
 
-echo "Deploy KMMO..."
+check_module_not_loaded () {
+  local module_name="$1"
+
+  echo "Check that the ${module_name} module is not loaded on the node..."
+  if minikube ssh -- lsmod | grep "${module_name}"; then
+   echo "Unexpected lsmod output - ${module_name} is loaded on the node"
+   return 1
+  fi
+}
+
+echo "Deploy KMM..."
 make deploy
 
-echo "Check that the kmm_ci_a module is not loaded on the node..."
-if minikube ssh -- lsmod | grep kmm_ci_a; then
- echo "Unexpected lsmod output - the module is present on the node before the module was applied to the cluster"
- exit 1
-fi
+check_module_not_loaded "kmm_ci_a"
+check_module_not_loaded "kmm_ci_b"
 
 echo "Create a build secret..."
 oc create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
@@ -28,11 +35,20 @@ kubectl apply -f ci/module-kmm-ci-build-sign.yaml
 echo "Check that the module gets loaded on the node..."
 timeout 10m bash -c 'until minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
 
+echo "Check that the dependent module is also loaded on the node..."
+if ! minikube ssh -- lsmod | grep kmm_ci_b; then
+  echo "Unexpected lsmod output - kmm_ci_b is not loaded on the node"
+  return 1
+fi
+
 echo "Remove the Module..."
 kubectl delete -f ci/module-kmm-ci-build-sign.yaml --wait=false
 
 echo "Check that the module gets unloaded from the node..."
 timeout 1m bash -c 'until ! minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
+
+echo "Check that the dependent module is also unloaded from the node..."
+check_module_not_loaded "kmm_ci_b"
 
 echo "Wait for the Module to be deleted..."
 kubectl wait --for delete modules.kmm.sigs.x-k8s.io/kmm-ci
