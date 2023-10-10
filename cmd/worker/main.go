@@ -58,7 +58,9 @@ var kmodUnloadCmd = &cobra.Command{
 			return fmt.Errorf("could not read config file %s: %v", cfgPath, err)
 		}
 
-		return w.UnloadKmod(cmd.Context(), cfg)
+		mountPathFlag := cmd.Flags().Lookup(worker.FlagFirmwareMountPath)
+
+		return w.UnloadKmod(cmd.Context(), cfg, mountPathFlag.Value.String())
 	},
 }
 
@@ -80,6 +82,16 @@ func main() {
 		"",
 		"if set, this value will be written to "+worker.FirmwareClassPathLocation,
 	)
+
+	kmodLoadCmd.Flags().String(
+		worker.FlagFirmwareMountPath,
+		"",
+		"if set, this the value that firmware host path is mounted to")
+
+	kmodUnloadCmd.Flags().String(
+		worker.FlagFirmwareMountPath,
+		"",
+		"if set, this the value that firmware host path is mounted to")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		logger = klogr.New().WithName("kmm-worker")

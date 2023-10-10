@@ -46,26 +46,37 @@ var _ = Describe("kmodLoadFunc", func() {
 	})
 
 	DescribeTable(
-		"should try and set firmware_class.path if the flag is defined",
-		func(flagValue *string) {
+		"set firmware class and firmware mount path if defined",
+		func(flagFirmwareClassPathValue, flagFirmwareMountPath *string) {
 			cfg := &kmmv1beta1.ModuleConfig{}
 			ctx := context.TODO()
 
 			cmd := &cobra.Command{}
 			cmd.SetContext(ctx)
 			cmd.Flags().String(worker.FlagFirmwareClassPath, "", "")
+			cmd.Flags().String(worker.FlagFirmwareMountPath, "", "")
 
 			readConfig := ch.EXPECT().ReadConfigFile(configPath).Return(cfg, nil)
-			loadKmod := wo.EXPECT().LoadKmod(ctx, cfg).After(readConfig)
-
-			if flagValue != nil {
+			var loadKmod *gomock.Call
+			if flagFirmwareMountPath != nil {
 				Expect(
-					cmd.Flags().Set(worker.FlagFirmwareClassPath, *flagValue),
+					cmd.Flags().Set(worker.FlagFirmwareMountPath, *flagFirmwareMountPath),
+				).NotTo(
+					HaveOccurred(),
+				)
+				loadKmod = wo.EXPECT().LoadKmod(ctx, cfg, *flagFirmwareMountPath).After(readConfig)
+			} else {
+				loadKmod = wo.EXPECT().LoadKmod(ctx, cfg, "").After(readConfig)
+			}
+
+			if flagFirmwareClassPathValue != nil {
+				Expect(
+					cmd.Flags().Set(worker.FlagFirmwareClassPath, *flagFirmwareClassPathValue),
 				).NotTo(
 					HaveOccurred(),
 				)
 
-				setFirmwarePath := wo.EXPECT().SetFirmwareClassPath(*flagValue)
+				setFirmwarePath := wo.EXPECT().SetFirmwareClassPath(*flagFirmwareClassPathValue)
 				setFirmwarePath.After(readConfig)
 				loadKmod.After(setFirmwarePath)
 			}
@@ -76,8 +87,10 @@ var _ = Describe("kmodLoadFunc", func() {
 				HaveOccurred(),
 			)
 		},
-		Entry("flag not defined", nil),
-		Entry("flag defined and empty", pointer.String("")),
-		Entry("flag defined and not empty", pointer.String("/some/path")),
+		Entry("flags not defined", nil, nil),
+		Entry("class path defined and empty, mount path not defined", pointer.String(""), nil),
+		Entry("class path defined and not empty, mount path not defined", pointer.String("/some/path"), nil),
+		Entry("class path defined and empty, mount path defined", pointer.String(""), pointer.String("some mount path")),
+		Entry("class path defined and not empty, mount path defined", pointer.String("/some/path"), pointer.String("some mount path")),
 	)
 })

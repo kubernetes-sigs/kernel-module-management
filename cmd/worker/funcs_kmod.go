@@ -25,5 +25,7 @@ func kmodLoadFunc(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return w.LoadKmod(cmd.Context(), cfg)
+	mountPathFlag := cmd.Flags().Lookup(worker.FlagFirmwareMountPath)
+
+	return w.LoadKmod(cmd.Context(), cfg, mountPathFlag.Value.String())
 }
