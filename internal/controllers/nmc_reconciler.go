@@ -125,10 +125,10 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 				errs,
 				fmt.Errorf("error processing Module %s: %v", moduleNameKey, err),
 			)
-
-			continue
 		}
 
+		// deleting status always (even in case of an error), so that it won't be treated
+		// as an orphaned status later in reconciliation
 		delete(statusMap, moduleNameKey)
 	}
 
@@ -146,19 +146,15 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		}
 	}
 
-	if err := errors.Join(errs...); err != nil {
-		return reconcile.Result{}, fmt.Errorf("could not process orphan statuses: %v", err)
-	}
-
 	if err := r.helper.GarbageCollectInUseLabels(ctx, &nmcObj); err != nil {
-		return reconcile.Result{}, fmt.Errorf("could not garbage collect in-use labels for NMC %s: %v", req.NamespacedName, err)
+		errs = append(errs, fmt.Errorf("failed to GC in-use labels for NMC %s: %v", req.NamespacedName, err))
 	}
 
 	if err := r.helper.UpdateNodeLabelsAndRecordEvents(ctx, &nmcObj); err != nil {
-		return reconcile.Result{}, fmt.Errorf("could not update node's labels for NMC %s: %v", req.NamespacedName, err)
+		errs = append(errs, fmt.Errorf("could not update node's labels for NMC %s: %v", req.NamespacedName, err))
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, errors.Join(errs...)
 }
 
 func (r *NMCReconciler) SetupWithManager(ctx context.Context, mgr manager.Manager) error {
