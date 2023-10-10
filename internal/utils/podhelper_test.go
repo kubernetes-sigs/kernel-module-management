@@ -36,9 +36,16 @@ var _ = Describe("PodLabels", func() {
 		mgr := NewPodHelper(clnt)
 		labels := mgr.PodLabels(mod.Name, "targetKernel", "podType")
 
-		Expect(labels).To(HaveKeyWithValue(constants.ModuleNameLabel, "moduleName"))
-		Expect(labels).To(HaveKeyWithValue(constants.TargetKernelTarget, "targetKernel"))
-		Expect(labels).To(HaveKeyWithValue(constants.PodType, "podType"))
+		expected := map[string]string{
+			"app.kubernetes.io/name":      "kmm",
+			"app.kubernetes.io/component": "podType",
+			"app.kubernetes.io/part-of":   "kmm",
+			constants.ModuleNameLabel:     "moduleName",
+			constants.TargetKernelTarget:  "targetKernel",
+			constants.PodType:             "podType",
+		}
+
+		Expect(labels).To(Equal(expected))
 	})
 })
 

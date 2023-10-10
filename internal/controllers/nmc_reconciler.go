@@ -887,7 +887,12 @@ func (p *podManagerImpl) baseWorkerPod(
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: item.Namespace,
 			Name:      workerPodName(nodeName, item.Name),
-			Labels:    map[string]string{constants.ModuleNameLabel: item.Name},
+			Labels: map[string]string{
+				"app.kubernetes.io/name":      "kmm",
+				"app.kubernetes.io/component": "worker",
+				"app.kubernetes.io/part-of":   "kmm",
+				constants.ModuleNameLabel:     item.Name,
+			},
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
