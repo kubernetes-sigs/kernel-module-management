@@ -162,6 +162,65 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			BeZero(),
 		)
 	})
+
+	It("should complete all the reconcile functions and return combined error", func() {
+		const (
+			mod0Name = "mod0"
+			mod1Name = "mod1"
+			mod2Name = "mod2"
+		)
+		spec0 := kmmv1beta1.NodeModuleSpec{
+			ModuleItem: kmmv1beta1.ModuleItem{
+				Namespace: namespace,
+				Name:      mod0Name,
+			},
+		}
+
+		status0 := kmmv1beta1.NodeModuleStatus{
+			ModuleItem: kmmv1beta1.ModuleItem{
+				Namespace: namespace,
+				Name:      mod0Name,
+			},
+		}
+
+		status2 := kmmv1beta1.NodeModuleStatus{
+			ModuleItem: kmmv1beta1.ModuleItem{
+				Namespace: namespace,
+				Name:      mod2Name,
+			},
+		}
+
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			Spec: kmmv1beta1.NodeModulesConfigSpec{
+				Modules: []kmmv1beta1.NodeModuleSpec{spec0},
+			},
+			Status: kmmv1beta1.NodeModulesConfigStatus{
+				Modules: []kmmv1beta1.NodeModuleStatus{status0, status2},
+			},
+		}
+
+		contextWithValueMatch := gomock.AssignableToTypeOf(
+			reflect.TypeOf((*context.Context)(nil)).Elem(),
+		)
+
+		gomock.InOrder(
+			kubeClient.
+				EXPECT().
+				Get(ctx, nmcNsn, &kmmv1beta1.NodeModulesConfig{}).
+				Do(func(_ context.Context, _ types.NamespacedName, kubeNmc ctrlclient.Object, _ ...ctrlclient.Options) {
+					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
+				}),
+			wh.EXPECT().SyncStatus(ctx, nmc).Return(nil),
+			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0).Return(fmt.Errorf("some error")),
+			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2).Return(fmt.Errorf("some error")),
+			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc).Return(fmt.Errorf("some error")),
+			wh.EXPECT().UpdateNodeLabelsAndRecordEvents(ctx, nmc).Return(fmt.Errorf("some error")),
+		)
+
+		_, err := r.Reconcile(ctx, req)
+		Expect(err).ToNot(BeNil())
+	})
 })
 
 var moduleConfig = kmmv1beta1.ModuleConfig{
