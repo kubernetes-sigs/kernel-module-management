@@ -6,6 +6,7 @@ metadata:
 spec:
   moduleLoader:
     container:
+      inTreeModuleToRemove: dummy
       modprobe:
         moduleName: kmm_ci_a
         modulesLoadingOrder: [kmm_ci_a, kmm_ci_b]
