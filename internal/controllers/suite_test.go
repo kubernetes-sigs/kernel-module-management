@@ -27,6 +27,10 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
+const (
+	namespace = "namespace"
+)
+
 var scheme *runtime.Scheme
 
 func TestAPIs(t *testing.T) {
