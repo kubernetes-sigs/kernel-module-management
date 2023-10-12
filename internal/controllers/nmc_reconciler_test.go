@@ -17,6 +17,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
+	"github.com/mitchellh/hashstructure/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -64,7 +65,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				EXPECT().
 				Get(ctx, nmcNsn, &kmmv1beta1.NodeModulesConfig{}).
 				Return(k8serrors.NewNotFound(schema.GroupResource{}, nmcName)),
-			wh.EXPECT().RemoveOrphanFinalizers(ctx, nmcName),
+			wh.EXPECT().RemovePodFinalizers(ctx, nmcName),
 		)
 
 		Expect(
@@ -243,22 +244,28 @@ var _ = Describe("nmcReconcilerHelperImpl_GarbageCollectInUseLabels", func() {
 		ctx = context.TODO()
 
 		client *testclient.MockClient
+		pm     *MockpodManager
 		wh     nmcReconcilerHelper
 	)
 
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client = testclient.NewMockClient(ctrl)
-		wh = newNMCReconcilerHelper(client, nil, nil)
+		pm = NewMockpodManager(ctrl)
+		wh = newNMCReconcilerHelper(client, pm, nil)
 	})
 
 	It("should do nothing if no labels should be collected", func() {
 		nmcObj := &kmmv1beta1.NodeModulesConfig{
-
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
 			Status: kmmv1beta1.NodeModulesConfigStatus{
 				Modules: make([]kmmv1beta1.NodeModuleStatus, 0),
 			},
 		}
+
+		gomock.InOrder(
+			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName),
+		)
 
 		Expect(
 			wh.GarbageCollectInUseLabels(ctx, nmcObj),
@@ -270,13 +277,16 @@ var _ = Describe("nmcReconcilerHelperImpl_GarbageCollectInUseLabels", func() {
 	It("should work as expected", func() {
 		bInUse := nmc.ModuleInUseLabel("b", "b")
 		cInUse := nmc.ModuleInUseLabel("c", "c")
+		dInUse := nmc.ModuleInUseLabel("d", "d")
 
 		nmcObj := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{
+				Name: nmcName,
 				Labels: map[string]string{
 					nmc.ModuleInUseLabel("a", "a"): "",
 					bInUse:                         "",
 					cInUse:                         "",
+					dInUse:                         "",
 				},
 			},
 			Spec: kmmv1beta1.NodeModulesConfigSpec{
@@ -307,7 +317,19 @@ var _ = Describe("nmcReconcilerHelperImpl_GarbageCollectInUseLabels", func() {
 			},
 		}
 
-		client.EXPECT().Patch(ctx, nmcObj, gomock.Any())
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					constants.ModuleNameLabel: "d",
+				},
+				Namespace: "d",
+			},
+		}
+
+		gomock.InOrder(
+			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{pod}, nil),
+			client.EXPECT().Patch(ctx, nmcObj, gomock.Any()),
+		)
 
 		Expect(
 			wh.GarbageCollectInUseLabels(ctx, nmcObj),
@@ -320,6 +342,7 @@ var _ = Describe("nmcReconcilerHelperImpl_GarbageCollectInUseLabels", func() {
 				map[string]string{
 					bInUse: "",
 					cInUse: "",
+					dInUse: "",
 				},
 			),
 		)
@@ -333,7 +356,8 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 	)
 
 	var (
-		ctx = context.TODO()
+		ctx     = context.TODO()
+		podName = workerPodName(nmcName, name)
 
 		client *testclient.MockClient
 		pm     *MockpodManager
@@ -347,8 +371,10 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		wh = newNMCReconcilerHelper(client, pm, nil)
 	})
 
-	It("should create a loader Pod if the corresponding status is missing", func() {
-		nmc := &kmmv1beta1.NodeModulesConfig{}
+	It("should create a loader Pod if there is no existing Pod and the status is missing", func() {
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+		}
 		spec := &kmmv1beta1.NodeModuleSpec{
 			ModuleItem: kmmv1beta1.ModuleItem{
 				Name:      name,
@@ -356,7 +382,10 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 			},
 		}
 
-		pm.EXPECT().CreateLoaderPod(ctx, nmc, spec)
+		gomock.InOrder(
+			pm.EXPECT().GetWorkerPod(ctx, podName, namespace),
+			pm.EXPECT().CreateLoaderPod(ctx, nmc, spec),
+		)
 
 		Expect(
 			wh.ProcessModuleSpec(ctx, nmc, spec, nil),
@@ -365,33 +394,10 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		)
 	})
 
-	It("should create a loader Pod if inProgress is false, but the Config is not define (nil)", func() {
-		nmc := &kmmv1beta1.NodeModulesConfig{}
-		spec := &kmmv1beta1.NodeModuleSpec{
-			ModuleItem: kmmv1beta1.ModuleItem{
-				Name:      name,
-				Namespace: namespace,
-			},
-			Config: kmmv1beta1.ModuleConfig{ContainerImage: "old-container-image"},
-		}
-
-		status := &kmmv1beta1.NodeModuleStatus{
-			ModuleItem: kmmv1beta1.ModuleItem{
-				Name:      name,
-				Namespace: namespace,
-			},
-		}
-		pm.EXPECT().CreateLoaderPod(ctx, nmc, spec)
-
-		Expect(
-			wh.ProcessModuleSpec(ctx, &kmmv1beta1.NodeModulesConfig{}, spec, status),
-		).NotTo(
-			HaveOccurred(),
-		)
-	})
-
 	It("should create an unloader Pod if the spec is different from the status", func() {
-		nmc := &kmmv1beta1.NodeModulesConfig{}
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+		}
 
 		spec := &kmmv1beta1.NodeModuleSpec{
 			ModuleItem: kmmv1beta1.ModuleItem{
@@ -406,10 +412,13 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 				Name:      name,
 				Namespace: namespace,
 			},
-			Config: &kmmv1beta1.ModuleConfig{ContainerImage: "new-container-image"},
+			Config: kmmv1beta1.ModuleConfig{ContainerImage: "new-container-image"},
 		}
 
-		pm.EXPECT().CreateUnloaderPod(ctx, nmc, status)
+		gomock.InOrder(
+			pm.EXPECT().GetWorkerPod(ctx, podName, namespace),
+			pm.EXPECT().CreateUnloaderPod(ctx, nmc, status),
+		)
 
 		Expect(
 			wh.ProcessModuleSpec(ctx, nmc, spec, status),
@@ -418,13 +427,19 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		)
 	})
 
-	It("should do nothing if InProgress is true, even though the config is different", func() {
+	It("should return an error if we could not get the node", func() {
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+		}
+
+		cfg := kmmv1beta1.ModuleConfig{ContainerImage: "some-image"}
+
 		spec := &kmmv1beta1.NodeModuleSpec{
 			ModuleItem: kmmv1beta1.ModuleItem{
 				Name:      name,
 				Namespace: namespace,
 			},
-			Config: kmmv1beta1.ModuleConfig{ContainerImage: "old-container-image"},
+			Config: cfg,
 		}
 
 		status := &kmmv1beta1.NodeModuleStatus{
@@ -432,13 +447,20 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 				Name:      name,
 				Namespace: namespace,
 			},
-			Config:     &kmmv1beta1.ModuleConfig{ContainerImage: "new-container-image"},
-			InProgress: true,
+			Config: cfg,
 		}
 
+		gomock.InOrder(
+			pm.EXPECT().GetWorkerPod(ctx, podName, namespace),
+			client.
+				EXPECT().
+				Get(ctx, types.NamespacedName{Name: nmcName}, &v1.Node{}).
+				Return(errors.New("random error")),
+		)
+
 		Expect(
-			wh.ProcessModuleSpec(ctx, &kmmv1beta1.NodeModulesConfig{}, spec, status),
-		).NotTo(
+			wh.ProcessModuleSpec(ctx, nmc, spec, status),
+		).To(
 			HaveOccurred(),
 		)
 	})
@@ -456,18 +478,19 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 			Config: moduleConfig,
 		}
 
-		now := metav1.Now()
-
 		status := &kmmv1beta1.NodeModuleStatus{
 			ModuleItem: kmmv1beta1.ModuleItem{
 				Name:      name,
 				Namespace: namespace,
 			},
-			Config:             &moduleConfig,
-			LastTransitionTime: &now,
+			Config:             moduleConfig,
+			LastTransitionTime: metav1.Now(),
 		}
 
-		client.EXPECT().Get(ctx, types.NamespacedName{Name: nmcName}, &v1.Node{})
+		gomock.InOrder(
+			pm.EXPECT().GetWorkerPod(ctx, podName, namespace),
+			client.EXPECT().Get(ctx, types.NamespacedName{Name: nmcName}, &v1.Node{}),
+		)
 
 		Expect(
 			wh.ProcessModuleSpec(ctx, nmc, spec, status),
@@ -491,8 +514,8 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 	now := metav1.Now()
 
 	status := &kmmv1beta1.NodeModuleStatus{
-		Config:             &moduleConfig,
-		LastTransitionTime: &metav1.Time{Time: now.Add(-1 * time.Minute)},
+		Config:             moduleConfig,
+		LastTransitionTime: metav1.Time{Time: now.Add(-1 * time.Minute)},
 		ModuleItem: kmmv1beta1.ModuleItem{
 			Name:      name,
 			Namespace: namespace,
@@ -502,6 +525,11 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 	DescribeTable(
 		"should create a loader Pod if status is older than the Ready condition",
 		func(cs v1.ConditionStatus, shouldCreate bool) {
+
+			getPod := pm.
+				EXPECT().
+				GetWorkerPod(ctx, podName, namespace)
+
 			getNode := client.
 				EXPECT().
 				Get(ctx, types.NamespacedName{Name: nmcName}, &v1.Node{}).
@@ -513,7 +541,8 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 							LastTransitionTime: now,
 						},
 					}
-				})
+				}).
+				After(getPod)
 
 			if shouldCreate {
 				pm.EXPECT().CreateLoaderPod(ctx, nmc, spec).After(getNode)
@@ -528,58 +557,255 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		Entry(nil, v1.ConditionFalse, false),
 		Entry(nil, v1.ConditionTrue, true),
 	)
+
+	It("should do nothing if the pod is not loading a kmod", func() {
+		pm.
+			EXPECT().
+			GetWorkerPod(ctx, podName, namespace).
+			Return(&v1.Pod{}, nil)
+
+		Expect(
+			wh.ProcessModuleSpec(ctx, nmc, spec, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should do nothing if the worker container has not restarted", func() {
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{actionLabelKey: WorkerActionLoad},
+			},
+		}
+
+		pm.
+			EXPECT().
+			GetWorkerPod(ctx, podName, namespace).
+			Return(&pod, nil)
+
+		Expect(
+			wh.ProcessModuleSpec(ctx, nmc, spec, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should return an error if there was an error making the Pod template", func() {
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{actionLabelKey: WorkerActionLoad},
+			},
+			Status: v1.PodStatus{
+				ContainerStatuses: []v1.ContainerStatus{
+					{
+						Name:         workerContainerName,
+						RestartCount: 1,
+					},
+				},
+			},
+		}
+
+		gomock.InOrder(
+			pm.
+				EXPECT().
+				GetWorkerPod(ctx, podName, namespace).
+				Return(&pod, nil),
+			pm.
+				EXPECT().
+				LoaderPodTemplate(ctx, nmc, spec).
+				Return(nil, errors.New("random error")),
+		)
+
+		Expect(
+			wh.ProcessModuleSpec(ctx, nmc, spec, status),
+		).To(
+			HaveOccurred(),
+		)
+	})
+
+	It("should delete the existing pod if its hash annotation is outdated", func() {
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:      map[string]string{actionLabelKey: WorkerActionLoad},
+				Annotations: map[string]string{hashAnnotationKey: "123"},
+			},
+			Status: v1.PodStatus{
+				ContainerStatuses: []v1.ContainerStatus{
+					{
+						Name:         workerContainerName,
+						RestartCount: 1,
+					},
+				},
+			},
+		}
+
+		podTemplate := pod.DeepCopy()
+		podTemplate.Annotations[hashAnnotationKey] = "456"
+
+		gomock.InOrder(
+			pm.
+				EXPECT().
+				GetWorkerPod(ctx, podName, namespace).
+				Return(&pod, nil),
+			pm.
+				EXPECT().
+				LoaderPodTemplate(ctx, nmc, spec).
+				Return(podTemplate, nil),
+			pm.
+				EXPECT().
+				DeletePod(ctx, &pod),
+		)
+
+		Expect(
+			wh.ProcessModuleSpec(ctx, nmc, spec, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
 })
 
 var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func() {
-	ctx := context.TODO()
+	const name = "name"
 
-	It("should do nothing if the status sync is in progress", func() {
-		nmc := &kmmv1beta1.NodeModulesConfig{}
-		status := &kmmv1beta1.NodeModuleStatus{InProgress: true}
+	var (
+		ctx     = context.TODO()
+		podName = workerPodName(nmcName, name)
+
+		client *testclient.MockClient
+		pm     *MockpodManager
+		helper nmcReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctrl := gomock.NewController(GinkgoT())
+		client = testclient.NewMockClient(ctrl)
+		pm = NewMockpodManager(ctrl)
+		helper = newNMCReconcilerHelper(client, pm, nil)
+	})
+
+	nmc := &kmmv1beta1.NodeModulesConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+	}
+
+	status := &kmmv1beta1.NodeModuleStatus{
+		ModuleItem: kmmv1beta1.ModuleItem{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+
+	It("should create an unloader Pod if no worker Pod exists", func() {
+		gomock.InOrder(
+			pm.EXPECT().GetWorkerPod(ctx, podName, namespace),
+			pm.EXPECT().CreateUnloaderPod(ctx, nmc, status),
+		)
 
 		Expect(
-			newNMCReconcilerHelper(nil, nil, nil).ProcessUnconfiguredModuleStatus(ctx, nmc, status),
+			helper.ProcessUnconfiguredModuleStatus(ctx, nmc, status),
 		).NotTo(
 			HaveOccurred(),
 		)
 	})
 
-	It("should remove status in case Config is nil", func() {
-		nmc := &kmmv1beta1.NodeModulesConfig{}
-		status := &kmmv1beta1.NodeModuleStatus{}
-
-		ctrl := gomock.NewController(GinkgoT())
-		client := testclient.NewMockClient(ctrl)
-		sw := testclient.NewMockStatusWriter(ctrl)
-		client.EXPECT().Status().Return(sw)
-		sw.EXPECT().Patch(ctx, nmc, gomock.Any())
-		Expect(
-			newNMCReconcilerHelper(client, nil, nil).ProcessUnconfiguredModuleStatus(ctx, nmc, status),
-		).NotTo(
-			HaveOccurred(),
-		)
-	})
-
-	It("should create an unloader Pod", func() {
-		ctrl := gomock.NewController(GinkgoT())
-		client := testclient.NewMockClient(ctrl)
-
-		pm := NewMockpodManager(ctrl)
-		wh := newNMCReconcilerHelper(client, pm, nil)
-
-		nmc := &kmmv1beta1.NodeModulesConfig{}
-		status := &kmmv1beta1.NodeModuleStatus{
-			Config: &kmmv1beta1.ModuleConfig{},
+	It("should delete the current worker if it is loading a module", func() {
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName,
+				Namespace: namespace,
+				Labels:    map[string]string{actionLabelKey: WorkerActionLoad},
+			},
 		}
 
-		pm.EXPECT().CreateUnloaderPod(ctx, nmc, status)
+		gomock.InOrder(
+			pm.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
+			pm.EXPECT().DeletePod(ctx, &pod),
+		)
 
 		Expect(
-			wh.ProcessUnconfiguredModuleStatus(ctx, nmc, status),
+			helper.ProcessUnconfiguredModuleStatus(ctx, nmc, status),
 		).NotTo(
 			HaveOccurred(),
 		)
 	})
+
+	It("should do nothing if the pod has not restarted yet", func() {
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName,
+				Namespace: namespace,
+			},
+		}
+
+		pm.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil)
+
+		Expect(
+			helper.ProcessUnconfiguredModuleStatus(ctx, nmc, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should return an error if there was an error while making the unloader Pod", func() {
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName,
+				Namespace: namespace,
+			},
+			Status: v1.PodStatus{
+				ContainerStatuses: []v1.ContainerStatus{
+					{
+						Name:         workerContainerName,
+						RestartCount: 1,
+					},
+				},
+			},
+		}
+
+		gomock.InOrder(
+			pm.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
+			pm.EXPECT().UnloaderPodTemplate(ctx, nmc, status).Return(nil, errors.New("random error")),
+		)
+
+		Expect(
+			helper.ProcessUnconfiguredModuleStatus(ctx, nmc, status),
+		).To(
+			HaveOccurred(),
+		)
+	})
+
+	It("should delete the existing pod if its hash annotation is outdated", func() {
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        podName,
+				Namespace:   namespace,
+				Annotations: map[string]string{hashAnnotationKey: "123"},
+			},
+			Status: v1.PodStatus{
+				ContainerStatuses: []v1.ContainerStatus{
+					{
+						Name:         workerContainerName,
+						RestartCount: 1,
+					},
+				},
+			},
+		}
+
+		podTemplate := pod.DeepCopy()
+		podTemplate.Annotations[hashAnnotationKey] = "456"
+
+		gomock.InOrder(
+			pm.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
+			pm.EXPECT().UnloaderPodTemplate(ctx, nmc, status).Return(podTemplate, nil),
+			pm.EXPECT().DeletePod(ctx, &pod),
+		)
+
+		Expect(
+			helper.ProcessUnconfiguredModuleStatus(ctx, nmc, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
 })
 
 var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
@@ -654,8 +880,7 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 							Name:      "mod name 1",
 							Namespace: podNamespace,
 						},
-						InProgress: true,
-						Config:     &kmmv1beta1.ModuleConfig{ContainerImage: "some image"},
+						Config: kmmv1beta1.ModuleConfig{ContainerImage: "some image"},
 					},
 				},
 			},
@@ -675,56 +900,7 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 			HaveOccurred(),
 		)
 
-		Expect(nmc.Status.Modules).To(HaveLen(2))
-		Expect(nmc.Status.Modules[0].InProgress).To(BeFalse())
-		Expect(nmc.Status.Modules[0].Config).NotTo(BeNil())
-		Expect(nmc.Status.Modules[1].InProgress).To(BeFalse())
-		Expect(nmc.Status.Modules[1].Config).To(BeNil())
-	})
-
-	It("should set the in progress status if pods are pending or running", func() {
-		nmc := &kmmv1beta1.NodeModulesConfig{
-			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
-		}
-
-		pods := []v1.Pod{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: podNamespace,
-					Name:      podName,
-					Labels: map[string]string{
-						constants.ModuleNameLabel: "mod name 1",
-					},
-				},
-				Status: v1.PodStatus{Phase: v1.PodRunning},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: podNamespace,
-					Name:      podName,
-					Labels: map[string]string{
-						constants.ModuleNameLabel: "mod name 2",
-					},
-				},
-				Status: v1.PodStatus{Phase: v1.PodPending},
-			},
-		}
-
-		gomock.InOrder(
-			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return(pods, nil),
-			kubeClient.EXPECT().Status().Return(sw),
-			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
-		)
-
-		Expect(
-			wh.SyncStatus(ctx, nmc),
-		).NotTo(
-			HaveOccurred(),
-		)
-
-		Expect(nmc.Status.Modules).To(HaveLen(2))
-		Expect(nmc.Status.Modules[0].InProgress).To(BeTrue())
-		Expect(nmc.Status.Modules[1].InProgress).To(BeTrue())
+		Expect(nmc.Status.Modules).To(HaveLen(1))
 	})
 
 	It("should remove the status and label if an unloader pod was successful", func() {
@@ -791,7 +967,6 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 							Name:      modName,
 							Namespace: modNamespace,
 						},
-						InProgress: true,
 					},
 				},
 			},
@@ -867,9 +1042,8 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 				Namespace:          modNamespace,
 				ServiceAccountName: serviceAccountName,
 			},
-			Config:             &cfg,
-			LastTransitionTime: &now,
-			InProgress:         false,
+			Config:             cfg,
+			LastTransitionTime: now,
 		}
 
 		Expect(nmc.Status.Modules[0]).To(BeComparableTo(expectedStatus))
@@ -920,7 +1094,7 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 	})
 })
 
-var _ = Describe("nmcReconcilerHelperImpl_RemoveOrphanFinalizers", func() {
+var _ = Describe("nmcReconcilerHelperImpl_RemovePodFinalizers", func() {
 	const nodeName = "node-name"
 
 	var (
@@ -942,7 +1116,7 @@ var _ = Describe("nmcReconcilerHelperImpl_RemoveOrphanFinalizers", func() {
 		pm.EXPECT().ListWorkerPodsOnNode(ctx, nodeName)
 
 		Expect(
-			wh.RemoveOrphanFinalizers(ctx, nodeName),
+			wh.RemovePodFinalizers(ctx, nodeName),
 		).NotTo(
 			HaveOccurred(),
 		)
@@ -971,7 +1145,7 @@ var _ = Describe("nmcReconcilerHelperImpl_RemoveOrphanFinalizers", func() {
 		)
 
 		Expect(
-			wh.RemoveOrphanFinalizers(ctx, nodeName),
+			wh.RemovePodFinalizers(ctx, nodeName),
 		).NotTo(
 			HaveOccurred(),
 		)
@@ -1079,7 +1253,7 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 					if !tc.configsEqual {
 						statusConfig.ContainerImage = "some other container image"
 					}
-					nmc.Status.Modules[0].Config = &statusConfig
+					nmc.Status.Modules[0].Config = statusConfig
 				}
 			}
 
@@ -1269,6 +1443,11 @@ var _ = Describe("podManagerImpl_CreateLoaderPod", func() {
 				}
 			}
 
+			hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
+
 			ctx := context.TODO()
 
 			gomock.InOrder(
@@ -1321,7 +1500,7 @@ var _ = Describe("podManagerImpl_CreateUnloaderPod", func() {
 		moduleConfigToUse.Modprobe.FirmwarePath = "/firmware-path"
 		status := &kmmv1beta1.NodeModuleStatus{
 			ModuleItem: mi,
-			Config:     &moduleConfigToUse,
+			Config:     moduleConfigToUse,
 		}
 
 		expected := getBaseWorkerPod("unload", WorkerActionUnload, nmc, nil, true)
@@ -1336,6 +1515,11 @@ var _ = Describe("podManagerImpl_CreateUnloaderPod", func() {
 			RunAsUser:      workerCfg.RunAsUser,
 			SELinuxOptions: &v1.SELinuxOptions{Type: workerCfg.SELinuxType},
 		}
+
+		hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
 
 		ctx := context.TODO()
 
@@ -1537,7 +1721,7 @@ softdep b pre: c
 				},
 			},
 			NodeName:           nmcName,
-			RestartPolicy:      v1.RestartPolicyNever,
+			RestartPolicy:      v1.RestartPolicyOnFailure,
 			ServiceAccountName: serviceAccountName,
 			Volumes: []v1.Volume{
 				{

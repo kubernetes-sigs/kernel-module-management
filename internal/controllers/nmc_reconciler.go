@@ -16,6 +16,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
+	"github.com/mitchellh/hashstructure/v2"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -46,6 +47,7 @@ const (
 
 	actionLabelKey             = "kmm.node.kubernetes.io/worker-action"
 	configAnnotationKey        = "kmm.node.kubernetes.io/worker-config"
+	hashAnnotationKey          = "kmm.node.kubernetes.io/worker-hash"
 	modulesOrderKey            = "kmm.node.kubernetes.io/modules-order"
 	nodeModulesConfigFinalizer = "kmm.node.kubernetes.io/nodemodulesconfig-reconciler"
 	volumeNameConfig           = "config"
@@ -90,7 +92,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 			// Remove the finalizer if we did not have a chance to do it before NMC deletion.
 			logger.Info("Clearing worker Pod finalizers")
 
-			if err = r.helper.RemoveOrphanFinalizers(ctx, req.Name); err != nil {
+			if err = r.helper.RemovePodFinalizers(ctx, req.Name); err != nil {
 				return reconcile.Result{}, fmt.Errorf("could not clear all Pod finalizers for NMC %s: %v", req.Name, err)
 			}
 
@@ -219,7 +221,7 @@ type nmcReconcilerHelper interface {
 	GarbageCollectInUseLabels(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
 	ProcessModuleSpec(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, spec *kmmv1beta1.NodeModuleSpec, status *kmmv1beta1.NodeModuleStatus) error
 	ProcessUnconfiguredModuleStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, status *kmmv1beta1.NodeModuleStatus) error
-	RemoveOrphanFinalizers(ctx context.Context, nodeName string) error
+	RemovePodFinalizers(ctx context.Context, nodeName string) error
 	SyncStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
 	UpdateNodeLabelsAndRecordEvents(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
 }
@@ -262,6 +264,17 @@ func (h *nmcReconcilerHelperImpl) GarbageCollectInUseLabels(ctx context.Context,
 		)
 	}
 
+	podList, err := h.pm.ListWorkerPodsOnNode(ctx, nmcObj.Name)
+	if err != nil {
+		return fmt.Errorf("could not list worker Pods: %v", err)
+	}
+
+	for _, pod := range podList {
+		desiredSet.Insert(
+			nmc.ModuleInUseLabel(pod.Name, pod.Labels[constants.ModuleNameLabel]),
+		)
+	}
+
 	diff := labelSet.Difference(desiredSet)
 
 	if diff.Len() != 0 {
@@ -293,47 +306,65 @@ func (h *nmcReconcilerHelperImpl) ProcessModuleSpec(
 	spec *kmmv1beta1.NodeModuleSpec,
 	status *kmmv1beta1.NodeModuleStatus,
 ) error {
+	podName := workerPodName(nmcObj.Name, spec.Name)
+
 	logger := ctrl.LoggerFrom(ctx)
 
-	if status == nil {
-		logger.Info("Missing status; creating loader Pod")
-		return h.pm.CreateLoaderPod(ctx, nmcObj, spec)
+	pod, err := h.pm.GetWorkerPod(ctx, podName, spec.Namespace)
+	if err != nil {
+		return fmt.Errorf("could not get the worker Pod %s: %v", podName, err)
 	}
 
-	if status.InProgress {
-		logger.Info("Worker pod is running; skipping")
+	if pod == nil {
+		if status == nil {
+			logger.Info("Missing status; creating loader Pod")
+			return h.pm.CreateLoaderPod(ctx, nmcObj, spec)
+		}
+
+		if !reflect.DeepEqual(spec.Config, status.Config) {
+			logger.Info("Outdated config in status; creating unloader Pod")
+			return h.pm.CreateUnloaderPod(ctx, nmcObj, status)
+		}
+
+		node := v1.Node{}
+
+		if err = h.client.Get(ctx, types.NamespacedName{Name: nmcObj.Name}, &node); err != nil {
+			return fmt.Errorf("could not get node %s: %v", nmcObj.Name, err)
+		}
+
+		readyCondition := FindNodeCondition(node.Status.Conditions, v1.NodeReady)
+		if readyCondition == nil {
+			return fmt.Errorf("node %s has no Ready condition", nmcObj.Name)
+		}
+
+		if readyCondition.Status == v1.ConditionTrue && status.LastTransitionTime.Before(&readyCondition.LastTransitionTime) {
+			logger.Info("Outdated last transition time status; creating loader Pod")
+
+			return h.pm.CreateLoaderPod(ctx, nmcObj, spec)
+		}
+
 		return nil
 	}
 
-	if status.Config == nil {
-		logger.Info("Missing status config and pod is not running: previously failed pod, creating loader Pod")
-		return h.pm.CreateLoaderPod(ctx, nmcObj, spec)
+	if pod.Labels[actionLabelKey] != WorkerActionLoad {
+		logger.Info("Worker Pod is not loading the kmod; doing nothing")
+		return nil
 	}
 
-	if !reflect.DeepEqual(spec.Config, *status.Config) {
-		logger.Info("Outdated config in status; creating unloader Pod")
-
-		return h.pm.CreateUnloaderPod(ctx, nmcObj, status)
+	if GetContainerStatus(pod.Status.ContainerStatuses, workerContainerName).RestartCount == 0 {
+		logger.Info("Worker Loader Pod has not yet restarted; doing nothing")
+		return nil
 	}
 
-	node := v1.Node{}
-
-	if err := h.client.Get(ctx, types.NamespacedName{Name: nmcObj.Name}, &node); err != nil {
-		return fmt.Errorf("could not get node %s: %v", nmcObj.Name, err)
+	podTemplate, err := h.pm.LoaderPodTemplate(ctx, nmcObj, spec)
+	if err != nil {
+		return fmt.Errorf("could not create the Pod template for %s: %v", podName, err)
 	}
 
-	readyCondition := FindNodeCondition(node.Status.Conditions, v1.NodeReady)
-	if readyCondition == nil {
-		return fmt.Errorf("node %s has no Ready condition", nmcObj.Name)
+	if podTemplate.Annotations[hashAnnotationKey] != pod.Annotations[hashAnnotationKey] {
+		logger.Info("Hash differs, deleting pod")
+		return h.pm.DeletePod(ctx, pod)
 	}
-
-	if readyCondition.Status == v1.ConditionTrue && status.LastTransitionTime.Before(&readyCondition.LastTransitionTime) {
-		logger.Info("Outdated last transition time status; creating loader Pod")
-
-		return h.pm.CreateLoaderPod(ctx, nmcObj, spec)
-	}
-
-	logger.Info("Spec and status in sync; nothing to do")
 
 	return nil
 }
@@ -350,26 +381,44 @@ func (h *nmcReconcilerHelperImpl) ProcessUnconfiguredModuleStatus(
 	nmcObj *kmmv1beta1.NodeModulesConfig,
 	status *kmmv1beta1.NodeModuleStatus,
 ) error {
-	logger := ctrl.LoggerFrom(ctx)
+	podName := workerPodName(nmcObj.Name, status.Name)
 
-	if status.InProgress {
-		logger.Info("Sync status is in progress; skipping")
+	logger := ctrl.LoggerFrom(ctx).WithValues("pod name", podName)
+
+	pod, err := h.pm.GetWorkerPod(ctx, podName, status.Namespace)
+	if err != nil {
+		return fmt.Errorf("error while getting the worker Pod %s: %v", podName, err)
+	}
+
+	if pod == nil {
+		logger.Info("Worker Pod does not exist; creating it")
+		return h.pm.CreateUnloaderPod(ctx, nmcObj, status)
+	}
+
+	if pod.Labels[actionLabelKey] == WorkerActionLoad {
+		logger.Info("Worker Pod is loading the kmod; deleting it")
+		return h.pm.DeletePod(ctx, pod)
+	}
+
+	if GetContainerStatus(pod.Status.ContainerStatuses, workerContainerName).RestartCount == 0 {
+		logger.Info("Worker Pod has not yet restarted; doing nothing")
 		return nil
 	}
 
-	if status.Config == nil {
-		logger.Info("Missing status config and pod is not running: previously failed pod, no need to unload")
-		patchFrom := client.MergeFrom(nmcObj.DeepCopy())
-		nmc.RemoveModuleStatus(&nmcObj.Status.Modules, status.Namespace, status.Name)
-		return h.client.Status().Patch(ctx, nmcObj, patchFrom)
+	podTemplate, err := h.pm.UnloaderPodTemplate(ctx, nmcObj, status)
+	if err != nil {
+		return fmt.Errorf("could not create the Pod template for %s: %v", podName, err)
 	}
 
-	logger.Info("Creating unloader Pod")
+	if podTemplate.Annotations[hashAnnotationKey] != pod.Annotations[hashAnnotationKey] {
+		logger.Info("Hash differs, deleting pod")
+		return h.pm.DeletePod(ctx, pod)
+	}
 
-	return h.pm.CreateUnloaderPod(ctx, nmcObj, status)
+	return nil
 }
 
-func (h *nmcReconcilerHelperImpl) RemoveOrphanFinalizers(ctx context.Context, nodeName string) error {
+func (h *nmcReconcilerHelperImpl) RemovePodFinalizers(ctx context.Context, nodeName string) error {
 	pods, err := h.pm.ListWorkerPodsOnNode(ctx, nodeName)
 	if err != nil {
 		return fmt.Errorf("could not delete orphan worker Pods on node %s: %v", nodeName, err)
@@ -413,6 +462,12 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 		return nil
 	}
 
+	specEntries := sets.New[types.NamespacedName]()
+
+	for _, e := range nmcObj.Spec.Modules {
+		specEntries.Insert(types.NamespacedName{Namespace: e.Namespace, Name: e.Name})
+	}
+
 	patchFrom := client.MergeFrom(nmcObj.DeepCopy())
 	errs := make([]error, 0, len(pods))
 	podsToDelete := make([]v1.Pod, 0, len(pods))
@@ -429,33 +484,15 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 		logger.Info("Processing worker Pod")
 
 		status := nmc.FindModuleStatus(nmcObj.Status.Modules, modNamespace, modName)
-		if status == nil {
-			status = &kmmv1beta1.NodeModuleStatus{
-				ModuleItem: kmmv1beta1.ModuleItem{
-					Name:      modName,
-					Namespace: modNamespace,
-				},
-			}
-		}
-
-		if irsName, err := getImageRepoSecretName(&p); err != nil {
-			logger.Info(
-				utils.WarnString("Error while looking for the imageRepoSecret volume"),
-				"error",
-				err,
-			)
-		} else if irsName != "" {
-			status.ImageRepoSecret = &v1.LocalObjectReference{Name: irsName}
-		}
-
-		status.ServiceAccountName = p.Spec.ServiceAccountName
-
-		updateModuleStatus := false
 
 		switch phase {
+		case v1.PodRunning:
+			// Delete Pod if orphan
+			if !specEntries.Has(types.NamespacedName{Namespace: modNamespace, Name: modName}) && status == nil {
+				logger.Info("Orphan pod; deleting")
+				podsToDelete = append(podsToDelete, p)
+			}
 		case v1.PodFailed:
-			status.InProgress = false
-			updateModuleStatus = true
 			podsToDelete = append(podsToDelete, p)
 		case v1.PodSucceeded:
 			if p.Labels[actionLabelKey] == WorkerActionUnload {
@@ -464,11 +501,16 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 				break
 			}
 
-			updateModuleStatus = true
+			if status == nil {
+				status = &kmmv1beta1.NodeModuleStatus{
+					ModuleItem: kmmv1beta1.ModuleItem{
+						Name:      modName,
+						Namespace: modNamespace,
+					},
+				}
+			}
 
-			config := kmmv1beta1.ModuleConfig{}
-
-			if err = yaml.UnmarshalStrict([]byte(p.Annotations[configAnnotationKey]), &config); err != nil {
+			if err = yaml.UnmarshalStrict([]byte(p.Annotations[configAnnotationKey]), &status.Config); err != nil {
 				errs = append(
 					errs,
 					fmt.Errorf("%s: could not unmarshal the ModuleConfig from YAML: %v", podNSN, err),
@@ -477,29 +519,28 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 				continue
 			}
 
-			status.Config = &config
-			status.InProgress = false
+			if irsName, err := getImageRepoSecretName(&p); err != nil {
+				logger.Info(
+					utils.WarnString("Error while looking for the imageRepoSecret volume"),
+					"error",
+					err,
+				)
+			} else if irsName != "" {
+				status.ImageRepoSecret = &v1.LocalObjectReference{Name: irsName}
+			}
+
+			status.ServiceAccountName = p.Spec.ServiceAccountName
 
 			podLTT := GetContainerStatus(p.Status.ContainerStatuses, workerContainerName).
 				State.
 				Terminated.
 				FinishedAt
 
-			status.LastTransitionTime = &podLTT
-			podsToDelete = append(podsToDelete, p)
-		case v1.PodPending, v1.PodRunning:
-			status.InProgress = true
-			updateModuleStatus = true
-			// TODO: if the NMC's spec changed compared to the Pod's config, recreate the Pod
-		default:
-			errs = append(
-				errs,
-				fmt.Errorf("%s: unhandled Pod phase %q", podNSN, phase),
-			)
-		}
+			status.LastTransitionTime = podLTT
 
-		if updateModuleStatus {
 			nmc.SetModuleStatus(&nmcObj.Status.Modules, *status)
+
+			podsToDelete = append(podsToDelete, p)
 		}
 	}
 
@@ -547,10 +588,7 @@ func (h *nmcReconcilerHelperImpl) UpdateNodeLabelsAndRecordEvents(ctx context.Co
 	statusLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
 	for _, module := range nmc.Status.Modules {
 		label := types.NamespacedName{Namespace: module.Namespace, Name: module.Name}
-		statusLabels[label] = kmmv1beta1.ModuleConfig{}
-		if module.Config != nil {
-			statusLabels[label] = *module.Config
-		}
+		statusLabels[label] = module.Config
 	}
 
 	unloaded := make([]types.NamespacedName, 0, len(nodeModuleReadyLabels))
@@ -631,6 +669,9 @@ type podManager interface {
 	CreateUnloaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleStatus) error
 	DeletePod(ctx context.Context, pod *v1.Pod) error
 	ListWorkerPodsOnNode(ctx context.Context, nodeName string) ([]v1.Pod, error)
+	LoaderPodTemplate(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleSpec) (*v1.Pod, error)
+	GetWorkerPod(ctx context.Context, podName, namespace string) (*v1.Pod, error)
+	UnloaderPodTemplate(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleStatus) (*v1.Pod, error)
 }
 
 type podManagerImpl struct {
@@ -651,85 +692,20 @@ func newPodManager(client client.Client, workerImage string, scheme *runtime.Sch
 	}
 }
 
-func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleSpec) error {
-	pod, err := p.baseWorkerPod(ctx, nmc.GetName(), &nms.ModuleItem, nmc)
+func (p *podManagerImpl) CreateLoaderPod(ctx context.Context, nmcObj client.Object, nms *kmmv1beta1.NodeModuleSpec) error {
+	pod, err := p.LoaderPodTemplate(ctx, nmcObj, nms)
 	if err != nil {
-		return fmt.Errorf("could not create the base Pod: %v", err)
+		return fmt.Errorf("could not get loader Pod template: %v", err)
 	}
-
-	args := []string{"kmod", "load", configFullPath}
-
-	privileged := false
-
-	if p.workerCfg.SetFirmwareClassPath != nil {
-		args = append(args, "--"+worker.FlagFirmwareClassPath, *p.workerCfg.SetFirmwareClassPath)
-		privileged = true
-	}
-
-	if err = setWorkerConfigAnnotation(pod, nms.Config); err != nil {
-		return fmt.Errorf("could not set worker config: %v", err)
-	}
-
-	if err = setWorkerSecurityContext(pod, p.workerCfg, privileged); err != nil {
-		return fmt.Errorf("could not set the worker Pod as privileged: %v", err)
-	}
-
-	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
-		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
-			return fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
-		}
-	}
-
-	if nms.Config.Modprobe.FirmwarePath != "" {
-		args = append(args, "--"+worker.FlagFirmwareMountPath, worker.FirmwareMountPath)
-		if err = setFirmwareVolume(pod, p.workerCfg.SetFirmwareClassPath); err != nil {
-			return fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
-		}
-	}
-
-	if err = setWorkerContainerArgs(pod, args); err != nil {
-		return fmt.Errorf("could not set worker container args: %v", err)
-	}
-
-	meta.SetLabel(pod, actionLabelKey, WorkerActionLoad)
 
 	return p.client.Create(ctx, pod)
 }
 
 func (p *podManagerImpl) CreateUnloaderPod(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleStatus) error {
-	pod, err := p.baseWorkerPod(ctx, nmc.GetName(), &nms.ModuleItem, nmc)
+	pod, err := p.UnloaderPodTemplate(ctx, nmc, nms)
 	if err != nil {
-		return fmt.Errorf("could not create the base Pod: %v", err)
+		return fmt.Errorf("could not create the Pod template: %v", err)
 	}
-
-	args := []string{"kmod", "unload", configFullPath}
-
-	if err = setWorkerConfigAnnotation(pod, *nms.Config); err != nil {
-		return fmt.Errorf("could not set worker config: %v", err)
-	}
-
-	if err = setWorkerSecurityContext(pod, p.workerCfg, false); err != nil {
-		return fmt.Errorf("could not set the worker Pod's security context: %v", err)
-	}
-
-	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
-		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
-			return fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
-		}
-	}
-
-	if nms.Config.Modprobe.FirmwarePath != "" {
-		args = append(args, "--"+worker.FlagFirmwareMountPath, worker.FirmwareMountPath)
-		if err = setFirmwareVolume(pod, p.workerCfg.SetFirmwareClassPath); err != nil {
-			return fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
-		}
-	}
-
-	if err = setWorkerContainerArgs(pod, args); err != nil {
-		return fmt.Errorf("could not set worker container args: %v", err)
-	}
-
-	meta.SetLabel(pod, actionLabelKey, WorkerActionUnload)
 
 	return p.client.Create(ctx, pod)
 }
@@ -760,6 +736,21 @@ func (p *podManagerImpl) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	return nil
 }
 
+func (p *podManagerImpl) GetWorkerPod(ctx context.Context, podName, namespace string) (*v1.Pod, error) {
+	pod := v1.Pod{}
+	nsn := types.NamespacedName{Namespace: namespace, Name: podName}
+
+	if err := p.client.Get(ctx, nsn, &pod); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		} else {
+			return nil, fmt.Errorf("could not get pod %s: %v", nsn, err)
+		}
+	}
+
+	return &pod, nil
+}
+
 func (p *podManagerImpl) ListWorkerPodsOnNode(ctx context.Context, nodeName string) ([]v1.Pod, error) {
 	logger := ctrl.LoggerFrom(ctx).WithValues("node name", nodeName)
 
@@ -777,23 +768,87 @@ func (p *podManagerImpl) ListWorkerPodsOnNode(ctx context.Context, nodeName stri
 	return pl.Items, nil
 }
 
-func (p *podManagerImpl) PodExists(ctx context.Context, nodeName, modName, modNamespace string) (bool, error) {
-	pod := v1.Pod{}
-
-	nsn := types.NamespacedName{
-		Namespace: modNamespace,
-		Name:      workerPodName(nodeName, modName),
+func (p *podManagerImpl) LoaderPodTemplate(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleSpec) (*v1.Pod, error) {
+	pod, err := p.baseWorkerPod(ctx, nmc.GetName(), &nms.ModuleItem, nmc)
+	if err != nil {
+		return nil, fmt.Errorf("could not create the base Pod: %v", err)
 	}
 
-	if err := p.client.Get(ctx, nsn, &pod); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return false, nil
+	args := []string{"kmod", "load", configFullPath}
+
+	privileged := false
+
+	if p.workerCfg.SetFirmwareClassPath != nil {
+		args = append(args, "--"+worker.FlagFirmwareClassPath, *p.workerCfg.SetFirmwareClassPath)
+		privileged = true
+	}
+
+	if err = setWorkerConfigAnnotation(pod, nms.Config); err != nil {
+		return nil, fmt.Errorf("could not set worker config: %v", err)
+	}
+
+	if err = setWorkerSecurityContext(pod, p.workerCfg, privileged); err != nil {
+		return nil, fmt.Errorf("could not set the worker Pod as privileged: %v", err)
+	}
+
+	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
+		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
+			return nil, fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
 		}
-
-		return false, fmt.Errorf("error getting Pod %s: %v", nsn, err)
 	}
 
-	return true, nil
+	if nms.Config.Modprobe.FirmwarePath != "" {
+		args = append(args, "--"+worker.FlagFirmwareMountPath, worker.FirmwareMountPath)
+		if err = setFirmwareVolume(pod, p.workerCfg.SetFirmwareClassPath); err != nil {
+			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
+		}
+	}
+
+	if err = setWorkerContainerArgs(pod, args); err != nil {
+		return nil, fmt.Errorf("could not set worker container args: %v", err)
+	}
+
+	meta.SetLabel(pod, actionLabelKey, WorkerActionLoad)
+
+	return pod, setHashAnnotation(pod)
+}
+
+func (p *podManagerImpl) UnloaderPodTemplate(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleStatus) (*v1.Pod, error) {
+	pod, err := p.baseWorkerPod(ctx, nmc.GetName(), &nms.ModuleItem, nmc)
+	if err != nil {
+		return nil, fmt.Errorf("could not create the base Pod: %v", err)
+	}
+
+	args := []string{"kmod", "unload", configFullPath}
+
+	if err = setWorkerConfigAnnotation(pod, nms.Config); err != nil {
+		return nil, fmt.Errorf("could not set worker config: %v", err)
+	}
+
+	if err = setWorkerSecurityContext(pod, p.workerCfg, false); err != nil {
+		return nil, fmt.Errorf("could not set the worker Pod's security context: %v", err)
+	}
+
+	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
+		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
+			return nil, fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
+		}
+	}
+
+	if nms.Config.Modprobe.FirmwarePath != "" {
+		args = append(args, "--"+worker.FlagFirmwareMountPath, worker.FirmwareMountPath)
+		if err = setFirmwareVolume(pod, p.workerCfg.SetFirmwareClassPath); err != nil {
+			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
+		}
+	}
+
+	if err = setWorkerContainerArgs(pod, args); err != nil {
+		return nil, fmt.Errorf("could not set worker container args: %v", err)
+	}
+
+	meta.SetLabel(pod, actionLabelKey, WorkerActionUnload)
+
+	return pod, setHashAnnotation(pod)
 }
 
 var (
@@ -903,7 +958,7 @@ func (p *podManagerImpl) baseWorkerPod(
 				},
 			},
 			NodeName:           nodeName,
-			RestartPolicy:      v1.RestartPolicyNever,
+			RestartPolicy:      v1.RestartPolicyOnFailure,
 			ServiceAccountName: item.ServiceAccountName,
 			Volumes:            append(volumes, psv...),
 		},
@@ -1023,6 +1078,17 @@ func setFirmwareVolume(pod *v1.Pod, hostFirmwarePath *string) error {
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes, firmwareVolume)
 	container.VolumeMounts = append(container.VolumeMounts, firmwareVolumeMount)
+	return nil
+}
+
+func setHashAnnotation(pod *v1.Pod) error {
+	hash, err := hashstructure.Hash(pod, hashstructure.FormatV2, nil)
+	if err != nil {
+		return fmt.Errorf("could not hash the pod template: %v", err)
+	}
+
+	pod.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
+
 	return nil
 }
 
