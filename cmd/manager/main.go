@@ -42,7 +42,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/daemonset"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
@@ -85,7 +84,6 @@ func main() {
 		commit = "<undefined>"
 	}
 
-	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
 	workerImage := cmd.GetEnvOrFatalError("RELATED_IMAGES_WORKER", setupLogger)
 
 	managed, err := GetBoolEnv("KMM_MANAGED")
@@ -135,22 +133,25 @@ func main() {
 		registryAPI,
 	)
 
-	daemonAPI := daemonset.NewCreator(client, constants.KernelLabel, scheme)
 	kernelAPI := module.NewKernelMapper(buildHelperAPI, sign.NewSignerHelper())
 
-	mc := controllers.NewModuleReconciler(
+	dpc := controllers.NewDevicePluginReconciler(
+		client,
+		metricsAPI,
+		filterAPI,
+		scheme)
+	if err = dpc.SetupWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.DevicePluginReconcilerName)
+	}
+
+	bsc := controllers.NewBuildSignReconciler(
 		client,
 		buildAPI,
 		signAPI,
-		daemonAPI,
 		kernelAPI,
-		metricsAPI,
-		filterAPI,
-		statusupdater.NewModuleStatusUpdater(client),
-		operatorNamespace,
-	)
-	if err = mc.SetupWithManager(mgr, constants.KernelLabel); err != nil {
-		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleReconcilerName)
+		filterAPI)
+	if err = bsc.SetupWithManager(mgr, constants.KernelLabel); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignReconcilerName)
 	}
 
 	mnc := controllers.NewModuleNMCReconciler(
@@ -173,8 +174,8 @@ func main() {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeModulesConfigReconcilerName)
 	}
 
-	if err = controllers.NewPodNodeModuleReconciler(client, daemonAPI).SetupWithManager(mgr); err != nil {
-		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PodNodeModuleReconcilerName)
+	if err = controllers.NewDevicePluginPodReconciler(client).SetupWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.DevicePluginPodReconcilerName)
 	}
 
 	if err = controllers.NewNodeLabelModuleVersionReconciler(client).SetupWithManager(mgr); err != nil {
