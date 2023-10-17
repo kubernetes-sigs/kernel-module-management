@@ -83,9 +83,6 @@ func (r *DevicePluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
 //+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
 
-// Reconcile lists all nodes and looks for kernels that match its mappings.
-// For each mapping that matches at least one node in the cluster, it creates a DaemonSet running the container image
-// on the nodes with a compatible kernel.
 func (r *DevicePluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	res := ctrl.Result{}
 
@@ -282,7 +279,47 @@ func (dprh *devicePluginReconcilerHelper) getRequestedModule(ctx context.Context
 func (dprh *devicePluginReconcilerHelper) moduleUpdateDevicePluginStatus(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	existingDevicePluginDS []appsv1.DaemonSet) error {
-	return nil
+
+	// get the number of nodes targeted by selector (which also relevant for device plugin)
+	numTargetedNodes, err := dprh.getNumTargetedNodes(ctx, mod.Spec.Selector)
+	if err != nil {
+		return fmt.Errorf("failed to determine the number of nodes that should be targeted by Module's %s/%s selector: %v", mod.Namespace, mod.Name, err)
+	}
+
+	// number of available consists of sum of available pods for both (in case of ordered upgrade)
+	// device plugin DaemonSets
+	numAvailable := int32(0)
+	for _, ds := range existingDevicePluginDS {
+		numAvailable += ds.Status.NumberAvailable
+	}
+
+	unmodifiedMod := mod.DeepCopy()
+
+	mod.Status.DevicePlugin.NodesMatchingSelectorNumber = int32(numTargetedNodes)
+	mod.Status.DevicePlugin.DesiredNumber = int32(numTargetedNodes)
+	mod.Status.DevicePlugin.AvailableNumber = numAvailable
+
+	return dprh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
+}
+
+func (dprh *devicePluginReconcilerHelper) getNumTargetedNodes(ctx context.Context, selectorLabels map[string]string) (int, error) {
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("Listing nodes", "selector", selectorLabels)
+
+	selectedNodes := v1.NodeList{}
+	opt := client.MatchingLabels(selectorLabels)
+	if err := dprh.client.List(ctx, &selectedNodes, opt); err != nil {
+		return 0, fmt.Errorf("could not list nodes: %v", err)
+	}
+
+	numNodes := 0
+
+	for _, node := range selectedNodes.Items {
+		if utils.IsNodeSchedulable(&node) {
+			numNodes += 1
+		}
+	}
+	return numNodes, nil
 }
 
 //go:generate mockgen -source=device_plugin_reconciler.go -package=controllers -destination=mock_device_plugin_reconciler.go daemonSetCreator

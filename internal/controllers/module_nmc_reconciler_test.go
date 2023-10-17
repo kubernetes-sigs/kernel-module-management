@@ -87,7 +87,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 	})
 
 	DescribeTable("check error flows", func(getModuleError,
-		setFinalizerError,
+		setFinalizerAndStatusError,
 		getNodesError,
 		getNMCsMapError,
 		prepareSchedulingError,
@@ -103,11 +103,11 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil)
-		if setFinalizerError {
-			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(returnedError)
+		if setFinalizerAndStatusError {
+			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, &mod).Return(returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil)
+		mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, &mod).Return(nil)
 		if getNodesError {
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(nil, returnedError)
 			goto executeTestFunction
@@ -137,7 +137,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 
 	},
 		Entry("getRequestedModule failed", true, false, false, false, false, false),
-		Entry("setFinalizer failed", false, true, false, false, false, false),
+		Entry("setFinalizerAndStatus failed", false, true, false, false, false, false),
 		Entry("getNodesListBySelector failed", false, false, true, false, false, false),
 		Entry("getNMCsByModuleMap failed", false, false, false, true, false, false),
 		Entry("prepareSchedulingData failed", false, false, false, false, true, false),
@@ -149,7 +149,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		nmcMLDConfigs := map[string]schedulingData{nodeName: enableSchedulingData}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
-			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil),
+			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, &mod).Return(nil),
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil),
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
@@ -166,7 +166,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		nmcMLDConfigs := map[string]schedulingData{nodeName: disableSchedulingData}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
-			mockReconHelper.EXPECT().setFinalizer(ctx, &mod).Return(nil),
+			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, &mod).Return(nil),
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil),
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
@@ -222,40 +222,57 @@ var _ = Describe("ModuleReconciler_getRequestedModule", func() {
 
 })
 
-var _ = Describe("setFinalizer", func() {
+var _ = Describe("setFinalizerAndStatus", func() {
 	var (
-		ctrl *gomock.Controller
-		clnt *client.MockClient
-		mnrh moduleNMCReconcilerHelperAPI
-		mod  kmmv1beta1.Module
+		ctrl         *gomock.Controller
+		clnt         *client.MockClient
+		statusWriter *client.MockStatusWriter
+		mnrh         moduleNMCReconcilerHelperAPI
+		mod          kmmv1beta1.Module
+		expectedMod  *kmmv1beta1.Module
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
+		statusWriter = client.NewMockStatusWriter(ctrl)
 		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, nil, scheme)
 		mod = kmmv1beta1.Module{}
+		expectedMod = mod.DeepCopy()
 	})
 
 	ctx := context.Background()
 
 	It("finalizer is already set", func() {
 		controllerutil.AddFinalizer(&mod, constants.ModuleFinalizer)
-		err := mnrh.setFinalizer(ctx, &mod)
+		err := mnrh.setFinalizerAndStatus(ctx, &mod)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("finalizer is not set", func() {
+		controllerutil.AddFinalizer(expectedMod, constants.ModuleFinalizer)
 		clnt.EXPECT().Patch(ctx, &mod, gomock.Any()).Return(nil)
+		clnt.EXPECT().Status().Return(statusWriter)
+		statusWriter.EXPECT().Update(ctx, expectedMod).Return(nil)
 
-		err := mnrh.setFinalizer(ctx, &mod)
+		err := mnrh.setFinalizerAndStatus(ctx, &mod)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("finalizer is not set, failed to patch the Module", func() {
 		clnt.EXPECT().Patch(ctx, &mod, gomock.Any()).Return(fmt.Errorf("some error"))
 
-		err := mnrh.setFinalizer(ctx, &mod)
+		err := mnrh.setFinalizerAndStatus(ctx, &mod)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("finalizer is not set, failed to update Module's status", func() {
+		controllerutil.AddFinalizer(expectedMod, constants.ModuleFinalizer)
+		clnt.EXPECT().Patch(ctx, &mod, gomock.Any()).Return(nil)
+		clnt.EXPECT().Status().Return(statusWriter)
+		statusWriter.EXPECT().Update(ctx, expectedMod).Return(fmt.Errorf("some error"))
+
+		err := mnrh.setFinalizerAndStatus(ctx, &mod)
 		Expect(err).To(HaveOccurred())
 	})
 })

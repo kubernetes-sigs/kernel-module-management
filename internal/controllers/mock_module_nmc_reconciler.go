@@ -145,16 +145,16 @@ func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) prepareSchedulingData(ct
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareSchedulingData", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).prepareSchedulingData), ctx, mod, targetedNodes, currentNMCs)
 }
 
-// setFinalizer mocks base method.
-func (m *MockmoduleNMCReconcilerHelperAPI) setFinalizer(ctx context.Context, mod *v1beta1.Module) error {
+// setFinalizerAndStatus mocks base method.
+func (m *MockmoduleNMCReconcilerHelperAPI) setFinalizerAndStatus(ctx context.Context, mod *v1beta1.Module) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "setFinalizer", ctx, mod)
+	ret := m.ctrl.Call(m, "setFinalizerAndStatus", ctx, mod)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// setFinalizer indicates an expected call of setFinalizer.
-func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) setFinalizer(ctx, mod any) *gomock.Call {
+// setFinalizerAndStatus indicates an expected call of setFinalizerAndStatus.
+func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) setFinalizerAndStatus(ctx, mod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setFinalizer", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).setFinalizer), ctx, mod)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setFinalizerAndStatus", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).setFinalizerAndStatus), ctx, mod)
 }
