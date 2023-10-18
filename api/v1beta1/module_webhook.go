@@ -81,7 +81,7 @@ func (m *Module) ValidateDelete() (admission.Warnings, error) {
 func (m *Module) validate() (admission.Warnings, error) {
 	nameLength := len(m.Name + m.Namespace)
 
-	if m.Spec.ModuleLoader.Container.Version != "" && nameLength > maxCombinedLength {
+	if nameLength > maxCombinedLength {
 		return nil, fmt.Errorf(
 			"module name and namespace have a combined length of %d characters, which exceeds the maximum of %d when version is set",
 			nameLength,

@@ -408,11 +408,10 @@ var _ = Describe("validate", func() {
 
 	DescribeTable(
 		"should work as expected",
-		func(name, ns, version string, errExpected bool) {
+		func(name, ns string, errExpected bool) {
 			mod := validModule
 			mod.Name = name
 			mod.Namespace = ns
-			mod.Spec.ModuleLoader.Container.Version = version
 
 			_, err := mod.validate()
 			exp := Expect(err)
@@ -423,10 +422,8 @@ var _ = Describe("validate", func() {
 				exp.NotTo(HaveOccurred())
 			}
 		},
-		Entry(nil, "name", "ns", "", false),
-		Entry(nil, "name", "ns", "test", false),
-		Entry(nil, chars21, chars21, "", false),
-		Entry(nil, chars21, chars21, "test", true),
+		Entry("not too long", "name", "ns", false),
+		Entry("too long", chars21, chars21, true),
 	)
 })
 
