@@ -493,6 +493,65 @@ var _ = Describe("DevicePluginReconciler_setKMMOMetrics", func() {
 	)
 })
 
+var _ = Describe("DevicePluginReconciler_moduleUpdateDevicePluginStatus", func() {
+	var (
+		ctrl         *gomock.Controller
+		clnt         *client.MockClient
+		statusWriter *client.MockStatusWriter
+		dprh         devicePluginReconcilerHelperAPI
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		statusWriter = client.NewMockStatusWriter(ctrl)
+		dprh = newDevicePluginReconcilerHelper(clnt, nil, nil)
+	})
+
+	ctx := context.Background()
+
+	DescribeTable("device-plugin status update",
+		func(numTargetedNodes int, numAvailableInDaemonSets []int, nodesMatchingNumber, availableNumber int) {
+			mod := kmmv1beta1.Module{}
+			expectedMod := mod.DeepCopy()
+			expectedMod.Status.DevicePlugin.NodesMatchingSelectorNumber = int32(nodesMatchingNumber)
+			expectedMod.Status.DevicePlugin.DesiredNumber = int32(nodesMatchingNumber)
+			expectedMod.Status.DevicePlugin.AvailableNumber = int32(availableNumber)
+
+			nodesList := []v1.Node{}
+			for i := 0; i < numTargetedNodes; i++ {
+				nodesList = append(nodesList, v1.Node{})
+			}
+			daemonSetsList := []appsv1.DaemonSet{}
+			for _, numAvailable := range numAvailableInDaemonSets {
+				ds := appsv1.DaemonSet{
+					Status: appsv1.DaemonSetStatus{
+						NumberAvailable: int32(numAvailable),
+					},
+				}
+				daemonSetsList = append(daemonSetsList, ds)
+			}
+
+			clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+					list.Items = nodesList
+					return nil
+				},
+			)
+			clnt.EXPECT().Status().Return(statusWriter)
+			statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any())
+
+			err := dprh.moduleUpdateDevicePluginStatus(ctx, &mod, daemonSetsList)
+			Expect(err).NotTo(HaveOccurred())
+		},
+		Entry("0 target node, 0 ds", 0, nil, 0, 0),
+		Entry("0 target node, 1 ds", 0, []int{1}, 0, 1),
+		Entry("0 target node, 2 ds", 0, []int{3, 6}, 0, 9),
+		Entry("3 target node, 0 ds", 3, nil, 3, 0),
+		Entry("2 target node, 3 ds", 2, []int{3, 6, 8}, 2, 17),
+	)
+})
+
 var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 	const (
 		devicePluginImage = "device-plugin-image"

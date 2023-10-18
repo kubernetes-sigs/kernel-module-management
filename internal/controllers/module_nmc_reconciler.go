@@ -84,7 +84,7 @@ func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	err = mnr.reconHelper.setFinalizer(ctx, mod)
+	err = mnr.reconHelper.setFinalizerAndStatus(ctx, mod)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to set finalizer on %s Module: %v", req.NamespacedName, err)
 	}
@@ -144,7 +144,7 @@ func (mnr *ModuleNMCReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //go:generate mockgen -source=module_nmc_reconciler.go -package=controllers -destination=mock_module_nmc_reconciler.go moduleNMCReconcilerHelperAPI
 
 type moduleNMCReconcilerHelperAPI interface {
-	setFinalizer(ctx context.Context, mod *kmmv1beta1.Module) error
+	setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error)
 	getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error)
@@ -177,7 +177,7 @@ func newModuleNMCReconcilerHelper(
 	}
 }
 
-func (mnrh *moduleNMCReconcilerHelper) setFinalizer(ctx context.Context, mod *kmmv1beta1.Module) error {
+func (mnrh *moduleNMCReconcilerHelper) setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error {
 	if controllerutil.ContainsFinalizer(mod, constants.ModuleFinalizer) {
 		return nil
 	}
@@ -187,7 +187,16 @@ func (mnrh *moduleNMCReconcilerHelper) setFinalizer(ctx context.Context, mod *km
 
 	modCopy := mod.DeepCopy()
 	controllerutil.AddFinalizer(mod, constants.ModuleFinalizer)
-	return mnrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
+	err := mnrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
+	if err != nil {
+		return fmt.Errorf("failed to set finalizer for module %s/%s: %v", mod.Namespace, mod.Name, err)
+	}
+
+	//mod.Status.ModuleLoader.NodesMatchingSelectorNumber = 0
+	//mod.Status.ModuleLoader.DesiredNumber = 0
+	//mod.Status.ModuleLoader.AvailableNumber = 0
+
+	return mnrh.client.Status().Update(ctx, mod)
 }
 
 func (mnrh *moduleNMCReconcilerHelper) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error) {
