@@ -16,6 +16,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
+	"github.com/mitchellh/hashstructure/v2"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1101,9 +1102,14 @@ func (p *pullSecretHelperImpl) VolumesAndVolumeMounts(ctx context.Context, item 
 
 			secretNames.Insert(s.Name)
 
+			hashValue, err := hashstructure.Hash(s.Name, hashstructure.FormatV2, nil)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to hash secret %s: %v", s.Name, err)
+			}
+
 			ps := pullSecret{
 				secretName: s.Name,
-				volumeName: "pull-secret-" + s.Name,
+				volumeName: fmt.Sprintf("pull-secret-%d", hashValue),
 				optional:   true, // to match the node's container runtime behaviour
 			}
 
