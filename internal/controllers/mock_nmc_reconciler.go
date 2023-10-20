@@ -83,18 +83,18 @@ func (mr *MocknmcReconcilerHelperMockRecorder) ProcessUnconfiguredModuleStatus(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessUnconfiguredModuleStatus", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).ProcessUnconfiguredModuleStatus), ctx, nmc, status)
 }
 
-// RemoveOrphanFinalizers mocks base method.
-func (m *MocknmcReconcilerHelper) RemoveOrphanFinalizers(ctx context.Context, nodeName string) error {
+// RemovePodFinalizers mocks base method.
+func (m *MocknmcReconcilerHelper) RemovePodFinalizers(ctx context.Context, nodeName string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveOrphanFinalizers", ctx, nodeName)
+	ret := m.ctrl.Call(m, "RemovePodFinalizers", ctx, nodeName)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// RemoveOrphanFinalizers indicates an expected call of RemoveOrphanFinalizers.
-func (mr *MocknmcReconcilerHelperMockRecorder) RemoveOrphanFinalizers(ctx, nodeName any) *gomock.Call {
+// RemovePodFinalizers indicates an expected call of RemovePodFinalizers.
+func (mr *MocknmcReconcilerHelperMockRecorder) RemovePodFinalizers(ctx, nodeName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveOrphanFinalizers", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).RemoveOrphanFinalizers), ctx, nodeName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePodFinalizers", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).RemovePodFinalizers), ctx, nodeName)
 }
 
 // SyncStatus mocks base method.
@@ -190,6 +190,21 @@ func (mr *MockpodManagerMockRecorder) DeletePod(ctx, pod any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePod", reflect.TypeOf((*MockpodManager)(nil).DeletePod), ctx, pod)
 }
 
+// GetWorkerPod mocks base method.
+func (m *MockpodManager) GetWorkerPod(ctx context.Context, podName, namespace string) (*v1.Pod, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkerPod", ctx, podName, namespace)
+	ret0, _ := ret[0].(*v1.Pod)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkerPod indicates an expected call of GetWorkerPod.
+func (mr *MockpodManagerMockRecorder) GetWorkerPod(ctx, podName, namespace any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerPod", reflect.TypeOf((*MockpodManager)(nil).GetWorkerPod), ctx, podName, namespace)
+}
+
 // ListWorkerPodsOnNode mocks base method.
 func (m *MockpodManager) ListWorkerPodsOnNode(ctx context.Context, nodeName string) ([]v1.Pod, error) {
 	m.ctrl.T.Helper()
@@ -203,6 +218,36 @@ func (m *MockpodManager) ListWorkerPodsOnNode(ctx context.Context, nodeName stri
 func (mr *MockpodManagerMockRecorder) ListWorkerPodsOnNode(ctx, nodeName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkerPodsOnNode", reflect.TypeOf((*MockpodManager)(nil).ListWorkerPodsOnNode), ctx, nodeName)
+}
+
+// LoaderPodTemplate mocks base method.
+func (m *MockpodManager) LoaderPodTemplate(ctx context.Context, nmc client.Object, nms *v1beta1.NodeModuleSpec) (*v1.Pod, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LoaderPodTemplate", ctx, nmc, nms)
+	ret0, _ := ret[0].(*v1.Pod)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LoaderPodTemplate indicates an expected call of LoaderPodTemplate.
+func (mr *MockpodManagerMockRecorder) LoaderPodTemplate(ctx, nmc, nms any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoaderPodTemplate", reflect.TypeOf((*MockpodManager)(nil).LoaderPodTemplate), ctx, nmc, nms)
+}
+
+// UnloaderPodTemplate mocks base method.
+func (m *MockpodManager) UnloaderPodTemplate(ctx context.Context, nmc client.Object, nms *v1beta1.NodeModuleStatus) (*v1.Pod, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnloaderPodTemplate", ctx, nmc, nms)
+	ret0, _ := ret[0].(*v1.Pod)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnloaderPodTemplate indicates an expected call of UnloaderPodTemplate.
+func (mr *MockpodManagerMockRecorder) UnloaderPodTemplate(ctx, nmc, nms any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnloaderPodTemplate", reflect.TypeOf((*MockpodManager)(nil).UnloaderPodTemplate), ctx, nmc, nms)
 }
 
 // MockpullSecretHelper is a mock of pullSecretHelper interface.
