@@ -291,8 +291,6 @@ spec:
                           type: string
                       type: object
                       x-kubernetes-map-type: atomic
-                    inProgress:
-                      type: boolean
                     lastTransitionTime:
                       format: date-time
                       type: string
@@ -303,7 +301,6 @@ spec:
                     serviceAccountName:
                       type: string
                   required:
-                  - inProgress
                   - name
                   - namespace
                   - serviceAccountName

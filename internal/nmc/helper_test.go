@@ -313,8 +313,6 @@ var _ = Describe("SetModuleStatus", func() {
 		namespace = "test-namespace"
 	)
 
-	now := metav1.Now()
-
 	s := kmmv1beta1.NodeModuleStatus{
 		ModuleItem: kmmv1beta1.ModuleItem{
 			ImageRepoSecret:    nil, // TODO
@@ -322,13 +320,13 @@ var _ = Describe("SetModuleStatus", func() {
 			Namespace:          namespace,
 			ServiceAccountName: "sa",
 		},
-		Config: &kmmv1beta1.ModuleConfig{
+		Config: kmmv1beta1.ModuleConfig{
 			KernelVersion:        "some-kver",
 			ContainerImage:       "some-kernel-image",
 			InsecurePull:         true,
 			InTreeModuleToRemove: "intree",
 		},
-		LastTransitionTime: &now,
+		LastTransitionTime: metav1.Now(),
 	}
 
 	It("should do nothing if the slice is nil", func() {
@@ -348,7 +346,6 @@ var _ = Describe("SetModuleStatus", func() {
 		statuses := []kmmv1beta1.NodeModuleStatus{s}
 
 		new := s
-		new.InProgress = true
 
 		SetModuleStatus(&statuses, new)
 

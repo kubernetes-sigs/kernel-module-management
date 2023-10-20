@@ -57,10 +57,9 @@ type NodeModuleStatus struct {
 	ModuleItem `json:",inline"`
 
 	//+optional
-	Config     *ModuleConfig `json:"config,omitempty"`
-	InProgress bool          `json:"inProgress"`
+	Config ModuleConfig `json:"config,omitempty"`
 	//+optional
-	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
 }
 
 // NodeModuleConfigStatus is the most recently observed status of the KMM modules on node.
