@@ -55,19 +55,33 @@ func (mr *MockHelperMockRecorder) Get(ctx, name any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockHelper)(nil).Get), ctx, name)
 }
 
-// GetModuleEntry mocks base method.
-func (m *MockHelper) GetModuleEntry(nmc *v1beta1.NodeModulesConfig, modNamespace, modName string) (*v1beta1.NodeModuleSpec, int) {
+// GetModuleSpecEntry mocks base method.
+func (m *MockHelper) GetModuleSpecEntry(nmc *v1beta1.NodeModulesConfig, modNamespace, modName string) (*v1beta1.NodeModuleSpec, int) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetModuleEntry", nmc, modNamespace, modName)
+	ret := m.ctrl.Call(m, "GetModuleSpecEntry", nmc, modNamespace, modName)
 	ret0, _ := ret[0].(*v1beta1.NodeModuleSpec)
 	ret1, _ := ret[1].(int)
 	return ret0, ret1
 }
 
-// GetModuleEntry indicates an expected call of GetModuleEntry.
-func (mr *MockHelperMockRecorder) GetModuleEntry(nmc, modNamespace, modName any) *gomock.Call {
+// GetModuleSpecEntry indicates an expected call of GetModuleSpecEntry.
+func (mr *MockHelperMockRecorder) GetModuleSpecEntry(nmc, modNamespace, modName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleEntry", reflect.TypeOf((*MockHelper)(nil).GetModuleEntry), nmc, modNamespace, modName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleSpecEntry", reflect.TypeOf((*MockHelper)(nil).GetModuleSpecEntry), nmc, modNamespace, modName)
+}
+
+// GetModuleStatusEntry mocks base method.
+func (m *MockHelper) GetModuleStatusEntry(nmc *v1beta1.NodeModulesConfig, modNamespace, modName string) *v1beta1.NodeModuleStatus {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetModuleStatusEntry", nmc, modNamespace, modName)
+	ret0, _ := ret[0].(*v1beta1.NodeModuleStatus)
+	return ret0
+}
+
+// GetModuleStatusEntry indicates an expected call of GetModuleStatusEntry.
+func (mr *MockHelperMockRecorder) GetModuleStatusEntry(nmc, modNamespace, modName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleStatusEntry", reflect.TypeOf((*MockHelper)(nil).GetModuleStatusEntry), nmc, modNamespace, modName)
 }
 
 // RemoveModuleConfig mocks base method.
