@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -114,6 +115,9 @@ func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		errs = append(errs, err)
 	}
 
+	err = mnr.reconHelper.moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes)
+	errs = append(errs, err)
+
 	err = errors.Join(errs...)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile module %s/%s config: %v", mod.Namespace, mod.Name, err)
@@ -152,6 +156,7 @@ type moduleNMCReconcilerHelperAPI interface {
 	prepareSchedulingData(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node, currentNMCs sets.Set[string]) (map[string]schedulingData, []error)
 	enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error
 	disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error
+	moduleUpdateWorkerPodsStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error
 }
 
 type moduleNMCReconcilerHelper struct {
@@ -275,15 +280,19 @@ func (mnrh *moduleNMCReconcilerHelper) getNodesListBySelector(ctx context.Contex
 }
 
 func (mnrh *moduleNMCReconcilerHelper) getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error) {
-	nmcNamesList, err := mnrh.getNMCsNamesForModule(ctx, mod)
+	nmcList, err := mnrh.getNMCsForModule(ctx, mod)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get list of %s/%s module's NMC for map: %v", mod.Namespace, mod.Name, err)
 	}
 
-	return sets.New[string](nmcNamesList...), nil
+	result := sets.New[string]()
+	for _, nmc := range nmcList {
+		result.Insert(nmc.Name)
+	}
+	return result, nil
 }
 
-func (mnrh *moduleNMCReconcilerHelper) getNMCsNamesForModule(ctx context.Context, mod *kmmv1beta1.Module) ([]string, error) {
+func (mnrh *moduleNMCReconcilerHelper) getNMCsForModule(ctx context.Context, mod *kmmv1beta1.Module) ([]kmmv1beta1.NodeModulesConfig, error) {
 	logger := log.FromContext(ctx)
 	moduleNMCLabel := nmc.ModuleConfiguredLabel(mod.Namespace, mod.Name)
 	logger.V(1).Info("Listing nmcs", "selector", moduleNMCLabel)
@@ -292,11 +301,8 @@ func (mnrh *moduleNMCReconcilerHelper) getNMCsNamesForModule(ctx context.Context
 	if err := mnrh.client.List(ctx, &selectedNMCs, opt); err != nil {
 		return nil, fmt.Errorf("could not list NMCs: %v", err)
 	}
-	result := make([]string, len(selectedNMCs.Items))
-	for i := range selectedNMCs.Items {
-		result[i] = selectedNMCs.Items[i].Name
-	}
-	return result, nil
+
+	return selectedNMCs.Items, nil
 }
 
 // prepareSchedulingData prepare data needed to scheduling enable/disable module per node
@@ -400,6 +406,37 @@ func (mnrh *moduleNMCReconcilerHelper) removeModuleFromNMC(ctx context.Context, 
 
 	logger.Info("Disabled module in NMC", "name", modName, "namespace", modNamespace, "NMC", nmcObj.Name, "result", opRes)
 	return nil
+}
+
+func (mnrh *moduleNMCReconcilerHelper) moduleUpdateWorkerPodsStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error {
+	logger := log.FromContext(ctx)
+	// get nmcs with configured
+	nmcs, err := mnrh.getNMCsForModule(ctx, mod)
+	if err != nil {
+		return fmt.Errorf("failed to get configured NMCs for module %s/%s: %v", mod.Namespace, mod.Name, err)
+	}
+
+	numAvailable := 0
+	for _, nmc := range nmcs {
+		modSpec, _ := mnrh.nmcHelper.GetModuleSpecEntry(&nmc, mod.Namespace, mod.Name)
+		if modSpec == nil {
+			logger.Info(utils.WarnString(
+				fmt.Sprintf("module %s/%s spec is missing in NMC %s although config label is present", mod.Namespace, mod.Name, nmc.Name)))
+			continue
+		}
+		modStatus := mnrh.nmcHelper.GetModuleStatusEntry(&nmc, mod.Namespace, mod.Name)
+		if modStatus != nil && reflect.DeepEqual(modSpec.Config, modStatus.Config) {
+			numAvailable += 1
+		}
+	}
+
+	unmodifiedMod := mod.DeepCopy()
+
+	mod.Status.ModuleLoader.NodesMatchingSelectorNumber = int32(len(targetedNodes))
+	mod.Status.ModuleLoader.DesiredNumber = int32(len(nmcs))
+	mod.Status.ModuleLoader.AvailableNumber = int32(numAvailable)
+
+	return mnrh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
 }
 
 func prepareNodeSchedulingData(node v1.Node, mld *api.ModuleLoaderData, currentNMCs sets.Set[string]) schedulingData {

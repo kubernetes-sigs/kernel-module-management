@@ -510,9 +510,19 @@ var _ = Describe("DevicePluginReconciler_moduleUpdateDevicePluginStatus", func()
 
 	ctx := context.Background()
 
+	It("device plugin not defined in the module", func() {
+		mod := kmmv1beta1.Module{}
+		err := dprh.moduleUpdateDevicePluginStatus(ctx, &mod, nil)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	DescribeTable("device-plugin status update",
 		func(numTargetedNodes int, numAvailableInDaemonSets []int, nodesMatchingNumber, availableNumber int) {
-			mod := kmmv1beta1.Module{}
+			mod := kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{
+					DevicePlugin: &kmmv1beta1.DevicePluginSpec{},
+				},
+			}
 			expectedMod := mod.DeepCopy()
 			expectedMod.Status.DevicePlugin.NodesMatchingSelectorNumber = int32(nodesMatchingNumber)
 			expectedMod.Status.DevicePlugin.DesiredNumber = int32(nodesMatchingNumber)

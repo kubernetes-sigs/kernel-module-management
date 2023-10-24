@@ -203,7 +203,7 @@ var _ = Describe("RemoveModuleConfig", func() {
 	})
 })
 
-var _ = Describe("GetModuleEntry", func() {
+var _ = Describe("GetModuleSpecEntry", func() {
 	var (
 		nmcHelper Helper
 	)
@@ -212,17 +212,17 @@ var _ = Describe("GetModuleEntry", func() {
 		nmcHelper = NewHelper(nil)
 	})
 
-	It("empty module list", func() {
+	It("empty module spec list", func() {
 		nmc := kmmv1beta1.NodeModulesConfig{
 			Spec: kmmv1beta1.NodeModulesConfigSpec{},
 		}
 
-		res, _ := nmcHelper.GetModuleEntry(&nmc, "namespace", "name")
+		res, _ := nmcHelper.GetModuleSpecEntry(&nmc, "namespace", "name")
 
 		Expect(res).To(BeNil())
 	})
 
-	It("module missing from the list", func() {
+	It("module spec missing from the spec list", func() {
 		nmc := kmmv1beta1.NodeModulesConfig{
 			Spec: kmmv1beta1.NodeModulesConfigSpec{
 				Modules: []kmmv1beta1.NodeModuleSpec{
@@ -242,12 +242,12 @@ var _ = Describe("GetModuleEntry", func() {
 			},
 		}
 
-		res, _ := nmcHelper.GetModuleEntry(&nmc, "namespace", "name")
+		res, _ := nmcHelper.GetModuleSpecEntry(&nmc, "namespace", "name")
 
 		Expect(res).To(BeNil())
 	})
 
-	It("module present", func() {
+	It("module spec present", func() {
 		nmc := kmmv1beta1.NodeModulesConfig{
 			Spec: kmmv1beta1.NodeModulesConfigSpec{
 				Modules: []kmmv1beta1.NodeModuleSpec{
@@ -267,11 +267,82 @@ var _ = Describe("GetModuleEntry", func() {
 			},
 		}
 
-		res, index := nmcHelper.GetModuleEntry(&nmc, "some namespace 1", "some name 1")
+		res, index := nmcHelper.GetModuleSpecEntry(&nmc, "some namespace 1", "some name 1")
 
 		Expect(res.Name).To(Equal("some name 1"))
 		Expect(res.Namespace).To(Equal("some namespace 1"))
 		Expect(index).To(Equal(0))
+	})
+})
+
+var _ = Describe("GetModuleStatusEntry", func() {
+	var (
+		nmcHelper Helper
+	)
+
+	BeforeEach(func() {
+		nmcHelper = NewHelper(nil)
+	})
+
+	It("empty module status list", func() {
+		nmc := kmmv1beta1.NodeModulesConfig{
+			Status: kmmv1beta1.NodeModulesConfigStatus{},
+		}
+
+		res := nmcHelper.GetModuleStatusEntry(&nmc, "namespace", "name")
+
+		Expect(res).To(BeNil())
+	})
+
+	It("module status missing from the status list", func() {
+		nmc := kmmv1beta1.NodeModulesConfig{
+			Status: kmmv1beta1.NodeModulesConfigStatus{
+				Modules: []kmmv1beta1.NodeModuleStatus{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Name:      "some name 1",
+							Namespace: "some namespace 1",
+						},
+					},
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Name:      "some name 2",
+							Namespace: "some namespace 2",
+						},
+					},
+				},
+			},
+		}
+
+		res := nmcHelper.GetModuleStatusEntry(&nmc, "namespace", "name")
+
+		Expect(res).To(BeNil())
+	})
+
+	It("module status present", func() {
+		nmc := kmmv1beta1.NodeModulesConfig{
+			Status: kmmv1beta1.NodeModulesConfigStatus{
+				Modules: []kmmv1beta1.NodeModuleStatus{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Name:      "some name 1",
+							Namespace: "some namespace 1",
+						},
+					},
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Name:      "some name 2",
+							Namespace: "some namespace 2",
+						},
+					},
+				},
+			},
+		}
+
+		res := nmcHelper.GetModuleStatusEntry(&nmc, "some namespace 1", "some name 1")
+
+		Expect(res.Name).To(Equal("some name 1"))
+		Expect(res.Namespace).To(Equal("some namespace 1"))
 	})
 })
 

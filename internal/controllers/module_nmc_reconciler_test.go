@@ -91,7 +91,9 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		getNodesError,
 		getNMCsMapError,
 		prepareSchedulingError,
-		shouldBeOnNode bool) {
+		shouldBeOnNode,
+		disableEnableError,
+		moduleUpdateStatusErr bool) {
 
 		nmcMLDConfigs := map[string]schedulingData{"nodeName": disableSchedulingData}
 		if shouldBeOnNode {
@@ -120,13 +122,28 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil)
 		if prepareSchedulingError {
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nil, []error{returnedError})
-			goto executeTestFunction
+			goto moduleStatusUpdateFunction
 		}
 		mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, []error{})
+		if disableEnableError {
+			if shouldBeOnNode {
+				mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(returnedError)
+			} else {
+				mockReconHelper.EXPECT().disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name).Return(returnedError)
+			}
+			goto moduleStatusUpdateFunction
+		}
 		if shouldBeOnNode {
-			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(returnedError)
+			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(nil)
 		} else {
-			mockReconHelper.EXPECT().disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name).Return(returnedError)
+			mockReconHelper.EXPECT().disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name).Return(nil)
+		}
+
+	moduleStatusUpdateFunction:
+		if moduleUpdateStatusErr {
+			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes).Return(returnedError)
+		} else {
+			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes).Return(nil)
 		}
 
 	executeTestFunction:
@@ -136,13 +153,14 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 
 	},
-		Entry("getRequestedModule failed", true, false, false, false, false, false),
-		Entry("setFinalizerAndStatus failed", false, true, false, false, false, false),
-		Entry("getNodesListBySelector failed", false, false, true, false, false, false),
-		Entry("getNMCsByModuleMap failed", false, false, false, true, false, false),
-		Entry("prepareSchedulingData failed", false, false, false, false, true, false),
-		Entry("enableModuleOnNode failed", false, false, false, false, false, true),
-		Entry("disableModuleOnNode failed", false, false, false, false, false, false),
+		Entry("getRequestedModule failed", true, false, false, false, false, false, false, false),
+		Entry("setFinalizerAndStatus failed", false, true, false, false, false, false, false, false),
+		Entry("getNodesListBySelector failed", false, false, true, false, false, false, false, false),
+		Entry("getNMCsByModuleMap failed", false, false, false, true, false, false, false, false),
+		Entry("prepareSchedulingData failed", false, false, false, false, true, false, false, false),
+		Entry("enableModuleOnNode failed", false, false, false, false, false, true, true, false),
+		Entry("disableModuleOnNode failed", false, false, false, false, false, false, true, false),
+		Entry(".moduleUpdateWorkerPodsStatus failed", false, false, false, false, false, false, false, true),
 	)
 
 	It("Good flow, should run on node", func() {
@@ -154,6 +172,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(nil),
+			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes).Return(nil),
 		)
 
 		res, err := mnr.Reconcile(ctx, req)
@@ -171,6 +190,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 			mockReconHelper.EXPECT().disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name).Return(nil),
+			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes).Return(nil),
 		)
 
 		res, err := mnr.Reconcile(ctx, req)
@@ -885,4 +905,149 @@ var _ = Describe("removeModuleFromNMC", func() {
 		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
 		Expect(err).NotTo(HaveOccurred())
 	})
+})
+
+var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
+	var (
+		ctx          context.Context
+		ctrl         *gomock.Controller
+		clnt         *client.MockClient
+		mod          kmmv1beta1.Module
+		mnrh         *moduleNMCReconcilerHelper
+		helper       *nmc.MockHelper
+		statusWriter *client.MockStatusWriter
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		helper = nmc.NewMockHelper(ctrl)
+		statusWriter = client.NewMockStatusWriter(ctrl)
+		mod = kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "modName",
+				Namespace: "modNamespace",
+			},
+		}
+		mnrh = &moduleNMCReconcilerHelper{client: clnt, nmcHelper: helper}
+	})
+
+	It("faled to get configured NMCs", func() {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+		err := mnrh.moduleUpdateWorkerPodsStatus(ctx, &mod, nil)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("module missing from spec", func() {
+		nmc1 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc1"},
+		}
+		targetedNodes := []v1.Node{v1.Node{}, v1.Node{}}
+		expectedMod := mod.DeepCopy()
+		expectedMod.Status.ModuleLoader.NodesMatchingSelectorNumber = int32(2)
+		expectedMod.Status.ModuleLoader.DesiredNumber = int32(1)
+		expectedMod.Status.ModuleLoader.AvailableNumber = int32(0)
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.NodeModulesConfig{nmc1}
+					return nil
+				},
+			),
+			helper.EXPECT().GetModuleSpecEntry(&nmc1, mod.Namespace, mod.Name).Return(nil, 0),
+			clnt.EXPECT().Status().Return(statusWriter),
+			statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any()),
+		)
+
+		err := mnrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	DescribeTable("module present in spec", func(numTargetedNodes int,
+		modulePresentInStatus,
+		configsEqual bool,
+		expectedNodesMatchingSelectorNumber,
+		expectedDesiredNumber,
+		expectedAvailableNumber int) {
+		expectedMod := mod.DeepCopy()
+		expectedMod.Status.ModuleLoader.NodesMatchingSelectorNumber = int32(expectedNodesMatchingSelectorNumber)
+		expectedMod.Status.ModuleLoader.DesiredNumber = int32(expectedDesiredNumber)
+		expectedMod.Status.ModuleLoader.AvailableNumber = int32(expectedAvailableNumber)
+
+		targetedNodes := []v1.Node{}
+		for i := 0; i < numTargetedNodes; i++ {
+			targetedNodes = append(targetedNodes, v1.Node{})
+		}
+		nmc1 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc1"},
+		}
+		moduleConfig1 := kmmv1beta1.ModuleConfig{ContainerImage: "some image1"}
+		moduleConfig2 := kmmv1beta1.ModuleConfig{ContainerImage: "some image2"}
+		nmcModuleSpec := kmmv1beta1.NodeModuleSpec{
+			Config: moduleConfig1,
+		}
+		nmcModuleStatus := kmmv1beta1.NodeModuleStatus{}
+		if configsEqual {
+			nmcModuleStatus.Config = moduleConfig1
+		} else {
+			nmcModuleStatus.Config = moduleConfig2
+		}
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+				list.Items = []kmmv1beta1.NodeModulesConfig{nmc1}
+				return nil
+			},
+		)
+		helper.EXPECT().GetModuleSpecEntry(&nmc1, mod.Namespace, mod.Name).Return(&nmcModuleSpec, 0)
+		if modulePresentInStatus {
+			helper.EXPECT().GetModuleStatusEntry(&nmc1, mod.Namespace, mod.Name).Return(&nmcModuleStatus)
+		} else {
+			helper.EXPECT().GetModuleStatusEntry(&nmc1, mod.Namespace, mod.Name).Return(nil)
+		}
+		clnt.EXPECT().Status().Return(statusWriter)
+		statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any())
+
+		err := mnrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
+		Expect(err).NotTo(HaveOccurred())
+	},
+		Entry("2 targeted nodes, module not in status", 2, false, false, 2, 1, 0),
+		Entry("3 targeted nodes, module in status, configs not equal", 2, true, false, 2, 1, 0),
+		Entry("3 targeted nodes, module in status, configs equal", 2, true, true, 2, 1, 1),
+	)
+
+	It("multiple module in spec and status", func() {
+		moduleConfig1 := kmmv1beta1.ModuleConfig{ContainerImage: "some image1"}
+		//moduleConfig2 := kmmv1beta1.ModuleConfig{ContainerImage: "some image2",}
+		nmcModuleSpec := kmmv1beta1.NodeModuleSpec{
+			Config: moduleConfig1,
+		}
+		nmcModuleStatus := kmmv1beta1.NodeModuleStatus{
+			Config: moduleConfig1,
+		}
+		nmc1 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc1"},
+		}
+		targetedNodes := []v1.Node{v1.Node{}, v1.Node{}}
+		expectedMod := mod.DeepCopy()
+		expectedMod.Status.ModuleLoader.NodesMatchingSelectorNumber = int32(2)
+		expectedMod.Status.ModuleLoader.DesiredNumber = int32(1)
+		expectedMod.Status.ModuleLoader.AvailableNumber = int32(1)
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.NodeModulesConfig{nmc1}
+					return nil
+				},
+			),
+			helper.EXPECT().GetModuleSpecEntry(&nmc1, mod.Namespace, mod.Name).Return(&nmcModuleSpec, 0),
+			helper.EXPECT().GetModuleStatusEntry(&nmc1, mod.Namespace, mod.Name).Return(&nmcModuleStatus),
+			clnt.EXPECT().Status().Return(statusWriter),
+			statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any()),
+		)
+
+		err := mnrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 })
