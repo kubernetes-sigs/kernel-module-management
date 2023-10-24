@@ -17,7 +17,8 @@ type Helper interface {
 	Get(ctx context.Context, name string) (*kmmv1beta1.NodeModulesConfig, error)
 	SetModuleConfig(nmc *kmmv1beta1.NodeModulesConfig, mld *api.ModuleLoaderData, moduleConfig *kmmv1beta1.ModuleConfig) error
 	RemoveModuleConfig(nmc *kmmv1beta1.NodeModulesConfig, namespace, name string) error
-	GetModuleEntry(nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) (*kmmv1beta1.NodeModuleSpec, int)
+	GetModuleSpecEntry(nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) (*kmmv1beta1.NodeModuleSpec, int)
+	GetModuleStatusEntry(nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) *kmmv1beta1.NodeModuleStatus
 }
 
 type helper struct {
@@ -47,7 +48,7 @@ func (h *helper) SetModuleConfig(
 	mld *api.ModuleLoaderData,
 	moduleConfig *kmmv1beta1.ModuleConfig) error {
 
-	foundEntry, _ := h.GetModuleEntry(nmc, mld.Namespace, mld.Name)
+	foundEntry, _ := h.GetModuleSpecEntry(nmc, mld.Namespace, mld.Name)
 	if foundEntry == nil {
 		nms := kmmv1beta1.NodeModuleSpec{
 			ModuleItem: kmmv1beta1.ModuleItem{
@@ -73,20 +74,29 @@ func (h *helper) SetModuleConfig(
 }
 
 func (h *helper) RemoveModuleConfig(nmc *kmmv1beta1.NodeModulesConfig, namespace, name string) error {
-	foundEntry, index := h.GetModuleEntry(nmc, namespace, name)
+	foundEntry, index := h.GetModuleSpecEntry(nmc, namespace, name)
 	if foundEntry != nil {
 		nmc.Spec.Modules = append(nmc.Spec.Modules[:index], nmc.Spec.Modules[index+1:]...)
 	}
 	return nil
 }
 
-func (h *helper) GetModuleEntry(nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) (*kmmv1beta1.NodeModuleSpec, int) {
+func (h *helper) GetModuleSpecEntry(nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) (*kmmv1beta1.NodeModuleSpec, int) {
 	for i, moduleSpec := range nmc.Spec.Modules {
 		if moduleSpec.Namespace == modNamespace && moduleSpec.Name == modName {
 			return &nmc.Spec.Modules[i], i
 		}
 	}
 	return nil, 0
+}
+
+func (h *helper) GetModuleStatusEntry(nmc *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) *kmmv1beta1.NodeModuleStatus {
+	for i, moduleStatus := range nmc.Status.Modules {
+		if moduleStatus.Namespace == modNamespace && moduleStatus.Name == modName {
+			return &nmc.Status.Modules[i]
+		}
+	}
+	return nil
 }
 
 func FindModuleStatus(statuses []kmmv1beta1.NodeModuleStatus, moduleNamespace, moduleName string) *kmmv1beta1.NodeModuleStatus {
