@@ -130,6 +130,20 @@ func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getRequestedModule(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getRequestedModule", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getRequestedModule), ctx, namespacedName)
 }
 
+// moduleUpdateWorkerPodsStatus mocks base method.
+func (m *MockmoduleNMCReconcilerHelperAPI) moduleUpdateWorkerPodsStatus(ctx context.Context, mod *v1beta1.Module, targetedNodes []v1.Node) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "moduleUpdateWorkerPodsStatus", ctx, mod, targetedNodes)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// moduleUpdateWorkerPodsStatus indicates an expected call of moduleUpdateWorkerPodsStatus.
+func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "moduleUpdateWorkerPodsStatus", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).moduleUpdateWorkerPodsStatus), ctx, mod, targetedNodes)
+}
+
 // prepareSchedulingData mocks base method.
 func (m *MockmoduleNMCReconcilerHelperAPI) prepareSchedulingData(ctx context.Context, mod *v1beta1.Module, targetedNodes []v1.Node, currentNMCs sets.Set[string]) (map[string]schedulingData, []error) {
 	m.ctrl.T.Helper()

@@ -123,7 +123,7 @@ func (r *DevicePluginReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	err = r.reconHelperAPI.moduleUpdateDevicePluginStatus(ctx, mod, existingDevicePluginDS)
 	if err != nil {
-		return res, fmt.Errorf("failed to update status of the module: %w", err)
+		return res, fmt.Errorf("failed to update device-plugin status of the module: %w", err)
 	}
 
 	logger.Info("Reconcile loop finished successfully")
@@ -279,6 +279,10 @@ func (dprh *devicePluginReconcilerHelper) getRequestedModule(ctx context.Context
 func (dprh *devicePluginReconcilerHelper) moduleUpdateDevicePluginStatus(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	existingDevicePluginDS []appsv1.DaemonSet) error {
+
+	if mod.Spec.DevicePlugin == nil {
+		return nil
+	}
 
 	// get the number of nodes targeted by selector (which also relevant for device plugin)
 	numTargetedNodes, err := dprh.getNumTargetedNodes(ctx, mod.Spec.Selector)
