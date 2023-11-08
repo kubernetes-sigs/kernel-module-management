@@ -25,8 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/klog/v2"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -68,19 +67,20 @@ func init() {
 }
 
 func main() {
-	logger := klogr.New().WithName("kmm-hub")
-
-	ctrl.SetLogger(logger)
-
-	setupLogger := logger.WithName("setup")
+	logConfig := textlogger.NewConfig()
+	logConfig.AddFlags(flag.CommandLine)
 
 	var configFile string
 
 	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
 
-	klog.InitFlags(flag.CommandLine)
-
 	flag.Parse()
+
+	logger := textlogger.NewLogger(logConfig).WithName("kmm-hub")
+
+	ctrl.SetLogger(logger)
+
+	setupLogger := logger.WithName("setup")
 
 	commit, err := cmd.GitCommit()
 	if err != nil {

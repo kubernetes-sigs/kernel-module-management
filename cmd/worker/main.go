@@ -12,8 +12,7 @@ import (
 	kmmcmd "github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
 	"github.com/spf13/cobra"
-	"k8s.io/klog/v2"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 )
 
 var (
@@ -73,7 +72,9 @@ func main() {
 	kmodCmd.AddCommand(kmodLoadCmd, kmodUnloadCmd)
 
 	klogFlagSet := flag.NewFlagSet("klog", flag.ContinueOnError)
-	klog.InitFlags(klogFlagSet)
+
+	logConfig := textlogger.NewConfig()
+	logConfig.AddFlags(klogFlagSet)
 
 	rootCmd.PersistentFlags().AddGoFlagSet(klogFlagSet)
 
@@ -94,7 +95,7 @@ func main() {
 		"if set, this the value that firmware host path is mounted to")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		logger = klogr.New().WithName("kmm-worker")
+		logger = textlogger.NewLogger(logConfig).WithName("kmm-worker")
 
 		commit, err := kmmcmd.GitCommit()
 		if err != nil {
