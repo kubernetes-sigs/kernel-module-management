@@ -8,5 +8,5 @@ roleRef:
   name: event-recorder-clusterrole
 subjects:
 - kind: ServiceAccount
-  name: controller-manager
+  name: controller
   namespace: system

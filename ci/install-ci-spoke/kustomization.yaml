@@ -9,7 +9,7 @@ patches:
     apiVersion: apps/v1
     kind: Deployment
     metadata:
-      name: controller-manager
+      name: controller
       namespace: system
     spec:
       template:
