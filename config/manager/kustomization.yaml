@@ -9,9 +9,11 @@ patches:
 
 images:
 - name: controller
-  newName: host.minikube.internal:5000/kmm
+  newName: gcr.io/k8s-staging-kmm/kernel-module-management-operator
+  newTag: latest
 - name: worker
-  newName: host.minikube.internal:5000/kmm-worker
+  newName: gcr.io/k8s-staging-kmm/kernel-module-management-worker
+  newTag: latest
 
 configMapGenerator:
 - files:
