@@ -5,7 +5,7 @@ set -euxo pipefail
 : "$BINDIR"
 
 readonly TMP=$(mktemp -d)
-readonly VERSION=5.0.1
+readonly VERSION=5.2.1
 
 echo "Downloading kustomize in $TMP"
 
