@@ -49,8 +49,8 @@ clusteradm addon enable addon --names config-policy-controller --clusters ${MINI
 # Install kmm and kmm-hub
 make deploy-hub
 make deploy
-kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-hub-controller-manager -n ${OPERATOR_NAMESPACE}
-kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-controller-manager -n ${OPERATOR_NAMESPACE}
+kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-hub-controller -n ${OPERATOR_NAMESPACE}
+kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-controller -n ${OPERATOR_NAMESPACE}
 
 # Apply the ManagedClusterModule
 kubectl apply -f ci/managedclustermodule-kmm-ci-build-sign.yaml

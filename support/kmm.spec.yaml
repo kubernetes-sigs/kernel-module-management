@@ -69,7 +69,7 @@ spec:
     # KMM Deployments
     #
     - deploymentStatus:
-        name: kmm-operator-controller-manager
+        name: kmm-operator-controller
         namespace: kmm-operator-system
         outcomes:
           - fail:
@@ -81,7 +81,7 @@ spec:
           - pass:
               message: There is at least one Ready replica of the Deployment.
     - deploymentStatus:
-        name: kmm-operator-hub-controller-manager
+        name: kmm-operator-hub-controller
         namespace: kmm-operator-system
         outcomes:
           - fail:
