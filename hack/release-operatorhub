@@ -14,21 +14,17 @@ make_output_dir () {
   fi
 }
 
-created_at=$(date +'%Y-%m-%d %H:%M:%S')
-readonly created_at
-
 replace_csv () {
   local -r container_image=$1
   local -r csv_path=$2
 
-  yq -i "
-    .metadata.annotations.containerImage = \"$container_image\" |
-    .metadata.annotations.createdAt = \"$created_at\"" \
-    "$csv_path"
+  yq -i ".metadata.annotations.containerImage = \"$container_image\"" "$csv_path"
 }
 
 : "$IMG"
 : "$HUB_IMG"
+: "$SIGNER_IMG"
+: "$WORKER_IMG"
 : "$VERSION"
 
 # KMM
