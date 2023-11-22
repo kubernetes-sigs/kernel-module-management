@@ -102,6 +102,7 @@ rules:
   - nodemodulesconfigs
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
