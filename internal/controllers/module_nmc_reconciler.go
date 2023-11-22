@@ -31,7 +31,7 @@ import (
 )
 
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;watch
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=nodemodulesconfigs,verbs=get;list;watch;patch;create
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=nodemodulesconfigs,verbs=get;list;watch;patch;create;delete
 
 const (
 	ModuleNMCReconcilerName = "ModuleNMCReconciler"
