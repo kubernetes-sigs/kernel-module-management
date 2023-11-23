@@ -226,6 +226,10 @@ func extractTarToDisk(r io.Reader, dst string) error {
 			if err = f.Close(); err != nil {
 				return fmt.Errorf("could not close %s: %v", target, err)
 			}
+		case tar.TypeSymlink:
+			if err := os.Symlink(header.Linkname, target); err != nil {
+				return err
+			}
 		}
 	}
 }

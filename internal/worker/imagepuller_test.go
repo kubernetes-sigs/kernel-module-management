@@ -136,6 +136,15 @@ var _ = Describe("imagePuller_PullAndExtract", func() {
 			Expect(filepath.Join(imgRoot, "subdir", "b")).To(BeARegularFile())
 			Expect(filepath.Join(imgRoot, "subdir", "subsubdir", "c")).To(BeARegularFile())
 
+			symlinkName := filepath.Join(imgRoot, "subdir", "subsubdir", "symlink")
+			fi, err := os.Lstat(symlinkName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fi.Mode() & os.ModeSymlink).To(Equal(os.ModeSymlink))
+
+			symlinkTarget, err := os.Readlink(symlinkName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(symlinkTarget).To(Equal(filepath.Join("..", "b")))
+
 			digestFilePath := filepath.Join(tmpDir, serverURL.Host, "test", "archive:tag", "digest")
 
 			Expect(os.ReadFile(digestFilePath)).To(Equal([]byte(srcDigest.String())))
