@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"archive/tar"
 	"context"
 	"errors"
 	"fmt"
@@ -10,10 +9,12 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/go-logr/logr"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/moby/moby/pkg/archive"
 )
 
 type PullResult struct {
@@ -141,7 +142,11 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 		defer wg.Done()
 		defer rd.Close()
 
-		if err := extractTarToDisk(rd, dstDirFS); err != nil {
+		id := idtools.CurrentIdentity()
+
+		tarOpts := &archive.TarOptions{ChownOpts: &id}
+
+		if err := archive.Untar(rd, dstDirFS, tarOpts); err != nil {
 			errs <- err
 			return
 		}
@@ -162,11 +167,11 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 		return res, fmt.Errorf("got one or more errors while writing the image: %v", err)
 	}
 
-	logger.V(1).Info("Image written to the filesystem")
-
 	if err = ctx.Err(); err != nil {
 		return res, fmt.Errorf("not writing digest file: %v", err)
 	}
+
+	logger.V(1).Info("Image written to the filesystem")
 
 	digest, err := img.Digest()
 	if err != nil {
@@ -182,50 +187,4 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 	}
 
 	return res, nil
-}
-
-func extractTarToDisk(r io.Reader, dst string) error {
-	tr := tar.NewReader(r)
-
-	for {
-		header, err := tr.Next()
-
-		switch {
-		case err == io.EOF:
-			return nil
-		case err != nil:
-			return err
-		case header == nil:
-			continue
-		}
-
-		target := filepath.Join(dst, header.Name)
-
-		// the following switch could also be done using fi.Mode(), not sure if there
-		// a benefit of using one vs. the other.
-		// fi := header.FileInfo()
-
-		// check the file type
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if _, err := os.Stat(target); err != nil {
-				if err := os.MkdirAll(target, 0755); err != nil {
-					return err
-				}
-			}
-		case tar.TypeReg:
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
-			if err != nil {
-				return err
-			}
-
-			if _, err := io.Copy(f, tr); err != nil {
-				return err
-			}
-
-			if err = f.Close(); err != nil {
-				return fmt.Errorf("could not close %s: %v", target, err)
-			}
-		}
-	}
 }
