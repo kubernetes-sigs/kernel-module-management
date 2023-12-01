@@ -13,7 +13,7 @@ nav:
   - Documentation:
       - documentation/install.md
       - documentation/deploy_kmod.md
-      - documentation/module_loader_image.md
+      - documentation/kmod_image.md
       - Binary firmwares: documentation/firmwares.md
       - Secure boot: documentation/secure_boot.md
       - Preflight validation: documentation/preflight_validation.md
@@ -36,7 +36,6 @@ plugins:
 markdown_extensions:
   - admonition
 
-
 theme:
-  name: mkdocs
+  name: readthedocs
   custom_dir: overrides/

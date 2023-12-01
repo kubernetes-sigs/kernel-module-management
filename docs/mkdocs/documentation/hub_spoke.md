@@ -16,6 +16,10 @@ To do that, [install the regular edition of KMM](./install.md).
 
 ### Installing KMM-Hub
 
+#### With [OLM](https://olm.operatorframework.io/) (recommended)
+
+Follow the instructions on [OperatorHub.io](https://operatorhub.io/operator/kernel-module-management-hub).
+
 #### With `kubectl`
 
 First, [install the cert-manager dependency](./install.md#installing-the-cert-manager-dependency).
@@ -24,14 +28,6 @@ Then, run the following command:
 
 ```shell
 kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default-hub
-```
-
-#### With OLM
-
-Run the following command:
-
-```shell
-operator-sdk run bundle gcr.io/k8s-staging-kmm/kernel-module-management-operator-hub-bundle:latest
 ```
 
 ### The `ManagedClusterModule` CRD

@@ -19,7 +19,7 @@ If you have a pre-built image, such as one distributed by a hardware vendor, or 
 [Signing](#signing-a-pre-built-driver-container) docs for signing with KMM.
 
 Alternatively if you have source code and need to build your image first, please see the
-[Build and Sign](#building-and-signing-a-moduleloader-container-image) docs for deploying with KMM.
+[Build and Sign](#building-and-signing-a-kmod-image) docs for deploying with KMM.
 
 If all goes well KMM should load your driver into the node's kernel.
 If not, see [Common Issues](#debugging--troubleshooting).
@@ -92,16 +92,16 @@ kubectl  get secret -o yaml <private key secret name> | awk '/key/{print $2; exi
 
 Which should display a key, including `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines
 
-# Signing a pre-built driver container
+# Signing kmods in a pre-built image
 
 The YAML below will add the public/private key-pair as secrets with the required key names (`key` for the private key,
 `cert` for the public key).
 It will then pull down the `unsignedImage` image, open it up, sign the kernel modules listed in `filesToSign`, add them
 back and push the resulting image as `containerImage`.
 
-KMM should then deploy the DaemonSet that loads the signed kmods onto all the nodes with that match the selector.
-The driver containers should run successfully on any nodes that have the public key in their MOK database, and any
-nodes that are not secure-boot enabled (which will just ignore the signature).
+KMM should then load the signed kmods onto all the nodes with that match the selector.
+The kmods should be successfully loaded on any nodes that have the public key in their MOK database, and any nodes that
+are not secure-boot enabled (which will just ignore the signature).
 They should fail to load on any that have secure-boot enabled but do not have that key in their MOK database.
 
 ## Example
@@ -143,7 +143,7 @@ spec:
     kubernetes.io/arch: amd64
 ```
 
-# Building and signing a ModuleLoader container image
+# Building and signing a kmod image
 
 The YAML below should build a new container image using the
 [source code from the repo](https://github.com/kubernetes-sigs/kernel-module-management/tree/main/ci/kmm-kmod) (this
@@ -222,7 +222,6 @@ spec:
 
 # Debugging & troubleshooting
 
-If your driver containers end up in `PostStartHookError` or `CrashLoopBackOff` status, and `kubectl describe` shows an
-event: `modprobe: ERROR: could not insert '<your kmod name>': Required key not available` then the kmods are either not
-signed, or signed with the wrong key.
+If your worker Pod logs show `modprobe: ERROR: could not insert '<your kmod name>': Required key not available` then the
+kmods are either not signed, or signed with the wrong key.
 

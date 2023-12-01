@@ -1,15 +1,20 @@
-# Creating a ModuleLoader image
+# Creating a kmod image
 
-Kernel Module Management works with purpose-built ModuleLoader images.
-Those are standard OCI images that satisfy a few requirements:
+Kernel Module Management works with purpose-built kmod images, which are standard OCI images that contain `.ko` files.  
+The location of those files must match the following pattern:
+```
+<prefix>/lib/modules/[kernel-version]/
+```
 
-- `.ko` files must be located under `/opt/lib/modules/${KERNEL_VERSION}`
-- the `modprobe` and `sleep` binaries must be in the `$PATH`.
+Where:
+
+- `<prefix>` should be equal to `/opt` in most cases, as it is the `Module` CRD's default value;
+- `kernel-version` must be non-empty and equal to the kernel version the kernel modules were built for.
 
 ## `depmod`
 
 It is recommended to run `depmod` at the end of the build process to generate `modules.dep` and map files.
-This is especially useful if your ModuleLoader image contains several kernel modules and if one of the modules depend on
+This is especially useful if your kmod image contains several kernel modules and if one of the modules depend on
 another.
 To generate dependencies and map files for a specific kernel version, run `depmod -b /opt ${KERNEL_VERSION}`.
 
@@ -54,25 +59,22 @@ RUN depmod -b /opt ${KERNEL_VERSION}
 
 ## Building in cluster
 
-KMM is able to build ModuleLoader images in cluster.
+KMM is able to build kmod images in cluster.
 Build instructions must be provided using the `build` section of a kernel mapping.
 The `Dockerfile` for your container image should be copied into a `ConfigMap` object, under the `Dockerfile` key.
 The `ConfigMap` needs to be located in the same namespace as the `Module`.
 
 KMM will first check if the image name specified in the `containerImage` field exists.
 If it does, the build will be skipped.
-Otherwise, KMM will create a Pod to build your image.
-The [kaniko](https://github.com/GoogleContainerTools/kaniko) build system is used.
-KMM monitors the health of the build pod, retrying if necessary.
+Otherwise, KMM will create a Pod to build your image using [kaniko](https://github.com/GoogleContainerTools/kaniko).
 
 The following build arguments are automatically set by KMM:
 
-| Name                          | Description                            | Example                 |
-|-------------------------------|----------------------------------------|-------------------------|
-| `KERNEL_FULL_VERSION`         | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
-| `KERNEL_VERSION` (deprecated) | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
-| `MOD_NAME`                    | The `Module`'s name                    | `my-mod`                |
-| `MOD_NAMESPACE`               | The `Module`'s namespace               | `my-namespace`          |
+| Name                  | Description                            | Example                 |
+|-----------------------|----------------------------------------|-------------------------|
+| `KERNEL_FULL_VERSION` | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
+| `MOD_NAME`            | The `Module`'s name                    | `my-mod`                |
+| `MOD_NAMESPACE`       | The `Module`'s namespace               | `my-namespace`          |
 
 Once the image is built, KMM proceeds with the `Module` reconciliation.
 
