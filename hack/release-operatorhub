@@ -23,8 +23,7 @@ replace_csv () {
 
 : "$IMG"
 : "$HUB_IMG"
-: "$SIGNER_IMG"
-: "$WORKER_IMG"
+: "$IMAGE_TAG"
 : "$VERSION"
 
 # KMM

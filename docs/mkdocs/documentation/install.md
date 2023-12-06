@@ -1,6 +1,10 @@
 # Installing
 
-## Using `kubectl`
+## With [OLM](https://olm.operatorframework.io/) (recommended)
+
+Follow the instructions on [OperatorHub.io](https://operatorhub.io/operator/kernel-module-management).
+
+## With `kubectl`
 
 ### Installing the cert-manager dependency
 
@@ -16,12 +20,4 @@ kubectl -n cert-manager wait --for=condition=Available deployment \
 
 ```shell
 kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default
-```
-
-## Using the bundle
-
-### Using `operator-sdk`
-
-```shell
-operator-sdk run bundle gcr.io/k8s-staging-kmm/kernel-module-management-operator-bundle:latest
 ```
