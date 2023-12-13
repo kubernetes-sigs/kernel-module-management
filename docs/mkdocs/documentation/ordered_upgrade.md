@@ -50,39 +50,40 @@ Steps 3, 4 and 5 are then unified into one step: update the
 `kmm.node.kubernetes.io/version-module.<module-namespace>.<module-name>` label value to new `$moduleVersion` as set in
 the `Module`.
 
-## Inner implementation
+## Implementation details
 
-### Components:
+### Components
 
-1. A controller watches for `kmm.node.kubernetes.io/version-module.<module-namespace>.<module-name>`.
-   Once it that label is modified on a node, it uses the internal
-   `beta.kmm.node.kubernetes.io/version-module-loader.<module-namespace>.<module-name>` and
-   `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>` labels to initiate the upgrade
-   process.
-2. ModuleLoader and DevicePlugin DaemonSets now have additional node selector value:
-  `beta.kmm.node.kubernetes.io/version-module-loader.<module-namespace>.<module-name>`
-   and `kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>` accordingly.
-   Manipulation of those labels in the nodes will allow the controller to remove the old pod from the node and add the
-   new one.
-3. Upon change to the `version` field in the `Module`, new ModuleLoader and DevicePlugin DaemonSets will be created with
-   the appropriate labels in the `nodeSelector` field.
+1. A dedicated controller in the operator watches
+   `kmm.node.kubernetes.io/version-module.<module-namespace>.<module-name>` labels on nodes.
+   When it detects a change in the value of that label, it sets the following internal labels to initiate the upgrade
+   process:
+     - `beta.kmm.node.kubernetes.io/version-worker-pod.<module-namespace>.<module-name>`
+     - `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>`
+2. The operator manipulates its internal `NodeModulesConfig` resources to create worker Pods that unload the current
+   version of a module and load the new one.
+3. The operator creates new device plugin DaemonSets with a new node selector component:
+   `kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>`
+   This makes it possible to terminate the device plugin Pod before unloading the current module, and to create them
+   again when the new module is loaded.
 
 ### Flow
 
-1. In case the `version` field was modified in the `Module`, new ModuleLoader and DevicePlugin DaemonSets are created
-   with the appropriate node selectors:
-   `beta.kmm.node.kubernetes.io/version-module-loader.<module-namespace>.<module-name>=$moduleVersion` and 
-   `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>=$moduleVersion`.
-2. Once the "version label controller" detects change/removal of the
-   `kmm.node.kubernetes.io/version-module.<module-namespace>.<module-name>` label on the node,
-   it removes the `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>` label from the
-   node, which terminates the device-plugin pod.
-3. Once the device plugin pod is terminated, the controller removes the
-   `beta.kmm.node.kubernetes.io/version-module-loader.<module-namespace>.<module-name>` label, which causes the current
-   version of the ModuleLoader pod to be removed.
-4. Once the current ModuleLoader pod is removed, the controller sets the
-   `beta.kmm.node.kubernetes.io/version-module-loader.<module-namespace>.<module-name>=$moduleVersion` label on the
-   node, which causes the new ModuleLoader pod to start.
-5. Once the new ModuleLoader pod is running, the controller sets the
+1. When the `version` field is modified in the `Module`, a new device plugin DaemonSet is created with the following
+   internal node selector:
+   `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>=$moduleVersion`
+2. When the `kmm.node.kubernetes.io/version-module.<module-namespace>.<module-name>` label is changed on the node, KMM's
+   version label controller removes the
+   `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>` label, which terminates the
+   device plugin Pod;
+3. Once the device plugin Pod is terminated, the controller removes the
+   `beta.kmm.node.kubernetes.io/version-worker-pod.<module-namespace>.<module-name>` label, which removes the entry from
+   the corresponding `NodeModulesConfig` resource.
+   This results in a worker Pod being created to unload the current kernel module.
+4. Once the current kernel module is unloaded, the controller sets the
+   `beta.kmm.node.kubernetes.io/version-worker-pod.<module-namespace>.<module-name>=$moduleVersion` label on the
+   node, which adds back an updated entry into the corresponding `NodeModulesConfig` resource.
+   This results in a worker Pod being created to load the new kernel module.
+5. Once the new kernel module is loaded, the controller sets the
    `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>=$moduleVersion` label on the
-   node, which will cause the DevicePlugin pod to start again.
+   node, which will cause the device plugin Pod to start again.
