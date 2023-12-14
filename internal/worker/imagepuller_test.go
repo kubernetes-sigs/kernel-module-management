@@ -18,7 +18,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -112,7 +112,7 @@ var _ = Describe("imagePuller_PullAndExtract", func() {
 			keyChain := authn.NewMultiKeychain()
 
 			if token != "" {
-				expectedToken = pointer.String(
+				expectedToken = ptr.To(
 					base64.StdEncoding.EncodeToString([]byte(username + ":" + password)),
 				)
 

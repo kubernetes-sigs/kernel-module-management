@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubectl/pkg/cmd/util/podcmd"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -1381,7 +1381,7 @@ const (
 )
 
 var workerCfg = &config.Worker{
-	RunAsUser:   pointer.Int64(1234),
+	RunAsUser:   ptr.To[int64](1234),
 	SELinuxType: "someType",
 }
 
@@ -1431,7 +1431,7 @@ var _ = Describe("podManagerImpl_CreateLoaderPod", func() {
 
 			if firmwareClassPath != nil {
 				container.SecurityContext = &v1.SecurityContext{
-					Privileged: pointer.Bool(true),
+					Privileged: ptr.To(true),
 				}
 			} else {
 				container.SecurityContext = &v1.SecurityContext{
@@ -1473,9 +1473,9 @@ var _ = Describe("podManagerImpl_CreateLoaderPod", func() {
 			)
 		},
 		Entry("pod without firmwareClassPath, without firmware loading", nil, false),
-		Entry("pod with empty firmwareClassPath, without firmware loading", pointer.String(""), false),
-		Entry("pod with firmwareClassPath, without firmware loading", pointer.String("some-path"), false),
-		Entry("pod with firmwareClassPath, with firmware loading", pointer.String("some-path"), true),
+		Entry("pod with empty firmwareClassPath, without firmware loading", ptr.To(""), false),
+		Entry("pod with firmwareClassPath, without firmware loading", ptr.To("some-path"), false),
+		Entry("pod with firmwareClassPath, with firmware loading", ptr.To("some-path"), true),
 		Entry("pod without firmwareClassPath, with firmware loading", nil, true),
 	)
 })
@@ -1851,7 +1851,7 @@ var _ = Describe("pullSecretHelperImpl_VolumesAndVolumeMounts", func() {
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
 						SecretName: irs,
-						Optional:   pointer.Bool(false),
+						Optional:   ptr.To(false),
 					},
 				},
 			},
@@ -1860,7 +1860,7 @@ var _ = Describe("pullSecretHelperImpl_VolumesAndVolumeMounts", func() {
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
 						SecretName: saPullSecret1,
-						Optional:   pointer.Bool(true),
+						Optional:   ptr.To(true),
 					},
 				},
 			},
@@ -1869,7 +1869,7 @@ var _ = Describe("pullSecretHelperImpl_VolumesAndVolumeMounts", func() {
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
 						SecretName: saPullSecret2,
-						Optional:   pointer.Bool(true),
+						Optional:   ptr.To(true),
 					},
 				},
 			},

@@ -33,7 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -403,7 +403,7 @@ func (dsci *daemonSetCreatorImpl) setDevicePluginAsDesired(
 						Image:           mod.Spec.DevicePlugin.Container.Image,
 						ImagePullPolicy: mod.Spec.DevicePlugin.Container.ImagePullPolicy,
 						Resources:       mod.Spec.DevicePlugin.Container.Resources,
-						SecurityContext: &v1.SecurityContext{Privileged: pointer.Bool(true)},
+						SecurityContext: &v1.SecurityContext{Privileged: ptr.To(true)},
 						VolumeMounts:    append(mod.Spec.DevicePlugin.Container.VolumeMounts, containerVolumeMounts...),
 					},
 				},
