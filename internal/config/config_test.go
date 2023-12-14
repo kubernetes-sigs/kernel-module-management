@@ -3,7 +3,7 @@ package config
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("ParseFile", func() {
@@ -26,9 +26,9 @@ var _ = Describe("ParseFile", func() {
 			},
 			WebhookPort: 9443,
 			Worker: Worker{
-				RunAsUser:            pointer.Int64(1234),
+				RunAsUser:            ptr.To[int64](1234),
 				SELinuxType:          "mySELinuxType",
-				SetFirmwareClassPath: pointer.String("/some/path"),
+				SetFirmwareClassPath: ptr.To("/some/path"),
 			},
 		}
 

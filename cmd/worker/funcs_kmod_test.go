@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
 	"go.uber.org/mock/gomock"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("kmodLoadFunc", func() {
@@ -88,9 +88,9 @@ var _ = Describe("kmodLoadFunc", func() {
 			)
 		},
 		Entry("flags not defined", nil, nil),
-		Entry("class path defined and empty, mount path not defined", pointer.String(""), nil),
-		Entry("class path defined and not empty, mount path not defined", pointer.String("/some/path"), nil),
-		Entry("class path defined and empty, mount path defined", pointer.String(""), pointer.String("some mount path")),
-		Entry("class path defined and not empty, mount path defined", pointer.String("/some/path"), pointer.String("some mount path")),
+		Entry("class path defined and empty, mount path not defined", ptr.To(""), nil),
+		Entry("class path defined and not empty, mount path not defined", ptr.To("/some/path"), nil),
+		Entry("class path defined and empty, mount path defined", ptr.To(""), ptr.To("some mount path")),
+		Entry("class path defined and not empty, mount path defined", ptr.To("/some/path"), ptr.To("some mount path")),
 	)
 })
