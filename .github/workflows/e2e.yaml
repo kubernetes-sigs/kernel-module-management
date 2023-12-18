@@ -23,9 +23,9 @@ jobs:
         run: docker save -o kmm_local.tar kmm:local
 
       - name: Upload the image
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ci-images
+          name: ci-image-kmm
           if-no-files-found: error
           path: kmm_local.tar
           retention-days: 1
@@ -46,9 +46,9 @@ jobs:
         run: docker save -o kmm-hub_local.tar kmm-hub:local
 
       - name: Upload the image
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ci-images
+          name: ci-image-kmm-hub
           if-no-files-found: error
           path: kmm-hub_local.tar
           retention-days: 1
@@ -69,9 +69,9 @@ jobs:
         run: docker save -o kmm-signimage_local.tar kmm-signimage:local
 
       - name: Upload the image
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ci-images
+          name: ci-image-signer
           if-no-files-found: error
           path: kmm-signimage_local.tar
           retention-days: 1
@@ -92,9 +92,9 @@ jobs:
         run: docker save -o kmm-worker_local.tar kmm-worker:local
 
       - name: Upload the image
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ci-images
+          name: ci-image-worker
           if-no-files-found: error
           path: kmm-worker_local.tar
           retention-days: 1
@@ -134,21 +134,21 @@ jobs:
           start-args: --insecure-registry=host.minikube.internal:5000
 
       - name: Download container images
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: ci-images
+          path: artifacts
 
       - name: Import the KMM operator image into minikube
-        run: minikube image load kmm_local.tar
+        run: minikube image load artifacts/ci-image-kmm/kmm_local.tar
 
       - name: Import the KMM-hub operator image into minikube
-        run: minikube image load kmm-hub_local.tar
+        run: minikube image load artifacts/ci-image-kmm-hub/kmm-hub_local.tar
         if: ${{ matrix.import_hub_image }}
 
       - name: Copy the signing and worker images to the registry
         run: |
-          docker load -i kmm-signimage_local.tar
-          docker load -i kmm-worker_local.tar
+          docker load -i artifacts/ci-image-signer/kmm-signimage_local.tar
+          docker load -i artifacts/ci-image-worker/kmm-worker_local.tar
           
           docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
           docker tag kmm-worker:local localhost:5000/kmm/worker:local
