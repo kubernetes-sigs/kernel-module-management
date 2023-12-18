@@ -1224,7 +1224,8 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 	DescribeTable(
 		"nodes labels scenarios",
 		func(tc testCase) {
-			nodeLabels := make(map[string]string)
+			nodeLabels := map[string]string{"kmm.node.kubernetes.io/deprecated-label.ready": ""}
+
 			if tc.nodeLabelPresent {
 				nodeLabels[utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName)] = ""
 			}
