@@ -9,6 +9,7 @@ import (
 )
 
 var reKernelModuleReadyLabel = regexp.MustCompile(`^kmm\.node\.kubernetes\.io/([a-zA-Z0-9-]+)\.([a-zA-Z0-9-]+)\.ready$`)
+var reDeprecatedKernelModuleReadyLabel = regexp.MustCompile(`^kmm\.node\.kubernetes\.io/[a-zA-Z0-9-]+\.ready$`)
 
 func GetModuleVersionLabelName(namespace, name string) string {
 	return fmt.Sprintf("%s.%s.%s", constants.ModuleVersionLabelPrefix, namespace, name)
@@ -75,6 +76,10 @@ func GetKernelModuleReadyNodeLabel(namespace, moduleName string) string {
 
 func GetDevicePluginNodeLabel(namespace, moduleName string) string {
 	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-ready", namespace, moduleName)
+}
+
+func IsDeprecatedKernelModuleReadyNodeLabel(label string) bool {
+	return reDeprecatedKernelModuleReadyLabel.MatchString(label)
 }
 
 func IsKernelModuleReadyNodeLabel(label string) (bool, string, string) {
