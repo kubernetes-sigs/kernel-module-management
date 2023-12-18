@@ -571,10 +571,15 @@ func (h *nmcReconcilerHelperImpl) UpdateNodeLabelsAndRecordEvents(ctx context.Co
 
 	// get all the kernel module ready labels of the node
 	nodeModuleReadyLabels := sets.New[types.NamespacedName]()
+	deprecatedNodeModuleReadyLabels := sets.New[string]()
 
 	for label := range node.GetLabels() {
 		if ok, namespace, name := utils.IsKernelModuleReadyNodeLabel(label); ok {
 			nodeModuleReadyLabels.Insert(types.NamespacedName{Namespace: namespace, Name: name})
+		}
+
+		if utils.IsDeprecatedKernelModuleReadyNodeLabel(label) {
+			deprecatedNodeModuleReadyLabels.Insert(label)
 		}
 	}
 
@@ -608,6 +613,11 @@ func (h *nmcReconcilerHelperImpl) UpdateNodeLabelsAndRecordEvents(ctx context.Co
 
 			unloaded = append(unloaded, nsn)
 		}
+	}
+
+	// v1 ready labels, deprecated - should be removed
+	for label := range deprecatedNodeModuleReadyLabels {
+		meta.RemoveLabel(&node, label)
 	}
 
 	// label in spec and status and config equal - should be added
