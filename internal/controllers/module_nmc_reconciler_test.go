@@ -558,16 +558,27 @@ var _ = Describe("prepareSchedulingData", func() {
 		Expect(scheduleData).To(Equal(map[string]schedulingData{}))
 	})
 
-	It("mld for kernel version does not exists", func() {
-		currentNMCs := sets.New[string](nodeName)
-		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, module.ErrNoMatchingKernelMapping)
+	DescribeTable(
+		"mld for kernel version does not exists",
+		func(moduleCurrentlyEnabled bool, expectedAction string) {
+			currentNMCs := sets.New[string]()
+			expectedScheduleData := map[string]schedulingData{nodeName: {action: expectedAction}}
 
-		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+			if moduleCurrentlyEnabled {
+				currentNMCs.Insert(nodeName)
+			}
 
-		expectedScheduleData := map[string]schedulingData{nodeName: schedulingData{action: actionDelete}}
-		Expect(errs).To(BeEmpty())
-		Expect(scheduleData).To(Equal(expectedScheduleData))
-	})
+			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, module.ErrNoMatchingKernelMapping)
+
+			scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+
+			Expect(errs).To(BeEmpty())
+			Expect(scheduleData).To(Equal(expectedScheduleData))
+		},
+		EntryDescription("module currently enabled in MLD: %t, expected action: %q"),
+		Entry(nil, true, actionDelete),
+		Entry(nil, false, ""),
+	)
 
 	It("mld exists", func() {
 		currentNMCs := sets.New[string](nodeName)
