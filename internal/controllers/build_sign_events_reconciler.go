@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -14,6 +13,8 @@ import (
 	"golang.org/x/text/language"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -67,12 +68,14 @@ func newJobEvent(jobType string) (*jobEvent, error) {
 
 type JobEventReconciler struct {
 	client   client.Client
+	helper   JobEventReconcilerHelper
 	recorder record.EventRecorder
 }
 
-func NewBuildSignEventsReconciler(client client.Client, eventRecorder record.EventRecorder) *JobEventReconciler {
+func NewBuildSignEventsReconciler(client client.Client, helper JobEventReconcilerHelper, eventRecorder record.EventRecorder) *JobEventReconciler {
 	return &JobEventReconciler{
 		client:   client,
+		helper:   helper,
 		recorder: eventRecorder,
 	}
 }
@@ -97,27 +100,18 @@ func (r *JobEventReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 
 	kernelVersion := pod.Labels[constants.TargetKernelTarget]
 
-	mod := kmmv1beta1.Module{}
-
-	moduleNSN := types.NamespacedName{
-		Namespace: req.Namespace,
-		Name:      pod.Labels[constants.ModuleNameLabel],
+	if nor := len(pod.OwnerReferences); nor != 1 {
+		return ctrl.Result{}, fmt.Errorf("unexpected number of owner references: expected 1, got %d", nor)
 	}
 
-	if err = r.client.Get(ctx, moduleNSN, &mod); err != nil {
+	owner, err := r.helper.GetOwner(ctx, pod.OwnerReferences[0], req.Namespace)
+	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info(
-				"Module not found for job",
-				"pod name",
-				req.NamespacedName,
-				"module name",
-				moduleNSN,
-			)
-
+			logger.Info("Job owner not found; removing finalizer")
 			return ctrl.Result{}, r.removeFinalizer(ctx, &pod)
-		} else {
-			return ctrl.Result{}, fmt.Errorf("error while getting Module %s: %v", moduleNSN, err)
 		}
+
+		return ctrl.Result{}, err
 	}
 
 	eventAnnotations := map[string]string{
@@ -138,7 +132,7 @@ func (r *JobEventReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 		ann["pod-creation-timestamp"] = pod.CreationTimestamp.String()
 
 		r.recorder.AnnotatedEventf(
-			&mod,
+			owner,
 			ann,
 			v1.EventTypeNormal,
 			je.ReasonCreated(),
@@ -169,7 +163,7 @@ func (r *JobEventReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 	}
 
 	r.recorder.AnnotatedEventf(
-		&mod,
+		owner,
 		eventAnnotations,
 		eventType,
 		reason,
@@ -210,4 +204,42 @@ func (r *JobEventReconciler) removeFinalizer(ctx context.Context, pod *v1.Pod) e
 	}
 
 	return nil
+}
+
+//go:generate mockgen -source=build_sign_events_reconciler.go -package=controllers -destination=mock_build_sign_events_reconciler.go JobEventReconcilerHelper
+
+type JobEventReconcilerHelper interface {
+	GetOwner(context.Context, metav1.OwnerReference, string) (client.Object, error)
+}
+
+type jobEventReconcilerHelper struct {
+	client client.Client
+}
+
+func NewJobEventReconcilerHelper(client client.Client) JobEventReconcilerHelper {
+	return &jobEventReconcilerHelper{client: client}
+}
+
+func (h *jobEventReconcilerHelper) GetOwner(ctx context.Context, ref metav1.OwnerReference, namespace string) (client.Object, error) {
+	owner := &unstructured.Unstructured{}
+	owner.SetKind(ref.Kind)
+	owner.SetAPIVersion(ref.APIVersion)
+	owner.SetUID(ref.UID)
+
+	ownerNSN := types.NamespacedName{Name: ref.Name}
+
+	namespaced, err := h.client.IsObjectNamespaced(owner)
+	if err != nil {
+		return nil, fmt.Errorf("could not determine if object %s is namespaced: %v", owner, err)
+	}
+
+	if namespaced {
+		ownerNSN.Namespace = namespace
+	}
+
+	if err = h.client.Get(ctx, ownerNSN, owner); err != nil {
+		return nil, fmt.Errorf("could not get owner with kind %s and name %s: %w", owner.GetKind(), ownerNSN, err)
+	}
+
+	return owner, nil
 }
