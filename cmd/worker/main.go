@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,8 +32,9 @@ var rootCmd = &cobra.Command{
 }
 
 var kmodCmd = &cobra.Command{
-	Use:   "kmod",
-	Short: "Manage kernel modules",
+	Use:               "kmod",
+	Short:             "Manage kernel modules",
+	PersistentPreRunE: kmodFuncPreRunE,
 }
 
 var kmodLoadCmd = &cobra.Command{
@@ -48,20 +48,7 @@ var kmodUnloadCmd = &cobra.Command{
 	Use:   "unload",
 	Short: "Unload a kernel module",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cfgPath := args[0]
-
-		logger.V(1).Info("Reading config", "path", cfgPath)
-
-		cfg, err := configHelper.ReadConfigFile(cfgPath)
-		if err != nil {
-			return fmt.Errorf("could not read config file %s: %v", cfgPath, err)
-		}
-
-		mountPathFlag := cmd.Flags().Lookup(worker.FlagFirmwareMountPath)
-
-		return w.UnloadKmod(cmd.Context(), cfg, mountPathFlag.Value.String())
-	},
+	RunE:  kmodUnloadFunc,
 }
 
 func main() {
@@ -103,17 +90,6 @@ func main() {
 		}
 
 		logger.Info("Starting worker", "version", rootCmd.Version, "git commit", commit)
-		logger.Info("Reading pull secrets", "base dir", worker.PullSecretsDir)
-
-		keyChain, err := worker.ReadKubernetesSecrets(cmd.Context(), worker.PullSecretsDir, logger)
-		if err != nil {
-			return fmt.Errorf("could not read pull secrets: %v", err)
-		}
-
-		ip := worker.NewImagePuller(worker.ImagesDir, keyChain, logger)
-		mr := worker.NewModprobeRunner(logger)
-		w = worker.NewWorker(ip, mr, logger)
-
 		return nil
 	}
 

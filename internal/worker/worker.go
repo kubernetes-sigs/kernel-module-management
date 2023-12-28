@@ -21,14 +21,14 @@ type Worker interface {
 }
 
 type worker struct {
-	ip     ImagePuller
+	im     ImageMounter
 	logger logr.Logger
 	mr     ModprobeRunner
 }
 
-func NewWorker(ip ImagePuller, mr ModprobeRunner, logger logr.Logger) Worker {
+func NewWorker(im ImageMounter, mr ModprobeRunner, logger logr.Logger) Worker {
 	return &worker{
-		ip:     ip,
+		im:     im,
 		logger: logger,
 		mr:     mr,
 	}
@@ -37,11 +37,9 @@ func NewWorker(ip ImagePuller, mr ModprobeRunner, logger logr.Logger) Worker {
 func (w *worker) LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, firmwareMountPath string) error {
 	imageName := cfg.ContainerImage
 
-	w.logger.Info("Pulling image", "name", imageName)
-
-	pr, err := w.ip.PullAndExtract(ctx, imageName, cfg.InsecurePull)
+	fsDir, err := w.im.MountImage(ctx, imageName, cfg)
 	if err != nil {
-		return fmt.Errorf("could not pull %q: %v", imageName, err)
+		return fmt.Errorf("failed to mount image %s: %v", imageName, err)
 	}
 
 	if inTree := cfg.InTreeModuleToRemove; inTree != "" {
@@ -54,7 +52,7 @@ func (w *worker) LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, fir
 
 	// prepare firmware
 	if cfg.Modprobe.FirmwarePath != "" {
-		imageFirmwarePath := filepath.Join(pr.fsDir, cfg.Modprobe.FirmwarePath)
+		imageFirmwarePath := filepath.Join(fsDir, cfg.Modprobe.FirmwarePath)
 		w.logger.Info("preparing firmware for loading", "image directory", imageFirmwarePath, "host mount directory", firmwareMountPath)
 		options := cp.Options{
 			OnError: func(src, dest string, err error) error {
@@ -76,7 +74,7 @@ func (w *worker) LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, fir
 	if cfg.Modprobe.RawArgs != nil {
 		args = cfg.Modprobe.RawArgs.Load
 	} else {
-		args = []string{"-vd", filepath.Join(pr.fsDir, cfg.Modprobe.DirName)}
+		args = []string{"-vd", filepath.Join(fsDir, cfg.Modprobe.DirName)}
 
 		if cfg.Modprobe.Args != nil {
 			args = append(args, cfg.Modprobe.Args.Load...)
@@ -116,11 +114,9 @@ func (w *worker) SetFirmwareClassPath(value string) error {
 func (w *worker) UnloadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, firmwareMountPath string) error {
 	imageName := cfg.ContainerImage
 
-	w.logger.Info("Pulling image", "name", imageName)
-
-	pr, err := w.ip.PullAndExtract(ctx, imageName, cfg.InsecurePull)
+	fsDir, err := w.im.MountImage(ctx, imageName, cfg)
 	if err != nil {
-		return fmt.Errorf("could not pull %q: %v", imageName, err)
+		return fmt.Errorf("failed to mount image %s: %v", imageName, err)
 	}
 
 	moduleName := cfg.Modprobe.ModuleName
@@ -130,7 +126,7 @@ func (w *worker) UnloadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, f
 	if cfg.Modprobe.RawArgs != nil {
 		args = cfg.Modprobe.RawArgs.Unload
 	} else {
-		args = []string{"-rvd", filepath.Join(pr.fsDir, cfg.Modprobe.DirName)}
+		args = []string{"-rvd", filepath.Join(fsDir, cfg.Modprobe.DirName)}
 
 		if cfg.Modprobe.Args != nil {
 			args = append(args, cfg.Modprobe.Args.Unload...)
@@ -147,7 +143,7 @@ func (w *worker) UnloadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, f
 
 	//remove firmware files only (no directories)
 	if cfg.Modprobe.FirmwarePath != "" {
-		imageFirmwarePath := filepath.Join(pr.fsDir, cfg.Modprobe.FirmwarePath)
+		imageFirmwarePath := filepath.Join(fsDir, cfg.Modprobe.FirmwarePath)
 		err = filepath.Walk(imageFirmwarePath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err

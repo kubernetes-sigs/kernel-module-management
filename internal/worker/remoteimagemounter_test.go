@@ -16,6 +16,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/utils/pointer"
@@ -38,7 +39,7 @@ func (f *fakeKeyChainAndAuthenticator) Authorization() (*authn.AuthConfig, error
 	return &authn.AuthConfig{Auth: f.token}, nil
 }
 
-var _ = Describe("imagePuller_PullAndExtract", func() {
+var _ = Describe("imageMounter_MountImage", func() {
 	var (
 		expectedToken   *string
 		remoteImageName string
@@ -49,6 +50,10 @@ var _ = Describe("imagePuller_PullAndExtract", func() {
 	)
 
 	const imagePathAndTag = "/test/archive:tag"
+
+	modConfig := &kmmv1beta1.ModuleConfig{
+		InsecurePull: true,
+	}
 
 	BeforeEach(func() {
 		var err error
@@ -119,14 +124,13 @@ var _ = Describe("imagePuller_PullAndExtract", func() {
 				keyChain = &fakeKeyChainAndAuthenticator{token: *expectedToken}
 			}
 
-			ip := NewImagePuller(tmpDir, keyChain, GinkgoLogr)
+			rim := NewRemoteImageMounter(tmpDir, keyChain, GinkgoLogr)
 
-			res, err := ip.PullAndExtract(context.Background(), remoteImageName, true)
+			res, err := rim.MountImage(context.Background(), remoteImageName, modConfig)
 			Expect(err).NotTo(HaveOccurred())
 
 			imgRoot := filepath.Join(tmpDir, serverURL.Host, "test", "archive:tag", "fs")
-			Expect(res.fsDir).To(Equal(imgRoot))
-			Expect(res.pulled).To(BeTrue())
+			Expect(res).To(Equal(imgRoot))
 
 			Expect(imgRoot).To(BeADirectory())
 			Expect(filepath.Join(imgRoot, "subdir")).To(BeADirectory())
@@ -161,11 +165,10 @@ var _ = Describe("imagePuller_PullAndExtract", func() {
 			HaveOccurred(),
 		)
 
-		ip := NewImagePuller(tmpDir, authn.NewMultiKeychain(), GinkgoLogr)
+		rim := NewRemoteImageMounter(tmpDir, authn.NewMultiKeychain(), GinkgoLogr)
 
-		res, err := ip.PullAndExtract(context.Background(), remoteImageName, true)
+		res, err := rim.MountImage(context.Background(), remoteImageName, modConfig)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(res.fsDir).To(Equal(filepath.Join(dstDir, "fs")))
-		Expect(res.pulled).To(BeFalse())
+		Expect(res).To(Equal(filepath.Join(dstDir, "fs")))
 	})
 })
