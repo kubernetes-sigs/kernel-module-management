@@ -40,6 +40,8 @@ func getLengthAfterSlash(s string) int {
 	return len(before)
 }
 
+const validImageName = "example.com/image:tag"
+
 var validModule = Module{
 	Spec: ModuleSpec{
 		ModuleLoader: ModuleLoaderSpec{
@@ -48,7 +50,7 @@ var validModule = Module{
 					ModuleName: "mod-name",
 				},
 				KernelMappings: []KernelMapping{
-					{Regexp: "valid-regexp", ContainerImage: "image-url"},
+					{Regexp: "valid-regexp", ContainerImage: validImageName},
 				},
 			},
 		},
@@ -87,8 +89,8 @@ var _ = Describe("validateKernelMapping", func() {
 				ModuleLoader: ModuleLoaderSpec{
 					Container: ModuleLoaderContainerSpec{
 						KernelMappings: []KernelMapping{
-							{Regexp: "valid-regexp", ContainerImage: "image-url"},
-							{Regexp: "^.*$", ContainerImage: "image-url"},
+							{Regexp: "valid-regexp", ContainerImage: validImageName},
+							{Regexp: "^.*$", ContainerImage: validImageName},
 						},
 					},
 				},
@@ -100,7 +102,7 @@ var _ = Describe("validateKernelMapping", func() {
 			Spec: ModuleSpec{
 				ModuleLoader: ModuleLoaderSpec{
 					Container: ModuleLoaderContainerSpec{
-						ContainerImage: "image-url",
+						ContainerImage: validImageName,
 						KernelMappings: []KernelMapping{
 							{Regexp: "valid-regexp"},
 						},
@@ -114,7 +116,7 @@ var _ = Describe("validateKernelMapping", func() {
 			Spec: ModuleSpec{
 				ModuleLoader: ModuleLoaderSpec{
 					Container: ModuleLoaderContainerSpec{
-						ContainerImage: "image-url",
+						ContainerImage: validImageName,
 						KernelMappings: []KernelMapping{
 							{Literal: "any-value"},
 						},
@@ -167,7 +169,7 @@ var _ = Describe("validateKernelMapping", func() {
 				ModuleLoader: ModuleLoaderSpec{
 					Container: ModuleLoaderContainerSpec{
 						KernelMappings: []KernelMapping{
-							{ContainerImage: "image-url"},
+							{ContainerImage: validImageName},
 						},
 					},
 				},
@@ -197,6 +199,51 @@ var _ = Describe("validateKernelMapping", func() {
 		Expect(e.Error()).To(
 			ContainSubstring(
 				"missing spec.moduleLoader.container.kernelMappings",
+			),
+		)
+	})
+
+	It("should fail if the top-level containerImage is invalid", func() {
+		mod := &Module{
+			Spec: ModuleSpec{
+				ModuleLoader: ModuleLoaderSpec{
+					Container: ModuleLoaderContainerSpec{
+						ContainerImage: "invalid-image",
+						KernelMappings: []KernelMapping{
+							{Literal: "some-kernel-version"},
+						},
+					},
+				},
+			},
+		}
+
+		_, err := mod.validate()
+		Expect(err).To(
+			MatchError(
+				ContainSubstring("failed to validate kernel mappings"),
+				ContainSubstring("could not parse reference"),
+			),
+		)
+	})
+
+	It("should fail if the kernel mapping containerImage is invalid", func() {
+		mod := &Module{
+			Spec: ModuleSpec{
+				ModuleLoader: ModuleLoaderSpec{
+					Container: ModuleLoaderContainerSpec{
+						KernelMappings: []KernelMapping{
+							{Literal: "some-kernel-version", ContainerImage: "invalid-name"},
+						},
+					},
+				},
+			},
+		}
+
+		_, err := mod.validate()
+		Expect(err).To(
+			MatchError(
+				ContainSubstring("failed to validate kernel mappings"),
+				ContainSubstring("could not parse reference"),
 			),
 		)
 	})
@@ -464,7 +511,7 @@ var _ = Describe("ValidateUpdate", func() {
 						Modprobe: ModprobeSpec{
 							ModuleName: "module-name",
 						},
-						ContainerImage: "image-url",
+						ContainerImage: validImageName,
 						KernelMappings: []KernelMapping{
 							{Regexp: "valid-regexp"},
 						},
@@ -483,7 +530,7 @@ var _ = Describe("ValidateUpdate", func() {
 						Modprobe: ModprobeSpec{
 							RawArgs: &modprobeRawArgs,
 						},
-						ContainerImage: "image-url",
+						ContainerImage: validImageName,
 						KernelMappings: []KernelMapping{
 							{Regexp: "valid-regexp"},
 						},
