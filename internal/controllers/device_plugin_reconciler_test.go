@@ -839,3 +839,67 @@ var _ = Describe("DevicePluginReconciler_getExistingDS", func() {
 		Expect(res).To(Equal(&ds))
 	})
 })
+
+var _ = Describe("DevicePluginReconciler_getModuleDevicePluginDaemonSets", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		dprh devicePluginReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		dprh = devicePluginReconcilerHelper{
+			client: clnt,
+		}
+	})
+
+	ctx := context.Background()
+
+	It("list failed", func() {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		dsList, err := dprh.getModuleDevicePluginDaemonSets(ctx, "name", "namespace")
+
+		Expect(err).ToNot(BeNil())
+		Expect(dsList).To(BeNil())
+	})
+
+	It("good flow, return only device plugin DSs, either v2 or v1", func() {
+		ds1 := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					constants.ModuleNameLabel: "some name",
+				},
+			},
+		}
+		ds2 := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					constants.ModuleNameLabel: "some name",
+					constants.DaemonSetRole:   constants.ModuleLoaderRoleLabelValue,
+				},
+			},
+		}
+		ds3 := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					constants.ModuleNameLabel: "some name",
+					constants.DaemonSetRole:   "some role",
+				},
+			},
+		}
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *appsv1.DaemonSetList, _ ...interface{}) error {
+				list.Items = []appsv1.DaemonSet{ds1, ds2, ds3}
+				return nil
+			},
+		)
+
+		dsList, err := dprh.getModuleDevicePluginDaemonSets(ctx, "name", "namespace")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(dsList).To(Equal([]appsv1.DaemonSet{ds1, ds3}))
+	})
+})
