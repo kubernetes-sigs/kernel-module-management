@@ -169,7 +169,16 @@ func (dprh *devicePluginReconcilerHelper) getModuleDevicePluginDaemonSets(ctx co
 	if err := dprh.client.List(ctx, &dsList, opts...); err != nil {
 		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
 	}
-	return dsList.Items, nil
+
+	devicePluginsList := make([]appsv1.DaemonSet, 0, len(dsList.Items))
+	// remove the older version module loader daemonsets
+	for _, ds := range dsList.Items {
+		if ds.GetLabels()[constants.DaemonSetRole] != constants.ModuleLoaderRoleLabelValue {
+			devicePluginsList = append(devicePluginsList, ds)
+		}
+	}
+
+	return devicePluginsList, nil
 }
 
 func (dprh *devicePluginReconcilerHelper) handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingDevicePluginDS []appsv1.DaemonSet) error {
