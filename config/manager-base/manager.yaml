@@ -34,6 +34,9 @@ spec:
             - matchExpressions:
               - key: node-role.kubernetes.io/master
                 operator: Exists
+            - matchExpressions:
+              - key: kmm.node.kubernetes.io/control-plane
+                operator: Exists
       securityContext:
         runAsNonRoot: true
       containers:

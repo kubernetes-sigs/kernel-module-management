@@ -19,7 +19,11 @@ could also be used and examples will be provided in such directory).
 Kernel Management Module deploys at nodes labeled as `node-role.kubernetes.io/master=` or
 `node-role.kubernetes.io/control-plane=` depending on which Kubernetes version we are running, but Control Plane
 (master) in EKS nodes do not allow custom workloads per design as these nodes are managed by AWS.
-So as a user workaround we could label worker nodes with said key to make deployment work.
+As a user workaround we could also label worker nodes with `kmm.node.kubernetes.io/control-plane` key to allow controller
+to be run on worker nodes.
+
+Please be aware that a user escaping the container runtime in this kind of scenario (running controllers on worker nodes)
+could access the API server token used by KMM.
 
 As underlying node OS is [Amazon EKS Linux](https://github.com/awslabs/amazon-eks-ami) which is based in Amazon Linux
 v2, using amazonlinux images as builder images is the easiest way to match kernel versions between hosts and builders.
