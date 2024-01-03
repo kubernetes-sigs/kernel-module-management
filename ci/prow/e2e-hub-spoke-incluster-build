@@ -10,7 +10,8 @@ chmod +x install.sh
 export MINIKUBE=minikube
 export OPERATOR_NAMESPACE=kmm-operator-system
 
-kubectl label node/${MINIKUBE} node-role.kubernetes.io/worker=""
+readonly FIRST_NODE=$(kubectl get node -o jsonpath='{.items[0].metadata.name}')
+kubectl label "node/$FIRST_NODE" node-role.kubernetes.io/worker=""
 
 # Init OCM in the cluster
 clusteradm init --wait

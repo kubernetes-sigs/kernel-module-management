@@ -9,3 +9,6 @@ RUN mkdir -p /opt/lib/modules/${KERNEL_VERSION}/extra
 COPY kmm_ci_a.ko kmm_ci_b.ko /opt/lib/modules/${KERNEL_VERSION}/extra/
 
 RUN ["depmod", "-b", "/opt"]
+
+RUN ["mkdir", "/firmware"]
+RUN echo -n 'kmm_ci_firmware validation string' > /firmware/kmm_ci_firmware.bin

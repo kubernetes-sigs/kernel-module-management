@@ -27,3 +27,12 @@ patches:
                   value: host.minikube.internal:5000/kmm/signimage:local
                 - name: RELATED_IMAGES_WORKER
                   value: host.minikube.internal:5000/kmm/worker:local
+
+configMapGenerator:
+  - behavior: replace
+    files:
+      - controller_config.yaml
+    name: manager-config
+
+generatorOptions:
+  disableNameSuffixHash: true
