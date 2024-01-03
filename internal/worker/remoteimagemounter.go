@@ -13,43 +13,33 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
-type PullResult struct {
-	fsDir  string
-	pulled bool
-}
-
-//go:generate mockgen -source=imagepuller.go -package=worker -destination=mock_imagepuller.go
-
-type ImagePuller interface {
-	PullAndExtract(ctx context.Context, imageName string, insecurePull bool) (PullResult, error)
-}
-
-type imagePuller struct {
+type remoteImageMounter struct {
 	baseDir  string
 	keyChain authn.Keychain
 	logger   logr.Logger
 }
 
-func NewImagePuller(baseDir string, keyChain authn.Keychain, logger logr.Logger) ImagePuller {
-	return &imagePuller{
+func NewRemoteImageMounter(baseDir string, keyChain authn.Keychain, logger logr.Logger) ImageMounter {
+	return &remoteImageMounter{
 		baseDir:  baseDir,
 		keyChain: keyChain,
 		logger:   logger,
 	}
 }
 
-func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, insecurePull bool) (PullResult, error) {
-	logger := i.logger.V(1).WithValues("image name", imageName)
+func (rim *remoteImageMounter) MountImage(ctx context.Context, imageName string, cfg *kmmv1beta1.ModuleConfig) (string, error) {
+	logger := rim.logger.V(1).WithValues("image name", imageName)
 
 	opts := []crane.Option{
 		crane.WithContext(ctx),
-		crane.WithAuthFromKeychain(i.keyChain),
+		crane.WithAuthFromKeychain(rim.keyChain),
 	}
 
-	if insecurePull {
+	if cfg.InsecurePull {
 		logger.Info(utils.WarnString("Pulling without TLS"))
 		opts = append(opts, crane.Insecure)
 	}
@@ -58,14 +48,13 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 
 	remoteDigest, err := crane.Digest(imageName, opts...)
 	if err != nil {
-		return PullResult{}, fmt.Errorf("could not get the digest for %s: %v", imageName, err)
+		return "", fmt.Errorf("could not get the digest for %s: %v", imageName, err)
 	}
 
-	dstDir := filepath.Join(i.baseDir, imageName)
+	dstDir := filepath.Join(rim.baseDir, imageName)
 	digestPath := filepath.Join(dstDir, "digest")
 
 	dstDirFS := filepath.Join(dstDir, "fs")
-	res := PullResult{fsDir: dstDirFS}
 	cleanup := false
 
 	logger.Info("Reading digest file", "path", digestPath)
@@ -75,7 +64,7 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 		if os.IsNotExist(err) {
 			cleanup = true
 		} else {
-			return PullResult{}, fmt.Errorf("could not open the digest file %s: %v", digestPath, err)
+			return "", fmt.Errorf("could not open the digest file %s: %v", digestPath, err)
 		}
 	} else {
 		logger.V(1).Info(
@@ -88,7 +77,7 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 
 		if string(b) == remoteDigest {
 			logger.Info("Local file and remote digest are identical; skipping pull")
-			return res, nil
+			return dstDirFS, nil
 		} else {
 			logger.Info("Local file and remote digest differ; pulling image")
 			cleanup = true
@@ -99,22 +88,20 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 		logger.Info("Cleaning up image directory", "path", dstDir)
 
 		if err = os.RemoveAll(dstDir); err != nil {
-			return PullResult{}, fmt.Errorf("could not cleanup %s: %v", dstDir, err)
+			return "", fmt.Errorf("could not cleanup %s: %v", dstDir, err)
 		}
 	}
 
 	if err = os.MkdirAll(dstDirFS, os.ModeDir|0755); err != nil {
-		return res, fmt.Errorf("could not create the filesystem directory %s: %v", dstDirFS, err)
+		return "", fmt.Errorf("could not create the filesystem directory %s: %v", dstDirFS, err)
 	}
 
 	logger.V(1).Info("Pulling image")
 
 	img, err := crane.Pull(imageName, opts...)
 	if err != nil {
-		return PullResult{}, fmt.Errorf("could not pull %s: %v", imageName, err)
+		return "", fmt.Errorf("could not pull %s: %v", imageName, err)
 	}
-
-	res.pulled = true
 
 	errs := make(chan error, 2)
 
@@ -159,18 +146,18 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 	}
 
 	if err = errors.Join(chErrs...); err != nil {
-		return res, fmt.Errorf("got one or more errors while writing the image: %v", err)
+		return "", fmt.Errorf("got one or more errors while writing the image: %v", err)
 	}
 
 	logger.V(1).Info("Image written to the filesystem")
 
 	if err = ctx.Err(); err != nil {
-		return res, fmt.Errorf("not writing digest file: %v", err)
+		return "", fmt.Errorf("not writing digest file: %v", err)
 	}
 
 	digest, err := img.Digest()
 	if err != nil {
-		return PullResult{}, fmt.Errorf("could not get the digest of the pulled image: %v", err)
+		return "", fmt.Errorf("could not get the digest of the pulled image: %v", err)
 	}
 
 	digestStr := digest.String()
@@ -178,10 +165,10 @@ func (i *imagePuller) PullAndExtract(ctx context.Context, imageName string, inse
 	logger.V(1).Info("Writing digest", "digest", digestStr)
 
 	if err = os.WriteFile(digestPath, []byte(digestStr), 0644); err != nil {
-		return res, fmt.Errorf("could not write the digest file at %s: %v", digestPath, err)
+		return "", fmt.Errorf("could not write the digest file at %s: %v", digestPath, err)
 	}
 
-	return res, nil
+	return dstDirFS, nil
 }
 
 func extractTarToDisk(r io.Reader, dst string) error {

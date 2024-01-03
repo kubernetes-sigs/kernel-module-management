@@ -153,8 +153,9 @@ func main() {
 	}
 
 	eventRecorder := mgr.GetEventRecorderFor("kmm-hub")
+	jobEventReconcilerHelper := controllers.NewJobEventReconcilerHelper(client)
 
-	if err = controllers.NewBuildSignEventsReconciler(client, eventRecorder).SetupWithManager(mgr); err != nil {
+	if err = controllers.NewBuildSignEventsReconciler(client, jobEventReconcilerHelper, eventRecorder).SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignEventsReconcilerName)
 	}
 

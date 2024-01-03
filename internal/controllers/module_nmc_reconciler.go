@@ -446,9 +446,11 @@ func prepareNodeSchedulingData(node v1.Node, mld *api.ModuleLoaderData, currentN
 		versionLabel, present = utils.GetNodeWorkerPodVersionLabel(node.GetLabels(), mld.Namespace, mld.Name)
 	}
 	switch {
-	case mld == nil && currentNMCs.Has(node.Name):
-		// mld missing, Module does not have mapping for node's kernel, NMC for the node exists
-		return schedulingData{action: actionDelete}
+	case mld == nil:
+		if currentNMCs.Has(node.Name) {
+			// mld missing, Module does not have mapping for node's kernel, NMC for the node exists
+			return schedulingData{action: actionDelete}
+		}
 	case mld.ModuleVersion == "":
 		// mld exists, Version not define, should be running
 		return schedulingData{action: actionAdd, mld: mld, node: &node}
