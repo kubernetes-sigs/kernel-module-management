@@ -226,6 +226,22 @@ The following variables will be substituted:
 | `MOD_NAME`            | The `Module`'s name                    | `my-mod`                |
 | `MOD_NAMESPACE`       | The `Module`'s namespace               | `my-namespace`          |
 
+### Unloading the kernel module
+
+To unload a module loaded with KMM from nodes, simply delete the corresponding `Module` resource.
+KMM will then create worker Pods where required to run `modprobe -r` and unload the kernel module from nodes.
+
+!!! warning
+    To create unloading worker Pods, KMM needs all the resources it used when loading the kernel module.
+    This includes the `ServiceAccount` that are referenced in the `Module` as well as any RBAC you may have defined to
+    allow privileged KMM worker Pods to run.
+    It also includes any pull secret referenced in `.spec.imageRepoSecret`.  
+    To avoid situations where KMM is unable to unload the kernel module from nodes:  
+
+      - do not delete those resources while the `Module` resource is still present in the cluster in any state,
+        including `Terminating`;
+      - do not delete any namespace containing at least a `Module` resource.
+
 ## Security and permissions
 
 Loading kernel modules is a highly sensitive operation.

@@ -49,3 +49,11 @@ spec:
   selector:
     node-role.kubernetes.io/worker: ""
 ```
+
+## Setting the kernel's firmware search path
+
+The Linux kernel accepts the `firmware_class.path` parameter as a
+[search path for firmwares](https://www.kernel.org/doc/html/latest/driver-api/firmware/fw_search_path.html).
+Since version 2.0.0, KMM workers can set that value on nodes by writing to sysfs, before attempting to load kmods.  
+To enable that feature, set `worker.setFirmwareClassPath` to `/var/lib/firmware` in the
+[operator configuration](configure.md#workersetfirmwareclasspath).  

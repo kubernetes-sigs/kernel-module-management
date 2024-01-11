@@ -19,6 +19,7 @@ To do that, [install the regular edition of KMM](./install.md).
 #### With [OLM](https://olm.operatorframework.io/) (recommended)
 
 Follow the instructions on [OperatorHub.io](https://operatorhub.io/operator/kernel-module-management-hub).
+This installs the operator in the `operators` namespace.
 
 #### With `kubectl`
 
@@ -29,6 +30,8 @@ Then, run the following command:
 ```shell
 kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default-hub
 ```
+
+This installs the operator in the `kmm-operator-system` namespace.
 
 ### The `ManagedClusterModule` CRD
 
