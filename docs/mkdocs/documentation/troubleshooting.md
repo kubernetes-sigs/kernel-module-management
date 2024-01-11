@@ -2,10 +2,12 @@
 
 ## Reading operator logs
 
-| Component | Command                                                                      |
-|-----------|------------------------------------------------------------------------------|
-| KMM       | `kubectl logs -fn openshift-kmm deployments/kmm-operator-controller`         |
-| KMM-Hub   | `kubectl logs -fn openshift-kmm-hub deployments/kmm-operator-hub-controller` |
+| Component | Command                                                                 |
+|-----------|-------------------------------------------------------------------------|
+| KMM       | `kubectl logs -fn "$namespace" deployments/kmm-operator-controller`     |
+| KMM-Hub   | `kubectl logs -fn "$namespace" deployments/kmm-operator-hub-controller` |
+
+The value of `$namespace` depends on your [installation method](install.md).
 
 ## Observing events
 

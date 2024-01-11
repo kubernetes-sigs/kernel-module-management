@@ -12,6 +12,7 @@ nav:
   - index.md
   - Documentation:
       - documentation/install.md
+      - documentation/configure.md
       - documentation/deploy_kmod.md
       - documentation/kmod_image.md
       - Binary firmwares: documentation/firmwares.md
@@ -39,3 +40,8 @@ markdown_extensions:
 theme:
   name: readthedocs
   custom_dir: overrides/
+  highlightjs: true
+  hljs_languages:
+    - dockerfile
+    - shell
+    - yaml
