@@ -62,7 +62,7 @@ var _ = Describe("ImageExists", func() {
 			_, err = reg.ImageExists(ctx, invalidImage, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("does not contain hash or tag"))
+			Expect(err).To(MatchError(ContainSubstring("could not parse reference")))
 		})
 
 		It("should fail if it cannot get key chain from secret", func() {
@@ -227,7 +227,7 @@ var _ = Describe("GetLayersDigests", func() {
 			_, err = reg.ImageExists(ctx, invalidImage, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("does not contain hash or tag"))
+			Expect(err).To(MatchError(ContainSubstring("could not parse reference")))
 		})
 
 		It("should fail if it cannot get key chain from secret", func() {
@@ -397,7 +397,7 @@ var _ = Describe("GetDigest", func() {
 			_, err = reg.GetDigest(ctx, invalidImage, &kmmv1beta1.TLSOptions{}, nil)
 
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("does not contain hash or tag"))
+			Expect(err).To(MatchError(ContainSubstring("could not parse reference")))
 		})
 
 		It("should fail if it cannot get key chain from secret", func() {

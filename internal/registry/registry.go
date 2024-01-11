@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/crane"
+	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
@@ -106,15 +107,9 @@ func (r *registry) GetDigest(ctx context.Context, image string, tlsOptions *kmmv
 }
 
 func (r *registry) getPullOptions(ctx context.Context, image string, tlsOptions *kmmv1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) (*RepoPullConfig, error) {
-	var repo string
-	if hash := strings.Split(image, "@"); len(hash) > 1 {
-		repo = hash[0]
-	} else if tag := strings.Split(image, ":"); len(tag) > 1 {
-		repo = tag[0]
-	}
-
-	if repo == "" {
-		return nil, fmt.Errorf("image url %s is not valid, does not contain hash or tag", image)
+	ref, err := name.ParseReference(image, name.StrictValidation)
+	if err != nil {
+		return nil, fmt.Errorf("error validating image name %q: %v", image, err)
 	}
 
 	options := []crane.Option{
@@ -148,7 +143,7 @@ func (r *registry) getPullOptions(ctx context.Context, image string, tlsOptions 
 		)
 	}
 
-	return &RepoPullConfig{repo: repo, authOptions: options}, nil
+	return &RepoPullConfig{repo: ref.Context().String(), authOptions: options}, nil
 }
 
 func (r *registry) getImageManifest(ctx context.Context, image string, tlsOptions *kmmv1beta1.TLSOptions, registryAuthGetter auth.RegistryAuthGetter) ([]byte, *RepoPullConfig, error) {

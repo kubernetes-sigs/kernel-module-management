@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/google/go-containerregistry/pkg/name"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -99,6 +100,12 @@ func (m *Module) validate() (admission.Warnings, error) {
 func (m *Module) validateKernelMapping() error {
 	container := m.Spec.ModuleLoader.Container
 
+	if container.ContainerImage != "" {
+		if _, err := name.ParseReference(container.ContainerImage, name.StrictValidation); err != nil {
+			return fmt.Errorf("spec.moduleLoader.container.containerImage: invalid value %q: %v", container.ContainerImage, err)
+		}
+	}
+
 	for idx, km := range container.KernelMappings {
 		if km.Regexp != "" && km.Literal != "" {
 			return fmt.Errorf("regexp and literal are mutually exclusive properties at kernelMappings[%d]", idx)
@@ -112,8 +119,14 @@ func (m *Module) validateKernelMapping() error {
 			return fmt.Errorf("invalid regexp at index %d: %v", idx, err)
 		}
 
-		if container.ContainerImage == "" && km.ContainerImage == "" {
-			return fmt.Errorf("missing spec.moduleLoader.container.kernelMappings[%d].containerImage", idx)
+		if km.ContainerImage == "" {
+			if container.ContainerImage == "" {
+				return fmt.Errorf("missing spec.moduleLoader.container.kernelMappings[%d].containerImage", idx)
+			}
+		} else {
+			if _, err := name.ParseReference(km.ContainerImage, name.StrictValidation); err != nil {
+				return fmt.Errorf("spec.moduleLoader.container.kernelMappings[%d].containerImage: invalid value %q: %v", idx, km.ContainerImage, err)
+			}
 		}
 	}
 
