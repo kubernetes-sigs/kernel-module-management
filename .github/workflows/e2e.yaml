@@ -163,7 +163,7 @@ jobs:
 
       - name: Cache binaries needed by Makefile
         id: cache-bin
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ./bin
           key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
