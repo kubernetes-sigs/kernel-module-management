@@ -84,7 +84,7 @@ func main() {
 		commit = "<undefined>"
 	}
 
-	workerImage := cmd.GetEnvOrFatalError("RELATED_IMAGES_WORKER", setupLogger)
+	workerImage := cmd.GetEnvOrFatalError("RELATED_IMAGE_WORKER", setupLogger)
 
 	managed, err := GetBoolEnv("KMM_MANAGED")
 	if err != nil {

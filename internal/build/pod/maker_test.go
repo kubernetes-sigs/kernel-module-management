@@ -32,7 +32,7 @@ var _ = Describe("MakePodTemplate", func() {
 		kernelVersion      = "1.2.3"
 		moduleName         = "module-name"
 		namespace          = "some-namespace"
-		relatedImageEnvVar = "RELATED_IMAGES_BUILD"
+		relatedImageEnvVar = "RELATED_IMAGE_BUILD"
 	)
 
 	var (

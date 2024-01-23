@@ -47,9 +47,9 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
-          - name: RELATED_IMAGES_BUILD
+          - name: RELATED_IMAGE_BUILD
             value: gcr.io/kaniko-project/executor:latest
-          - name: RELATED_IMAGES_SIGN
+          - name: RELATED_IMAGE_SIGN
             value: signer
         imagePullPolicy: Always
         securityContext:
