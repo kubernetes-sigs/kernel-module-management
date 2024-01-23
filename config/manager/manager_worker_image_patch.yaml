@@ -9,5 +9,5 @@ spec:
       containers:
         - name: manager
           env:
-            - name: RELATED_IMAGES_WORKER
+            - name: RELATED_IMAGE_WORKER
               value: worker

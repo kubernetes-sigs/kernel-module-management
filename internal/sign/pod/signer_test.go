@@ -91,8 +91,8 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 	privateSignData := map[string][]byte{constants.PrivateSignDataKey: []byte(privateKey)}
 
 	DescribeTable("should set fields correctly", func(imagePullSecret *v1.LocalObjectReference) {
-		GinkgoT().Setenv("RELATED_IMAGES_BUILD", buildImage)
-		GinkgoT().Setenv("RELATED_IMAGES_SIGN", "some-sign-image:some-tag")
+		GinkgoT().Setenv("RELATED_IMAGE_BUILD", buildImage)
+		GinkgoT().Setenv("RELATED_IMAGE_SIGN", "some-sign-image:some-tag")
 
 		ctx := context.Background()
 		nodeSelector := map[string]string{"arch": "x64"}

@@ -23,5 +23,5 @@ patches:
             - name: manager
               imagePullPolicy: Never
               env:
-                - name: RELATED_IMAGES_SIGN
+                - name: RELATED_IMAGE_SIGN
                   value: host.minikube.internal:5000/kmm/signimage:local
