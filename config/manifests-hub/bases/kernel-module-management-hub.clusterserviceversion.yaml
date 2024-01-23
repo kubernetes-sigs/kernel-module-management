@@ -37,11 +37,14 @@ spec:
   - supported: false
     type: AllNamespaces
   keywords:
-  - oot
-  - out-of-tree
+  - hub
   - kernel
+  - kmm
+  - kmm-hub
   - module
   - modules
+  - oot
+  - out-of-tree
   links:
   - name: Documentation
     url: https://kmm.sigs.k8s.io
