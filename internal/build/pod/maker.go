@@ -107,7 +107,7 @@ func (m *maker) MakePodTemplate(
 func (m *maker) podSpec(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodSpec {
 
 	buildConfig := mld.Build
-	kanikoImage := os.Getenv("RELATED_IMAGES_BUILD")
+	kanikoImage := os.Getenv("RELATED_IMAGE_BUILD")
 
 	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
 		if idx := strings.IndexAny(kanikoImage, "@:"); idx != -1 {
