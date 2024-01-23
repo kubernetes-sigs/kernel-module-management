@@ -85,7 +85,7 @@ func (s *signer) MakePodTemplate(
 
 	td := TemplateData{
 		FilesToSign: mld.Sign.FilesToSign,
-		SignImage:   os.Getenv("RELATED_IMAGES_SIGN"),
+		SignImage:   os.Getenv("RELATED_IMAGE_SIGN"),
 	}
 
 	args := make([]string, 0)
@@ -181,7 +181,7 @@ func (s *signer) MakePodTemplate(
 		Containers: []v1.Container{
 			{
 				Name:         "kaniko",
-				Image:        os.Getenv("RELATED_IMAGES_BUILD"),
+				Image:        os.Getenv("RELATED_IMAGE_BUILD"),
 				Args:         args,
 				VolumeMounts: volumeMounts,
 			},
