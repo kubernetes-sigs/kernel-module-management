@@ -29,7 +29,7 @@ func rootFuncPreRunE(cmd *cobra.Command, args []string) error {
 func kmodLoadFunc(cmd *cobra.Command, args []string) error {
 	cfgPath := args[0]
 
-	logger.V(1).Info("Reading config", "path", cfgPath)
+	logger.Info("Reading config", "path", cfgPath)
 
 	cfg, err := configHelper.ReadConfigFile(cfgPath)
 	if err != nil {
@@ -52,7 +52,7 @@ func kmodLoadFunc(cmd *cobra.Command, args []string) error {
 func kmodUnloadFunc(cmd *cobra.Command, args []string) error {
 	cfgPath := args[0]
 
-	logger.V(1).Info("Reading config", "path", cfgPath)
+	logger.Info("Reading config", "path", cfgPath)
 
 	cfg, err := configHelper.ReadConfigFile(cfgPath)
 	if err != nil {
