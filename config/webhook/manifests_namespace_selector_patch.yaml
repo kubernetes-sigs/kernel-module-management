@@ -1,0 +1,9 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- name: namespace-deletion.kmm.sigs.k8s.io
+  namespaceSelector:
+    matchLabels:
+      kmm.node.k8s.io/contains-modules: ''
