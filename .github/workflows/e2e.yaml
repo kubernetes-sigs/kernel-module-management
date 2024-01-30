@@ -183,3 +183,71 @@ jobs:
         if: ${{ always() }}
         with:
           output-file: ${{ matrix.name }}-support-bundle.tar.gz
+
+
+  operator-upgrade:
+
+    runs-on: ubuntu-20.04
+    name: operator-upgrade
+    needs: [build-operator-image, build-signing-image, build-worker-image]
+
+    services:
+      registry:
+        image: registry:2
+        ports: ['5000:5000/tcp']
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create the minikube cluster
+        uses: ./.github/actions/create-minikube-cluster
+        with:
+          start-args: --insecure-registry=host.minikube.internal:5000
+
+      - name: Download container images
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Copy kmm, signing and worker images to the registry
+        run: |
+          # KMM is pulled by operator-sdk in the cluster and not by minikube
+          docker load -i artifacts/ci-image-kmm/kmm_local.tar
+          docker load -i artifacts/ci-image-signer/kmm-signimage_local.tar
+          docker load -i artifacts/ci-image-worker/kmm-worker_local.tar
+
+          docker tag kmm:local localhost:5000/kmm/kmm:local
+          docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
+          docker tag kmm-worker:local localhost:5000/kmm/worker:local
+
+          docker push localhost:5000/kmm/kmm:local
+          docker push localhost:5000/kmm/signimage:local
+          docker push localhost:5000/kmm/worker:local
+
+      - name: Set some Ubuntu environment variables
+        run: |
+          grep 'ID=' /etc/os-release >> "$GITHUB_ENV"
+          grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
+
+      - name: Cache binaries needed by Makefile
+        id: cache-bin
+        uses: actions/cache@v4
+        with:
+          path: ./bin
+          key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        if: steps.cache-bin.outputs.cache-hit != 'true'
+
+      - name: Run test
+        run: ./ci/prow/operator-upgrade
+
+      - name: Collect troubleshooting data
+        uses: ./.github/actions/collect-troubleshooting
+        if: ${{ always() }}
+        with:
+          output-file: operator-upgrade-support-bundle.tar.gz

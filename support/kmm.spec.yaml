@@ -10,10 +10,16 @@ spec:
           - default
           - cert-manager
           - kmm-operator-system
+          - olm
+          - operators
     - logs:
         namespace: kmm-operator-system
         selector:
           - app.kubernetes.io/part-of=kmm
+    - logs:
+        namespace: olm
+    - logs:
+        namespace: operators
   hostCollectors:
     - cpu: {}
     - hostOS: {}
