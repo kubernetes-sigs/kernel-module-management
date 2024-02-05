@@ -16,17 +16,17 @@ Where:
 It is recommended to run `depmod` at the end of the build process to generate `modules.dep` and map files.
 This is especially useful if your kmod image contains several kernel modules and if one of the modules depend on
 another.
-To generate dependencies and map files for a specific kernel version, run `depmod -b /opt ${KERNEL_VERSION}`.
+To generate dependencies and map files for a specific kernel version, run `depmod -b /opt ${KERNEL_FULL_VERSION}`.
 
 ## Example `Dockerfile`
 
 The `Dockerfile` below can accommodate any kernel available in the Ubuntu repositories.
-Pass the kernel version you are building an image from using the `--build-arg KERNEL_VERSION=1.2.3` Docker CLI switch.
+Pass the kernel version you are building an image from using the `--build-arg KERNEL_FULL_VERSION=1.2.3` Docker CLI switch.
 
 ```dockerfile
 FROM ubuntu as builder
 
-ARG KERNEL_VERSION
+ARG KERNEL_FULL_VERSION
 
 RUN apt-get update && apt-get install -y bc \
     bison \
@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y bc \
     git \
     make \
     gcc \
-    linux-headers-${KERNEL_VERSION}
+    linux-headers-${KERNEL_FULL_VERSION}
 
 WORKDIR /usr/src
 RUN ["git", "clone", "https://github.com/kubernetes-sigs/kernel-module-management.git"]
@@ -47,14 +47,14 @@ RUN ["make"]
 
 FROM ubuntu
 
-ARG KERNEL_VERSION
+ARG KERNEL_FULL_VERSION
 
 RUN apt-get update && apt-get install -y kmod
 
-COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_a.ko /opt/lib/modules/${KERNEL_VERSION}/
-COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_b.ko /opt/lib/modules/${KERNEL_VERSION}/
+COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_a.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/
+COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_b.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/
 
-RUN depmod -b /opt ${KERNEL_VERSION}
+RUN depmod -b /opt ${KERNEL_FULL_VERSION}
 ```
 
 ## Building in cluster
@@ -105,3 +105,46 @@ Once the image is built, KMM proceeds with the `Module` reconciliation.
     # the container image already exists.
     insecureSkipTLSVerify: false
 ```
+
+### Depending on in-tree kernel modules
+
+Some kernel modules depend on other kernel modules shipped with the node's distribution.
+To avoid copying those dependencies into the kmod image, KMM mounts `/usr/lib/modules` into both the build and the
+worker Pod's filesystems.  
+By creating a symlink from `/opt/usr/lib/modules/[kernel-version]/[symlink-name]` to
+`/usr/lib/modules/[kernel-version]`, `depmod` can use the in-tree kmods on the building node's filesystem to resolve
+dependencies.
+At runtime, the worker Pod extracts the entire image, including the `[symlink-name]` symbolic link.
+That link points to `/usr/lib/modules/[kernel-version]` in the worker Pod, which is mounted from the node's filesystem.
+`modprobe` can then follow that link and load the in-tree dependencies as needed.
+
+In the example below, we use `host` as the symbolic link name under `/opt/usr/lib/modules/[kernel-version]`:
+
+```dockerfile
+FROM ubuntu as builder
+
+#
+# Build steps
+#
+
+FROM ubuntu
+
+ARG KERNEL_FULL_VERSION
+
+RUN apt-get update && apt-get install -y kmod
+
+COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_a.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/
+COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_b.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/
+
+# Create the symbolic link
+RUN ln -s /lib/modules/${KERNEL_FULL_VERSION} /opt/lib/modules/${KERNEL_FULL_VERSION}/host
+
+RUN depmod -b /opt ${KERNEL_FULL_VERSION}
+```
+
+!!! warning
+    `depmod` will generate dependency files based on the kernel modules present on the node that runs the kmod image
+    build.  
+    On the node on which KMM loads the kernel modules, `modprobe` will expect the files to be present under
+    `/usr/lib/modules/[kernel-version]`, and the same filesystem layout.  
+    It is highly recommended that the build and the target nodes share the same distribution and release.
