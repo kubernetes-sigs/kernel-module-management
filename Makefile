@@ -354,7 +354,7 @@ workerimage-build: ## Build docker image for worker app.
 	docker build -f Dockerfile.worker -t $(WORKER_IMG) .
 
 operatorhub-release:
-	IMG=$(IMG) HUB_IMG=$(HUB_IMG) VERSION=$(VERSION) ./hack/release-operatorhub
+	IMG=$(IMG) HUB_IMG=$(HUB_IMG) WORKER_IMG=$(WORKER_IMG) SIGNER_IMG=$(SIGNER_IMG) VERSION=$(VERSION) ./hack/release-operatorhub
 
 include docs.mk
 
