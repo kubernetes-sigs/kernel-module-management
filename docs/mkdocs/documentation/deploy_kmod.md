@@ -220,12 +220,26 @@ The following `Module` fields support shell-like variable substitution:
 
 The following variables will be substituted:
 
-| Name                          | Description                            | Example                 |
-|-------------------------------|----------------------------------------|-------------------------|
-| `KERNEL_FULL_VERSION`         | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
-| `KERNEL_VERSION` (deprecated) | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
-| `MOD_NAME`                    | The `Module`'s name                    | `my-mod`                |
-| `MOD_NAMESPACE`               | The `Module`'s namespace               | `my-namespace`          |
+| Name                  | Description                            | Example                 |
+|-----------------------|----------------------------------------|-------------------------|
+| `KERNEL_FULL_VERSION` | The kernel version we are building for | `6.3.5-200.fc38.x86_64` |
+| `MOD_NAME`            | The `Module`'s name                    | `my-mod`                |
+| `MOD_NAMESPACE`       | The `Module`'s namespace               | `my-namespace`          |
+
+### Unloading the kernel module
+
+To unload a module loaded with KMM from nodes, simply delete the corresponding `Module` resource.
+KMM will then create worker Pods where required to run `modprobe -r` and unload the kernel module from nodes.
+
+!!! warning
+    To create unloading worker Pods, KMM needs all the resources it used when loading the kernel module.
+    This includes the `ServiceAccount` that are referenced in the `Module` as well as any RBAC you may have defined to
+    allow privileged KMM worker Pods to run.
+    It also includes any pull secret referenced in `.spec.imageRepoSecret`.  
+    To avoid situations where KMM is unable to unload the kernel module from nodes, make sure those resources are not
+    deleted while the `Module` resource is still present in the cluster in any state, including `Terminating`.  
+    KMM ships with a validating admission webhook that rejects the deletion of namespaces that contain at least one
+    `Module` resource.
 
 ## Security and permissions
 
