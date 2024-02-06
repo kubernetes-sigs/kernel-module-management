@@ -3,9 +3,9 @@
 set -euxo pipefail
 
 # Install the `clusteradm` command
-curl -LO https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/v0.6.0/install.sh
+curl -LO https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/v0.7.2/install.sh
 chmod +x install.sh
-./install.sh 0.6.0
+./install.sh 0.7.2
 
 export MINIKUBE=minikube
 export OPERATOR_NAMESPACE=kmm-operator-system
@@ -47,10 +47,16 @@ clusteradm addon enable --names governance-policy-framework --clusters ${MINIKUB
 clusteradm addon enable addon --names config-policy-controller --clusters ${MINIKUBE}
 
 # Install kmm and kmm-hub
-make deploy-hub
-make deploy
-kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-hub-controller -n ${OPERATOR_NAMESPACE}
-kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-controller -n ${OPERATOR_NAMESPACE}
+make deploy deploy-hub
+
+kubectl wait --for=condition=Available -n ${OPERATOR_NAMESPACE} \
+  deployment/kmm-operator-hub-controller \
+  deployment/kmm-operator-hub-webhook-server \
+  deployment/kmm-operator-controller \
+  deployment/kmm-operator-webhook-server \
+
+# Make the ManagedCluster selected by the ManagedClusterModule
+kubectl label managedcluster minikube name=minikube
 
 # Apply the ManagedClusterModule
 kubectl apply -f ci/managedclustermodule-kmm-ci-build-sign.yaml

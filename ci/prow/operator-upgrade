@@ -41,6 +41,7 @@ make bundle bundle-build bundle-push \
     VERSION="2.0.0" \
     IMG=host.minikube.internal:5000/kmm/kmm:local \
     SIGNER_IMG=host.minikube.internal:5000/kmm/signimage:local \
+    WEBHOOK_IMG=host.minikube.internal:5000/kmm/webhook-server:local \
     WORKER_IMG=host.minikube.internal:5000/kmm/worker:local \
     BUNDLE_IMG=localhost:5000/kmm/kmm-bundle:local
 

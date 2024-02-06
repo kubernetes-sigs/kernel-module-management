@@ -49,6 +49,22 @@ steps:
       - --all-tags
       - gcr.io/$PROJECT_ID/kernel-module-management-signimage
     waitFor: [build-signimage]
+  - id: build-webhook-server
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-webhook-server:$_GIT_TAG
+      - --tag=gcr.io/$PROJECT_ID/kernel-module-management-webhook-server:latest
+      - --file=Dockerfile.webhook
+      - .
+    waitFor: ['-']
+  - id: push-webhook-server
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - gcr.io/$PROJECT_ID/kernel-module-management-webhook-server
+    waitFor: [build-webhook-server]
   - id: build-worker
     name: gcr.io/cloud-builders/docker
     args:
@@ -97,7 +113,7 @@ steps:
         path: /bundle-kmm
       - name: bundle-hub
         path: /bundle-hub
-    waitFor: [push-manager-image, push-manager-hub-image, push-signimage, push-worker]
+    waitFor: [push-manager-image, push-manager-hub-image, push-signimage, push-webhook-server, push-worker]
   - id: build-kmm-bundle-image
     name: gcr.io/cloud-builders/docker
     args:
