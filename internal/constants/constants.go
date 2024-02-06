@@ -8,6 +8,7 @@ const (
 	PodHashAnnotation    = "kmm.node.kubernetes.io/last-hash"
 	KernelLabel          = "kmm.node.kubernetes.io/kernel-version.full"
 	DaemonSetRole        = "kmm.node.kubernetes.io/role"
+	NamespaceLabelKey    = "kmm.node.k8s.io/contains-modules"
 
 	WorkerPodVersionLabelPrefix    = "beta.kmm.node.kubernetes.io/version-worker-pod"
 	DevicePluginVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-device-plugin"
