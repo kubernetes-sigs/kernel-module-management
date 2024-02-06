@@ -10,6 +10,25 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate--v1-namespace
+  failurePolicy: Fail
+  name: namespace-deletion.kmm.sigs.k8s.io
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - DELETE
+    resources:
+    - namespaces
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-kmm-sigs-x-k8s-io-v1beta1-module
   failurePolicy: Fail
   name: vmodule.kb.io
@@ -23,23 +42,4 @@ webhooks:
     - UPDATE
     resources:
     - modules
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
-      path: /validate--v1-namespace
-  failurePolicy: Fail
-  name: namespace-deletion.kmm.sigs.k8s.io
-  rules:
-  - apiGroups:
-    - ""
-    apiVersions:
-    - v1
-    operations:
-    - DELETE
-    resources:
-    - namespaces
   sideEffects: None

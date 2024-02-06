@@ -100,11 +100,11 @@ help: ## Display this help.
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
-	$(CONTROLLER_GEN) webhook paths="./api/..." paths="./internal/webhook/..." output:webhook:artifacts:config=config/webhook
+	$(CONTROLLER_GEN) webhook paths="./internal/webhook" output:webhook:artifacts:config=config/webhook
 	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./internal/controllers" output:rbac:artifacts:config=config/rbac
 	# Hub
 	$(CONTROLLER_GEN) crd paths="./api-hub/..." output:crd:artifacts:config=config/crd-hub/bases
-	$(CONTROLLER_GEN) webhook paths="./api-hub/..." output:webhook:artifacts:config=config/webhook-hub
+	$(CONTROLLER_GEN) webhook paths="./internal/webhook/hub" output:webhook:artifacts:config=config/webhook-hub
 	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./internal/controllers/hub" output:rbac:artifacts:config=config/rbac-hub
 
 .PHONY: generate
@@ -227,7 +227,7 @@ undeploy-hub: undeploy-kmm-hub undeploy-cert-manager ## Undeploy controller from
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 .PHONY: controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.13.0)
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0)
 
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
 .PHONY: golangci-lint

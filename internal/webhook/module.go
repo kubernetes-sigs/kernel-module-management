@@ -14,72 +14,87 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package webhook
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
 
+	"github.com/go-logr/logr"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // maxCombinedLength is the maximum combined length of Module name and namespace when the version field is set.
 const maxCombinedLength = 40
 
-// log is for logging in this package.
-var modulelog = logf.Log.WithName("module-resource")
+type ModuleValidator struct {
+	logger logr.Logger
+}
 
-func (m *Module) SetupWebhookWithManager(mgr ctrl.Manager) error {
+func NewModuleValidator(logger logr.Logger) *ModuleValidator {
+	return &ModuleValidator{logger: logger}
+}
+
+func (m *ModuleValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	// controller-runtime will set the path to `validate-<group>-<version>-<resource> so we
 	// need to make sure it is set correctly in the +kubebuilder annotation below.
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(m).
+		For(&kmmv1beta1.Module{}).
+		WithValidator(m).
 		Complete()
 }
 
 //+kubebuilder:webhook:path=/validate-kmm-sigs-x-k8s-io-v1beta1-module,mutating=false,failurePolicy=fail,sideEffects=None,groups=kmm.sigs.x-k8s.io,resources=modules,verbs=create;update,versions=v1beta1,name=vmodule.kb.io,admissionReviewVersions=v1
 
-var _ webhook.Validator = &Module{}
-
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (m *Module) ValidateCreate() (admission.Warnings, error) {
-	modulelog.Info("Validating Module creation", "name", m.Name, "namespace", m.Namespace)
+func (m *ModuleValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	mod, ok := obj.(*kmmv1beta1.Module)
+	if !ok {
+		return nil, fmt.Errorf("bad type for the object; expected %T, got %T", mod, obj)
+	}
 
-	return m.validate()
+	m.logger.Info("Validating Module creation", "name", mod.Name, "namespace", mod.Namespace)
+
+	return validateModule(mod)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (m *Module) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
-	modulelog.Info("Validating Module update", "name", m.Name, "namespace", m.Namespace)
+func (m *ModuleValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	oldMod, ok := oldObj.(*kmmv1beta1.Module)
+	if !ok {
+		return nil, fmt.Errorf("bad type for the old object; expected %T, got %T", oldMod, oldObj)
+	}
 
-	if old != nil {
-		oldModule, ok := old.(*Module)
-		if !ok {
-			return nil, fmt.Errorf("old object %v is not of the expected type *Module", old)
-		}
+	newMod, ok := newObj.(*kmmv1beta1.Module)
+	if !ok {
+		return nil, fmt.Errorf("bad type for the new object; expected %T, got %T", newMod, newObj)
+	}
 
-		if (oldModule.Spec.ModuleLoader.Container.Version == "" && m.Spec.ModuleLoader.Container.Version != "") ||
-			(oldModule.Spec.ModuleLoader.Container.Version != "" && m.Spec.ModuleLoader.Container.Version == "") {
+	m.logger.Info("Validating Module update", "name", oldMod.Name, "namespace", oldMod.Namespace)
+
+	if oldObj != nil {
+		if (oldMod.Spec.ModuleLoader.Container.Version == "" && newMod.Spec.ModuleLoader.Container.Version != "") ||
+			(oldMod.Spec.ModuleLoader.Container.Version != "" && newMod.Spec.ModuleLoader.Container.Version == "") {
 			return nil, errors.New("cannot update to or from an empty version; please delete the Module and create it again")
 		}
 	}
 
-	return m.validate()
+	return validateModule(newMod)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (m *Module) ValidateDelete() (admission.Warnings, error) {
-	return nil, nil
+func (m *ModuleValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	return nil, NotImplemented
 }
 
-func (m *Module) validate() (admission.Warnings, error) {
-	nameLength := len(m.Name + m.Namespace)
+func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
+	nameLength := len(mod.Name + mod.Namespace)
 
 	if nameLength > maxCombinedLength {
 		return nil, fmt.Errorf(
@@ -89,16 +104,14 @@ func (m *Module) validate() (admission.Warnings, error) {
 		)
 	}
 
-	if err := m.validateKernelMapping(); err != nil {
+	if err := validateModuleLoaderContainerSpec(mod.Spec.ModuleLoader.Container); err != nil {
 		return nil, fmt.Errorf("failed to validate kernel mappings: %v", err)
 	}
 
-	return nil, m.validateModprobe()
+	return nil, validateModprobe(mod.Spec.ModuleLoader.Container.Modprobe)
 }
 
-func (m *Module) validateKernelMapping() error {
-	container := m.Spec.ModuleLoader.Container
-
+func validateModuleLoaderContainerSpec(container kmmv1beta1.ModuleLoaderContainerSpec) error {
 	for idx, km := range container.KernelMappings {
 		if km.Regexp != "" && km.Literal != "" {
 			return fmt.Errorf("regexp and literal are mutually exclusive properties at kernelMappings[%d]", idx)
@@ -120,8 +133,7 @@ func (m *Module) validateKernelMapping() error {
 	return nil
 }
 
-func (m *Module) validateModprobe() error {
-	modprobe := m.Spec.ModuleLoader.Container.Modprobe
+func validateModprobe(modprobe kmmv1beta1.ModprobeSpec) error {
 	moduleName := modprobe.ModuleName
 	moduleNameDefined := moduleName != ""
 	rawLoadArgsDefined := modprobe.RawArgs != nil && len(modprobe.RawArgs.Load) > 0

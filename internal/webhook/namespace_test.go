@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var validator = &NamespaceDeletion{}
+var validator = &NamespaceValidator{}
 
 var _ = Describe("NamespaceDeletion_ValidateCreate", func() {
 	It("should always error", func() {

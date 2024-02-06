@@ -12,11 +12,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-var notImplemented = errors.New("not implemented")
+type NamespaceValidator struct{}
 
-type NamespaceDeletion struct{}
-
-func (nd *NamespaceDeletion) SetupWebhookWithManager(mgr ctrl.Manager) error {
+func (nd *NamespaceValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	// controller-runtime will set the path to `validate-<group>-<version>-<resource> so we
 	// need to make sure it is set correctly in the +kubebuilder annotation below.
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -27,15 +25,15 @@ func (nd *NamespaceDeletion) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 //+kubebuilder:webhook:path=/validate--v1-namespace,mutating=false,failurePolicy=fail,sideEffects=None,groups="",resources=namespaces,verbs=delete,versions=v1,name=namespace-deletion.kmm.sigs.k8s.io,admissionReviewVersions=v1
 
-func (nd *NamespaceDeletion) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	return nil, notImplemented
+func (nd *NamespaceValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	return nil, NotImplemented
 }
 
-func (nd *NamespaceDeletion) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	return nil, notImplemented
+func (nd *NamespaceValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	return nil, NotImplemented
 }
 
-func (nd *NamespaceDeletion) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (nd *NamespaceValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	// We could just always return some error, as if the webhook was called, the namespace should indeed have the label.
 	// Just make another check here to be super safe, and because it's cheap enough.
 	if meta.HasLabel(obj.(*v1.Namespace), constants.NamespaceLabelKey) {
