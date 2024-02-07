@@ -53,6 +53,7 @@ import (
 	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	webhookhub "github.com/kubernetes-sigs/kernel-module-management/internal/webhook/hub"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -159,8 +160,8 @@ func main() {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignEventsReconcilerName)
 	}
 
-	if err = (&v1beta1.ManagedClusterModule{}).SetupWebhookWithManager(mgr); err != nil {
-		cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "ManagedClusterModule")
+	if err = webhookhub.NewManagedClusterModuleValidator(logger).SetupWebhookWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "ManagedClusterModuleValidator")
 	}
 
 	//+kubebuilder:scaffold:builder

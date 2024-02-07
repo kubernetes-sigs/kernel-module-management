@@ -208,12 +208,12 @@ func main() {
 		}
 	}
 
-	if err = (&webhook.NamespaceDeletion{}).SetupWebhookWithManager(mgr); err != nil {
-		cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "Namespace")
+	if err = (&webhook.NamespaceValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "NamespaceValidator")
 	}
 
-	if err = (&v1beta12.Module{}).SetupWebhookWithManager(mgr); err != nil {
-		cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "Module")
+	if err = webhook.NewModuleValidator(logger).SetupWebhookWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "ModuleValidator")
 	}
 
 	//+kubebuilder:scaffold:builder
