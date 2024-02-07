@@ -2,9 +2,7 @@ package controllers
 
 import (
 	"context"
-	"errors"
 
-	"github.com/budougumi0617/cmpmock"
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	testclient "github.com/kubernetes-sigs/kernel-module-management/internal/client"
@@ -26,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func getOwnerReferenceFromObject(obj ctrlclient.Object) metav1.OwnerReference {
@@ -135,7 +132,6 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		fakeRecorder *record.FakeRecorder
 		mockClient   *testclient.MockClient
 		mockHelper   *MockJobEventReconcilerHelper
-		podNSN       = types.NamespacedName{Namespace: namespace, Name: "name"}
 		r            *JobEventReconciler
 	)
 
@@ -161,39 +157,11 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		return elems
 	}
 
-	It("should return no error if the Pod could not be found", func() {
-		mockClient.
-			EXPECT().
-			Get(ctx, podNSN, &v1.Pod{}).
-			Return(
-				k8serrors.NewNotFound(schema.GroupResource{Resource: "pods"}, podNSN.Name),
-			)
-
-		Expect(
-			r.Reconcile(ctx, reconcile.Request{NamespacedName: podNSN}),
-		).To(
-			Equal(reconcile.Result{}),
-		)
-	})
-
-	It("should return no error if we cannot get the Pod for a random reason", func() {
-		mockClient.
-			EXPECT().
-			Get(ctx, podNSN, &v1.Pod{}).
-			Return(
-				errors.New("random error"),
-			)
-
-		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: podNSN})
-		Expect(err).To(HaveOccurred())
-	})
-
 	It("should add the annotation and send the created event", func() {
 		or := getOwnerReferenceFromObject(ownerModule)
 
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{createdAnnotationKey: ""},
 				Labels: map[string]string{
 					constants.PodType:            utils.PodTypeBuild,
 					constants.TargetKernelTarget: kernelVersion,
@@ -203,22 +171,16 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 			},
 		}
 
+		podWithAnnotation := *pod
+		meta.SetAnnotation(&podWithAnnotation, createdAnnotationKey, "")
+
 		gomock.InOrder(
-			mockClient.
-				EXPECT().
-				Get(ctx, podNSN, &v1.Pod{}).
-				Do(func(_ context.Context, _ types.NamespacedName, p *v1.Pod, _ ...ctrlclient.GetOption) {
-					meta.SetLabel(p, constants.PodType, utils.PodTypeBuild)
-					meta.SetLabel(p, constants.TargetKernelTarget, kernelVersion)
-					p.Namespace = namespace
-					p.OwnerReferences = []metav1.OwnerReference{or}
-				}),
 			mockHelper.EXPECT().GetOwner(ctx, or, namespace),
-			mockClient.EXPECT().Patch(ctx, cmpmock.DiffEq(pod), gomock.Any()),
+			mockClient.EXPECT().Patch(ctx, &podWithAnnotation, gomock.Any()),
 		)
 
 		Expect(
-			r.Reconcile(ctx, reconcile.Request{NamespacedName: podNSN}),
+			r.Reconcile(ctx, pod),
 		).To(
 			Equal(ctrl.Result{}),
 		)
@@ -231,21 +193,21 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 	It("should do nothing if the annotation is already there and the pod is still running", func() {
 		or := getOwnerReferenceFromObject(ownerModule)
 
-		gomock.InOrder(
-			mockClient.
-				EXPECT().
-				Get(ctx, podNSN, &v1.Pod{}).
-				Do(func(_ context.Context, _ types.NamespacedName, p *v1.Pod, _ ...ctrlclient.GetOption) {
-					meta.SetLabel(p, constants.PodType, utils.PodTypeBuild)
-					meta.SetAnnotation(p, createdAnnotationKey, "")
-					p.Namespace = namespace
-					p.OwnerReferences = []metav1.OwnerReference{or}
-				}),
-			mockHelper.EXPECT().GetOwner(ctx, or, namespace),
-		)
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations:     map[string]string{createdAnnotationKey: ""},
+				Labels:          map[string]string{constants.PodType: utils.PodTypeBuild},
+				Namespace:       namespace,
+				OwnerReferences: []metav1.OwnerReference{or},
+			},
+			Spec:   v1.PodSpec{},
+			Status: v1.PodStatus{},
+		}
+
+		mockHelper.EXPECT().GetOwner(ctx, or, namespace)
 
 		Expect(
-			r.Reconcile(ctx, reconcile.Request{NamespacedName: podNSN}),
+			r.Reconcile(ctx, pod),
 		).To(
 			Equal(ctrl.Result{}),
 		)
@@ -260,22 +222,16 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:          map[string]string{constants.PodType: utils.PodTypeBuild},
-				Finalizers:      make([]string, 0),
+				Finalizers:      []string{constants.JobEventFinalizer},
 				Namespace:       namespace,
 				OwnerReferences: []metav1.OwnerReference{or},
 			},
 		}
 
+		podWithoutFinalizer := *pod
+		controllerutil.RemoveFinalizer(&podWithoutFinalizer, constants.JobEventFinalizer)
+
 		gomock.InOrder(
-			mockClient.
-				EXPECT().
-				Get(ctx, podNSN, &v1.Pod{}).
-				Do(func(_ context.Context, _ types.NamespacedName, p *v1.Pod, _ ...ctrlclient.GetOption) {
-					meta.SetLabel(p, constants.PodType, utils.PodTypeBuild)
-					controllerutil.AddFinalizer(p, constants.JobEventFinalizer)
-					p.Namespace = namespace
-					p.OwnerReferences = []metav1.OwnerReference{or}
-				}),
 			mockHelper.
 				EXPECT().
 				GetOwner(ctx, or, namespace).
@@ -283,11 +239,11 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 					nil,
 					k8serrors.NewNotFound(schema.GroupResource{}, moduleName),
 				),
-			mockClient.EXPECT().Patch(ctx, cmpmock.DiffEq(pod), gomock.Any()),
+			mockClient.EXPECT().Patch(ctx, &podWithoutFinalizer, gomock.Any()),
 		)
 
 		Expect(
-			r.Reconcile(ctx, reconcile.Request{NamespacedName: podNSN}),
+			r.Reconcile(ctx, pod),
 		).To(
 			Equal(ctrl.Result{}),
 		)
@@ -308,41 +264,23 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 						constants.PodType:            jobType,
 						constants.TargetKernelTarget: kernelVersion,
 					},
-					Finalizers:      make([]string, 0),
+					Finalizers:      []string{constants.JobEventFinalizer},
 					Namespace:       namespace,
 					OwnerReferences: []metav1.OwnerReference{or},
 				},
 				Status: v1.PodStatus{Phase: phase},
 			}
 
-			calls := []any{
-				mockClient.
-					EXPECT().
-					Get(ctx, podNSN, &v1.Pod{}).
-					Do(func(_ context.Context, _ types.NamespacedName, p *v1.Pod, _ ...ctrlclient.GetOption) {
-						p.Namespace = namespace
+			podWithoutFinalizer := *pod
+			controllerutil.RemoveFinalizer(&podWithoutFinalizer, constants.JobEventFinalizer)
 
-						meta.SetAnnotation(p, createdAnnotationKey, "")
-						meta.SetLabel(p, constants.PodType, jobType)
-						meta.SetLabel(p, constants.TargetKernelTarget, kernelVersion)
-						controllerutil.AddFinalizer(p, constants.JobEventFinalizer)
-						p.OwnerReferences = []metav1.OwnerReference{or}
-						p.Status.Phase = phase
-					}),
-				mockHelper.EXPECT().GetOwner(ctx, or, namespace),
-			}
-
+			getOwner := mockHelper.EXPECT().GetOwner(ctx, or, namespace)
 			if sendEventAndRemoveFinalizer {
-				calls = append(
-					calls,
-					mockClient.EXPECT().Patch(ctx, cmpmock.DiffEq(pod), gomock.Any()),
-				)
+				mockClient.EXPECT().Patch(ctx, &podWithoutFinalizer, gomock.Any()).After(getOwner)
 			}
-
-			gomock.InOrder(calls...)
 
 			Expect(
-				r.Reconcile(ctx, reconcile.Request{NamespacedName: podNSN}),
+				r.Reconcile(ctx, pod),
 			).To(
 				Equal(ctrl.Result{}),
 			)

@@ -29,28 +29,25 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
 	DevicePluginReconcilerName     = "DevicePluginReconciler"
 	kubeletDevicePluginsVolumeName = "kubelet-device-plugins"
 	kubeletDevicePluginsPath       = "/var/lib/kubelet/device-plugins"
-	nodeVarLibFirmwarePath         = "/var/lib/firmware"
 )
 
 // ModuleReconciler reconciles a Module object
 type DevicePluginReconciler struct {
-	client.Client
-
+	client         client.Client
 	filter         *filter.Filter
 	reconHelperAPI devicePluginReconcilerHelperAPI
 }
@@ -63,6 +60,7 @@ func NewDevicePluginReconciler(
 ) *DevicePluginReconciler {
 	reconHelperAPI := newDevicePluginReconcilerHelper(client, metricsAPI, scheme)
 	return &DevicePluginReconciler{
+		client:         client,
 		reconHelperAPI: reconHelperAPI,
 		filter:         filter,
 	}
@@ -74,7 +72,9 @@ func (r *DevicePluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&kmmv1beta1.Module{}).
 		Owns(&appsv1.DaemonSet{}).
 		Named(DevicePluginReconcilerName).
-		Complete(r)
+		Complete(
+			reconcile.AsReconciler[*kmmv1beta1.Module](r.client, r),
+		)
 }
 
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modules,verbs=get;list;watch;
@@ -83,20 +83,10 @@ func (r *DevicePluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
 //+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
 
-func (r *DevicePluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *DevicePluginReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (ctrl.Result, error) {
 	res := ctrl.Result{}
 
 	logger := log.FromContext(ctx)
-
-	mod, err := r.reconHelperAPI.getRequestedModule(ctx, req.NamespacedName)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Module deleted")
-			return ctrl.Result{}, nil
-		}
-
-		return res, fmt.Errorf("failed to get the requested %s KMMO CR: %w", req.NamespacedName, err)
-	}
 
 	existingDevicePluginDS, err := r.reconHelperAPI.getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace)
 	if err != nil {
@@ -134,7 +124,6 @@ func (r *DevicePluginReconciler) Reconcile(ctx context.Context, req ctrl.Request
 //go:generate mockgen -source=device_plugin_reconciler.go -package=controllers -destination=mock_device_plugin_reconciler.go devicePluginReconcilerHelperAPI
 
 type devicePluginReconcilerHelperAPI interface {
-	getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error)
 	setKMMOMetrics(ctx context.Context)
 	handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingDevicePluginDS []appsv1.DaemonSet) error
 	garbageCollect(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) error
@@ -274,15 +263,6 @@ func (dprh *devicePluginReconcilerHelper) setKMMOMetrics(ctx context.Context) {
 	dprh.metricsAPI.SetKMMInClusterBuildNum(numModulesWithBuild)
 	dprh.metricsAPI.SetKMMInClusterSignNum(numModulesWithSign)
 	dprh.metricsAPI.SetKMMDevicePluginNum(numModulesWithDevicePlugin)
-}
-
-func (dprh *devicePluginReconcilerHelper) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error) {
-	mod := kmmv1beta1.Module{}
-
-	if err := dprh.client.Get(ctx, namespacedName, &mod); err != nil {
-		return nil, fmt.Errorf("failed to get the kmmo module %s: %w", namespacedName, err)
-	}
-	return &mod, nil
 }
 
 func (dprh *devicePluginReconcilerHelper) moduleUpdateDevicePluginStatus(ctx context.Context,

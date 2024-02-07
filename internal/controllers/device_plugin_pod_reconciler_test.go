@@ -13,7 +13,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -37,55 +36,34 @@ var _ = Describe("DevicePluginPodReconciler_Reconcile", func() {
 	})
 
 	ctx := context.Background()
-	nn := types.NamespacedName{
-		Namespace: podNamespace,
-		Name:      podName,
-	}
-	req := ctrl.Request{NamespacedName: nn}
 
 	It("should return an error if the pod is not labeled", func() {
-		gomock.InOrder(
-			kubeClient.EXPECT().Get(ctx, nn, gomock.AssignableToTypeOf(&v1.Pod{})),
-		)
-
-		_, err := r.Reconcile(ctx, req)
+		_, err := r.Reconcile(ctx, &v1.Pod{})
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("should return an error if we failed to get the list of pods", func() {
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{constants.ModuleNameLabel: moduleName},
+				Name:   podName,
+			},
+			Spec: v1.PodSpec{NodeName: nodeName},
+		}
 
-		gomock.InOrder(
-			kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
-				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
-					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-					pod.Spec.NodeName = nodeName
-					pod.Name = podName
-				},
-			),
-			kubeClient.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some error")),
-		)
+		kubeClient.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some error"))
 
-		_, err := r.Reconcile(ctx, req)
+		_, err := r.Reconcile(ctx, pod)
 		Expect(err).To(HaveOccurred())
-
 	})
 
 	It("should unlabel the node when a Pod is not ready", func() {
-
 		var (
 			labelSelector = client.MatchingLabels{constants.ModuleNameLabel: moduleName}
 			fieldSelector = client.MatchingFields{"spec.nodeName": nodeName}
 		)
 
 		gomock.InOrder(
-			kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
-				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
-					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-					pod.Spec.NodeName = nodeName
-					pod.Name = podName
-					pod.Namespace = podNamespace
-				},
-			),
 			kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Return(nil),
 			kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Do(
 				func(_ interface{}, _ interface{}, node *v1.Node, _ ...client.GetOption) {
@@ -100,44 +78,51 @@ var _ = Describe("DevicePluginPodReconciler_Reconcile", func() {
 			),
 		)
 
-		_, err := r.Reconcile(ctx, req)
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:    map[string]string{constants.ModuleNameLabel: moduleName},
+				Name:      podName,
+				Namespace: podNamespace,
+			},
+			Spec: v1.PodSpec{NodeName: nodeName},
+		}
+
+		_, err := r.Reconcile(ctx, pod)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should NOT unlabel the node when a Pod is not ready but there is a new running pod", func() {
-
 		var (
 			labelSelector = client.MatchingLabels{constants.ModuleNameLabel: moduleName}
 			fieldSelector = client.MatchingFields{"spec.nodeName": nodeName}
 		)
 
-		gomock.InOrder(
-			kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
-				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
-					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-					pod.Spec.NodeName = nodeName
-					pod.Name = podName
-				},
-			),
-			kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Do(
-				func(_ interface{}, modulePodsList *v1.PodList, _ ...client.ListOption) {
-					modulePodsList.Items = []v1.Pod{
-						{
-							Status: v1.PodStatus{
-								Conditions: []v1.PodCondition{
-									{
-										Type:   v1.PodReady,
-										Status: v1.ConditionTrue,
-									},
+		kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Do(
+			func(_ interface{}, modulePodsList *v1.PodList, _ ...client.ListOption) {
+				modulePodsList.Items = []v1.Pod{
+					{
+						Status: v1.PodStatus{
+							Conditions: []v1.PodCondition{
+								{
+									Type:   v1.PodReady,
+									Status: v1.ConditionTrue,
 								},
 							},
 						},
-					}
-				},
-			),
+					},
+				}
+			},
 		)
 
-		_, err := r.Reconcile(ctx, req)
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{constants.ModuleNameLabel: moduleName},
+				Name:   podName,
+			},
+			Spec: v1.PodSpec{NodeName: nodeName},
+		}
+
+		_, err := r.Reconcile(ctx, pod)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -149,41 +134,23 @@ var _ = Describe("DevicePluginPodReconciler_Reconcile", func() {
 	}
 
 	It("should NOT label or unlabel when the Pod has no .spec.nodeName", func() {
-		gomock.InOrder(
-			kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
-				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
-					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-					pod.Finalizers = []string{constants.NodeLabelerFinalizer}
-					pod.DeletionTimestamp = &now
-					pod.Name = podName
-				},
-			),
-			kubeClient.EXPECT().Patch(ctx, gomock.AssignableToTypeOf(&v1.Pod{}), gomock.Any()).Do(patchRemoveFinalizerFunc),
-		)
+		kubeClient.EXPECT().Patch(ctx, gomock.AssignableToTypeOf(&v1.Pod{}), gomock.Any()).Do(patchRemoveFinalizerFunc)
 
-		_, err := r.Reconcile(ctx, req)
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				DeletionTimestamp: &now,
+				Finalizers:        []string{constants.NodeLabelerFinalizer},
+				Labels:            map[string]string{constants.ModuleNameLabel: moduleName},
+				Name:              podName,
+			},
+		}
+
+		_, err := r.Reconcile(ctx, pod)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should label the node when a Pod is ready", func() {
-
 		gomock.InOrder(
-			kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
-				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
-					pod.Name = podName
-					pod.Namespace = podNamespace
-					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-					pod.Spec.NodeName = nodeName
-					pod.Status = v1.PodStatus{
-						Conditions: []v1.PodCondition{
-							{
-								Type:   v1.PodReady,
-								Status: v1.ConditionTrue,
-							},
-						},
-					}
-				},
-			),
 			kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil),
 			kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(
 				func(_ interface{}, node *v1.Node, p client.Patch, _ ...client.GetOption) {
@@ -196,34 +163,52 @@ var _ = Describe("DevicePluginPodReconciler_Reconcile", func() {
 			),
 		)
 
-		_, err := r.Reconcile(ctx, req)
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Finalizers: []string{constants.NodeLabelerFinalizer},
+				Labels:     map[string]string{constants.ModuleNameLabel: moduleName},
+				Name:       podName,
+				Namespace:  podNamespace,
+			},
+			Spec: v1.PodSpec{NodeName: nodeName},
+			Status: v1.PodStatus{
+				Conditions: []v1.PodCondition{
+					{
+						Type:   v1.PodReady,
+						Status: v1.ConditionTrue,
+					},
+				},
+			},
+		}
+
+		_, err := r.Reconcile(ctx, pod)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should remove the pod finalizer when the pod is being deleted", func() {
-
 		var (
 			labelSelector = client.MatchingLabels{constants.ModuleNameLabel: moduleName}
 			fieldSelector = client.MatchingFields{"spec.nodeName": nodeName}
 		)
 
 		gomock.InOrder(
-			kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
-				func(_ interface{}, _ interface{}, pod *v1.Pod, _ ...client.GetOption) {
-					pod.SetLabels(map[string]string{constants.ModuleNameLabel: moduleName})
-					pod.DeletionTimestamp = &now
-					pod.Finalizers = []string{constants.NodeLabelerFinalizer}
-					pod.Spec.NodeName = nodeName
-					pod.Name = podName
-				},
-			),
 			kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Return(nil),
 			kubeClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil),
 			kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil),
 			kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Do(patchRemoveFinalizerFunc),
 		)
 
-		_, err := r.Reconcile(ctx, req)
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				DeletionTimestamp: &now,
+				Finalizers:        []string{constants.NodeLabelerFinalizer},
+				Labels:            map[string]string{constants.ModuleNameLabel: moduleName},
+				Name:              podName,
+			},
+			Spec: v1.PodSpec{NodeName: nodeName},
+		}
+
+		_, err := r.Reconcile(ctx, pod)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

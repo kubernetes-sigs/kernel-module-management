@@ -16,7 +16,6 @@ import (
 	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
-	types "k8s.io/apimachinery/pkg/types"
 	sets "k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -113,21 +112,6 @@ func (m *MockmoduleNMCReconcilerHelperAPI) getNodesListBySelector(ctx context.Co
 func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getNodesListBySelector(ctx, mod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNodesListBySelector", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getNodesListBySelector), ctx, mod)
-}
-
-// getRequestedModule mocks base method.
-func (m *MockmoduleNMCReconcilerHelperAPI) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*v1beta1.Module, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getRequestedModule", ctx, namespacedName)
-	ret0, _ := ret[0].(*v1beta1.Module)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// getRequestedModule indicates an expected call of getRequestedModule.
-func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getRequestedModule(ctx, namespacedName any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getRequestedModule", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getRequestedModule), ctx, namespacedName)
 }
 
 // moduleUpdateWorkerPodsStatus mocks base method.

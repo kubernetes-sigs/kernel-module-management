@@ -39,19 +39,9 @@ var _ = Describe("Reconcile", func() {
 	})
 
 	ctx := context.Background()
-	nn := types.NamespacedName{
-		Name: nodeName,
-	}
-	req := ctrl.Request{NamespacedName: nn}
 	nodeLabels := map[string]string{"some label": "some label value"}
-	testNode := v1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   nodeName,
-			Labels: nodeLabels,
-		},
-	}
 
-	DescribeTable("reconciler flow", func(getNodeError, getMLPodsError, upDateNodeLabelsErrors, requeue bool) {
+	DescribeTable("reconciler flow", func(getMLPodsError, upDateNodeLabelsErrors, requeue bool) {
 		labelsPerModules := map[string]*modulesVersionLabels{
 			"moduleNameNamespace": &modulesVersionLabels{name: "name", namespace: "namespace"},
 		}
@@ -59,16 +49,6 @@ var _ = Describe("Reconcile", func() {
 		loadedKernelModules := []types.NamespacedName{{Name: "some name", Namespace: "some namespace"}}
 		reconcileLabelsResult := &reconcileLabelsResult{requeue: requeue}
 		expectedRes := ctrl.Result{Requeue: requeue}
-		if getNodeError {
-			kubeClient.EXPECT().Get(ctx, nn, gomock.AssignableToTypeOf(&testNode)).Return(fmt.Errorf("some error"))
-			goto executeTestFunction
-		}
-		kubeClient.EXPECT().Get(ctx, req.NamespacedName, gomock.Any()).Do(
-			func(_ interface{}, _ interface{}, node *v1.Node, _ ...client.GetOption) {
-				node.SetLabels(testNode.Labels)
-				node.Name = testNode.Name
-			},
-		)
 		mockHelper.EXPECT().getLabelsPerModules(ctx, nodeLabels).Return(labelsPerModules)
 		if getMLPodsError {
 			mockHelper.EXPECT().getDevicePluginPods(ctx, nodeName).Return(nil, fmt.Errorf("some error"))
@@ -83,20 +63,25 @@ var _ = Describe("Reconcile", func() {
 		}
 		mockHelper.EXPECT().updateNodeLabels(ctx, nodeName, reconcileLabelsResult).Return(nil)
 	executeTestFunction:
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: nodeLabels,
+				Name:   nodeName,
+			},
+		}
 
-		res, err := nlmvr.Reconcile(ctx, req)
-		if upDateNodeLabelsErrors || getMLPodsError || getNodeError {
+		res, err := nlmvr.Reconcile(ctx, &node)
+		if upDateNodeLabelsErrors || getMLPodsError {
 			Expect(err).To(HaveOccurred())
 		} else {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res).To(Equal(expectedRes))
 		}
 	},
-		Entry("good flow, no requeue", false, false, false, false),
-		Entry("good flow, with requeue", false, false, false, true),
-		Entry("get node failed", true, false, false, false),
-		Entry("get module loader pods failed", false, true, false, false),
-		Entry("update node labels failed", false, false, true, false),
+		Entry("good flow, no requeue", false, false, false),
+		Entry("good flow, with requeue", false, false, true),
+		Entry("get module loader pods failed", true, false, false),
+		Entry("update node labels failed", false, true, false),
 	)
 })
 

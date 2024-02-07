@@ -20,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -30,6 +29,7 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 	var (
 		ctrl            *gomock.Controller
 		mockReconHelper *MockdevicePluginReconcilerHelperAPI
+		mod             *kmmv1beta1.Module
 		dpr             *DevicePluginReconciler
 	)
 
@@ -37,40 +37,20 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mockReconHelper = NewMockdevicePluginReconcilerHelperAPI(ctrl)
 
+		mod = &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: moduleName},
+		}
+
 		dpr = &DevicePluginReconciler{
 			reconHelperAPI: mockReconHelper,
 		}
 	})
 
-	const moduleName = "test-module"
-
-	nsn := types.NamespacedName{
-		Name:      moduleName,
-		Namespace: namespace,
-	}
-
-	req := reconcile.Request{NamespacedName: nsn}
-
 	ctx := context.Background()
 
-	It("should return ok if module has been deleted", func() {
-		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "whatever"))
-
-		res, err := dpr.Reconcile(ctx, req)
-
-		Expect(res).To(Equal(reconcile.Result{}))
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	DescribeTable("check error flows", func(getModuleError, getDSError, handlePluginError, gcError bool) {
-		mod := kmmv1beta1.Module{}
+	DescribeTable("check error flows", func(getDSError, handlePluginError, gcError bool) {
 		devicePluginDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
 		returnedError := fmt.Errorf("some error")
-		if getModuleError {
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(nil, returnedError)
-			goto executeTestFunction
-		}
-		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil)
 		if getDSError {
 			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, returnedError)
 			goto executeTestFunction
@@ -78,118 +58,71 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 		mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil)
 		mockReconHelper.EXPECT().setKMMOMetrics(ctx)
 		if handlePluginError {
-			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, devicePluginDS).Return(returnedError)
+			mockReconHelper.EXPECT().handleDevicePlugin(ctx, mod, devicePluginDS).Return(returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, devicePluginDS).Return(nil)
+		mockReconHelper.EXPECT().handleDevicePlugin(ctx, mod, devicePluginDS).Return(nil)
 		if gcError {
-			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, devicePluginDS).Return(returnedError)
+			mockReconHelper.EXPECT().garbageCollect(ctx, mod, devicePluginDS).Return(returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().garbageCollect(ctx, &mod, devicePluginDS).Return(nil)
-		mockReconHelper.EXPECT().moduleUpdateDevicePluginStatus(ctx, &mod, devicePluginDS).Return(returnedError)
+		mockReconHelper.EXPECT().garbageCollect(ctx, mod, devicePluginDS).Return(nil)
+		mockReconHelper.EXPECT().moduleUpdateDevicePluginStatus(ctx, mod, devicePluginDS).Return(returnedError)
 
 	executeTestFunction:
-		res, err := dpr.Reconcile(ctx, req)
+		res, err := dpr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).To(HaveOccurred())
 
 	},
-		Entry("getRequestedModule failed", true, false, false, false),
-		Entry("getDevicePluginDaemonSets failed", false, true, false, false),
-		Entry("handleDevicePlugin failed", false, false, true, false),
-		Entry("garbageCollect failed", false, false, false, true),
-		Entry("devicePluginUpdateStatus failed", false, false, false, false),
+		Entry("getDevicePluginDaemonSets failed", true, false, false),
+		Entry("handleDevicePlugin failed", false, true, false),
+		Entry("garbageCollect failed", false, false, true),
+		Entry("devicePluginUpdateStatus failed", false, false, false),
 	)
 
 	It("Good flow", func() {
-		mod := kmmv1beta1.Module{}
 		devicePluginDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
 			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
-			mockReconHelper.EXPECT().handleDevicePlugin(ctx, &mod, devicePluginDS).Return(nil),
-			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, devicePluginDS).Return(nil),
-			mockReconHelper.EXPECT().moduleUpdateDevicePluginStatus(ctx, &mod, devicePluginDS).Return(nil),
+			mockReconHelper.EXPECT().handleDevicePlugin(ctx, mod, devicePluginDS).Return(nil),
+			mockReconHelper.EXPECT().garbageCollect(ctx, mod, devicePluginDS).Return(nil),
+			mockReconHelper.EXPECT().moduleUpdateDevicePluginStatus(ctx, mod, devicePluginDS).Return(nil),
 		)
 
-		res, err := dpr.Reconcile(ctx, req)
+		res, err := dpr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("module deletion flow", func() {
-		mod := kmmv1beta1.Module{}
 		mod.SetDeletionTimestamp(&metav1.Time{})
 		devicePluginDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
 
 		By("good flow")
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
 			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
 			mockReconHelper.EXPECT().handleModuleDeletion(ctx, devicePluginDS).Return(nil),
 		)
 
-		res, err := dpr.Reconcile(ctx, req)
+		res, err := dpr.Reconcile(ctx, mod)
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 
 		By("error flow")
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
 			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
 			mockReconHelper.EXPECT().handleModuleDeletion(ctx, devicePluginDS).Return(fmt.Errorf("some error")),
 		)
 
-		res, err = dpr.Reconcile(ctx, req)
+		res, err = dpr.Reconcile(ctx, mod)
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).To(HaveOccurred())
 	})
 
-})
-
-var _ = Describe("DevicePluginReconciler_getRequestedModule", func() {
-	var (
-		ctrl *gomock.Controller
-		clnt *client.MockClient
-		dprh devicePluginReconcilerHelperAPI
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		dprh = newDevicePluginReconcilerHelper(clnt, nil, nil)
-	})
-
-	ctx := context.Background()
-	moduleName := "moduleName"
-	moduleNamespace := "moduleNamespace"
-	nsn := types.NamespacedName{Name: moduleName, Namespace: moduleNamespace}
-
-	It("good flow", func() {
-		clnt.EXPECT().Get(ctx, nsn, gomock.Any()).DoAndReturn(
-			func(_ interface{}, _ interface{}, module *kmmv1beta1.Module, _ ...ctrlclient.GetOption) error {
-				module.ObjectMeta = metav1.ObjectMeta{Name: moduleName, Namespace: moduleNamespace}
-				return nil
-			},
-		)
-
-		mod, err := dprh.getRequestedModule(ctx, nsn)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mod.Name).To(Equal(moduleName))
-		Expect(mod.Namespace).To(Equal(moduleNamespace))
-	})
-
-	It("error flow", func() {
-
-		clnt.EXPECT().Get(ctx, nsn, gomock.Any()).Return(fmt.Errorf("some error"))
-		mod, err := dprh.getRequestedModule(ctx, nsn)
-		Expect(err).To(HaveOccurred())
-		Expect(mod).To(BeNil())
-	})
 })
 
 var _ = Describe("DevicePluginReconciler_handleDevicePlugin", func() {

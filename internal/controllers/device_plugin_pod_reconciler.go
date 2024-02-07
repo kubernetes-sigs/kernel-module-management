@@ -8,11 +8,11 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/util/podutils"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -31,26 +31,14 @@ func NewDevicePluginPodReconciler(client client.Client) *DevicePluginPodReconcil
 	return &DevicePluginPodReconciler{client: client}
 }
 
-func (dppr *DevicePluginPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (dppr *DevicePluginPodReconciler) Reconcile(ctx context.Context, pod *v1.Pod) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
-
-	pod := v1.Pod{}
-	podNamespacedName := req.NamespacedName
-
-	if err := dppr.client.Get(ctx, podNamespacedName, &pod); err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Pod not found")
-			return ctrl.Result{}, nil
-		}
-
-		return ctrl.Result{}, fmt.Errorf("could not get pod %s: %v", podNamespacedName, err)
-	}
 
 	nodeName := pod.Spec.NodeName
 
 	moduleName, ok := pod.Labels[constants.ModuleNameLabel]
 	if !ok {
-		return ctrl.Result{}, fmt.Errorf("pod %s has no %q label", podNamespacedName, constants.ModuleNameLabel)
+		return ctrl.Result{}, fmt.Errorf("pod %s/%s has no %q label", pod.Namespace, pod.Name, constants.ModuleNameLabel)
 	}
 
 	labelName := utils.GetDevicePluginNodeLabel(pod.Namespace, moduleName)
@@ -67,7 +55,7 @@ func (dppr *DevicePluginPodReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// at the beginning. IsodReady condition should still be checked, in case pod state
 	// has changed not due to Daemonset termination, but due to internal state of Daemonset on
 	// cluster
-	if !podutils.IsPodReady(&pod) || !pod.DeletionTimestamp.IsZero() {
+	if !podutils.IsPodReady(pod) || !pod.DeletionTimestamp.IsZero() {
 		// If the pod was created very recently but immediately deleted, its .spec.nodeName may still be empty.
 		// In that case, no need to try and unlabel the node; because .spec.nodeName is empty, it was never labeled in
 		// the first place.
@@ -104,7 +92,7 @@ func (dppr *DevicePluginPodReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// the specified Pod has already been deleted. By ignoring NotFound errors we ensure
 			// that no additional, unnecessary reconciliation request will be queued (since a
 			// reconciliation result with a non-nil error will be requeued).
-			if err := dppr.deleteFinalizer(ctx, &pod); client.IgnoreNotFound(err) != nil {
+			if err := dppr.deleteFinalizer(ctx, pod); client.IgnoreNotFound(err) != nil {
 				return ctrl.Result{}, fmt.Errorf("could not delete the pod finalizer: %v", err)
 			}
 		}
@@ -157,7 +145,9 @@ func (dppr *DevicePluginPodReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		Named(DevicePluginPodReconcilerName).
 		For(&v1.Pod{}).
 		WithEventFilter(p).
-		Complete(dppr)
+		Complete(
+			reconcile.AsReconciler[*v1.Pod](dppr.client, dppr),
+		)
 }
 
 func (dppr *DevicePluginPodReconciler) addLabel(ctx context.Context, nodeName string, labelName string) error {

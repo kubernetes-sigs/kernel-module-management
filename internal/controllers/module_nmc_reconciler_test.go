@@ -33,6 +33,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		ctrl                *gomock.Controller
 		mockNamespaceHelper *MocknamespaceLabeler
 		mockReconHelper     *MockmoduleNMCReconcilerHelperAPI
+		mod                 *kmmv1beta1.Module
 		mnr                 *ModuleNMCReconciler
 	)
 
@@ -41,24 +42,19 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		mockNamespaceHelper = NewMocknamespaceLabeler(ctrl)
 		mockReconHelper = NewMockmoduleNMCReconcilerHelperAPI(ctrl)
 
+		mod = &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: moduleName, Namespace: namespace},
+		}
+
 		mnr = &ModuleNMCReconciler{
 			nsLabeler:   mockNamespaceHelper,
 			reconHelper: mockReconHelper,
 		}
 	})
 
-	const moduleName = "test-module"
 	const nodeName = "nodeName"
 
-	nsn := types.NamespacedName{
-		Name:      moduleName,
-		Namespace: namespace,
-	}
-
-	req := reconcile.Request{NamespacedName: nsn}
-
 	ctx := context.Background()
-	mod := kmmv1beta1.Module{}
 	node := v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 	}
@@ -68,32 +64,21 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 	enableSchedulingData := schedulingData{action: actionAdd, mld: &mld, node: &node}
 	disableSchedulingData := schedulingData{action: actionDelete, mld: nil}
 
-	It("should return ok if module has been deleted", func() {
-		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "whatever"))
-
-		res, err := mnr.Reconcile(ctx, req)
-
-		Expect(res).To(Equal(reconcile.Result{}))
-		Expect(err).NotTo(HaveOccurred())
-	})
-
 	It("should run finalization and try removing namespace label when module is being deleted", func() {
-		mod := kmmv1beta1.Module{}
 		mod.SetDeletionTimestamp(&metav1.Time{})
+
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
-			mockNamespaceHelper.EXPECT().tryRemovingLabel(ctx, mod.Namespace, mod.Namespace),
-			mockReconHelper.EXPECT().finalizeModule(ctx, &mod).Return(nil),
+			mockNamespaceHelper.EXPECT().tryRemovingLabel(ctx, namespace, moduleName),
+			mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(nil),
 		)
 
-		res, err := mnr.Reconcile(ctx, req)
+		res, err := mnr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	type errorFlowTestCase struct {
-		getModuleError             bool
 		setFinalizerAndStatusError bool
 		getNodesError              bool
 		getNMCsMapError            bool
@@ -111,36 +96,31 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 			nmcMLDConfigs = map[string]schedulingData{"nodeName": enableSchedulingData}
 		}
 		returnedError := errors.New("some error")
-		if c.getModuleError {
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(nil, returnedError)
-			goto executeTestFunction
-		}
-		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil)
 		if c.setLabelError {
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace).Return(returnedError)
 			goto executeTestFunction
 		}
 		mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace)
 		if c.setFinalizerAndStatusError {
-			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, &mod).Return(returnedError)
+			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, &mod).Return(nil)
+		mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil)
 		if c.getNodesError {
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(nil, returnedError)
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil)
+		mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(targetedNodes, nil)
 		if c.getNMCsMapError {
-			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(nil, returnedError)
+			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil)
+		mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil)
 		if c.prepareSchedulingError {
-			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nil, []error{returnedError})
+			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nil, []error{returnedError})
 			goto moduleStatusUpdateFunction
 		}
-		mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, []error{})
+		mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, []error{})
 		if c.disableEnableError {
 			if c.shouldBeOnNode {
 				mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(returnedError)
@@ -157,19 +137,17 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 
 	moduleStatusUpdateFunction:
 		if c.moduleUpdateStatusErr {
-			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes).Return(returnedError)
+			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes).Return(returnedError)
 		} else {
-			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes).Return(nil)
+			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes).Return(nil)
 		}
 
 	executeTestFunction:
-		res, err := mnr.Reconcile(ctx, req)
+		res, err := mnr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).To(HaveOccurred())
-
 	},
-		Entry("getRequestedModule failed", errorFlowTestCase{getModuleError: true}),
 		Entry("setFinalizerAndStatus failed", errorFlowTestCase{setFinalizerAndStatusError: true}),
 		Entry("getNodesListBySelector failed", errorFlowTestCase{getNodesError: true}),
 		Entry("getNMCsByModuleMap failed", errorFlowTestCase{getNMCsMapError: true}),
@@ -183,17 +161,16 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 	It("Good flow, should run on node", func() {
 		nmcMLDConfigs := map[string]schedulingData{nodeName: enableSchedulingData}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
-			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, &mod).Return(nil),
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil),
-			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
-			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
+			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil),
+			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(nil),
-			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes).Return(nil),
+			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes).Return(nil),
 		)
 
-		res, err := mnr.Reconcile(ctx, req)
+		res, err := mnr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
@@ -202,63 +179,20 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 	It("Good flow, should not run on node", func() {
 		nmcMLDConfigs := map[string]schedulingData{nodeName: disableSchedulingData}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
-			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, &mod).Return(nil),
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(targetedNodes, nil),
-			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, &mod).Return(currentNMCs, nil),
-			mockReconHelper.EXPECT().prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
+			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil),
+			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 			mockReconHelper.EXPECT().disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name).Return(nil),
-			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes).Return(nil),
+			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes).Return(nil),
 		)
 
-		res, err := mnr.Reconcile(ctx, req)
+		res, err := mnr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 	})
-})
-
-var _ = Describe("ModuleReconciler_getRequestedModule", func() {
-	var (
-		ctrl *gomock.Controller
-		clnt *client.MockClient
-		mnrh moduleNMCReconcilerHelperAPI
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, nil, scheme)
-	})
-
-	ctx := context.Background()
-	moduleName := "moduleName"
-	moduleNamespace := "moduleNamespace"
-	nsn := types.NamespacedName{Name: moduleName, Namespace: moduleNamespace}
-
-	It("good flow", func() {
-		clnt.EXPECT().Get(ctx, nsn, gomock.Any()).DoAndReturn(
-			func(_ interface{}, _ interface{}, module *kmmv1beta1.Module, _ ...ctrlclient.GetOption) error {
-				module.ObjectMeta = metav1.ObjectMeta{Name: moduleName, Namespace: moduleNamespace}
-				return nil
-			},
-		)
-
-		mod, err := mnrh.getRequestedModule(ctx, nsn)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mod.Name).To(Equal(moduleName))
-		Expect(mod.Namespace).To(Equal(moduleNamespace))
-	})
-
-	It("error flow", func() {
-
-		clnt.EXPECT().Get(ctx, nsn, gomock.Any()).Return(fmt.Errorf("some error"))
-		mod, err := mnrh.getRequestedModule(ctx, nsn)
-		Expect(err).To(HaveOccurred())
-		Expect(mod).To(BeNil())
-	})
-
 })
 
 var _ = Describe("setFinalizerAndStatus", func() {

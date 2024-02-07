@@ -16,7 +16,6 @@ import (
 	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
-	types "k8s.io/apimachinery/pkg/types"
 )
 
 // MockbuildSignReconcilerHelperAPI is a mock of buildSignReconcilerHelperAPI interface.
@@ -84,21 +83,6 @@ func (m *MockbuildSignReconcilerHelperAPI) getRelevantKernelMappings(ctx context
 func (mr *MockbuildSignReconcilerHelperAPIMockRecorder) getRelevantKernelMappings(ctx, mod, targetedNodes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getRelevantKernelMappings", reflect.TypeOf((*MockbuildSignReconcilerHelperAPI)(nil).getRelevantKernelMappings), ctx, mod, targetedNodes)
-}
-
-// getRequestedModule mocks base method.
-func (m *MockbuildSignReconcilerHelperAPI) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*v1beta1.Module, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getRequestedModule", ctx, namespacedName)
-	ret0, _ := ret[0].(*v1beta1.Module)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// getRequestedModule indicates an expected call of getRequestedModule.
-func (mr *MockbuildSignReconcilerHelperAPIMockRecorder) getRequestedModule(ctx, namespacedName any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getRequestedModule", reflect.TypeOf((*MockbuildSignReconcilerHelperAPI)(nil).getRequestedModule), ctx, namespacedName)
 }
 
 // handleBuild mocks base method.

@@ -80,18 +80,8 @@ func NewBuildSignEventsReconciler(client client.Client, helper JobEventReconcile
 	}
 }
 
-func (r *JobEventReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+func (r *JobEventReconciler) Reconcile(ctx context.Context, pod *v1.Pod) (reconcile.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
-
-	pod := v1.Pod{}
-
-	if err := r.client.Get(ctx, req.NamespacedName, &pod); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return reconcile.Result{}, nil
-		}
-
-		return reconcile.Result{}, fmt.Errorf("could not get pod %s: %v", req.NamespacedName, err)
-	}
 
 	je, err := newJobEvent(pod.Labels[constants.PodType])
 	if err != nil {
@@ -104,11 +94,11 @@ func (r *JobEventReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 		return ctrl.Result{}, fmt.Errorf("unexpected number of owner references: expected 1, got %d", nor)
 	}
 
-	owner, err := r.helper.GetOwner(ctx, pod.OwnerReferences[0], req.Namespace)
+	owner, err := r.helper.GetOwner(ctx, pod.OwnerReferences[0], pod.Namespace)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("Job owner not found; removing finalizer")
-			return ctrl.Result{}, r.removeFinalizer(ctx, &pod)
+			return ctrl.Result{}, r.removeFinalizer(ctx, pod)
 		}
 
 		return ctrl.Result{}, err
@@ -122,10 +112,10 @@ func (r *JobEventReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 	if _, ok := pod.GetAnnotations()[createdAnnotationKey]; !ok {
 		patchFrom := client.MergeFrom(pod.DeepCopy())
 
-		meta.SetAnnotation(&pod, createdAnnotationKey, "")
+		meta.SetAnnotation(pod, createdAnnotationKey, "")
 
-		if err = r.client.Patch(ctx, &pod, patchFrom); err != nil {
-			return ctrl.Result{}, fmt.Errorf("could not patch Pod %s: %v", req.NamespacedName, err)
+		if err = r.client.Patch(ctx, pod, patchFrom); err != nil {
+			return ctrl.Result{}, fmt.Errorf("could not patch Pod %s/%s: %v", pod.Namespace, pod.Name, err)
 		}
 
 		ann := maps.Clone(eventAnnotations)
@@ -158,8 +148,8 @@ func (r *JobEventReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 		return ctrl.Result{}, nil
 	}
 
-	if err = r.removeFinalizer(ctx, &pod); err != nil {
-		return reconcile.Result{}, fmt.Errorf("could not patch pod %s: %v", req.NamespacedName, err)
+	if err = r.removeFinalizer(ctx, pod); err != nil {
+		return reconcile.Result{}, fmt.Errorf("could not patch pod %s/%s: %v", pod.Namespace, pod.Name, err)
 	}
 
 	r.recorder.AnnotatedEventf(
@@ -189,7 +179,9 @@ func (r *JobEventReconciler) SetupWithManager(mgr manager.Manager) error {
 			builder.WithPredicates(jobEventPredicate),
 		).
 		Named(BuildSignEventsReconcilerName).
-		Complete(r)
+		Complete(
+			reconcile.AsReconciler[*v1.Pod](r.client, r),
+		)
 }
 
 func (r *JobEventReconciler) removeFinalizer(ctx context.Context, pod *v1.Pod) error {
