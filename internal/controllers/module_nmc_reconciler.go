@@ -17,7 +17,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 //+kubebuilder:rbac:groups="core",resources=namespaces,verbs=get;list;patch;watch
@@ -66,39 +66,31 @@ func NewModuleNMCReconciler(client client.Client,
 	}
 }
 
-func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	logger.Info("Starting Module-NMS reconcilation", "module name and namespace", req.NamespacedName)
+	logger.Info("Starting Module-NMC reconciliation")
 
-	mod, err := mnr.reconHelper.getRequestedModule(ctx, req.NamespacedName)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Module deleted, nothing to do")
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, fmt.Errorf("failed to get the requested %s Module: %v", req.NamespacedName, err)
-	}
 	if mod.GetDeletionTimestamp() != nil {
 		//Module is being deleted
-		if err = mnr.nsLabeler.tryRemovingLabel(ctx, mod.Namespace, mod.Name); err != nil {
+		if err := mnr.nsLabeler.tryRemovingLabel(ctx, mod.Namespace, mod.Name); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while trying to remove the label on namespace %s: %v", mod.Namespace, err)
 		}
 
-		err = mnr.reconHelper.finalizeModule(ctx, mod)
+		err := mnr.reconHelper.finalizeModule(ctx, mod)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to finalize %s Module: %v", req.NamespacedName, err)
+			return ctrl.Result{}, fmt.Errorf("failed to finalize Module %s/%s: %v", mod.Namespace, mod.Name, err)
 		}
 		return ctrl.Result{}, nil
 	}
 
-	if err = mnr.nsLabeler.setLabel(ctx, mod.Namespace); err != nil {
+	if err := mnr.nsLabeler.setLabel(ctx, mod.Namespace); err != nil {
 		return ctrl.Result{}, fmt.Errorf("could not set label %q on namespace %s: %v", constants.NamespaceLabelKey, mod.Namespace, err)
 	}
 
-	err = mnr.reconHelper.setFinalizerAndStatus(ctx, mod)
+	err := mnr.reconHelper.setFinalizerAndStatus(ctx, mod)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to set finalizer on %s Module: %v", req.NamespacedName, err)
+		return ctrl.Result{}, fmt.Errorf("failed to set finalizer on Module %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
 
 	// get nodes targeted by selector
@@ -109,7 +101,7 @@ func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	currentNMCs, err := mnr.reconHelper.getNMCsByModuleSet(ctx, mod)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get NMCs for %s Module: %v", req.NamespacedName, err)
+		return ctrl.Result{}, fmt.Errorf("failed to get NMCs for Module %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
 
 	sdMap, prepareErrs := mnr.reconHelper.prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs)
@@ -153,7 +145,9 @@ func (mnr *ModuleNMCReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(filter.ListModulesForNMC),
 		).
 		Named(ModuleNMCReconcilerName).
-		Complete(mnr)
+		Complete(
+			reconcile.AsReconciler[*kmmv1beta1.Module](mgr.GetClient(), mnr),
+		)
 }
 
 //go:generate mockgen -source=module_nmc_reconciler.go -package=controllers -destination=mock_module_nmc_reconciler.go moduleNMCReconcilerHelperAPI,namespaceLabeler
@@ -161,7 +155,6 @@ func (mnr *ModuleNMCReconciler) SetupWithManager(mgr ctrl.Manager) error {
 type moduleNMCReconcilerHelperAPI interface {
 	setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
-	getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error)
 	getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error)
 	getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error)
 	prepareSchedulingData(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node, currentNMCs sets.Set[string]) (map[string]schedulingData, []error)
@@ -213,15 +206,6 @@ func (mnrh *moduleNMCReconcilerHelper) setFinalizerAndStatus(ctx context.Context
 	//mod.Status.ModuleLoader.AvailableNumber = 0
 
 	return mnrh.client.Status().Update(ctx, mod)
-}
-
-func (mnrh *moduleNMCReconcilerHelper) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error) {
-	mod := kmmv1beta1.Module{}
-
-	if err := mnrh.client.Get(ctx, namespacedName, &mod); err != nil {
-		return nil, fmt.Errorf("failed to get Module %s: %w", namespacedName, err)
-	}
-	return &mod, nil
 }
 
 func (mnrh *moduleNMCReconcilerHelper) finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error {

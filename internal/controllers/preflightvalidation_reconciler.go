@@ -28,7 +28,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -80,7 +80,9 @@ func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
 		}).
-		Complete(r)
+		Complete(
+			reconcile.AsReconciler[*v1beta12.PreflightValidation](r.client, r),
+		)
 }
 
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modules,verbs=get;list;watch
@@ -88,25 +90,14 @@ func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=preflightvalidations/status,verbs=get;update;patch
 
 // Reconcile Reconiliation entry point
-func (r *PreflightValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PreflightValidationReconciler) Reconcile(ctx context.Context, pv *v1beta12.PreflightValidation) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Start PreflightValidation Reconciliation")
-
-	pv := v1beta12.PreflightValidation{}
-	err := r.client.Get(ctx, req.NamespacedName, &pv)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			log.Info("Reconciliation object not found; not reconciling")
-			return ctrl.Result{}, nil
-		}
-		log.Error(err, "preflight validation reconcile failed to find object")
-		return ctrl.Result{}, err
-	}
 
 	// we want the metric just to signal that this customer uses preflight
 	r.metricsAPI.SetKMMPreflightsNum(1)
 
-	reconCompleted, err := r.runPreflightValidation(ctx, &pv)
+	reconCompleted, err := r.runPreflightValidation(ctx, pv)
 	if err != nil {
 		log.Error(err, "runPreflightValidation failed")
 		return ctrl.Result{}, err

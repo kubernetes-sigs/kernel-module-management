@@ -13,9 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,7 +31,6 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 		mockMetrics   *metrics.MockMetrics
 		mockSU        *statusupdater.MockPreflightStatusUpdater
 		mockPreflight *preflight.MockPreflightAPI
-		req           reconcile.Request
 		ctx           context.Context
 		nsn           types.NamespacedName
 		pr            *PreflightValidationReconciler
@@ -49,27 +46,8 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 			Name:      preflightName,
 			Namespace: namespace,
 		}
-		req = reconcile.Request{NamespacedName: nsn}
 		ctx = context.Background()
 		pr = NewPreflightValidationReconciler(clnt, nil, mockMetrics, mockSU, mockPreflight)
-	})
-
-	It("should do nothing if the Preflight is not available anymore", func() {
-		clnt.EXPECT().Get(ctx, nsn, &v1beta12.PreflightValidation{}).Return(apierrors.NewNotFound(schema.GroupResource{}, preflightName))
-
-		res, err := pr.Reconcile(ctx, req)
-
-		Expect(err).To(BeNil())
-		Expect(res).To(Equal(reconcile.Result{}))
-	})
-
-	It("should return error when failed to get preflight", func() {
-		clnt.EXPECT().Get(ctx, nsn, &v1beta12.PreflightValidation{}).Return(fmt.Errorf("some error"))
-
-		res, err := pr.Reconcile(ctx, req)
-
-		Expect(err).To(HaveOccurred())
-		Expect(res).To(Equal(reconcile.Result{}))
 	})
 
 	It("good flow, all verified", func() {
@@ -91,14 +69,6 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 			},
 		}
 		gomock.InOrder(
-			clnt.EXPECT().Get(context.Background(), nsn, &v1beta12.PreflightValidation{}).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *v1beta12.PreflightValidation, _ ...ctrlclient.GetOption) error {
-					m.ObjectMeta = pv.ObjectMeta
-					m.Spec.KernelVersion = pv.Spec.KernelVersion
-					m.Status = pv.Status
-					return nil
-				},
-			),
 			mockMetrics.EXPECT().SetKMMPreflightsNum(1),
 			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ interface{}, list *v1beta12.ModuleList, _ ...interface{}) error {
@@ -118,7 +88,7 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 			),
 		)
 
-		res, err := pr.Reconcile(ctx, req)
+		res, err := pr.Reconcile(ctx, &pv)
 
 		Expect(err).To(BeNil())
 		Expect(res).To(Equal(reconcile.Result{}))
@@ -143,14 +113,6 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 			},
 		}
 		gomock.InOrder(
-			clnt.EXPECT().Get(context.Background(), nsn, &v1beta12.PreflightValidation{}).DoAndReturn(
-				func(_ interface{}, _ interface{}, m *v1beta12.PreflightValidation, _ ...ctrlclient.GetOption) error {
-					m.ObjectMeta = pv.ObjectMeta
-					m.Spec.KernelVersion = pv.Spec.KernelVersion
-					m.Status = pv.Status
-					return nil
-				},
-			),
 			mockMetrics.EXPECT().SetKMMPreflightsNum(1),
 			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ interface{}, list *v1beta12.ModuleList, _ ...interface{}) error {
@@ -170,7 +132,7 @@ var _ = Describe("PreflightValidationReconciler_Reconcile", func() {
 			),
 		)
 
-		res, err := pr.Reconcile(ctx, req)
+		res, err := pr.Reconcile(ctx, &pv)
 
 		Expect(err).To(BeNil())
 		Expect(res).To(Equal(reconcile.Result{RequeueAfter: time.Second * reconcileRequeueInSeconds}))

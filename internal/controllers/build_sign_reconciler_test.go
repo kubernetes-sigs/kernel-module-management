@@ -15,17 +15,17 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ = Describe("BuildSignReconciler_Reconcile", func() {
+	const moduleName = "test-module"
+
 	var (
 		ctrl            *gomock.Controller
 		mockReconHelper *MockbuildSignReconcilerHelperAPI
+		mod             *kmmv1beta1.Module
 		bsr             *BuildSignReconciler
 	)
 
@@ -33,41 +33,24 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mockReconHelper = NewMockbuildSignReconcilerHelperAPI(ctrl)
 
+		mod = &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: moduleName},
+		}
+
 		bsr = &BuildSignReconciler{
 			reconHelperAPI: mockReconHelper,
 		}
 	})
 
-	const moduleName = "test-module"
-
-	nsn := types.NamespacedName{
-		Name:      moduleName,
-		Namespace: namespace,
-	}
-
-	req := reconcile.Request{NamespacedName: nsn}
-
 	ctx := context.Background()
 
-	It("should return ok if module has been deleted", func() {
-		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "whatever"))
-
-		res, err := bsr.Reconcile(ctx, req)
-
-		Expect(res).To(Equal(reconcile.Result{}))
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	DescribeTable("check error flows", func(getModuleError, getNodesError, getMappingsError, handleBuildError, handleSignError bool) {
-		mod := kmmv1beta1.Module{}
+	DescribeTable("check error flows", func(getNodesError, getMappingsError, handleBuildError, handleSignError bool) {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: moduleName},
+		}
 		selectNodesList := []v1.Node{v1.Node{}}
 		mappings := map[string]*api.ModuleLoaderData{"kernelVersion": &api.ModuleLoaderData{}}
 		returnedError := fmt.Errorf("some error")
-		if getModuleError {
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(nil, returnedError)
-			goto executeTestFunction
-		}
-		mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil)
 		if getNodesError {
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(nil, returnedError)
 			goto executeTestFunction
@@ -91,72 +74,63 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 		mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings).Return(returnedError)
 
 	executeTestFunction:
-		res, err := bsr.Reconcile(ctx, req)
+		res, err := bsr.Reconcile(ctx, &mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).To(HaveOccurred())
-
 	},
-		Entry("getRequestedModule failed", true, false, false, false, false),
-		Entry("getNodesListBySelector failed", false, true, false, false, false),
-		Entry("getRelevantKernelMappingsAndNodes failed", false, false, true, false, false),
-		Entry("handleBuild failed ", false, false, false, true, false),
-		Entry("handleSign failed", false, false, false, false, true),
-		Entry("garbageCollect failed", false, false, false, false, false),
+		Entry("getNodesListBySelector failed", true, false, false, false),
+		Entry("getRelevantKernelMappingsAndNodes failed", false, true, false, false),
+		Entry("handleBuild failed ", false, false, true, false),
+		Entry("handleSign failed", false, false, false, true),
+		Entry("garbageCollect failed", false, false, false, false),
 	)
 
 	It("Build has not completed successfully", func() {
-		mod := kmmv1beta1.Module{}
 		selectNodesList := []v1.Node{v1.Node{}}
 		mappings := map[string]*api.ModuleLoaderData{"kernelVersion": &api.ModuleLoaderData{}}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil),
-			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, &mod, selectNodesList).Return(mappings, nil),
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(selectNodesList, nil),
+			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, mod, selectNodesList).Return(mappings, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(false, nil),
-			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings).Return(nil),
+			mockReconHelper.EXPECT().garbageCollect(ctx, mod, mappings).Return(nil),
 		)
 
-		res, err := bsr.Reconcile(ctx, req)
+		res, err := bsr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
-
 	})
 
 	It("Signing has not completed successfully", func() {
-		mod := kmmv1beta1.Module{}
 		selectNodesList := []v1.Node{v1.Node{}}
 		mappings := map[string]*api.ModuleLoaderData{"kernelVersion": &api.ModuleLoaderData{}}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil),
-			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, &mod, selectNodesList).Return(mappings, nil),
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(selectNodesList, nil),
+			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, mod, selectNodesList).Return(mappings, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(false, nil),
-			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings).Return(nil),
+			mockReconHelper.EXPECT().garbageCollect(ctx, mod, mappings).Return(nil),
 		)
 
-		res, err := bsr.Reconcile(ctx, req)
+		res, err := bsr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("Good flow", func() {
-		mod := kmmv1beta1.Module{}
 		selectNodesList := []v1.Node{v1.Node{}}
 		mappings := map[string]*api.ModuleLoaderData{"kernelVersion": &api.ModuleLoaderData{}}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getRequestedModule(ctx, nsn).Return(&mod, nil),
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil),
-			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, &mod, selectNodesList).Return(mappings, nil),
+			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(selectNodesList, nil),
+			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, mod, selectNodesList).Return(mappings, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(true, nil),
-			mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings).Return(nil),
+			mockReconHelper.EXPECT().garbageCollect(ctx, mod, mappings).Return(nil),
 		)
 
-		res, err := bsr.Reconcile(ctx, req)
+		res, err := bsr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())

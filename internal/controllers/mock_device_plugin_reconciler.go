@@ -15,7 +15,6 @@ import (
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/apps/v1"
-	types "k8s.io/apimachinery/pkg/types"
 )
 
 // MockdevicePluginReconcilerHelperAPI is a mock of devicePluginReconcilerHelperAPI interface.
@@ -68,21 +67,6 @@ func (m *MockdevicePluginReconcilerHelperAPI) getModuleDevicePluginDaemonSets(ct
 func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) getModuleDevicePluginDaemonSets(ctx, name, namespace any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getModuleDevicePluginDaemonSets", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).getModuleDevicePluginDaemonSets), ctx, name, namespace)
-}
-
-// getRequestedModule mocks base method.
-func (m *MockdevicePluginReconcilerHelperAPI) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*v1beta1.Module, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getRequestedModule", ctx, namespacedName)
-	ret0, _ := ret[0].(*v1beta1.Module)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// getRequestedModule indicates an expected call of getRequestedModule.
-func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) getRequestedModule(ctx, namespacedName any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getRequestedModule", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).getRequestedModule), ctx, namespacedName)
 }
 
 // handleDevicePlugin mocks base method.

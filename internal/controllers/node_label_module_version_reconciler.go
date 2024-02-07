@@ -13,6 +13,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;watch;patch
@@ -48,13 +49,7 @@ func NewNodeLabelModuleVersionReconciler(client client.Client) *NodeLabelModuleV
 	}
 }
 
-func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	node := v1.Node{}
-
-	if err := nlmvr.client.Get(ctx, types.NamespacedName{Name: req.Name}, &node); err != nil {
-		return ctrl.Result{}, fmt.Errorf("could not get node: %v", err)
-	}
-
+func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, node *v1.Node) (ctrl.Result, error) {
 	modulesVersionLabels := nlmvr.helperAPI.getLabelsPerModules(ctx, node.Labels)
 
 	devicePluginPods, err := nlmvr.helperAPI.getDevicePluginPods(ctx, node.Name)
@@ -287,8 +282,11 @@ func (nlmvr *NodeLabelModuleVersionReconciler) SetupWithManager(mgr ctrl.Manager
 	return ctrl.
 		NewControllerManagedBy(mgr).
 		Named(NodeLabelModuleVersionReconcilerName).
-		For(&v1.Node{}).WithEventFilter(
-		filter.NodeLabelModuleVersionUpdatePredicate(mgr.GetLogger().WithName("node-version-labeling-changed")),
-	).
-		Complete(nlmvr)
+		For(&v1.Node{}).
+		WithEventFilter(
+			filter.NodeLabelModuleVersionUpdatePredicate(mgr.GetLogger().WithName("node-version-labeling-changed")),
+		).
+		Complete(
+			reconcile.AsReconciler[*v1.Node](nlmvr.client, nlmvr),
+		)
 }

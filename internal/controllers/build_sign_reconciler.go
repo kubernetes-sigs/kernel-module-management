@@ -29,13 +29,12 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const BuildSignReconcilerName = "BuildSignReconciler"
@@ -70,20 +69,10 @@ func NewBuildSignReconciler(
 // Reconcile lists all nodes and looks for kernels that match its mappings.
 // For each mapping that matches at least one node in the cluster, it creates a DaemonSet running the container image
 // on the nodes with a compatible kernel.
-func (r *BuildSignReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *BuildSignReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (ctrl.Result, error) {
 	res := ctrl.Result{}
 
 	logger := log.FromContext(ctx)
-
-	mod, err := r.reconHelperAPI.getRequestedModule(ctx, req.NamespacedName)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("Module deleted")
-			return ctrl.Result{}, nil
-		}
-
-		return res, fmt.Errorf("failed to get the requested %s KMMO CR: %w", req.NamespacedName, err)
-	}
 
 	targetedNodes, err := r.reconHelperAPI.getNodesListBySelector(ctx, mod)
 	if err != nil {
@@ -132,7 +121,6 @@ func (r *BuildSignReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 //go:generate mockgen -source=build_sign_reconciler.go -package=controllers -destination=mock_build_sign_reconciler.go buildSignReconcilerHelperAPI
 
 type buildSignReconcilerHelperAPI interface {
-	getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error)
 	getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error)
 	getRelevantKernelMappings(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, error)
 	handleBuild(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
@@ -304,15 +292,6 @@ func (bsrh *buildSignReconcilerHelper) garbageCollect(ctx context.Context,
 	return nil
 }
 
-func (bsrh *buildSignReconcilerHelper) getRequestedModule(ctx context.Context, namespacedName types.NamespacedName) (*kmmv1beta1.Module, error) {
-	mod := kmmv1beta1.Module{}
-
-	if err := bsrh.client.Get(ctx, namespacedName, &mod); err != nil {
-		return nil, fmt.Errorf("failed to get the kmmo module %s: %w", namespacedName, err)
-	}
-	return &mod, nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *BuildSignReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -326,5 +305,7 @@ func (r *BuildSignReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel str
 			),
 		).
 		Named(BuildSignReconcilerName).
-		Complete(r)
+		Complete(
+			reconcile.AsReconciler[*kmmv1beta1.Module](mgr.GetClient(), r),
+		)
 }
