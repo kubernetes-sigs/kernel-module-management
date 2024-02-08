@@ -681,13 +681,22 @@ var _ = Describe("enableModuleOnNode", func() {
 		}
 	})
 
-	It("Image does not exists", func() {
+	It("Build configured and image does not exist", func() {
+		mld.Build = &kmmv1beta1.Build{}
 		rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(false, nil)
 		err := mnrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("Failed to check if image exists", func() {
+	It("Sign configured and image does not exist", func() {
+		mld.Sign = &kmmv1beta1.Sign{}
+		rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(false, nil)
+		err := mnrh.enableModuleOnNode(ctx, mld, &node)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("Build configured and failed to check if image exists", func() {
+		mld.Build = &kmmv1beta1.Build{}
 		rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(false, fmt.Errorf("some error"))
 		err := mnrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).To(HaveOccurred())
@@ -699,7 +708,6 @@ var _ = Describe("enableModuleOnNode", func() {
 		}
 
 		gomock.InOrder(
-			rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(true, nil),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
 			helper.EXPECT().SetModuleConfig(nmc, mld, expectedModuleConfig).Return(nil),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
@@ -727,7 +735,6 @@ var _ = Describe("enableModuleOnNode", func() {
 		)
 
 		gomock.InOrder(
-			rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(true, nil),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, nmc *kmmv1beta1.NodeModulesConfig, _ ...ctrlclient.GetOption) error {
 					nmc.SetName(node.Name)
