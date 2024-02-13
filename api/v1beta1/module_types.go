@@ -136,7 +136,9 @@ type ModprobeArgs struct {
 
 type ModprobeSpec struct {
 	// ModuleName is the name of the Module to be loaded.
-	ModuleName string `json:"moduleName"`
+	// This field can only be unset if rawArgs is set.
+	// +optional
+	ModuleName string `json:"moduleName,omitempty"`
 
 	// Parameters is an optional list of kernel module parameters to be provided to modprobe.
 	// They should be in the form of key=value and will be separated by spaces in the modprobe command.

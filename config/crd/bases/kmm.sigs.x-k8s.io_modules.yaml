@@ -2348,8 +2348,9 @@ spec:
                               The firmware(s) will be copied to the host for the kernel to find them.
                             type: string
                           moduleName:
-                            description: ModuleName is the name of the Module to be
-                              loaded.
+                            description: |-
+                              ModuleName is the name of the Module to be loaded.
+                              This field can only be unset if rawArgs is set.
                             type: string
                           modulesLoadingOrder:
                             description: |-
@@ -2395,8 +2396,6 @@ spec:
                                 minItems: 1
                                 type: array
                             type: object
-                        required:
-                        - moduleName
                         type: object
                       registryTLS:
                         description: RegistryTLS set the TLS configs for accessing
