@@ -1,12 +1,11 @@
 name: Collect troubleshooting data
 
-description: This action fetches some troubleshooting data for KMM
-
 inputs:
-  output-file:
-    description: Name of the archive file
+  artifact-name:
+    description: The name of the artifact for the support bundle
     required: true
 
+description: This action fetches some troubleshooting data for KMM
 runs:
   using: composite
 
@@ -18,10 +17,10 @@ runs:
       shell: bash
 
     - name: Collect a support bundle
-      run: kubectl support-bundle -o ${{ inputs.output-file }} ./support/kmm.spec.yaml
+      run: kubectl support-bundle -o support-bundle.tar.gz ./support/kmm.spec.yaml
       shell: bash
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
-        name: support-bundle
-        path: ${{ inputs.output-file }}
+        name: ${{ inputs.artifact-name }}
+        path: support-bundle.tar.gz

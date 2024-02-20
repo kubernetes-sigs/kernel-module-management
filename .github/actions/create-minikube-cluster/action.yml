@@ -20,7 +20,7 @@ runs:
       shell: bash
 
     - name: Cache Minikube artifacts
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.minikube/cache
         key: ${{ runner.os }}-minikube-${{ steps.install-minikube.outputs.version }}
