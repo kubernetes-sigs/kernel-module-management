@@ -93,13 +93,13 @@ var _ = Describe("SetModuleConfig", func() {
 			},
 		}
 
-		moduleConfig := kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "in-tree-module"}
+		moduleConfig := kmmv1beta1.ModuleConfig{InTreeModulesToRemove: []string{"in-tree-module1", "in-tree-module2"}}
 
 		err := nmcHelper.SetModuleConfig(&nmc, &api.ModuleLoaderData{Name: name, Namespace: namespace}, &moduleConfig)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(3))
-		Expect(nmc.Spec.Modules[2].Config.InTreeModuleToRemove).To(Equal("in-tree-module"))
+		Expect(nmc.Spec.Modules[2].Config.InTreeModulesToRemove).To(Equal([]string{"in-tree-module1", "in-tree-module2"}))
 		Expect(nmc.Spec.Modules[2].ServiceAccountName).To(Equal("default"))
 	})
 
@@ -118,11 +118,11 @@ var _ = Describe("SetModuleConfig", func() {
 					Name:      name,
 					Namespace: namespace,
 				},
-				Config: kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "some-in-tree-module"},
+				Config: kmmv1beta1.ModuleConfig{InTreeModulesToRemove: []string{"some-in-tree-module1", "some-in-tree-module2"}},
 			},
 		}
 
-		moduleConfig := kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "in-tree-module"}
+		moduleConfig := kmmv1beta1.ModuleConfig{InTreeModulesToRemove: []string{"in-tree-module1", "in-tree-module2"}}
 		mld := api.ModuleLoaderData{
 			Name:               name,
 			Namespace:          namespace,
@@ -133,7 +133,7 @@ var _ = Describe("SetModuleConfig", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(2))
-		Expect(nmc.Spec.Modules[1].Config.InTreeModuleToRemove).To(Equal("in-tree-module"))
+		Expect(nmc.Spec.Modules[1].Config.InTreeModulesToRemove).To(Equal([]string{"in-tree-module1", "in-tree-module2"}))
 		Expect(nmc.Spec.Modules[1].ServiceAccountName).To(Equal(saName))
 	})
 })
@@ -157,14 +157,14 @@ var _ = Describe("RemoveModuleConfig", func() {
 					Name:      "some name 1",
 					Namespace: "some namespace 1",
 				},
-				Config: kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "some-in-tree-module-1"},
+				Config: kmmv1beta1.ModuleConfig{InTreeModulesToRemove: []string{"some-in-tree-module-1"}},
 			},
 			{
 				ModuleItem: kmmv1beta1.ModuleItem{
 					Name:      "some name 2",
 					Namespace: "some namespace 2",
 				},
-				Config: kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "some-in-tree-module-2"},
+				Config: kmmv1beta1.ModuleConfig{InTreeModulesToRemove: []string{"some-in-tree-module-2"}},
 			},
 		}
 
@@ -172,8 +172,8 @@ var _ = Describe("RemoveModuleConfig", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(2))
-		Expect(nmc.Spec.Modules[0].Config.InTreeModuleToRemove).To(Equal("some-in-tree-module-1"))
-		Expect(nmc.Spec.Modules[1].Config.InTreeModuleToRemove).To(Equal("some-in-tree-module-2"))
+		Expect(nmc.Spec.Modules[0].Config.InTreeModulesToRemove).To(Equal([]string{"some-in-tree-module-1"}))
+		Expect(nmc.Spec.Modules[1].Config.InTreeModulesToRemove).To(Equal([]string{"some-in-tree-module-2"}))
 	})
 
 	It("deleting existing module", func() {
@@ -184,14 +184,14 @@ var _ = Describe("RemoveModuleConfig", func() {
 					Name:      "some name 1",
 					Namespace: "some namespace 1",
 				},
-				Config: kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "some-in-tree-module-1"},
+				Config: kmmv1beta1.ModuleConfig{InTreeModulesToRemove: []string{"some-in-tree-module-1"}},
 			},
 			{
 				ModuleItem: kmmv1beta1.ModuleItem{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Config: kmmv1beta1.ModuleConfig{InTreeModuleToRemove: "some-in-tree-module-2"},
+				Config: kmmv1beta1.ModuleConfig{InTreeModulesToRemove: []string{"some-in-tree-module-2"}},
 			},
 		}
 
@@ -199,7 +199,7 @@ var _ = Describe("RemoveModuleConfig", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(nmc.Spec.Modules)).To(Equal(1))
-		Expect(nmc.Spec.Modules[0].Config.InTreeModuleToRemove).To(Equal("some-in-tree-module-1"))
+		Expect(nmc.Spec.Modules[0].Config.InTreeModulesToRemove).To(Equal([]string{"some-in-tree-module-1"}))
 	})
 })
 
@@ -392,10 +392,10 @@ var _ = Describe("SetModuleStatus", func() {
 			ServiceAccountName: "sa",
 		},
 		Config: kmmv1beta1.ModuleConfig{
-			KernelVersion:        "some-kver",
-			ContainerImage:       "some-kernel-image",
-			InsecurePull:         true,
-			InTreeModuleToRemove: "intree",
+			KernelVersion:         "some-kver",
+			ContainerImage:        "some-kernel-image",
+			InsecurePull:          true,
+			InTreeModulesToRemove: []string{"intree"},
 		},
 		LastTransitionTime: metav1.Now(),
 	}

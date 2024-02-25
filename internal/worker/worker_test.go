@@ -87,11 +87,11 @@ var _ = Describe("worker_LoadKmod", func() {
 	})
 
 	It("should remove the in-tree module if configured", func() {
-		const inTreeModuleToRemove = "intree"
+		inTreeModulesToRemove := []string{"intree1", "intree2"}
 
 		cfg := v1beta1.ModuleConfig{
-			ContainerImage:       imageName,
-			InTreeModuleToRemove: inTreeModuleToRemove,
+			ContainerImage:        imageName,
+			InTreeModulesToRemove: inTreeModulesToRemove,
 			Modprobe: v1beta1.ModprobeSpec{
 				ModuleName: moduleName,
 				DirName:    dirName,
@@ -100,7 +100,31 @@ var _ = Describe("worker_LoadKmod", func() {
 
 		gomock.InOrder(
 			im.EXPECT().MountImage(ctx, imageName, &cfg),
-			mr.EXPECT().Run(ctx, "-rv", inTreeModuleToRemove),
+			mr.EXPECT().Run(ctx, "-rv", "intree1", "intree2"),
+			mr.EXPECT().Run(ctx, "-vd", dirName, moduleName),
+		)
+
+		Expect(
+			w.LoadKmod(ctx, &cfg, ""),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should use deprecated InTreeModuleToRemove if configured", func() {
+		cfg := v1beta1.ModuleConfig{
+			ContainerImage:        imageName,
+			InTreeModuleToRemove:  "intreeToRemove",
+			InTreeModulesToRemove: nil,
+			Modprobe: v1beta1.ModprobeSpec{
+				ModuleName: moduleName,
+				DirName:    dirName,
+			},
+		}
+
+		gomock.InOrder(
+			im.EXPECT().MountImage(ctx, imageName, &cfg),
+			mr.EXPECT().Run(ctx, "-rv", "intreeToRemove"),
 			mr.EXPECT().Run(ctx, "-vd", dirName, moduleName),
 		)
 

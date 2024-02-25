@@ -51,8 +51,8 @@ type ModuleLoaderData struct {
 	// RegistryTLS set the TLS configs for accessing the registry of the module-loader's image.
 	RegistryTLS *kmmv1beta1.TLSOptions
 
-	// InTreeModuleToRemove - in case string not empty, remove the module prior to loading the module specified in moduleName
-	InTreeModuleToRemove string
+	// InTreeModulesToRemove - in case array not empty, remove the modules prior to loading the module specified in moduleName
+	InTreeModulesToRemove []string
 
 	// used for setting the owner field of pods/buildconfigs
 	Owner metav1.Object

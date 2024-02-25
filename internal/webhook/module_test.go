@@ -175,6 +175,35 @@ var _ = Describe("validateModuleLoaderContainerSpec", func() {
 			),
 		)
 	})
+
+	DescribeTable("should fail when InTreeModulesToRemove and InTreeModuleToRemove both defined",
+		func(inTreeModulesInContainer, inTreeModuleInContainer, inTreeModulesInKM, inTreeModuleInKM bool) {
+			containerSpec := kmmv1beta1.ModuleLoaderContainerSpec{}
+			km := kmmv1beta1.KernelMapping{ContainerImage: "image-url"}
+
+			if inTreeModulesInContainer {
+				containerSpec.InTreeModulesToRemove = []string{"some value"}
+			}
+			if inTreeModuleInContainer {
+				containerSpec.InTreeModuleToRemove = "some value" //nolint:staticcheck
+			}
+			if inTreeModulesInKM {
+				km.InTreeModulesToRemove = []string{"some value"}
+			}
+			if inTreeModuleInKM {
+				km.InTreeModuleToRemove = "some value" //nolint:staticcheck
+			}
+			containerSpec.KernelMappings = []kmmv1beta1.KernelMapping{km}
+
+			err := validateModuleLoaderContainerSpec(containerSpec)
+			Expect(err).ToNot(BeNil())
+		},
+		Entry("InTreeModulesToRemove and InTreeModuleToRemove set in containerspec", true, true, false, false),
+		Entry("InTreeModulesToRemove and InTreeModuleToRemove set in kernel mapping", false, false, true, true),
+		Entry("InTreeModulesToRemove set in container spec, InTreeModuleToRemove set in kernel mapping", true, false, false, true),
+		Entry("InTreeModuleToRemove set in container spec, InTreeModulesToRemove set in kernel mapping", true, false, true, false),
+	)
+
 })
 
 var _ = Describe("validateModprobe", func() {

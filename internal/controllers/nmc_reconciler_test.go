@@ -225,10 +225,10 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 })
 
 var moduleConfig = kmmv1beta1.ModuleConfig{
-	KernelVersion:        "kernel version",
-	ContainerImage:       "container image",
-	InsecurePull:         true,
-	InTreeModuleToRemove: "intree",
+	KernelVersion:         "kernel version",
+	ContainerImage:        "container image",
+	InsecurePull:          true,
+	InTreeModulesToRemove: []string{"intree1", "intree2"},
 	Modprobe: kmmv1beta1.ModprobeSpec{
 		ModuleName:          "test",
 		Parameters:          []string{"a", "b"},
@@ -975,11 +975,11 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 		now := metav1.Now()
 
 		cfg := kmmv1beta1.ModuleConfig{
-			KernelVersion:        "some-kernel-version",
-			ContainerImage:       "some-container-image",
-			InsecurePull:         true,
-			InTreeModuleToRemove: "intree",
-			Modprobe:             kmmv1beta1.ModprobeSpec{ModuleName: "test"},
+			KernelVersion:         "some-kernel-version",
+			ContainerImage:        "some-container-image",
+			InsecurePull:          true,
+			InTreeModulesToRemove: []string{"intree1", "intree2"},
+			Modprobe:              kmmv1beta1.ModprobeSpec{ModuleName: "test"},
 		}
 
 		pod := v1.Pod{
@@ -1184,9 +1184,9 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 	})
 
 	moduleConfig := kmmv1beta1.ModuleConfig{
-		KernelVersion:        "some version",
-		ContainerImage:       "some image",
-		InTreeModuleToRemove: "some kernel module",
+		KernelVersion:         "some version",
+		ContainerImage:        "some image",
+		InTreeModulesToRemove: []string{"some kernel module"},
 	}
 
 	closeAndGetAllEvents := func(events chan string) []string {
@@ -1643,7 +1643,9 @@ func getBaseWorkerPod(subcommand string, action WorkerAction, owner ctrlclient.O
 	hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
 
 	configAnnotationValue := `containerImage: container image
-inTreeModuleToRemove: intree
+inTreeModulesToRemove:
+- intree1
+- intree2
 insecurePull: true
 kernelVersion: kernel version
 modprobe:

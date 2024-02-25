@@ -267,9 +267,9 @@ func (mwg *manifestWorkGenerator) replaceTagWithDigest(image, digest string) (st
 
 func (mwg *manifestWorkGenerator) mappingFromModuleLoaderData(mld *api.ModuleLoaderData) kmmv1beta1.KernelMapping {
 	return kmmv1beta1.KernelMapping{
-		ContainerImage:       mld.ContainerImage,
-		Literal:              mld.KernelVersion,
-		InTreeModuleToRemove: mld.InTreeModuleToRemove,
+		ContainerImage:        mld.ContainerImage,
+		Literal:               mld.KernelVersion,
+		InTreeModulesToRemove: mld.InTreeModulesToRemove,
 	}
 }
 

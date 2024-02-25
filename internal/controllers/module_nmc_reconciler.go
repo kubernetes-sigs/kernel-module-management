@@ -347,10 +347,10 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 	}
 
 	moduleConfig := kmmv1beta1.ModuleConfig{
-		KernelVersion:        mld.KernelVersion,
-		ContainerImage:       mld.ContainerImage,
-		InTreeModuleToRemove: mld.InTreeModuleToRemove,
-		Modprobe:             mld.Modprobe,
+		KernelVersion:         mld.KernelVersion,
+		ContainerImage:        mld.ContainerImage,
+		InTreeModulesToRemove: mld.InTreeModulesToRemove,
+		Modprobe:              mld.Modprobe,
 	}
 
 	if tls := mld.RegistryTLS; tls != nil {

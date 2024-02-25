@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-logr/logr"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -42,11 +43,18 @@ func (w *worker) LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, fir
 		return fmt.Errorf("failed to mount image %s: %v", imageName, err)
 	}
 
-	if inTree := cfg.InTreeModuleToRemove; inTree != "" {
-		w.logger.Info("Unloading in-tree module", "name", inTree)
+	inTreeModulesToRemove := cfg.InTreeModulesToRemove
+	// [TODO] - remove handling cfg.InTreeModuleToRemove once we cease to support it
+	if inTreeModulesToRemove == nil && cfg.InTreeModuleToRemove != "" {
+		inTreeModulesToRemove = []string{cfg.InTreeModuleToRemove}
+	}
 
-		if err = w.mr.Run(ctx, "-rv", inTree); err != nil {
-			return fmt.Errorf("could not remove in-tree module %s: %v", inTree, err)
+	if inTreeModulesToRemove != nil {
+		w.logger.Info("Unloading in-tree modules", "names", inTreeModulesToRemove)
+
+		runArgs := append([]string{"-rv"}, inTreeModulesToRemove...)
+		if err = w.mr.Run(ctx, runArgs...); err != nil {
+			return fmt.Errorf("could not remove in-tree modules %s: %v", strings.Join(inTreeModulesToRemove, ""), err)
 		}
 	}
 

@@ -2121,9 +2121,17 @@ spec:
                         type: string
                       inTreeModuleToRemove:
                         description: |-
-                          InTreeModuleToRemove specifies the in-tree kernel module that should be removed (if present)
+                          Deprecated: please use InTreeModulesToRemove.
+                          InTreeModuleToRemove specifies one in-tree kernel module that should be removed (if present)
                           before loading the kernel module from the ContainerImage
                         type: string
+                      inTreeModulesToRemove:
+                        description: |-
+                          InTreeModulesToRemove specifies any number of  in-tree kernel modules that should be removed (if present)
+                          before loading the kernel module from the ContainerImage
+                        items:
+                          type: string
+                        type: array
                       kernelMappings:
                         description: |-
                           KernelMappings is a list of kernel mappings.
@@ -2224,9 +2232,17 @@ spec:
                               type: string
                             inTreeModuleToRemove:
                               description: |-
-                                InTreeModuleToRemove specifies the in-tree kernel module that should be removed (if present)
+                                Deprecated: please use InTreeModulesToRemove.
+                                InTreeModuleToRemove specifies one in-tree kernel module that should be removed (if present)
                                 before loading the kernel module from the ContainerImage
                               type: string
+                            inTreeModulesToRemove:
+                              description: |-
+                                InTreeModulesToRemove specifies any number of  in-tree kernel modules that should be removed (if present)
+                                before loading the kernel module from the ContainerImage
+                              items:
+                                type: string
+                              type: array
                             literal:
                               description: Literal defines a literal target kernel
                                 version to be matched exactly against node kernels.

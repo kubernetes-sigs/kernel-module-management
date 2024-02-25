@@ -115,9 +115,22 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 		mld.ContainerImage = mod.Spec.ModuleLoader.Container.ContainerImage
 	}
 
-	mld.InTreeModuleToRemove = mod.Spec.ModuleLoader.Container.InTreeModuleToRemove
-	if mapping.InTreeModuleToRemove != "" {
-		mld.InTreeModuleToRemove = mapping.InTreeModuleToRemove
+	mld.InTreeModulesToRemove = mod.Spec.ModuleLoader.Container.InTreeModulesToRemove
+	if mapping.InTreeModulesToRemove != nil {
+		mld.InTreeModulesToRemove = mapping.InTreeModulesToRemove
+	}
+
+	// [TODO] remove this code after InTreeModuleToRemove deprecated field has been
+	// removed from the CRD
+	inTreeModuleToRemove := mod.Spec.ModuleLoader.Container.InTreeModuleToRemove //nolint:staticcheck
+	if mapping.InTreeModuleToRemove != "" {                                      //nolint:staticcheck
+		inTreeModuleToRemove = mapping.InTreeModuleToRemove //nolint:staticcheck
+	}
+
+	// webhook makes sure that InTreeModuleToRemove and InTreeModulesToRemove cannot both
+	// be set, so if inTreeModuleToRemove is not empty, its value should be set into mld.InTreeModulesToRemove
+	if inTreeModuleToRemove != "" {
+		mld.InTreeModulesToRemove = []string{inTreeModuleToRemove}
 	}
 
 	mld.KernelVersion = kernelVersion

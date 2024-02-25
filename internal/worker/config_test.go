@@ -13,9 +13,9 @@ var _ = Describe("ConfigHelper_ReadConfigFile", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		expected := v1beta1.ModuleConfig{
-			ContainerImage:       "registry.local/org/img:tag",
-			InsecurePull:         true,
-			InTreeModuleToRemove: "some-module",
+			ContainerImage:        "registry.local/org/img:tag",
+			InsecurePull:          true,
+			InTreeModulesToRemove: []string{"intree1", "intree2"},
 			Modprobe: v1beta1.ModprobeSpec{
 				ModuleName: "test",
 				Parameters: []string{"key0=value0", "key1=value1"},
