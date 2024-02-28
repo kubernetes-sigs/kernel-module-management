@@ -3,7 +3,7 @@ name: e2e
 on: [pull_request]
 
 env:
-  GO_VERSION: '1.20'
+  GO_VERSION: '1.21'
 
 jobs:
 
@@ -162,7 +162,6 @@ jobs:
           grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
 
       - name: Cache binaries needed by Makefile
-        id: cache-bin
         uses: actions/cache@v4
         with:
           path: ./bin
@@ -171,7 +170,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-        if: steps.cache-bin.outputs.cache-hit != 'true'
 
       - name: Run test
         run: ${{ matrix.script }}
@@ -232,7 +230,6 @@ jobs:
           grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
 
       - name: Cache binaries needed by Makefile
-        id: cache-bin
         uses: actions/cache@v4
         with:
           path: ./bin
@@ -241,7 +238,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-        if: steps.cache-bin.outputs.cache-hit != 'true'
 
       - name: Run test
         run: ./ci/prow/operator-upgrade

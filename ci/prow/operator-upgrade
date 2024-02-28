@@ -13,11 +13,12 @@ sudo echo "127.0.0.1 host.minikube.internal" | sudo tee -a /etc/hosts
 # Build the bundle from the 'main' branch
 git fetch origin
 git checkout -b main origin/main
+go mod tidy
 make bundle bundle-build bundle-push \
     VERSION="1.0.0" \
     BUNDLE_IMG=localhost:5000/kmm/kmm-bundle:current
 # go back to the last branch
-git checkout -
+git checkout -f -
 
 # Install OLM
 make operator-sdk
