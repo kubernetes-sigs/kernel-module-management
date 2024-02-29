@@ -99,6 +99,29 @@ jobs:
           path: kmm-worker_local.tar
           retention-days: 1
 
+  build-webhook-image:
+    runs-on: ubuntu-20.04
+
+    name: Build the webhook server image
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build the image
+        run: make webhookimage-build WEBHOOK_IMG=kmm-webhook-server:local
+
+      - name: Export the image
+        run: docker save -o kmm-webhook-server_local.tar kmm-webhook-server:local
+
+      - name: Upload the image
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-image-webhook-server
+          if-no-files-found: error
+          path: kmm-webhook-server_local.tar
+          retention-days: 1
+
   e2e:
     strategy:
       matrix:
@@ -116,7 +139,7 @@ jobs:
 
     runs-on: ubuntu-20.04
     name: ${{ matrix.name }}
-    needs: [build-operator-image, build-operator-hub-image, build-signing-image, build-worker-image]
+    needs: [build-operator-image, build-operator-hub-image, build-signing-image, build-webhook-image, build-worker-image]
 
     services:
       registry:
@@ -130,31 +153,28 @@ jobs:
 
       - name: Create the minikube cluster
         uses: ./.github/actions/create-minikube-cluster
-        with:
-          start-args: --insecure-registry=host.minikube.internal:5000
 
       - name: Download container images
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Import the KMM operator image into minikube
-        run: minikube image load artifacts/ci-image-kmm/kmm_local.tar
+      - name: Import the KMM operator, webhook server and worker images into minikube
+        run: |
+          minikube image load artifacts/ci-image-kmm/kmm_local.tar
+          minikube image load artifacts/ci-image-webhook-server/kmm-webhook-server_local.tar
+          minikube image load artifacts/ci-image-worker/kmm-worker_local.tar
 
       - name: Import the KMM-hub operator image into minikube
         run: minikube image load artifacts/ci-image-kmm-hub/kmm-hub_local.tar
         if: ${{ matrix.import_hub_image }}
 
-      - name: Copy the signing and worker images to the registry
+      # This image is pulled by the signing pod, so it needs to be stored externally - not in the minikube container runtime.
+      - name: Copy the signing image into the registry
         run: |
           docker load -i artifacts/ci-image-signer/kmm-signimage_local.tar
-          docker load -i artifacts/ci-image-worker/kmm-worker_local.tar
-          
           docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
-          docker tag kmm-worker:local localhost:5000/kmm/worker:local
-          
           docker push localhost:5000/kmm/signimage:local
-          docker push localhost:5000/kmm/worker:local
 
       - name: Set some Ubuntu environment variables
         run: |
@@ -186,7 +206,7 @@ jobs:
 
     runs-on: ubuntu-20.04
     name: operator-upgrade
-    needs: [build-operator-image, build-signing-image, build-worker-image]
+    needs: [build-operator-image, build-signing-image, build-webhook-image, build-worker-image]
 
     services:
       registry:
@@ -213,14 +233,17 @@ jobs:
           # KMM is pulled by operator-sdk in the cluster and not by minikube
           docker load -i artifacts/ci-image-kmm/kmm_local.tar
           docker load -i artifacts/ci-image-signer/kmm-signimage_local.tar
+          docker load -i artifacts/ci-image-webhook-server/kmm-webhook-server_local.tar
           docker load -i artifacts/ci-image-worker/kmm-worker_local.tar
 
           docker tag kmm:local localhost:5000/kmm/kmm:local
           docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
+          docker tag kmm-webhook-server:local localhost:5000/kmm/webhook-server:local
           docker tag kmm-worker:local localhost:5000/kmm/worker:local
 
           docker push localhost:5000/kmm/kmm:local
           docker push localhost:5000/kmm/signimage:local
+          docker push localhost:5000/kmm/webhook-server:local
           docker push localhost:5000/kmm/worker:local
 
       - name: Set some Ubuntu environment variables

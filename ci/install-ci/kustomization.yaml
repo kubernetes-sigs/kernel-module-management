@@ -8,6 +8,15 @@ images:
 - name: gcr.io/k8s-staging-kmm/kernel-module-management-operator
   newName: kmm
   newTag: local
+- name: gcr.io/k8s-staging-kmm/kernel-module-management-signimage
+  newName: host.minikube.internal:5000/kmm/signimage
+  newTag: local
+- name: gcr.io/k8s-staging-kmm/kernel-module-management-webhook-server
+  newName: kmm-webhook-server
+  newTag: local
+- name: gcr.io/k8s-staging-kmm/kernel-module-management-worker
+  newName: kmm-worker
+  newTag: local
 
 patches:
 - patch: |
@@ -22,8 +31,15 @@ patches:
           containers:
             - name: manager
               imagePullPolicy: Never
-              env:
-                - name: RELATED_IMAGE_SIGN
-                  value: host.minikube.internal:5000/kmm/signimage:local
-                - name: RELATED_IMAGE_WORKER
-                  value: host.minikube.internal:5000/kmm/worker:local
+- patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: webhook-server
+      namespace: system
+    spec:
+      template:
+        spec:
+          containers:
+            - name: webhook-server
+              imagePullPolicy: Never

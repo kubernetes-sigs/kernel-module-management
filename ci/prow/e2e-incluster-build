@@ -33,7 +33,7 @@ kubectl apply -f ci/kmm-kmod-dockerfile.yaml
 echo "Add Secrets containing the signing key and certificate..."
 kubectl apply -f ci/secret_kmm-kmod-signing.yaml
 
-kubectl wait --for=condition=Available deployment/kmm-operator-controller -n kmm-operator-system
+kubectl wait --for=condition=Available deployment/kmm-operator-controller deployment/kmm-operator-webhook-server -n kmm-operator-system
 
 echo "Add an kmm-ci Module that contains a valid mapping..."
 kubectl apply -f ci/module-kmm-ci-build-sign.yaml

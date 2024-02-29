@@ -37,6 +37,9 @@ IMAGE_TAG ?= latest
 SIGNER_IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-signimage
 SIGNER_IMG ?= $(SIGNER_IMAGE_TAG_BASE):$(IMAGE_TAG)
 
+WEBHOOK_IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-webhook-server
+WEBHOOK_IMG ?= $(WEBHOOK_IMAGE_TAG_BASE):$(IMAGE_TAG)
+
 WORKER_IMAGE_TAG_BASE ?= gcr.io/k8s-staging-kmm/kernel-module-management-worker
 WORKER_IMG ?= $(WORKER_IMAGE_TAG_BASE):$(IMAGE_TAG)
 
@@ -142,6 +145,9 @@ manager: $(shell find -name "*.go") go.mod go.sum  ## Build manager binary.
 manager-hub: $(shell find -name "*.go") go.mod go.sum  ## Build manager-hub binary.
 	go build -o $@ ./cmd/manager-hub
 
+webhook-server: $(shell find -name "*.go") go.mod go.sum  ## Build webhook-server binary.
+	go build -ldflags="-X main.Version=$(VERSION)" -o $@ ./cmd/webhook-server
+
 worker: $(shell find -name "*.go") go.mod go.sum  ## Build worker binary.
 	go build -ldflags="-X main.Version=$(VERSION)" -o $@ ./cmd/worker
 
@@ -202,12 +208,14 @@ KUSTOMIZE_CONFIG_HUB_DEFAULT ?= config/default-hub
 deploy: deploy-cert-manager manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG) worker=$(WORKER_IMG)
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
+	cd config/webhook-server && $(KUSTOMIZE) edit set image webhook-server=$(WEBHOOK_IMG)
 	kubectl apply -k $(KUSTOMIZE_CONFIG_DEFAULT)
 
 .PHONY: deploy-hub
 deploy-hub: deploy-cert-manager manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager-hub && $(KUSTOMIZE) edit set image controller=$(HUB_IMG)
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
+	cd config/webhook-server && $(KUSTOMIZE) edit set image webhook-server=$(WEBHOOK_IMG)
 	kubectl apply -k $(KUSTOMIZE_CONFIG_HUB_DEFAULT)
 
 .PHONY: undeploy-kmm
@@ -278,6 +286,7 @@ bundle: operator-sdk manifests kustomize ## Generate bundle manifests and metada
 	${OPERATOR_SDK} generate kustomize manifests --apis-dir api
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG) worker=$(WORKER_IMG)
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
+	cd config/webhook-server && $(KUSTOMIZE) edit set image webhook-server=$(WEBHOOK_IMG)
 	kubectl kustomize config/manifests | ${OPERATOR_SDK} generate bundle $(BUNDLE_GEN_FLAGS)
 	cp -r config/manifests/bundle-metadata/* bundle/metadata/
 	${OPERATOR_SDK} bundle validate ./bundle
@@ -292,6 +301,7 @@ bundle-hub: operator-sdk manifests kustomize ## Generate bundle manifests and me
 		--input-dir config/manifests-hub
 	cd config/manager-hub && $(KUSTOMIZE) edit set image controller=$(HUB_IMG)
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
+	cd config/webhook-server && $(KUSTOMIZE) edit set image webhook-server=$(WEBHOOK_IMG)
 	kubectl kustomize config/manifests-hub | ${OPERATOR_SDK} generate bundle --package kernel-module-management-hub $(BUNDLE_GEN_FLAGS)
 	cp -r config/manifests-hub/bundle-metadata/* bundle/metadata/
 	${OPERATOR_SDK} bundle validate ./bundle
@@ -348,6 +358,10 @@ catalog-push: ## Push a catalog image.
 .PHONY: signimage-build 
 signimage-build: ## Build docker image with the signer.
 	docker build -f Dockerfile.signimage -t $(SIGNER_IMG) .
+
+.PHONY: webhookimage-build
+webhookimage-build: ## Build docker image for the webhook server.
+	docker build -f Dockerfile.webhook -t $(WEBHOOK_IMG) .
 
 .PHONY: workerimage-build 
 workerimage-build: ## Build docker image for worker app.

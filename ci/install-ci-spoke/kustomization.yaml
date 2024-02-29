@@ -19,5 +19,3 @@ patches:
               env:
                 - name: KMM_MANAGED
                   value: "1"
-                - name: RELATED_IMAGE_WORKER
-                  value: host.minikube.internal:5000/kmm/worker:local

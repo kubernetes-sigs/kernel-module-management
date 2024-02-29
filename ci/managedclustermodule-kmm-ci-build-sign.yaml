@@ -179,7 +179,7 @@ metadata:
 spec:
   spokeNamespace: kmm-operator-system
   selector:
-    cluster.open-cluster-management.io/clusterset: default
+    name: minikube
   moduleSpec:
     moduleLoader:
       container:
