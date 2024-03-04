@@ -112,6 +112,10 @@ func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
 }
 
 func validateModuleLoaderContainerSpec(container kmmv1beta1.ModuleLoaderContainerSpec) error {
+	if container.InTreeModulesToRemove != nil && container.InTreeModuleToRemove != "" { //nolint:staticcheck
+		return fmt.Errorf("only one of the Container's fields: InTreeModulesToRemove or InTreeModuleToRemove can be defined")
+	}
+
 	for idx, km := range container.KernelMappings {
 		if km.Regexp != "" && km.Literal != "" {
 			return fmt.Errorf("regexp and literal are mutually exclusive properties at kernelMappings[%d]", idx)
@@ -127,6 +131,15 @@ func validateModuleLoaderContainerSpec(container kmmv1beta1.ModuleLoaderContaine
 
 		if container.ContainerImage == "" && km.ContainerImage == "" {
 			return fmt.Errorf("missing spec.moduleLoader.container.kernelMappings[%d].containerImage", idx)
+		}
+
+		if km.InTreeModulesToRemove != nil && km.InTreeModuleToRemove != "" { //nolint:staticcheck
+			return fmt.Errorf("only one of the KernelMapping fields: InTreeModulesToRemove or InTreeModuleToRemove can be defined")
+		}
+
+		if (km.InTreeModulesToRemove != nil && container.InTreeModuleToRemove != "") || //nolint:staticcheck
+			(km.InTreeModuleToRemove != "" && container.InTreeModulesToRemove != nil) { //nolint:staticcheck
+			return fmt.Errorf("only one type if field (InTreeModuleToRemove or InTreeModulesToRemove) can be defined in KenrelMapping or Container")
 		}
 	}
 

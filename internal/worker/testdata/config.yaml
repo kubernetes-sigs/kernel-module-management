@@ -1,6 +1,6 @@
 containerImage: registry.local/org/img:tag
 insecurePull: true
-inTreeModuleToRemove: some-module
+inTreeModulesToRemove: [intree1, intree2]
 modprobe:
   moduleName: test
   parameters: [key0=value0, key1=value1]

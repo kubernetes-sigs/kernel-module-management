@@ -180,7 +180,7 @@ var _ = Describe("prepareModuleLoaderData", func() {
 	})
 
 	DescribeTable("prepare mapping", func(buildExistsInMapping, buildExistsInModuleSpec, signExistsInMapping, SignExistsInModuleSpec,
-		registryTLSExistsInMapping, containerImageExistsInMapping, inTreeModuleToRemoveExistsInMapping bool) {
+		registryTLSExistsInMapping, containerImageExistsInMapping, inTreeModulesToRemoveExistsInMapping bool) {
 		build := &kmmv1beta1.Build{
 			DockerfileConfigMap: &v1.LocalObjectReference{
 				Name: "some name",
@@ -236,9 +236,9 @@ var _ = Describe("prepareModuleLoaderData", func() {
 			mld.Sign = sign
 			signHelper.EXPECT().GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(sign, nil)
 		}
-		if inTreeModuleToRemoveExistsInMapping {
-			mld.InTreeModuleToRemove = "some module"
-			mapping.InTreeModuleToRemove = "some module"
+		if inTreeModulesToRemoveExistsInMapping {
+			mld.InTreeModulesToRemove = []string{"inTreeModule1", "inTreeModule2"}
+			mapping.InTreeModulesToRemove = []string{"inTreeModule1", "inTreeModule2"}
 		}
 
 		res, err := kh.prepareModuleLoaderData(&mapping, &mod, kernelVersion)
@@ -251,7 +251,43 @@ var _ = Describe("prepareModuleLoaderData", func() {
 		Entry("sign in spec only", false, false, false, true, false, false, false),
 		Entry("registryTLS in mapping", false, false, false, false, true, false, false),
 		Entry("containerImage in mapping", false, false, false, false, false, true, false),
-		Entry("inTreeModuleToRemove in mapping", false, false, false, false, false, false, true),
+		Entry("inTreeModulesToRemove in mapping", false, false, false, false, false, false, true),
+	)
+
+	// [TODO] remove this unit test once InTreeModuleToRemove depricated field is removed from CRD
+	DescribeTable("prepare InTreeModules based on InTreeModule", func(inTreeModuleInContainer, inTreeModuleInMapping bool, expectedInTreeModules []string) {
+		mld := api.ModuleLoaderData{
+			Name:               mod.Name,
+			Namespace:          mod.Namespace,
+			ImageRepoSecret:    mod.Spec.ImageRepoSecret,
+			Owner:              &mod,
+			Selector:           mod.Spec.Selector,
+			ServiceAccountName: mod.Spec.ModuleLoader.ServiceAccountName,
+			Modprobe:           mod.Spec.ModuleLoader.Container.Modprobe,
+			ImagePullPolicy:    mod.Spec.ModuleLoader.Container.ImagePullPolicy,
+			KernelVersion:      kernelVersion,
+		}
+		mld.RegistryTLS = &mod.Spec.ModuleLoader.Container.RegistryTLS
+		mld.ContainerImage = mod.Spec.ModuleLoader.Container.ContainerImage
+
+		if inTreeModuleInContainer {
+			mod.Spec.ModuleLoader.Container.InTreeModuleToRemove = "inTreeModuleToRemoveInContainer" //nolint:staticcheck
+			mld.InTreeModulesToRemove = []string{"inTreeModuleToRemoveInContainer"}
+		}
+
+		if inTreeModuleInMapping {
+			mapping.InTreeModuleToRemove = "inTreeModuleToRemoveInMapping" //nolint:staticcheck
+			mld.InTreeModulesToRemove = []string{"inTreeModuleToRemoveInMapping"}
+		}
+
+		res, err := kh.prepareModuleLoaderData(&mapping, &mod, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*res).To(Equal(mld))
+	},
+		Entry("inTreeModule not defined", false, false, nil),
+		Entry("inTreeModule defined in container", true, false, []string{"inTreeModuleToRemoveInContainer"}),
+		Entry("inTreeModule defined in mapping", false, true, []string{"inTreeModuleToRemoveInMapping"}),
+		Entry("inTreeModule defined in mapping and container", true, true, []string{"inTreeModuleToRemoveInMapping"}),
 	)
 })
 

@@ -118,10 +118,16 @@ type KernelMapping struct {
 	// Regexp is a regular expression to be match against node kernels.
 	Regexp string `json:"regexp"`
 
+	// Deprecated: please use InTreeModulesToRemove.
 	// +optional
-	// InTreeModuleToRemove specifies the in-tree kernel module that should be removed (if present)
+	// InTreeModuleToRemove specifies one in-tree kernel module that should be removed (if present)
 	// before loading the kernel module from the ContainerImage
 	InTreeModuleToRemove string `json:"inTreeModuleToRemove"`
+
+	// +optional
+	// InTreeModulesToRemove specifies any number of  in-tree kernel modules that should be removed (if present)
+	// before loading the kernel module from the ContainerImage
+	InTreeModulesToRemove []string `json:"inTreeModulesToRemove"`
 }
 
 type ModprobeArgs struct {
@@ -219,10 +225,16 @@ type ModuleLoaderContainerSpec struct {
 	// RegistryTLS set the TLS configs for accessing the registry of the module-loader's image.
 	RegistryTLS TLSOptions `json:"registryTLS"`
 
+	// Deprecated: please use InTreeModulesToRemove.
 	// +optional
-	// InTreeModuleToRemove specifies the in-tree kernel module that should be removed (if present)
+	// InTreeModuleToRemove specifies one in-tree kernel module that should be removed (if present)
 	// before loading the kernel module from the ContainerImage
 	InTreeModuleToRemove string `json:"inTreeModuleToRemove"`
+
+	// +optional
+	// InTreeModulesToRemove specifies any number of  in-tree kernel modules that should be removed (if present)
+	// before loading the kernel module from the ContainerImage
+	InTreeModulesToRemove []string `json:"inTreeModulesToRemove"`
 }
 
 type ModuleLoaderSpec struct {

@@ -666,18 +666,18 @@ var _ = Describe("enableModuleOnNode", func() {
 		kernelVersion = "some version"
 		ctx = context.Background()
 		mld = &api.ModuleLoaderData{
-			KernelVersion:        kernelVersion,
-			Name:                 moduleName,
-			Namespace:            moduleNamespace,
-			InTreeModuleToRemove: "InTreeModuleToRemove",
-			ContainerImage:       "containerImage",
+			KernelVersion:         kernelVersion,
+			Name:                  moduleName,
+			Namespace:             moduleNamespace,
+			InTreeModulesToRemove: []string{"InTreeModuleToRemove"},
+			ContainerImage:        "containerImage",
 		}
 
 		expectedModuleConfig = &kmmv1beta1.ModuleConfig{
-			KernelVersion:        mld.KernelVersion,
-			ContainerImage:       mld.ContainerImage,
-			InTreeModuleToRemove: mld.InTreeModuleToRemove,
-			Modprobe:             mld.Modprobe,
+			KernelVersion:         mld.KernelVersion,
+			ContainerImage:        mld.ContainerImage,
+			InTreeModulesToRemove: mld.InTreeModulesToRemove,
+			Modprobe:              mld.Modprobe,
 		}
 	})
 
