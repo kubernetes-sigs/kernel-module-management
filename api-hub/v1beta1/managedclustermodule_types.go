@@ -27,7 +27,7 @@ type ManagedClusterModuleSpec struct {
 	ModuleSpec kmmv1beta1.ModuleSpec `json:"moduleSpec,omitempty"`
 
 	// SpokeNamespace describes the Spoke namespace, in which the ModuleSpec should be applied.
-	SpokeNamespace string `json:"spokeNamespace,omitempty"`
+	SpokeNamespace string `json:"spokeNamespace"`
 
 	// Selector describes on which managed clusters the ModuleSpec should be applied.
 	Selector map[string]string `json:"selector"`

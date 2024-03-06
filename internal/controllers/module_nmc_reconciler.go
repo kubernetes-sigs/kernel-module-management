@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+//+kubebuilder:rbac:groups="core",resources=namespaces,verbs=get;list;patch;watch
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;watch
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=nodemodulesconfigs,verbs=get;list;watch;patch;create
 
@@ -47,6 +48,7 @@ type schedulingData struct {
 
 type ModuleNMCReconciler struct {
 	filter      *filter.Filter
+	nsLabeler   namespaceLabeler
 	reconHelper moduleNMCReconcilerHelperAPI
 }
 
@@ -59,6 +61,7 @@ func NewModuleNMCReconciler(client client.Client,
 	reconHelper := newModuleNMCReconcilerHelper(client, kernelAPI, registryAPI, nmcHelper, scheme)
 	return &ModuleNMCReconciler{
 		filter:      filter,
+		nsLabeler:   newNamespaceLabeler(client),
 		reconHelper: reconHelper,
 	}
 }
@@ -78,11 +81,19 @@ func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	if mod.GetDeletionTimestamp() != nil {
 		//Module is being deleted
+		if err = mnr.nsLabeler.tryRemovingLabel(ctx, mod.Namespace, mod.Name); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while trying to remove the label on namespace %s: %v", mod.Namespace, err)
+		}
+
 		err = mnr.reconHelper.finalizeModule(ctx, mod)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to finalize %s Module: %v", req.NamespacedName, err)
 		}
 		return ctrl.Result{}, nil
+	}
+
+	if err = mnr.nsLabeler.setLabel(ctx, mod.Namespace); err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not set label %q on namespace %s: %v", constants.NamespaceLabelKey, mod.Namespace, err)
 	}
 
 	err = mnr.reconHelper.setFinalizerAndStatus(ctx, mod)
@@ -145,7 +156,7 @@ func (mnr *ModuleNMCReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(mnr)
 }
 
-//go:generate mockgen -source=module_nmc_reconciler.go -package=controllers -destination=mock_module_nmc_reconciler.go moduleNMCReconcilerHelperAPI
+//go:generate mockgen -source=module_nmc_reconciler.go -package=controllers -destination=mock_module_nmc_reconciler.go moduleNMCReconcilerHelperAPI,namespaceLabeler
 
 type moduleNMCReconcilerHelperAPI interface {
 	setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error
@@ -338,14 +349,19 @@ func (mnrh *moduleNMCReconcilerHelper) prepareSchedulingData(ctx context.Context
 
 func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error {
 	logger := log.FromContext(ctx)
-	exists, err := module.ImageExists(ctx, mnrh.client, mnrh.registryAPI, mld, mld.Namespace, mld.ContainerImage)
-	if err != nil {
-		return fmt.Errorf("failed to verify is image %s exists: %v", mld.ContainerImage, err)
+
+	if module.ShouldBeBuilt(mld) || module.ShouldBeSigned(mld) {
+		exists, err := module.ImageExists(ctx, mnrh.client, mnrh.registryAPI, mld, mld.Namespace, mld.ContainerImage)
+		if err != nil {
+			return fmt.Errorf("failed to verify that image %s exists: %v", mld.ContainerImage, err)
+		}
+		if !exists {
+			// skip updating NMC, reconciliation will kick in once the build pod is completed
+			logger.V(1).Info("Image does not exist, not adding to NMC", "nmc name", node.Name, "container image", mld.ContainerImage)
+			return nil
+		}
 	}
-	if !exists {
-		// skip updating NMC, reconciliation will kick in once the build pod is completed
-		return nil
-	}
+
 	moduleConfig := kmmv1beta1.ModuleConfig{
 		KernelVersion:        mld.KernelVersion,
 		ContainerImage:       mld.ContainerImage,
@@ -362,8 +378,7 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 	}
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmcObj, func() error {
-		err = mnrh.nmcHelper.SetModuleConfig(nmcObj, mld, &moduleConfig)
-		if err != nil {
+		if err := mnrh.nmcHelper.SetModuleConfig(nmcObj, mld, &moduleConfig); err != nil {
 			return err
 		}
 
@@ -437,6 +452,80 @@ func (mnrh *moduleNMCReconcilerHelper) moduleUpdateWorkerPodsStatus(ctx context.
 	mod.Status.ModuleLoader.AvailableNumber = int32(numAvailable)
 
 	return mnrh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
+}
+
+type namespaceLabeler interface {
+	setLabel(ctx context.Context, name string) error
+	tryRemovingLabel(ctx context.Context, name, moduleName string) error
+}
+
+type namespaceLabelerImpl struct {
+	client client.Client
+}
+
+func newNamespaceLabeler(client client.Client) namespaceLabeler {
+	return &namespaceLabelerImpl{client: client}
+}
+
+func (h *namespaceLabelerImpl) setLabel(ctx context.Context, name string) error {
+	logger := log.FromContext(ctx)
+
+	ns := v1.Namespace{}
+
+	if err := h.client.Get(ctx, types.NamespacedName{Name: name}, &ns); err != nil {
+		return fmt.Errorf("could not get namespace %s: %v", name, err)
+	}
+
+	if !meta.HasLabel(&ns, constants.NamespaceLabelKey) {
+		nsCopy := ns.DeepCopy()
+
+		logger.Info("Setting namespace label")
+		meta.SetLabel(&ns, constants.NamespaceLabelKey, "")
+
+		return h.client.Patch(ctx, &ns, client.MergeFrom(nsCopy))
+	}
+
+	return nil
+}
+
+func (h *namespaceLabelerImpl) tryRemovingLabel(ctx context.Context, name, moduleName string) error {
+	logger := log.FromContext(ctx)
+
+	modList := kmmv1beta1.ModuleList{}
+
+	opt := client.InNamespace(name)
+
+	if err := h.client.List(ctx, &modList, opt); err != nil {
+		return fmt.Errorf("could not list modules in namespace %s: %v", name, err)
+	}
+
+	if count := len(modList.Items); count > 1 {
+		logger.Info("Namespace still contains modules; not removing the label", "count", count)
+
+		if verboseLogger := logger.V(1); verboseLogger.Enabled() {
+			modNames := make([]string, 0, count)
+
+			for _, m := range modList.Items {
+				modNames = append(modNames, m.Name)
+			}
+
+			verboseLogger.Info("Remaining modules", "names", modNames)
+		}
+
+		return nil
+	}
+
+	ns := &v1.Namespace{}
+
+	if err := h.client.Get(ctx, types.NamespacedName{Name: name}, ns); err != nil {
+		return fmt.Errorf("could not get namespace %s: %v", name, err)
+	}
+
+	nsCopy := ns.DeepCopy()
+
+	meta.RemoveLabel(ns, constants.NamespaceLabelKey)
+
+	return h.client.Patch(ctx, ns, client.MergeFrom(nsCopy))
 }
 
 func prepareNodeSchedulingData(node v1.Node, mld *api.ModuleLoaderData, currentNMCs sets.Set[string]) schedulingData {
