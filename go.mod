@@ -13,7 +13,7 @@ require (
 	github.com/google/go-containerregistry v0.19.0
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20230523181351-c3f8a49229d3
 	github.com/mitchellh/hashstructure/v2 v2.0.2
-	github.com/moby/moby v25.0.3+incompatible
+	github.com/moby/moby v25.0.4+incompatible
 	github.com/onsi/ginkgo/v2 v2.16.0
 	github.com/onsi/gomega v1.31.1
 	github.com/otiai10/copy v1.14.0
