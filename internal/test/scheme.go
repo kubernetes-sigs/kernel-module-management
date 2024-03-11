@@ -3,6 +3,7 @@ package test
 import (
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	kmmv1beta2 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -15,6 +16,7 @@ func TestScheme() (*runtime.Scheme, error) {
 	funcs := []func(s *runtime.Scheme) error{
 		scheme.AddToScheme,
 		kmmv1beta1.AddToScheme,
+		kmmv1beta2.AddToScheme,
 		hubv1beta1.AddToScheme,
 		clusterv1.Install,
 		workv1.Install,

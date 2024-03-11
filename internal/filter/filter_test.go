@@ -727,10 +727,7 @@ var _ = Describe("FindPreflightsForModule", func() {
 
 	It("preflight exists", func() {
 		preflight := kmmv1beta1.PreflightValidation{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "preflight",
-				Namespace: "preflightNamespace",
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: "preflight"},
 		}
 
 		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -742,7 +739,7 @@ var _ = Describe("FindPreflightsForModule", func() {
 
 		expectedRes := []reconcile.Request{
 			reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: preflight.Name, Namespace: preflight.Namespace},
+				NamespacedName: types.NamespacedName{Name: preflight.Name},
 			},
 		}
 

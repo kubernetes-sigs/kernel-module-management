@@ -4,6 +4,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // ModuleLoaderData contains all the data needed for succesfull execution of
@@ -56,4 +57,11 @@ type ModuleLoaderData struct {
 
 	// used for setting the owner field of pods/buildconfigs
 	Owner metav1.Object
+}
+
+func (mld *ModuleLoaderData) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      mld.Name,
+		Namespace: mld.Namespace,
+	}
 }
