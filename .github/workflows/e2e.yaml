@@ -261,6 +261,14 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Install grpcurl
+        run: |
+          curl -LO https://github.com/fullstorydev/grpcurl/releases/download/v1.8.9/grpcurl_1.8.9_linux_x86_64.tar.gz
+          tar -xvzf grpcurl_1.8.9_linux_x86_64.tar.gz -C /tmp/
+          chmod +x /tmp/grpcurl
+          mv /tmp/grpcurl /usr/local/bin/
+          rm grpcurl_1.8.9_linux_x86_64.tar.gz
+
       - name: Run test
         run: ./ci/prow/operator-upgrade
 

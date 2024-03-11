@@ -10,16 +10,6 @@ set -euxo pipefail
 # running host and the minikube cluster.
 sudo echo "127.0.0.1 host.minikube.internal" | sudo tee -a /etc/hosts
 
-# Build the bundle from the 'main' branch
-git fetch origin
-git checkout -b main origin/main
-go mod tidy
-make bundle bundle-build bundle-push \
-    VERSION="1.0.0" \
-    BUNDLE_IMG=localhost:5000/kmm/kmm-bundle:current
-# go back to the last branch
-git checkout -f -
-
 # Install OLM
 make operator-sdk
 ./bin/operator-sdk olm install
@@ -32,13 +22,18 @@ make operator-sdk
 timeout 3m bash -c 'until [ "$(kubectl -n olm get catalogsource/operatorhubio-catalog -o jsonpath={.status.connectionState.lastObservedState})" = "READY" ]; do sleep 5; done'
 
 # Deploy the current bundle
-./bin/operator-sdk run bundle host.minikube.internal:5000/kmm/kmm-bundle:current \
+kubectl -n olm patch svc/operatorhubio-catalog --type merge -p '{"spec":{"type": "NodePort"}}'
+catalog_url=$(minikube service operatorhubio-catalog -n olm --url | cut -d"/" -f3)
+latest_published_bundle=$(grpcurl -d '{"pkgName": "kernel-module-management", "channelName": "alpha"}' -plaintext ${catalog_url} api.Registry/GetBundleForChannel | jq -r '.bundlePath')
+
+./bin/operator-sdk run bundle ${latest_published_bundle} \
     --namespace operators \
-    --use-http
+    --use-http \
+    --timeout 5m0s
+kubectl wait --for=condition=Available -n operators --timeout=1m deployment/kmm-operator-controller
 
 # Build the new bundle
 make bundle bundle-build bundle-push \
-    VERSION="2.0.0" \
     IMG=host.minikube.internal:5000/kmm/kmm:local \
     SIGNER_IMG=host.minikube.internal:5000/kmm/signimage:local \
     WEBHOOK_IMG=host.minikube.internal:5000/kmm/webhook-server:local \
@@ -48,5 +43,9 @@ make bundle bundle-build bundle-push \
 # Upgrade to the new bundle
 ./bin/operator-sdk run bundle-upgrade host.minikube.internal:5000/kmm/kmm-bundle:local \
     --namespace operators \
-    --use-http
+    --use-http \
+    --timeout 5m0s
+kubectl wait --for=condition=Available -n operators --timeout=1m \
+    deployment/kmm-operator-controller \
+    deployment/kmm-operator-webhook-server
 
