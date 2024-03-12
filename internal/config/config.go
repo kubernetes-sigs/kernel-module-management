@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -10,6 +11,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
+
+type Job struct {
+	GCDelay time.Duration `yaml:"gcDelay,omitempty"`
+}
 
 type Worker struct {
 	RunAsUser            *int64  `yaml:"runAsUser"`
@@ -30,6 +35,7 @@ type Metrics struct {
 
 type Config struct {
 	HealthProbeBindAddress string         `yaml:"healthProbeBindAddress"`
+	Job                    Job            `yaml:"job"`
 	LeaderElection         LeaderElection `yaml:"leaderElection"`
 	Metrics                Metrics        `yaml:"metrics"`
 	WebhookPort            int            `yaml:"webhookPort"`

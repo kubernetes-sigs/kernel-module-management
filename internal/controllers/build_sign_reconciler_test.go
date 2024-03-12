@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
@@ -71,7 +72,7 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(true, nil)
-		mockReconHelper.EXPECT().garbageCollect(ctx, &mod, mappings).Return(returnedError)
+		mockReconHelper.EXPECT().garbageCollect(ctx, &mod).Return(returnedError)
 
 	executeTestFunction:
 		res, err := bsr.Reconcile(ctx, &mod)
@@ -93,7 +94,7 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, mod, selectNodesList).Return(mappings, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(false, nil),
-			mockReconHelper.EXPECT().garbageCollect(ctx, mod, mappings).Return(nil),
+			mockReconHelper.EXPECT().garbageCollect(ctx, mod).Return(nil),
 		)
 
 		res, err := bsr.Reconcile(ctx, mod)
@@ -110,7 +111,7 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, mod, selectNodesList).Return(mappings, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(false, nil),
-			mockReconHelper.EXPECT().garbageCollect(ctx, mod, mappings).Return(nil),
+			mockReconHelper.EXPECT().garbageCollect(ctx, mod).Return(nil),
 		)
 
 		res, err := bsr.Reconcile(ctx, mod)
@@ -127,7 +128,7 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, mod, selectNodesList).Return(mappings, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(true, nil),
-			mockReconHelper.EXPECT().garbageCollect(ctx, mod, mappings).Return(nil),
+			mockReconHelper.EXPECT().garbageCollect(ctx, mod).Return(nil),
 		)
 
 		res, err := bsr.Reconcile(ctx, mod)
@@ -147,7 +148,7 @@ var _ = Describe("BuildSignReconciler_getNodesListBySelector", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		bsrh = newBuildSignReconcilerHelper(clnt, nil, nil, nil)
+		bsrh = newBuildSignReconcilerHelper(clnt, nil, nil, nil, 0)
 	})
 
 	It("list failed", func() {
@@ -203,7 +204,7 @@ var _ = Describe("BuildSignReconciler_getRelevantKernelMappings", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mockKM = module.NewMockKernelMapper(ctrl)
-		bsrh = newBuildSignReconcilerHelper(nil, nil, nil, mockKM)
+		bsrh = newBuildSignReconcilerHelper(nil, nil, nil, mockKM, 0)
 	})
 
 	node1 := v1.Node{
@@ -273,7 +274,7 @@ var _ = Describe("BuildSignReconciler_handleBuild", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mockBM = build.NewMockManager(ctrl)
-		bsrh = newBuildSignReconcilerHelper(nil, mockBM, nil, nil)
+		bsrh = newBuildSignReconcilerHelper(nil, mockBM, nil, nil, 0)
 	})
 
 	const (
@@ -345,7 +346,7 @@ var _ = Describe("BuildSignReconciler_handleSigning", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mockSM = sign.NewMockSignManager(ctrl)
-		bsrh = newBuildSignReconcilerHelper(nil, nil, mockSM, nil)
+		bsrh = newBuildSignReconcilerHelper(nil, nil, mockSM, nil, 0)
 	})
 
 	const (
@@ -435,6 +436,8 @@ var _ = Describe("BuildSignReconciler_handleSigning", func() {
 })
 
 var _ = Describe("ModuleReconciler_garbageCollect", func() {
+	const gcDelay = time.Hour
+
 	var (
 		ctrl   *gomock.Controller
 		mockBM *build.MockManager
@@ -446,7 +449,7 @@ var _ = Describe("ModuleReconciler_garbageCollect", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mockBM = build.NewMockManager(ctrl)
 		mockSM = sign.NewMockSignManager(ctrl)
-		bsrh = newBuildSignReconcilerHelper(nil, mockBM, mockSM, nil)
+		bsrh = newBuildSignReconcilerHelper(nil, mockBM, mockSM, nil, gcDelay)
 	})
 
 	mod := &kmmv1beta1.Module{
@@ -457,32 +460,26 @@ var _ = Describe("ModuleReconciler_garbageCollect", func() {
 	}
 
 	It("good flow", func() {
-		mldMappings := map[string]*api.ModuleLoaderData{
-			"kernelVersion1": &api.ModuleLoaderData{}, "kernelVersion2": &api.ModuleLoaderData{},
-		}
 		gomock.InOrder(
-			mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, nil),
-			mockSM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, nil),
+			mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod, gcDelay).Return(nil, nil),
+			mockSM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod, gcDelay).Return(nil, nil),
 		)
 
-		err := bsrh.garbageCollect(context.Background(), mod, mldMappings)
+		err := bsrh.garbageCollect(context.Background(), mod)
 
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	DescribeTable("check error flows", func(buildError bool) {
 		returnedError := fmt.Errorf("some error")
-		mldMappings := map[string]*api.ModuleLoaderData{
-			"kernelVersion1": &api.ModuleLoaderData{}, "kernelVersion2": &api.ModuleLoaderData{},
-		}
 		if buildError {
-			mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, returnedError)
+			mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod, gcDelay).Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, nil)
-		mockSM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod).Return(nil, returnedError)
+		mockBM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod, gcDelay).Return(nil, nil)
+		mockSM.EXPECT().GarbageCollect(context.Background(), mod.Name, mod.Namespace, mod, gcDelay).Return(nil, returnedError)
 	executeTestFunction:
-		err := bsrh.garbageCollect(context.Background(), mod, mldMappings)
+		err := bsrh.garbageCollect(context.Background(), mod)
 
 		Expect(err).To(HaveOccurred())
 	},

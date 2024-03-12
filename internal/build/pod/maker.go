@@ -92,7 +92,7 @@ func (m *maker) MakePodTemplate(
 			Namespace:    mld.Namespace,
 			Labels:       m.podHelper.PodLabels(mld.Name, mld.KernelVersion, utils.PodTypeBuild),
 			Annotations:  map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash)},
-			Finalizers:   []string{constants.JobEventFinalizer},
+			Finalizers:   []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
 		},
 		Spec: podSpec,
 	}

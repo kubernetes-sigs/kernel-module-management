@@ -1,6 +1,8 @@
 package config
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/utils/ptr"
@@ -15,6 +17,9 @@ var _ = Describe("ParseFile", func() {
 	It("should parse the file correctly", func() {
 		expected := &Config{
 			HealthProbeBindAddress: ":8081",
+			Job: Job{
+				GCDelay: time.Hour,
+			},
 			LeaderElection: LeaderElection{
 				Enabled:    true,
 				ResourceID: "some-resource-id",

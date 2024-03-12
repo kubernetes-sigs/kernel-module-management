@@ -163,7 +163,7 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 						BlockOwnerDeletion: ptr.To(true),
 					},
 				},
-				Finalizers: []string{constants.JobEventFinalizer},
+				Finalizers: []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
 			},
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{
