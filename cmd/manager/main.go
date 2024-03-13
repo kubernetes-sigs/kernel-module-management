@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -34,7 +35,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	v1beta12 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
@@ -49,7 +50,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	//+kubebuilder:scaffold:imports
 )
@@ -58,7 +58,8 @@ var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(v1beta12.AddToScheme(scheme))
+	utilruntime.Must(v1beta1.AddToScheme(scheme))
+	utilruntime.Must(v1beta2.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -182,7 +183,7 @@ func main() {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeLabelModuleVersionReconcilerName)
 	}
 
-	preflightStatusUpdaterAPI := statusupdater.NewPreflightStatusUpdater(client)
+	preflightStatusUpdaterAPI := preflight.NewStatusUpdater(client)
 	preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
 
 	if err = controllers.NewPreflightValidationReconciler(client, filterAPI, metricsAPI, preflightStatusUpdaterAPI, preflightAPI).SetupWithManager(mgr); err != nil {

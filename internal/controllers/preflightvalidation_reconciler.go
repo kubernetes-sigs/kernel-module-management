@@ -21,11 +21,11 @@ import (
 	"fmt"
 	"time"
 
-	v1beta12 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -49,7 +49,7 @@ type PreflightValidationReconciler struct {
 	client        client.Client
 	filter        *filter.Filter
 	metricsAPI    metrics.Metrics
-	statusUpdater statusupdater.PreflightStatusUpdater
+	statusUpdater preflight.StatusUpdater
 	preflight     preflight.PreflightAPI
 }
 
@@ -57,8 +57,9 @@ func NewPreflightValidationReconciler(
 	client client.Client,
 	filter *filter.Filter,
 	metricsAPI metrics.Metrics,
-	statusUpdater statusupdater.PreflightStatusUpdater,
-	preflight preflight.PreflightAPI) *PreflightValidationReconciler {
+	statusUpdater preflight.StatusUpdater,
+	preflight preflight.PreflightAPI,
+) *PreflightValidationReconciler {
 	return &PreflightValidationReconciler{
 		client:        client,
 		filter:        filter,
@@ -70,10 +71,10 @@ func NewPreflightValidationReconciler(
 func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(PreflightValidationReconcilerName).
-		For(&v1beta12.PreflightValidation{}, builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate())).
+		For(&v1beta2.PreflightValidation{}, builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate())).
 		Owns(&v1.Pod{}).
 		Watches(
-			&v1beta12.Module{},
+			&v1beta1.Module{},
 			handler.EnqueueRequestsFromMapFunc(r.filter.EnqueueAllPreflightValidations),
 			builder.WithPredicates(filter.PreflightReconcilerUpdatePredicate()),
 		).
@@ -81,7 +82,7 @@ func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error
 			MaxConcurrentReconciles: 1,
 		}).
 		Complete(
-			reconcile.AsReconciler[*v1beta12.PreflightValidation](r.client, r),
+			reconcile.AsReconciler[*v1beta2.PreflightValidation](r.client, r),
 		)
 }
 
@@ -90,7 +91,7 @@ func (r *PreflightValidationReconciler) SetupWithManager(mgr ctrl.Manager) error
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=preflightvalidations/status,verbs=get;update;patch
 
 // Reconcile Reconiliation entry point
-func (r *PreflightValidationReconciler) Reconcile(ctx context.Context, pv *v1beta12.PreflightValidation) (ctrl.Result, error) {
+func (r *PreflightValidationReconciler) Reconcile(ctx context.Context, pv *v1beta2.PreflightValidation) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Start PreflightValidation Reconciliation")
 
@@ -115,7 +116,7 @@ func (r *PreflightValidationReconciler) Reconcile(ctx context.Context, pv *v1bet
 	return ctrl.Result{RequeueAfter: time.Second * reconcileRequeueInSeconds}, nil
 }
 
-func (r *PreflightValidationReconciler) runPreflightValidation(ctx context.Context, pv *v1beta12.PreflightValidation) (bool, error) {
+func (r *PreflightValidationReconciler) runPreflightValidation(ctx context.Context, pv *v1beta2.PreflightValidation) (bool, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	modulesToCheck, err := r.getModulesToCheck(ctx, pv)
@@ -130,16 +131,16 @@ func (r *PreflightValidationReconciler) runPreflightValidation(ctx context.Conte
 
 		log.Info("module preflight validation result", "name", module.Name, "verified", verified)
 
-		r.updatePreflightStatus(ctx, pv, module.Name, message, verified)
+		r.updatePreflightStatus(ctx, pv, types.NamespacedName{Name: module.Name, Namespace: module.Namespace}, message, verified)
 	}
 
-	return r.checkPreflightCompletion(ctx, pv.Name, pv.Namespace)
+	return r.checkPreflightCompletion(ctx, pv.Name)
 }
 
-func (r *PreflightValidationReconciler) getModulesToCheck(ctx context.Context, pv *v1beta12.PreflightValidation) ([]v1beta12.Module, error) {
+func (r *PreflightValidationReconciler) getModulesToCheck(ctx context.Context, pv *v1beta2.PreflightValidation) ([]v1beta1.Module, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	modulesList := v1beta12.ModuleList{}
+	modulesList := v1beta1.ModuleList{}
 	err := r.client.List(ctx, &modulesList)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get list of all Modules: %w", err)
@@ -150,67 +151,78 @@ func (r *PreflightValidationReconciler) getModulesToCheck(ctx context.Context, p
 		return nil, fmt.Errorf("failed to preset new modules' statuses: %w", err)
 	}
 
-	modulesToCheck := make([]v1beta12.Module, 0, len(modulesList.Items))
+	modulesToCheck := make([]v1beta1.Module, 0, len(modulesList.Items))
 	for _, module := range modulesList.Items {
 		if module.GetDeletionTimestamp() != nil {
 			log.Info("Module is marked for deletion, skipping preflight validation", "name", module.Name)
 			continue
 		}
-		if pv.Status.CRStatuses[module.Name].VerificationStatus != v1beta12.VerificationTrue {
+
+		status, ok := preflight.FindModuleStatus(pv.Status.Modules, types.NamespacedName{Name: module.Name, Namespace: module.Namespace})
+		if !ok || status.VerificationStatus != v1beta2.VerificationTrue {
 			modulesToCheck = append(modulesToCheck, module)
 		}
 	}
+
 	return modulesToCheck, nil
 }
 
-func (r *PreflightValidationReconciler) updatePreflightStatus(ctx context.Context, pv *v1beta12.PreflightValidation, moduleName, message string, verified bool) {
+func (r *PreflightValidationReconciler) updatePreflightStatus(ctx context.Context, pv *v1beta2.PreflightValidation, moduleName types.NamespacedName, message string, verified bool) {
 	log := ctrl.LoggerFrom(ctx)
-	verificationStatus := v1beta12.VerificationFalse
-	verificationStage := v1beta12.VerificationStageRequeued
+	verificationStatus := v1beta2.VerificationFalse
+	verificationStage := v1beta2.VerificationStageRequeued
 	if verified {
-		verificationStatus = v1beta12.VerificationTrue
-		verificationStage = v1beta12.VerificationStageDone
+		verificationStatus = v1beta2.VerificationTrue
+		verificationStage = v1beta2.VerificationStageDone
 	}
-	err := r.statusUpdater.PreflightSetVerificationStatus(ctx, pv, moduleName, verificationStatus, message)
+	err := r.statusUpdater.SetVerificationStatus(ctx, pv, moduleName, verificationStatus, message)
 	if err != nil {
 		log.Info(utils.WarnString("failed to update the status of Module CR in preflight"), "module", moduleName, "error", err)
 	}
 
-	err = r.statusUpdater.PreflightSetVerificationStage(ctx, pv, moduleName, verificationStage)
+	err = r.statusUpdater.SetVerificationStage(ctx, pv, moduleName, verificationStage)
 	if err != nil {
 		log.Info(utils.WarnString("failed to update the stage of Module CR in preflight"), "module", moduleName, "error", err)
 	}
 }
 
-func (r *PreflightValidationReconciler) presetModulesStatuses(ctx context.Context, pv *v1beta12.PreflightValidation, modules []v1beta12.Module) error {
-	if pv.Status.CRStatuses == nil {
-		pv.Status.CRStatuses = make(map[string]*v1beta12.CRStatus, len(modules))
+func (r *PreflightValidationReconciler) presetModulesStatuses(ctx context.Context, pv *v1beta2.PreflightValidation, modules []v1beta1.Module) error {
+	if pv.Status.Modules == nil {
+		pv.Status.Modules = make([]v1beta2.PreflightValidationModuleStatus, 0, len(modules))
 	}
-	existingModulesName := sets.New[string]()
-	newModulesNames := make([]string, 0, len(modules))
+
+	existingModulesName := sets.New[types.NamespacedName]()
+	newModulesNames := make([]types.NamespacedName, 0, len(modules))
+
 	for _, module := range modules {
 		if module.GetDeletionTimestamp() != nil {
 			continue
 		}
-		existingModulesName.Insert(module.Name)
-		if _, ok := pv.Status.CRStatuses[module.Name]; ok {
-			continue
+
+		nsn := types.NamespacedName{
+			Name:      module.Name,
+			Namespace: module.Namespace,
 		}
-		newModulesNames = append(newModulesNames, module.Name)
+
+		existingModulesName.Insert(nsn)
+
+		if _, ok := preflight.FindModuleStatus(pv.Status.Modules, nsn); !ok {
+			newModulesNames = append(newModulesNames, nsn)
+		}
 	}
-	return r.statusUpdater.PreflightPresetStatuses(ctx, pv, existingModulesName, newModulesNames)
+	return r.statusUpdater.PresetStatuses(ctx, pv, existingModulesName, newModulesNames)
 }
 
-func (r *PreflightValidationReconciler) checkPreflightCompletion(ctx context.Context, name, namespace string) (bool, error) {
-	pv := v1beta12.PreflightValidation{}
-	err := r.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &pv)
+func (r *PreflightValidationReconciler) checkPreflightCompletion(ctx context.Context, name string) (bool, error) {
+	pv := v1beta2.PreflightValidation{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: name}, &pv)
 	if err != nil {
 		return false, fmt.Errorf("failed to get preflight validation object in checkPreflightCompletion: %w", err)
 	}
 
-	for modName, crStatus := range pv.Status.CRStatuses {
-		if crStatus.VerificationStatus != v1beta12.VerificationTrue {
-			ctrl.LoggerFrom(ctx).Info("at least one Module is not verified yet", "module", modName, "status", crStatus.VerificationStatus)
+	for _, crStatus := range pv.Status.Modules {
+		if crStatus.VerificationStatus != v1beta2.VerificationTrue {
+			ctrl.LoggerFrom(ctx).Info("at least one Module is not verified yet", "module name", crStatus.Name, "module namespace", crStatus.Namespace, "status", crStatus.VerificationStatus)
 			return false, nil
 		}
 	}

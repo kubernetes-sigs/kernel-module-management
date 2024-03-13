@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	v1beta2 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -41,7 +42,7 @@ func (m *MockPreflightAPI) EXPECT() *MockPreflightAPIMockRecorder {
 }
 
 // PreflightUpgradeCheck mocks base method.
-func (m *MockPreflightAPI) PreflightUpgradeCheck(ctx context.Context, pv *v1beta1.PreflightValidation, mod *v1beta1.Module) (bool, string) {
+func (m *MockPreflightAPI) PreflightUpgradeCheck(ctx context.Context, pv *v1beta2.PreflightValidation, mod *v1beta1.Module) (bool, string) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PreflightUpgradeCheck", ctx, pv, mod)
 	ret0, _ := ret[0].(bool)
@@ -79,7 +80,7 @@ func (m *MockpreflightHelperAPI) EXPECT() *MockpreflightHelperAPIMockRecorder {
 }
 
 // verifyBuild mocks base method.
-func (m *MockpreflightHelperAPI) verifyBuild(ctx context.Context, pv *v1beta1.PreflightValidation, mld *api.ModuleLoaderData) (bool, string) {
+func (m *MockpreflightHelperAPI) verifyBuild(ctx context.Context, pv *v1beta2.PreflightValidation, mld *api.ModuleLoaderData) (bool, string) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "verifyBuild", ctx, pv, mld)
 	ret0, _ := ret[0].(bool)
@@ -109,7 +110,7 @@ func (mr *MockpreflightHelperAPIMockRecorder) verifyImage(ctx, mld any) *gomock.
 }
 
 // verifySign mocks base method.
-func (m *MockpreflightHelperAPI) verifySign(ctx context.Context, pv *v1beta1.PreflightValidation, mld *api.ModuleLoaderData) (bool, string) {
+func (m *MockpreflightHelperAPI) verifySign(ctx context.Context, pv *v1beta2.PreflightValidation, mld *api.ModuleLoaderData) (bool, string) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "verifySign", ctx, pv, mld)
 	ret0, _ := ret[0].(bool)

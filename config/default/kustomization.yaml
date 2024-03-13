@@ -41,6 +41,9 @@ patches:
     - op: add
       path: /spec/template/spec/containers/0/args/-
       value: --enable-namespace
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --enable-preflightvalidation
 
 replacements:
   # The following patches adds a directive for certmanager to inject CA into the CRD
@@ -51,6 +54,13 @@ replacements:
       - select:
           kind: CustomResourceDefinition
           name: modules.kmm.sigs.x-k8s.io
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+      - select:
+          kind: CustomResourceDefinition
+          name: preflightvalidations.kmm.sigs.x-k8s.io
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:
@@ -68,6 +78,14 @@ replacements:
       - select:
           kind: CustomResourceDefinition
           name: modules.kmm.sigs.x-k8s.io
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 1
+      - select:
+          kind: CustomResourceDefinition
+          name: preflightvalidations.kmm.sigs.x-k8s.io
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:

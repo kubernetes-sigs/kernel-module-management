@@ -5,6 +5,7 @@ import (
 
 	kmmhubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	kmmv1beta2 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/webhook"
@@ -22,6 +23,7 @@ var scheme = runtime.NewScheme()
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(kmmv1beta1.AddToScheme(scheme))
+	utilruntime.Must(kmmv1beta2.AddToScheme(scheme))
 	utilruntime.Must(kmmhubv1beta1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
@@ -35,12 +37,14 @@ func main() {
 		enableModule               bool
 		enableManagedClusterModule bool
 		enableNamespaceDeletion    bool
+		enablePreflightValidation  bool
 	)
 
 	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
 	flag.BoolVar(&enableModule, "enable-module", false, "Enable the webhook for Module resources")
 	flag.BoolVar(&enableManagedClusterModule, "enable-managedclustermodule", false, "Enable the webhook for ManagedClusterModule resources")
 	flag.BoolVar(&enableNamespaceDeletion, "enable-namespace", false, "Enable the webhook for Namespace deletion")
+	flag.BoolVar(&enablePreflightValidation, "enable-preflightvalidation", false, "Enable the webhook for PreflightValidation resources")
 
 	flag.Parse()
 
@@ -93,6 +97,16 @@ func main() {
 
 		if err = (&webhook.NamespaceValidator{}).SetupWebhookWithManager(mgr); err != nil {
 			cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "NamespaceValidator")
+		}
+	}
+
+	if enablePreflightValidation {
+		if err = ctrl.NewWebhookManagedBy(mgr).For(&kmmv1beta1.PreflightValidation{}).Complete(); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create conversion webhook", "name", "PreflightValidation/v1beta1")
+		}
+
+		if err = ctrl.NewWebhookManagedBy(mgr).For(&kmmv1beta2.PreflightValidation{}).Complete(); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create conversion webhook", "name", "PreflightValidation/v1beta2")
 		}
 	}
 

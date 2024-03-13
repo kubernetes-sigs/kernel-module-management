@@ -5,6 +5,7 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	kmmv1beta2 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	testclient "github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
@@ -108,11 +109,8 @@ var (
 			Namespace: namespace,
 		},
 	}
-	ownerPreflight = &kmmv1beta1.PreflightValidation{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "preflight-name",
-			Namespace: namespace,
-		},
+	ownerPreflight = &kmmv1beta2.PreflightValidation{
+		ObjectMeta: metav1.ObjectMeta{Name: "preflight-name"},
 	}
 	ownerMCM = &v1beta1.ManagedClusterModule{
 		ObjectMeta: metav1.ObjectMeta{Name: "mcm"},
