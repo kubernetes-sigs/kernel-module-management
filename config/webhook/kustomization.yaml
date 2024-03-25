@@ -10,3 +10,15 @@ configurations:
 
 patches:
 - path: manifests_namespace_selector_patch.yaml
+
+# controller-gen generates the ValidatingWebhookConfiguration targeting "webhook-service", and that is not configurable.
+# OLM wants it to be called "${DEPLOYMENT_NAME}-service", so webhook-server-service.
+replacements:
+  - source:
+      kind: Service
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - webhooks.*.clientConfig.service.name
