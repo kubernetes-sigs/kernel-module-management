@@ -101,7 +101,7 @@ replacements:
   # Patch dnsNames in webhook Certificate
   - source:
       kind: Service
-      name: webhook-service
+      name: webhook-server-service
       fieldPath: metadata.name
     targets:
       - select:
@@ -112,7 +112,7 @@ replacements:
           delimiter: .
   - source:
       kind: Service
-      name: webhook-service
+      name: webhook-server-service
       fieldPath: metadata.namespace
     targets:
       - select:
