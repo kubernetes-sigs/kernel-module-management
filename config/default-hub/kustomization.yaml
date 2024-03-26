@@ -4,11 +4,6 @@ kind: Kustomization
 # Adds namespace to all resources.
 namespace: kmm-operator-system
 
-# Value of this field is prepended to the
-# names of all resources, e.g. a deployment named
-# "wordpress" becomes "alices-wordpress".
-# Note that it should also match with the prefix (text before '-') of the namespace
-# field above.
 namePrefix: kmm-operator-hub-
 
 # Labels to add to all resources and selectors.
@@ -18,31 +13,13 @@ commonLabels:
   app.kubernetes.io/part-of: kmm
 
 resources:
-- ../crd-hub
-- ../rbac-hub
-- ../manager-hub
-# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
-# crd/kustomization.yaml
-- ../webhook-hub
-# [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'. 'WEBHOOK' components are required.
-- ../certificate
-# [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
-#- ../prometheus
-- ../webhook-server
+- ../deploy-hub
 
-# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in crd/kustomization.yaml
-patches:
-- path: webhookcainjection_patch.yaml
-- target:
-    kind: Deployment
-    name: webhook-server
-  patch: |-
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --enable-managedclustermodule
+components:
+- ../webhook-cert
 
 replacements:
-  # The following patches adds a directive for certmanager to inject CA into the CRD
+  # Replacements below adjust the value of the cert-manager.io/inject-ca-from annotation in CRDs and webhook objects.
   - source:
       kind: Certificate
       fieldPath: metadata.namespace
@@ -52,12 +29,14 @@ replacements:
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:
+          create: true
           delimiter: /
       - select:
           kind: ValidatingWebhookConfiguration
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:
+          create: true
           delimiter: /
   - source:
       kind: Certificate
@@ -68,6 +47,7 @@ replacements:
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:
+          create: true
           delimiter: /
           index: 1
       - select:
@@ -75,12 +55,13 @@ replacements:
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:
+          create: true
           delimiter: /
           index: 1
-  # Patch dnsNames in webhook Certificate
+  # Replacements below adjust the DNS names of the webhook certificate based on the service name.
   - source:
       kind: Service
-      name: webhook-server-service
+      name: webhook-service
       fieldPath: metadata.name
     targets:
       - select:
@@ -91,7 +72,7 @@ replacements:
           delimiter: .
   - source:
       kind: Service
-      name: webhook-server-service
+      name: webhook-service
       fieldPath: metadata.namespace
     targets:
       - select:

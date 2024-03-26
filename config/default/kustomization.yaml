@@ -1,14 +1,15 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+resources:
+- ../deploy
+
+components:
+- ../webhook-cert
+
 # Adds namespace to all resources.
 namespace: kmm-operator-system
 
-# Value of this field is prepended to the
-# names of all resources, e.g. a deployment named
-# "wordpress" becomes "alices-wordpress".
-# Note that it should also match with the prefix (text before '-') of the namespace
-# field above.
 namePrefix: kmm-operator-
 
 # Labels to add to all resources and selectors.
@@ -17,59 +18,26 @@ commonLabels:
   app.kubernetes.io/component: kmm
   app.kubernetes.io/part-of: kmm
 
-# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in crd/kustomization.yaml
-# [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'. 'WEBHOOK' components are required.
-resources:
-- ../crd
-- ../rbac
-- ../manager
-- ../webhook
-- ../certificate
-# [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
-#- ../prometheus
-- ../webhook-server
-
-patches:
-- path: webhookcainjection_patch.yaml
-- target:
-    kind: Deployment
-    name: webhook-server
-  patch: |-
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --enable-module
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --enable-namespace
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --enable-preflightvalidation
-
 replacements:
-  # The following patches adds a directive for certmanager to inject CA into the CRD
+  # Replacements below adjust the value of the cert-manager.io/inject-ca-from annotation in CRDs and webhook objects.
   - source:
       kind: Certificate
       fieldPath: metadata.namespace
     targets:
       - select:
           kind: CustomResourceDefinition
-          name: modules.kmm.sigs.x-k8s.io
-        fieldPaths:
-          - metadata.annotations.[cert-manager.io/inject-ca-from]
-        options:
-          delimiter: /
-      - select:
-          kind: CustomResourceDefinition
           name: preflightvalidations.kmm.sigs.x-k8s.io
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:
+          create: true
           delimiter: /
       - select:
           kind: ValidatingWebhookConfiguration
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:
+          create: true
           delimiter: /
   - source:
       kind: Certificate
@@ -77,18 +45,11 @@ replacements:
     targets:
       - select:
           kind: CustomResourceDefinition
-          name: modules.kmm.sigs.x-k8s.io
-        fieldPaths:
-          - metadata.annotations.[cert-manager.io/inject-ca-from]
-        options:
-          delimiter: /
-          index: 1
-      - select:
-          kind: CustomResourceDefinition
           name: preflightvalidations.kmm.sigs.x-k8s.io
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:
+          create: true
           delimiter: /
           index: 1
       - select:
@@ -96,12 +57,13 @@ replacements:
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:
+          create: true
           delimiter: /
           index: 1
-  # Patch dnsNames in webhook Certificate
+  # Replacements below adjust the DNS names of the webhook certificate based on the service name.
   - source:
       kind: Service
-      name: webhook-server-service
+      name: webhook-service
       fieldPath: metadata.name
     targets:
       - select:
@@ -112,7 +74,7 @@ replacements:
           delimiter: .
   - source:
       kind: Service
-      name: webhook-server-service
+      name: webhook-service
       fieldPath: metadata.namespace
     targets:
       - select:

@@ -69,9 +69,6 @@ spec:
               cpu: 10m
               memory: 64Mi
           volumeMounts:
-            - mountPath: /tmp/k8s-webhook-server/serving-certs
-              name: cert
-              readOnly: true
             - name: manager-config
               mountPath: /controller_config.yaml
               subPath: controller_config.yaml
@@ -85,10 +82,6 @@ spec:
           operator: Equal
           effect: NoSchedule
       volumes:
-        - name: cert
-          secret:
-            defaultMode: 420
-            secretName: webhook-server-cert
         - name: manager-config
           configMap:
             name: manager-config
