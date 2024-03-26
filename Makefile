@@ -279,7 +279,6 @@ bundle: operator-sdk manifests kustomize ## Generate bundle manifests and metada
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	cd config/webhook-server && $(KUSTOMIZE) edit set image webhook-server=$(WEBHOOK_IMG)
 	kubectl kustomize config/manifests | ${OPERATOR_SDK} generate bundle $(BUNDLE_GEN_FLAGS)
-	cp -r config/manifests/bundle-metadata/* bundle/metadata/
 	${OPERATOR_SDK} bundle validate ./bundle
 
 .PHONY: bundle-hub
@@ -294,7 +293,6 @@ bundle-hub: operator-sdk manifests kustomize ## Generate bundle manifests and me
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	cd config/webhook-server && $(KUSTOMIZE) edit set image webhook-server=$(WEBHOOK_IMG)
 	kubectl kustomize config/manifests-hub | ${OPERATOR_SDK} generate bundle --package kernel-module-management-hub $(BUNDLE_GEN_FLAGS)
-	cp -r config/manifests-hub/bundle-metadata/* bundle/metadata/
 	${OPERATOR_SDK} bundle validate ./bundle
 
 .PHONY: bundle-build
