@@ -150,7 +150,8 @@ func main() {
 		buildAPI,
 		signAPI,
 		kernelAPI,
-		filterAPI)
+		filterAPI,
+		cfg.Job.GCDelay)
 	if err = bsc.SetupWithManager(mgr, constants.KernelLabel); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignReconcilerName)
 	}

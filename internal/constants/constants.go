@@ -14,6 +14,7 @@ const (
 	DevicePluginVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-device-plugin"
 	ModuleVersionLabelPrefix       = "kmm.node.kubernetes.io/version-module"
 
+	GCDelayFinalizer  = "kmm.node.kubernetes.io/gc-delay"
 	ModuleFinalizer   = "kmm.node.kubernetes.io/module-finalizer"
 	JobEventFinalizer = "kmm.node.kubernetes.io/job-event-finalizer"
 

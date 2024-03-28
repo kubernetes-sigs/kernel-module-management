@@ -141,3 +141,17 @@ func (mr *MockPodHelperMockRecorder) PodLabels(modName, targetKernel, podType an
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PodLabels", reflect.TypeOf((*MockPodHelper)(nil).PodLabels), modName, targetKernel, podType)
 }
+
+// RemoveFinalizer mocks base method.
+func (m *MockPodHelper) RemoveFinalizer(ctx context.Context, pod *v1.Pod, finalizer string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveFinalizer", ctx, pod, finalizer)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveFinalizer indicates an expected call of RemoveFinalizer.
+func (mr *MockPodHelperMockRecorder) RemoveFinalizer(ctx, pod, finalizer any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveFinalizer", reflect.TypeOf((*MockPodHelper)(nil).RemoveFinalizer), ctx, pod, finalizer)
+}

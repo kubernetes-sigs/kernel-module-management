@@ -1,5 +1,7 @@
 healthProbeBindAddress: :8081
 webhookPort: 9443
+job:
+  gcDelay: 1h
 leaderElection:
   enabled: true
   resourceID: some-resource-id
