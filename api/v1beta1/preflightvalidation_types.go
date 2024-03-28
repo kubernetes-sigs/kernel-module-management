@@ -117,6 +117,9 @@ func (p *PreflightValidation) ConvertFrom(srcRaw conversion.Hub) error {
 		for _, v := range src.Status.Modules {
 			v := v
 			p.Status.CRStatuses[v.Namespace+"/"+v.Name] = &v.CRBaseStatus
+
+			// This may lead to collisions, but at least we preserve backwards compatibility.
+			p.Status.CRStatuses[v.Name] = &v.CRBaseStatus
 		}
 	}
 

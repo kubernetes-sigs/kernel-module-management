@@ -54,7 +54,9 @@ var _ = Describe("PreflightValidation_ConvertFrom", func() {
 			Status: PreflightValidationStatus{
 				CRStatuses: map[string]*CRStatus{
 					"namespace-1/module-1": &baseStatus1,
+					"module-1":             &baseStatus1,
 					"namespace-2/module-2": &baseStatus2,
+					"module-2":             &baseStatus2,
 				},
 			},
 		}
