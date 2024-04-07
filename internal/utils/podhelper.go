@@ -8,6 +8,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 )
@@ -36,6 +37,7 @@ type PodHelper interface {
 	DeletePod(ctx context.Context, pod *v1.Pod) error
 	CreatePod(ctx context.Context, podSpec *v1.Pod) error
 	GetPodStatus(pod *v1.Pod) (Status, error)
+	RemoveFinalizer(ctx context.Context, pod *v1.Pod, finalizer string) error
 }
 
 type podHelper struct {
@@ -148,6 +150,18 @@ func (ph *podHelper) getPods(ctx context.Context, namespace string, labels map[s
 	}
 
 	return podList.Items, nil
+}
+
+func (ph *podHelper) RemoveFinalizer(ctx context.Context, pod *v1.Pod, finalizer string) error {
+	if !controllerutil.RemoveFinalizer(pod, finalizer) {
+		return nil
+	}
+
+	podCopy := pod.DeepCopy()
+
+	controllerutil.RemoveFinalizer(pod, finalizer)
+
+	return ph.client.Patch(ctx, pod, client.MergeFrom(podCopy))
 }
 
 func moduleKernelLabels(moduleName, targetKernel, podType string) map[string]string {
