@@ -143,7 +143,7 @@ func main() {
 	mcmr := hub.NewManagedClusterModuleReconciler(
 		client,
 		manifestwork.NewCreator(client, scheme, kernelAPI, registryAPI, cache, operatorNamespace),
-		cluster.NewClusterAPI(client, kernelAPI, buildAPI, signAPI, operatorNamespace),
+		cluster.NewClusterAPI(client, kernelAPI, buildAPI, signAPI, operatorNamespace, cfg.Job.GCDelay),
 		statusupdater.NewManagedClusterModuleStatusUpdater(client),
 		filterAPI,
 	)
