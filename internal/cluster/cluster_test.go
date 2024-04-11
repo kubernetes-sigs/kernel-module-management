@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sort"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,7 +31,7 @@ var _ = Describe("RequestedManagedClusterModule", func() {
 	var c ClusterAPI
 
 	BeforeEach(func() {
-		c = NewClusterAPI(clnt, mockKM, nil, nil, "", 0)
+		c = NewClusterAPI(clnt, mockKM, nil, nil, "")
 	})
 
 	It("should return the requested ManagedClusterModule", func() {
@@ -94,7 +93,7 @@ var _ = Describe("SelectedManagedClusters", func() {
 	var c ClusterAPI
 
 	BeforeEach(func() {
-		c = NewClusterAPI(clnt, mockKM, nil, nil, "", 0)
+		c = NewClusterAPI(clnt, mockKM, nil, nil, "")
 	})
 
 	It("should return the ManagedClusters matching the ManagedClusterModule selector", func() {
@@ -156,7 +155,7 @@ var _ = Describe("KernelVersions", func() {
 	var c ClusterAPI
 
 	BeforeEach(func() {
-		c = NewClusterAPI(clnt, mockKM, nil, nil, "", 0)
+		c = NewClusterAPI(clnt, mockKM, nil, nil, "")
 	})
 
 	It("should return an error when no cluster claims are found", func() {
@@ -210,7 +209,7 @@ var _ = Describe("BuildAndSign", func() {
 	var c ClusterAPI
 
 	BeforeEach(func() {
-		c = NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace, 0)
+		c = NewClusterAPI(clnt, mockKM, mockBM, mockSM, namespace)
 	})
 
 	var (
@@ -387,12 +386,10 @@ var _ = Describe("BuildAndSign", func() {
 })
 
 var _ = Describe("GarbageCollectBuildsAndSigns", func() {
-	const gcDelay = 1 * time.Hour
-
 	var c ClusterAPI
 
 	BeforeEach(func() {
-		c = NewClusterAPI(clnt, nil, mockBM, mockSM, namespace, gcDelay)
+		c = NewClusterAPI(clnt, nil, mockBM, mockSM, namespace)
 	})
 
 	DescribeTable("return deleted builds and signs if no failure", func(buildsToDeleteFound, signsToDeleteFound bool) {
@@ -411,8 +408,8 @@ var _ = Describe("GarbageCollectBuildsAndSigns", func() {
 		ctx := context.Background()
 
 		gomock.InOrder(
-			mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm, gcDelay).Return(deletedBuilds, nil),
-			mockSM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm, gcDelay).Return(deletedSigns, nil),
+			mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(deletedBuilds, nil),
+			mockSM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(deletedSigns, nil),
 		)
 
 		collected, err := c.GarbageCollectBuildsAndSigns(ctx, mcm)
@@ -434,8 +431,8 @@ var _ = Describe("GarbageCollectBuildsAndSigns", func() {
 		collectedBuilds := []string{"test-build"}
 
 		gomock.InOrder(
-			mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm, gcDelay).Return(collectedBuilds, nil),
-			mockSM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm, gcDelay).Return(nil, errors.New("test")),
+			mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(collectedBuilds, nil),
+			mockSM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(nil, errors.New("test")),
 		)
 
 		collected, err := c.GarbageCollectBuildsAndSigns(ctx, mcm)
@@ -451,7 +448,7 @@ var _ = Describe("GarbageCollectBuildsAndSigns", func() {
 		ctx := context.Background()
 
 		gomock.InOrder(
-			mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm, gcDelay).Return(nil, errors.New("test")),
+			mockBM.EXPECT().GarbageCollect(ctx, mcm.Name, namespace, &mcm).Return(nil, errors.New("test")),
 		)
 
 		collected, err := c.GarbageCollectBuildsAndSigns(ctx, mcm)

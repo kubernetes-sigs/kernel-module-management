@@ -2,7 +2,6 @@ package sign
 
 import (
 	"context"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -13,7 +12,7 @@ import (
 //go:generate mockgen -source=manager.go -package=sign -destination=mock_manager.go
 
 type SignManager interface {
-	GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object, delay time.Duration) ([]string, error)
+	GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error)
 
 	ShouldSync(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
 

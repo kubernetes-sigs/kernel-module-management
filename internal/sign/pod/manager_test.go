@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/budougumi0617/cmpmock"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
@@ -325,7 +323,6 @@ var _ = Describe("Sync", func() {
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&newPod, nil),
 			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(&newPod, nil),
 			podhelper.EXPECT().IsPodChanged(&newPod, &newPod).Return(true, nil),
-			podhelper.EXPECT().RemoveFinalizer(ctx, &newPod, constants.GCDelayFinalizer),
 			podhelper.EXPECT().DeletePod(ctx, &newPod).Return(nil),
 		)
 
@@ -357,126 +354,57 @@ var _ = Describe("GarbageCollect", func() {
 		Owner: &kmmv1beta1.Module{},
 	}
 
-	type testCase struct {
-		podPhase1, podPhase2                       v1.PodPhase
-		gcDelay                                    time.Duration
-		expectsErr                                 bool
-		resShouldContainPod1, resShouldContainPod2 bool
-	}
-
 	DescribeTable("should return the correct error and names of the collected pods",
-		func(tc testCase) {
-			const (
-				pod1Name = "pod-1"
-				pod2Name = "pod-2"
-			)
-
-			ctx := context.Background()
-
+		func(podStatus1 v1.PodStatus, podStatus2 v1.PodStatus, expectsErr bool) {
 			pod1 := v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: pod1Name},
-				Status:     v1.PodStatus{Phase: tc.podPhase1},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "podName1",
+				},
+				Status: podStatus1,
 			}
 			pod2 := v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: pod2Name},
-				Status:     v1.PodStatus{Phase: tc.podPhase2},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "podName2",
+				},
+				Status: podStatus2,
 			}
-
+			expectedNames := []string{}
+			if !expectsErr {
+				if pod1.Status.Phase == v1.PodSucceeded {
+					expectedNames = append(expectedNames, "podName1")
+				}
+				if pod2.Status.Phase == v1.PodSucceeded {
+					expectedNames = append(expectedNames, "podName2")
+				}
+			}
 			returnedError := fmt.Errorf("some error")
-			if !tc.expectsErr {
+			if !expectsErr {
 				returnedError = nil
 			}
 
-			podList := []v1.Pod{pod1, pod2}
-
-			calls := []any{
-				podhelper.EXPECT().GetModulePods(ctx, mld.Name, mld.Namespace, utils.PodTypeSign, mld.Owner).Return(podList, returnedError),
-			}
-
-			if !tc.expectsErr {
-				now := metav1.Now()
-
-				for i := 0; i < len(podList); i++ {
-					pod := &podList[i]
-
-					if pod.Status.Phase == v1.PodSucceeded {
-						c := podhelper.
-							EXPECT().
-							DeletePod(ctx, cmpmock.DiffEq(pod)).
-							Do(func(_ context.Context, p *v1.Pod) {
-								p.DeletionTimestamp = &now
-								pod.DeletionTimestamp = &now
-							})
-
-						calls = append(calls, c)
-
-						if time.Now().After(now.Add(tc.gcDelay)) {
-							calls = append(
-								calls,
-								podhelper.EXPECT().RemoveFinalizer(ctx, cmpmock.DiffEq(pod), constants.GCDelayFinalizer),
-							)
-						}
-					}
+			podhelper.EXPECT().GetModulePods(context.Background(), mld.Name, mld.Namespace, utils.PodTypeSign, mld.Owner).Return([]v1.Pod{pod1, pod2}, returnedError)
+			if !expectsErr {
+				if pod1.Status.Phase == v1.PodSucceeded {
+					podhelper.EXPECT().DeletePod(context.Background(), &pod1).Return(nil)
+				}
+				if pod2.Status.Phase == v1.PodSucceeded {
+					podhelper.EXPECT().DeletePod(context.Background(), &pod2).Return(nil)
 				}
 			}
 
-			gomock.InOrder(calls...)
+			names, err := mgr.GarbageCollect(context.Background(), mld.Name, mld.Namespace, mld.Owner)
 
-			names, err := mgr.GarbageCollect(ctx, mld.Name, mld.Namespace, mld.Owner, tc.gcDelay)
-
-			if tc.expectsErr {
+			if expectsErr {
 				Expect(err).To(HaveOccurred())
-				return
-			}
-
-			Expect(err).NotTo(HaveOccurred())
-
-			if tc.resShouldContainPod1 {
-				Expect(names).To(ContainElements(pod1Name))
-			}
-
-			if tc.resShouldContainPod2 {
-				Expect(names).To(ContainElements(pod2Name))
+				Expect(names).To(BeNil())
+			} else {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(expectedNames).To(Equal(names))
 			}
 		},
-		Entry(
-			"all pods succeeded",
-			testCase{
-				podPhase1:            v1.PodSucceeded,
-				podPhase2:            v1.PodSucceeded,
-				resShouldContainPod1: true,
-				resShouldContainPod2: true,
-			},
-		),
-		Entry(
-			"1 pod succeeded",
-			testCase{
-				podPhase1:            v1.PodSucceeded,
-				podPhase2:            v1.PodFailed,
-				resShouldContainPod1: true,
-			},
-		),
-		Entry(
-			"0 pod succeeded",
-			testCase{
-				podPhase1: v1.PodFailed,
-				podPhase2: v1.PodFailed,
-			},
-		),
-		Entry(
-			"error occurred",
-			testCase{expectsErr: true},
-		),
-		Entry(
-			"GC delayed",
-			testCase{
-				podPhase1:            v1.PodSucceeded,
-				podPhase2:            v1.PodSucceeded,
-				gcDelay:              time.Hour,
-				resShouldContainPod1: false,
-				resShouldContainPod2: false,
-			},
-		),
+		Entry("all pods succeeded", v1.PodStatus{Phase: v1.PodSucceeded}, v1.PodStatus{Phase: v1.PodSucceeded}, false),
+		Entry("1 pod succeeded", v1.PodStatus{Phase: v1.PodSucceeded}, v1.PodStatus{Phase: v1.PodFailed}, false),
+		Entry("0 pod succeeded", v1.PodStatus{Phase: v1.PodFailed}, v1.PodStatus{Phase: v1.PodFailed}, false),
+		Entry("error occured", v1.PodStatus{Phase: v1.PodFailed}, v1.PodStatus{Phase: v1.PodFailed}, true),
 	)
-
 })

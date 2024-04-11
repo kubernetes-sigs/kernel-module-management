@@ -150,8 +150,7 @@ func main() {
 		buildAPI,
 		signAPI,
 		kernelAPI,
-		filterAPI,
-		cfg.Job.GCDelay)
+		filterAPI)
 	if err = bsc.SetupWithManager(mgr, constants.KernelLabel); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignReconcilerName)
 	}
@@ -206,6 +205,10 @@ func main() {
 
 		if err = controllers.NewBuildSignEventsReconciler(client, helper, eventRecorder).SetupWithManager(mgr); err != nil {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignEventsReconcilerName)
+		}
+
+		if err = controllers.NewJobGCReconciler(client, cfg.Job.GCDelay).SetupWithManager(mgr); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.JobGCReconcilerName)
 		}
 	}
 
