@@ -42,17 +42,17 @@ func (m *MockbuildSignReconcilerHelperAPI) EXPECT() *MockbuildSignReconcilerHelp
 }
 
 // garbageCollect mocks base method.
-func (m *MockbuildSignReconcilerHelperAPI) garbageCollect(ctx context.Context, mod *v1beta1.Module) error {
+func (m *MockbuildSignReconcilerHelperAPI) garbageCollect(ctx context.Context, mod *v1beta1.Module, mldMappings map[string]*api.ModuleLoaderData) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "garbageCollect", ctx, mod)
+	ret := m.ctrl.Call(m, "garbageCollect", ctx, mod, mldMappings)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // garbageCollect indicates an expected call of garbageCollect.
-func (mr *MockbuildSignReconcilerHelperAPIMockRecorder) garbageCollect(ctx, mod any) *gomock.Call {
+func (mr *MockbuildSignReconcilerHelperAPIMockRecorder) garbageCollect(ctx, mod, mldMappings any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "garbageCollect", reflect.TypeOf((*MockbuildSignReconcilerHelperAPI)(nil).garbageCollect), ctx, mod)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "garbageCollect", reflect.TypeOf((*MockbuildSignReconcilerHelperAPI)(nil).garbageCollect), ctx, mod, mldMappings)
 }
 
 // getNodesListBySelector mocks base method.

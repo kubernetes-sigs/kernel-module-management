@@ -11,7 +11,6 @@ package sign
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	utils "github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -43,18 +42,18 @@ func (m *MockSignManager) EXPECT() *MockSignManagerMockRecorder {
 }
 
 // GarbageCollect mocks base method.
-func (m *MockSignManager) GarbageCollect(ctx context.Context, modName, namespace string, owner v1.Object, delay time.Duration) ([]string, error) {
+func (m *MockSignManager) GarbageCollect(ctx context.Context, modName, namespace string, owner v1.Object) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GarbageCollect", ctx, modName, namespace, owner, delay)
+	ret := m.ctrl.Call(m, "GarbageCollect", ctx, modName, namespace, owner)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GarbageCollect indicates an expected call of GarbageCollect.
-func (mr *MockSignManagerMockRecorder) GarbageCollect(ctx, modName, namespace, owner, delay any) *gomock.Call {
+func (mr *MockSignManagerMockRecorder) GarbageCollect(ctx, modName, namespace, owner any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockSignManager)(nil).GarbageCollect), ctx, modName, namespace, owner, delay)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockSignManager)(nil).GarbageCollect), ctx, modName, namespace, owner)
 }
 
 // ShouldSync mocks base method.

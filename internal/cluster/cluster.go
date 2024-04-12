@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +38,6 @@ type clusterAPI struct {
 	client    client.Client
 	kernelAPI module.KernelMapper
 	buildAPI  build.Manager
-	gcDelay   time.Duration
 	signAPI   sign.SignManager
 	namespace string
 }
@@ -49,13 +47,11 @@ func NewClusterAPI(
 	kernelAPI module.KernelMapper,
 	buildAPI build.Manager,
 	signAPI sign.SignManager,
-	defaultPodNamespace string,
-	gcDelay time.Duration) ClusterAPI {
+	defaultPodNamespace string) ClusterAPI {
 	return &clusterAPI{
 		client:    client,
 		kernelAPI: kernelAPI,
 		buildAPI:  buildAPI,
-		gcDelay:   gcDelay,
 		signAPI:   signAPI,
 		namespace: defaultPodNamespace,
 	}
@@ -147,12 +143,12 @@ func (c *clusterAPI) BuildAndSign(
 }
 
 func (c *clusterAPI) GarbageCollectBuildsAndSigns(ctx context.Context, mcm hubv1beta1.ManagedClusterModule) ([]string, error) {
-	deletedBuilds, err := c.buildAPI.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm, c.gcDelay)
+	deletedBuilds, err := c.buildAPI.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to garbage collect build object: %v", err)
 	}
 
-	deletedSigns, err := c.signAPI.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm, c.gcDelay)
+	deletedSigns, err := c.signAPI.GarbageCollect(ctx, mcm.Name, c.namespace, &mcm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to garbage collect sign object: %v", err)
 	}
