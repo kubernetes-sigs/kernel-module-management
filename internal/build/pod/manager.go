@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,7 +36,7 @@ func NewBuildManager(
 	}
 }
 
-func (pm *podManager) GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object, delay time.Duration) ([]string, error) {
+func (pm *podManager) GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error) {
 	pods, err := pm.podHelper.GetModulePods(ctx, modName, namespace, utils.PodTypeBuild, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get build pods for module %s: %v", modName, err)
@@ -47,19 +45,11 @@ func (pm *podManager) GarbageCollect(ctx context.Context, modName, namespace str
 	deleteNames := make([]string, 0, len(pods))
 	for _, pod := range pods {
 		if pod.Status.Phase == v1.PodSucceeded {
-			if pod.DeletionTimestamp == nil {
-				if err = pm.podHelper.DeletePod(ctx, &pod); err != nil {
-					return nil, fmt.Errorf("failed to delete build pod %s: %v", pod.Name, err)
-				}
+			err = pm.podHelper.DeletePod(ctx, &pod)
+			if err != nil {
+				return nil, fmt.Errorf("failed to delete build pod %s: %v", pod.Name, err)
 			}
-
-			if pod.DeletionTimestamp.Add(delay).Before(time.Now()) {
-				if err = pm.podHelper.RemoveFinalizer(ctx, &pod, constants.GCDelayFinalizer); err != nil {
-					return nil, fmt.Errorf("could not remove the GC delay finalizer from pod %s/%s: %v", pod.Namespace, pod.Name, err)
-				}
-
-				deleteNames = append(deleteNames, pod.Name)
-			}
+			deleteNames = append(deleteNames, pod.Name)
 		}
 	}
 	return deleteNames, nil
@@ -128,11 +118,6 @@ func (pm *podManager) Sync(
 
 	if changed {
 		logger.Info("The module's build spec has been changed, deleting the current pod so a new one can be created", "name", pod.Name)
-
-		if err = pm.podHelper.RemoveFinalizer(ctx, pod, constants.GCDelayFinalizer); err != nil {
-			return "", fmt.Errorf("could not remove the GC delay finalizer from pod %s/%s: %v", pod.Namespace, pod.Name, err)
-		}
-
 		err = pm.podHelper.DeletePod(ctx, pod)
 		if err != nil {
 			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete build pod %s: %v", pod.Name, err)))
