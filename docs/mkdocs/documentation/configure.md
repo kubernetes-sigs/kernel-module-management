@@ -5,7 +5,7 @@ The operator configuration is set in the `kmm-operator-manager-config` `ConfigMa
 To modify any setting, edit the `ConfigMap` data and restart the controller with the following command:
 
 ```shell
-kubectl rollout restart -n "$namespace" deployment/kmm-operator-controller
+kubectl delete pod -n "$namespace" -l app.kubernetes.io/component=kmm
 ```
 
 The value of `$namespace` depends on your [installation method](install.md).
