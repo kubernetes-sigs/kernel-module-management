@@ -17,6 +17,13 @@ The value of `$namespace` depends on your [installation method](install.md).
 Defines the address on which the operator should listen for kubelet health probes.  
 Recommended value: `:8081`.
 
+#### `job.gcDelay`
+
+Defines the duration for which successful build pods should be preserved before they are deleted.  
+Refer to the Go [`ParseDuration`](https://pkg.go.dev/time#ParseDuration) function documentation to understand valid
+values for this setting.  
+There is no recommended value for this setting.
+
 #### `leaderElection.enabled`
 
 Determines whether [leader election](https://kubernetes.io/docs/concepts/architecture/leases/) is used to ensure that
