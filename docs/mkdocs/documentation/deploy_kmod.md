@@ -86,7 +86,7 @@ The first value in the list, to be loaded last, must be equivalent to the `modul
 ### Replacing an in-tree module
 
 Some modules loaded by KMM may replace in-tree modules already loaded on the node.  
-To unload an in-tree module before loading your module, set the `.spec.moduleLoader.container.inTreeModuleToRemove`:
+To unload in-tree modules before loading your module, set `.spec.moduleLoader.container.inTreeModulesToRemove`:
 
 ```yaml
 spec:
@@ -97,7 +97,7 @@ spec:
         # ...
 
       # Other fields removed for brevity
-      inTreeModuleToRemove: mod_b
+      inTreeModulesToRemove: [mod_a, mod_b]
 ```
 
 The worker Pod will first try to unload the in-tree `mod_b` before loading `mod_a` from the kmod image.  
@@ -137,7 +137,8 @@ spec:
 
       imagePullPolicy: Always  # optional
 
-      inTreeModuleToRemove: my-kmod-intree  # optional
+      inTreeModuleToRemove: my-intree-kmod  # optional and deprecated, use inTreeModulesToRemove
+      inTreeModulesToRemove: [my-intree-kmod, my-other-intree-kmod] # optional
 
       kernelMappings:  # At least one item is required
         - literal: 6.0.15-300.fc37.x86_64
@@ -152,7 +153,8 @@ spec:
         # For any other kernel, build the image using the Dockerfile in the my-kmod ConfigMap.
         - regexp: '^.+$'
           containerImage: "some.registry/org/my-kmod:${KERNEL_FULL_VERSION}"
-          inTreeModuleToRemove: my-other-kmod-intree  # optional
+          inTreeModuleToRemove: my-intree-kmod  # optional and deprecated, use inTreeModulesToRemove
+          inTreeModulesToRemove: [my-intree-kmod, my-other-intree-kmod] # optional
           build:
             buildArgs:  # Optional
               - name: ARG_NAME
