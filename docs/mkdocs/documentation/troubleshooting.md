@@ -1,13 +1,22 @@
 # Troubleshooting
 
-## Reading operator logs
+## Reading logs
+
+In the commands below, the value of `$namespace` depends on your [installation method](install.md).
+
+### Operator
 
 | Component | Command                                                                 |
 |-----------|-------------------------------------------------------------------------|
 | KMM       | `kubectl logs -fn "$namespace" deployments/kmm-operator-controller`     |
 | KMM-Hub   | `kubectl logs -fn "$namespace" deployments/kmm-operator-hub-controller` |
 
-The value of `$namespace` depends on your [installation method](install.md).
+### Webhook server
+
+| Component | Command                                                                     |
+|-----------|-----------------------------------------------------------------------------|
+| KMM       | `kubectl logs -fn "$namespace" deployments/kmm-operator-webhook-server`     |
+| KMM-Hub   | `kubectl logs -fn "$namespace" deployments/kmm-operator-hub-webhook-server` |
 
 ## Observing events
 
