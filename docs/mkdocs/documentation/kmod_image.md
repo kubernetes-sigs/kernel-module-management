@@ -76,6 +76,10 @@ The following build arguments are automatically set by KMM:
 | `MOD_NAME`            | The `Module`'s name                    | `my-mod`                |
 | `MOD_NAMESPACE`       | The `Module`'s namespace               | `my-namespace`          |
 
+Successful build pods are garbage-collected immediately, unless [`job.gcDelay`](./configure.md#jobgcdelay) is set in the
+operator configuration.  
+Failed build pods are always preserved and must be deleted manually by the administrator for the build to be restarted.
+
 Once the image is built, KMM proceeds with the `Module` reconciliation.
 
 ```yaml
