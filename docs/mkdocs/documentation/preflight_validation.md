@@ -9,22 +9,16 @@ Preflight will try to validate every `Module` loaded in the cluster, in parallel
 
 Preflight validation is triggered by creating a `PreflightValidation` resource in the cluster. This Spec contains two
 fields:
-```go
-type PreflightValidationSpec struct {
-	// KernelVersion describes the kernel image that all Modules need to be checked against.
-	// +kubebuilder:validation:Required
-	KernelVersion string `json:"kernelVersion"`
 
-	// Boolean flag that determines whether images build during preflight must also
-	// be pushed to a defined repository
-	// +optional
-	PushBuiltImage bool `json:"pushBuiltImage"`
-}
-```
+#### `kernelVersion`
 
-1. `KernelVersion` - the version of the kernel that the cluster will be upgraded to. Mandatory field
-2. `PushBuiltImage` - if true, then the images created during the Build and Sign validation will be pushed to their
-   repositories (false by default).
+The version of the kernel that the cluster will be upgraded to.  
+This field is required.
+
+#### `pushBuiltImage`
+
+If true, then the images created during the Build and Sign validation will be pushed to their repositories.  
+Default value: `false`.
 
 ## Validation lifecycle
 
@@ -38,44 +32,44 @@ Once all the modules have been validated, it is recommended to delete the `Prefl
 
 ## Validation status
 
-Preflight will report that status and progress of each module in the cluster that it tries/tried to validate.
+A `PreflightValidation` resource will report that status and progress of each module in the cluster that it tries / has
+tried to validate in its `.status.modules` list.  
+Elements of that list contain the following fields:
 
-```go
-type CRStatus struct {
-	// Status of Module CR verification: true (verified), false (verification failed),
-	// error (error during verification process), unknown (verification has not started yet)
-	// +required
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=True;False
-	VerificationStatus string `json:"verificationStatus"`
+#### `lastTransitionTime`
 
-	// StatusReason contains a string describing the status source.
-	// +optional
-	StatusReason string `json:"statusReason,omitempty"`
+The last time when the `Module` status transitioned from one status to another.  
+This should be when the underlying status changed.
+If that is not known, then using the time when the API field changed is acceptable.
 
-	// Current stage of the verification process:
-	// image (image existence verification), build(build process verification)
-	// +required
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=Image;Build;Sign;Requeued;Done
-	VerificationStage string `json:"verificationStage"`
+#### `name`
 
-	// LastTransitionTime is the last time the CR status transitioned from one status to another.
-	// This should be when the underlying status changed.  If that is not known, then using the time when the API field changed is acceptable.
-	// +required
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Type=string
-	// +kubebuilder:validation:Format=date-time
-	LastTransitionTime metav1.Time `json:"lastTransitionTime" protobuf:"bytes,4,opt,name=lastTransitionTime"`
-}
-```
+The name of the `Module` resource.
 
-For each module, you will find the following fields:
+#### `namespace`
 
-1. Verification status - true or false, validated or not
-2. Status reason - verbal explanation regarding the status. Why it is not validated, etc'
-3. Verification stage - describe the validation stage being executed (Image, Build, Sign)
-4. Last transition time - the time of the last update to the status
+The namespace of the `Module` resource.
+
+#### `statusReason`
+
+A string describing the status source.
+
+#### `verificationStage`
+
+The current stage of the verification process, either:
+
+- `image` (image existence verification), or;
+- `build` (build process verification), or;
+- `sign` (sign process verification), or;
+
+#### `verificationStatus`
+
+The status of the `Module` verification, either:
+
+- `true` (verified), or;
+- `false` (verification failed), or;
+- `error` (error during the verification process), or;
+- `unknown` (verification has not started yet).
 
 ## Preflight validation stages per Module
 
@@ -132,7 +126,7 @@ Below is an example of the `PreflightValidation` resource in the YAML format.
 In the example, we want to verify all the currently present modules against the upcoming `5.8.18-101.fc31.x86_64`
 kernel, and push the resulting images of Build/Sign into the defined repositories.
 ```yaml
-apiVersion: kmm.sigs.x-k8s.io/v1beta1
+apiVersion: kmm.sigs.x-k8s.io/v1beta2
 kind: PreflightValidation
 metadata:
   name: preflight
