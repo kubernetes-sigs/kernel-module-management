@@ -15,7 +15,7 @@ require (
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/moby v26.1.0+incompatible
 	github.com/onsi/ginkgo/v2 v2.17.1
-	github.com/onsi/gomega v1.32.0
+	github.com/onsi/gomega v1.33.0
 	github.com/otiai10/copy v1.14.0
 	github.com/prometheus/client_golang v1.19.0
 	github.com/spf13/cobra v1.8.0
