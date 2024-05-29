@@ -26,10 +26,9 @@ var _ = Describe("ShouldSync", func() {
 		reg  *registry.MockRegistry
 	)
 	const (
-		moduleName    = "module-name"
-		imageName     = "image-name"
-		namespace     = "some-namespace"
-		kernelVersion = "1.2.3"
+		moduleName = "module-name"
+		imageName  = "image-name"
+		namespace  = "some-namespace"
 	)
 
 	BeforeEach(func() {
@@ -145,9 +144,10 @@ var _ = Describe("Sync", func() {
 	})
 
 	const (
-		moduleName    = "module-name"
-		kernelVersion = "1.2.3"
-		podName       = "some-pod"
+		moduleName              = "module-name"
+		kernelVersion           = "1.2.3+4"
+		kernelNormalizedVersion = "1.2.3_4"
+		podName                 = "some-pod"
 	)
 
 	mod := kmmv1beta1.Module{
@@ -155,11 +155,12 @@ var _ = Describe("Sync", func() {
 	}
 
 	mld := &api.ModuleLoaderData{
-		Name:           moduleName,
-		Build:          &kmmv1beta1.Build{},
-		ContainerImage: imageName,
-		Owner:          &mod,
-		KernelVersion:  kernelVersion,
+		Name:                    moduleName,
+		Build:                   &kmmv1beta1.Build{},
+		ContainerImage:          imageName,
+		Owner:                   &mod,
+		KernelVersion:           kernelVersion,
+		KernelNormalizedVersion: kernelNormalizedVersion,
 	}
 
 	DescribeTable("should return the correct status depending on the pod status",
@@ -175,7 +176,7 @@ var _ = Describe("Sync", func() {
 
 			gomock.InOrder(
 				maker.EXPECT().MakePodTemplate(ctx, mld, mld.Owner, true).Return(&j, nil),
-				podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeBuild, mld.Owner).Return(&j, nil),
+				podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeBuild, mld.Owner).Return(&j, nil),
 				podhelper.EXPECT().IsPodChanged(&j, &j).Return(false, nil),
 				podhelper.EXPECT().GetPodStatus(&j).Return(podStatus, nil),
 			)
@@ -227,7 +228,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			maker.EXPECT().MakePodTemplate(ctx, mld, mld.Owner, true).Return(&j, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeBuild, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeBuild, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
 			podhelper.EXPECT().CreatePod(ctx, &j).Return(errors.New("some error")),
 		)
 
@@ -256,7 +257,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			maker.EXPECT().MakePodTemplate(ctx, mld, mld.Owner, true).Return(&j, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeBuild, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeBuild, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
 			podhelper.EXPECT().CreatePod(ctx, &j).Return(nil),
 		)
 
@@ -298,7 +299,7 @@ var _ = Describe("Sync", func() {
 
 		gomock.InOrder(
 			maker.EXPECT().MakePodTemplate(ctx, mld, mld.Owner, true).Return(&newPod, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeBuild, mld.Owner).Return(&j, nil),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeBuild, mld.Owner).Return(&j, nil),
 			podhelper.EXPECT().IsPodChanged(&j, &newPod).Return(true, nil),
 			podhelper.EXPECT().DeletePod(ctx, &j).Return(nil),
 		)

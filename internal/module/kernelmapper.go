@@ -8,6 +8,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/kernel"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
@@ -134,6 +135,7 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 	}
 
 	mld.KernelVersion = kernelVersion
+	mld.KernelNormalizedVersion = kernel.NormalizeVersion(kernelVersion)
 	mld.Name = mod.Name
 	mld.Namespace = mod.Namespace
 	mld.ImageRepoSecret = mod.Spec.ImageRepoSecret
@@ -148,7 +150,7 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 }
 
 func (kh *kernelMapperHelper) replaceTemplates(mld *api.ModuleLoaderData) error {
-	osConfigEnvVars := utils.KernelComponentsAsEnvVars(mld.KernelVersion)
+	osConfigEnvVars := utils.KernelComponentsAsEnvVars(mld.KernelNormalizedVersion)
 	osConfigEnvVars = append(osConfigEnvVars, "MOD_NAME="+mld.Name, "MOD_NAMESPACE="+mld.Namespace)
 
 	replacedContainerImage, err := utils.ReplaceInTemplates(osConfigEnvVars, mld.ContainerImage)

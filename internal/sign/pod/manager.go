@@ -81,14 +81,14 @@ func (spm *signPodManager) Sync(
 
 	logger.Info("Signing in-cluster")
 
-	labels := spm.podHelper.PodLabels(mld.Name, mld.KernelVersion, "sign")
+	labels := spm.podHelper.PodLabels(mld.Name, mld.KernelNormalizedVersion, "sign")
 
 	podTemplate, err := spm.signer.MakePodTemplate(ctx, mld, labels, imageToSign, pushImage, owner)
 	if err != nil {
 		return "", fmt.Errorf("could not make Pod template: %v", err)
 	}
 
-	pod, err := spm.podHelper.GetModulePodByKernel(ctx, mld.Name, mld.Namespace, mld.KernelVersion, utils.PodTypeSign, owner)
+	pod, err := spm.podHelper.GetModulePodByKernel(ctx, mld.Name, mld.Namespace, mld.KernelNormalizedVersion, utils.PodTypeSign, owner)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoMatchingPod) {
 			return "", fmt.Errorf("error getting the signing pod: %v", err)
