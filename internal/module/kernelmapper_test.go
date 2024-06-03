@@ -194,15 +194,16 @@ var _ = Describe("prepareModuleLoaderData", func() {
 		}
 
 		mld := api.ModuleLoaderData{
-			Name:               mod.Name,
-			Namespace:          mod.Namespace,
-			ImageRepoSecret:    mod.Spec.ImageRepoSecret,
-			Owner:              &mod,
-			Selector:           mod.Spec.Selector,
-			ServiceAccountName: mod.Spec.ModuleLoader.ServiceAccountName,
-			Modprobe:           mod.Spec.ModuleLoader.Container.Modprobe,
-			ImagePullPolicy:    mod.Spec.ModuleLoader.Container.ImagePullPolicy,
-			KernelVersion:      kernelVersion,
+			Name:                    mod.Name,
+			Namespace:               mod.Namespace,
+			ImageRepoSecret:         mod.Spec.ImageRepoSecret,
+			Owner:                   &mod,
+			Selector:                mod.Spec.Selector,
+			ServiceAccountName:      mod.Spec.ModuleLoader.ServiceAccountName,
+			Modprobe:                mod.Spec.ModuleLoader.Container.Modprobe,
+			ImagePullPolicy:         mod.Spec.ModuleLoader.Container.ImagePullPolicy,
+			KernelVersion:           kernelVersion,
+			KernelNormalizedVersion: kernelVersion,
 		}
 
 		if buildExistsInMapping {
@@ -257,15 +258,16 @@ var _ = Describe("prepareModuleLoaderData", func() {
 	// [TODO] remove this unit test once InTreeModuleToRemove depricated field is removed from CRD
 	DescribeTable("prepare InTreeModules based on InTreeModule", func(inTreeModuleInContainer, inTreeModuleInMapping bool, expectedInTreeModules []string) {
 		mld := api.ModuleLoaderData{
-			Name:               mod.Name,
-			Namespace:          mod.Namespace,
-			ImageRepoSecret:    mod.Spec.ImageRepoSecret,
-			Owner:              &mod,
-			Selector:           mod.Spec.Selector,
-			ServiceAccountName: mod.Spec.ModuleLoader.ServiceAccountName,
-			Modprobe:           mod.Spec.ModuleLoader.Container.Modprobe,
-			ImagePullPolicy:    mod.Spec.ModuleLoader.Container.ImagePullPolicy,
-			KernelVersion:      kernelVersion,
+			Name:                    mod.Name,
+			Namespace:               mod.Namespace,
+			ImageRepoSecret:         mod.Spec.ImageRepoSecret,
+			Owner:                   &mod,
+			Selector:                mod.Spec.Selector,
+			ServiceAccountName:      mod.Spec.ModuleLoader.ServiceAccountName,
+			Modprobe:                mod.Spec.ModuleLoader.Container.Modprobe,
+			ImagePullPolicy:         mod.Spec.ModuleLoader.Container.ImagePullPolicy,
+			KernelVersion:           kernelVersion,
+			KernelNormalizedVersion: kernelVersion,
 		}
 		mld.RegistryTLS = &mod.Spec.ModuleLoader.Container.RegistryTLS
 		mld.ContainerImage = mod.Spec.ModuleLoader.Container.ContainerImage
@@ -282,7 +284,7 @@ var _ = Describe("prepareModuleLoaderData", func() {
 
 		res, err := kh.prepareModuleLoaderData(&mapping, &mod, kernelVersion)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(*res).To(Equal(mld))
+		Expect(*res).To(BeComparableTo(mld))
 	},
 		Entry("inTreeModule not defined", false, false, nil),
 		Entry("inTreeModule defined in container", true, false, []string{"inTreeModuleToRemoveInContainer"}),
@@ -298,8 +300,9 @@ var _ = Describe("replaceTemplates", func() {
 
 	It("error input", func() {
 		mld := api.ModuleLoaderData{
-			ContainerImage: "some image:${KERNEL_XYZ",
-			KernelVersion:  kernelVersion,
+			ContainerImage:          "some image:${KERNEL_XYZ",
+			KernelVersion:           kernelVersion,
+			KernelNormalizedVersion: kernelVersion,
 		}
 		err := kh.replaceTemplates(&mld)
 		Expect(err).To(HaveOccurred())
@@ -315,7 +318,8 @@ var _ = Describe("replaceTemplates", func() {
 				},
 				DockerfileConfigMap: &v1.LocalObjectReference{},
 			},
-			KernelVersion: kernelVersion,
+			KernelVersion:           kernelVersion,
+			KernelNormalizedVersion: kernelVersion,
 		}
 		expectMld := api.ModuleLoaderData{
 			ContainerImage: "some image:5.8.18",
@@ -326,7 +330,8 @@ var _ = Describe("replaceTemplates", func() {
 				},
 				DockerfileConfigMap: &v1.LocalObjectReference{},
 			},
-			KernelVersion: kernelVersion,
+			KernelVersion:           kernelVersion,
+			KernelNormalizedVersion: kernelVersion,
 		}
 
 		err := kh.replaceTemplates(&mld)

@@ -26,13 +26,14 @@ import (
 
 var _ = Describe("MakePodTemplate", func() {
 	const (
-		image              = "my.registry/my/image"
-		dockerfile         = "FROM test"
-		kanikoImage        = "some-kaniko-image:some-tag"
-		kernelVersion      = "1.2.3"
-		moduleName         = "module-name"
-		namespace          = "some-namespace"
-		relatedImageEnvVar = "RELATED_IMAGE_BUILD"
+		image                   = "my.registry/my/image"
+		dockerfile              = "FROM test"
+		kanikoImage             = "some-kaniko-image:some-tag"
+		kernelVersion           = "1.2.3+4"
+		kernelNormalizedVersion = "1.2.3_4"
+		moduleName              = "module-name"
+		namespace               = "some-namespace"
+		relatedImageEnvVar      = "RELATED_IMAGE_BUILD"
 	)
 
 	var (
@@ -93,10 +94,11 @@ var _ = Describe("MakePodTemplate", func() {
 				BuildArgs:           buildArgs,
 				DockerfileConfigMap: &dockerfileConfigMap,
 			},
-			ContainerImage: image,
-			RegistryTLS:    &kmmv1beta1.TLSOptions{},
-			Selector:       nodeSelector,
-			KernelVersion:  kernelVersion,
+			ContainerImage:          image,
+			RegistryTLS:             &kmmv1beta1.TLSOptions{},
+			Selector:                nodeSelector,
+			KernelVersion:           kernelVersion,
+			KernelNormalizedVersion: kernelNormalizedVersion,
 		}
 
 		if useBuildSelector {
@@ -106,7 +108,7 @@ var _ = Describe("MakePodTemplate", func() {
 
 		labels := map[string]string{
 			constants.ModuleNameLabel:    moduleName,
-			constants.TargetKernelTarget: kernelVersion,
+			constants.TargetKernelTarget: kernelNormalizedVersion,
 			constants.PodType:            "build",
 		}
 
@@ -238,7 +240,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, utils.PodTypeBuild).Return(labels),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, utils.PodTypeBuild).Return(labels),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, true)
@@ -286,13 +288,14 @@ var _ = Describe("MakePodTemplate", func() {
 		ctx := context.Background()
 
 		mld := api.ModuleLoaderData{
-			Build:          b,
-			ContainerImage: image,
-			RegistryTLS:    tls,
-			Name:           mod.Name,
-			Namespace:      mod.Namespace,
-			Owner:          &mod,
-			KernelVersion:  kernelVersion,
+			Build:                   b,
+			ContainerImage:          image,
+			RegistryTLS:             tls,
+			Name:                    mod.Name,
+			Namespace:               mod.Namespace,
+			Owner:                   &mod,
+			KernelVersion:           kernelVersion,
+			KernelNormalizedVersion: kernelNormalizedVersion,
 		}
 
 		gomock.InOrder(
@@ -303,7 +306,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			podhelper.EXPECT().PodLabels(mod.Name, kernelVersion, utils.PodTypeBuild).Return(map[string]string{}),
+			podhelper.EXPECT().PodLabels(mod.Name, kernelNormalizedVersion, utils.PodTypeBuild).Return(map[string]string{}),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, pushImage)
@@ -368,9 +371,10 @@ var _ = Describe("MakePodTemplate", func() {
 				DockerfileConfigMap: &dockerfileConfigMap,
 				KanikoParams:        &kmmv1beta1.KanikoParams{Tag: customTag},
 			},
-			ContainerImage: image,
-			RegistryTLS:    &kmmv1beta1.TLSOptions{},
-			KernelVersion:  kernelVersion,
+			ContainerImage:          image,
+			RegistryTLS:             &kmmv1beta1.TLSOptions{},
+			KernelVersion:           kernelVersion,
+			KernelNormalizedVersion: kernelNormalizedVersion,
 		}
 
 		gomock.InOrder(
@@ -381,7 +385,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, utils.PodTypeBuild).Return(map[string]string{}),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, utils.PodTypeBuild).Return(map[string]string{}),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, false)
@@ -401,10 +405,11 @@ var _ = Describe("MakePodTemplate", func() {
 				BuildArgs:           buildArgs,
 				DockerfileConfigMap: &dockerfileConfigMap,
 			},
-			Sign:           &kmmv1beta1.Sign{},
-			ContainerImage: image,
-			RegistryTLS:    &kmmv1beta1.TLSOptions{},
-			KernelVersion:  kernelVersion,
+			Sign:                    &kmmv1beta1.Sign{},
+			ContainerImage:          image,
+			RegistryTLS:             &kmmv1beta1.TLSOptions{},
+			KernelVersion:           kernelVersion,
+			KernelNormalizedVersion: kernelNormalizedVersion,
 		}
 
 		expectedImageName := mld.ContainerImage + ":" + mld.Namespace + "_" + mld.Name + "_kmm_unsigned"
@@ -417,7 +422,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, utils.PodTypeBuild).Return(map[string]string{}),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, utils.PodTypeBuild).Return(map[string]string{}),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, true)

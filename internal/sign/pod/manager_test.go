@@ -127,9 +127,10 @@ var _ = Describe("Sync", func() {
 		previousImageName = "previous-image"
 		namespace         = "some-namespace"
 
-		moduleName    = "module-name"
-		kernelVersion = "1.2.3"
-		podName       = "some-pod"
+		moduleName              = "module-name"
+		kernelVersion           = "1.2.3+4"
+		kernelNormalizedVersion = "1.2.3_4"
+		podName                 = "some-pod"
 	)
 
 	BeforeEach(func() {
@@ -145,11 +146,12 @@ var _ = Describe("Sync", func() {
 	}
 
 	mld := &api.ModuleLoaderData{
-		Name:           moduleName,
-		ContainerImage: imageName,
-		Build:          &kmmv1beta1.Build{},
-		Owner:          &kmmv1beta1.Module{},
-		KernelVersion:  kernelVersion,
+		Name:                    moduleName,
+		ContainerImage:          imageName,
+		Build:                   &kmmv1beta1.Build{},
+		Owner:                   &kmmv1beta1.Module{},
+		KernelVersion:           kernelVersion,
+		KernelNormalizedVersion: kernelNormalizedVersion,
 	}
 
 	DescribeTable("should return the correct status depending on the pod status",
@@ -158,7 +160,7 @@ var _ = Describe("Sync", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"kmm.node.kubernetes.io/pod-type": "sign",
 						"kmm.node.kubernetes.io/module.name":   moduleName,
-						"kmm.node.kubernetes.io/target-kernel": kernelVersion,
+						"kmm.node.kubernetes.io/target-kernel": kernelNormalizedVersion,
 					},
 					Namespace:   namespace,
 					Annotations: map[string]string{constants.PodHashAnnotation: "some hash"},
@@ -169,7 +171,7 @@ var _ = Describe("Sync", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"kmm.node.kubernetes.io/pod-type": "sign",
 						"kmm.node.kubernetes.io/module.name":   moduleName,
-						"kmm.node.kubernetes.io/target-kernel": kernelVersion,
+						"kmm.node.kubernetes.io/target-kernel": kernelNormalizedVersion,
 					},
 					Namespace:   namespace,
 					Annotations: map[string]string{constants.PodHashAnnotation: "some hash"},
@@ -184,9 +186,9 @@ var _ = Describe("Sync", func() {
 			}
 
 			gomock.InOrder(
-				podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+				podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 				maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-				podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(&newPod, nil),
+				podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(&newPod, nil),
 				podhelper.EXPECT().IsPodChanged(&j, &newPod).Return(false, nil),
 				podhelper.EXPECT().GetPodStatus(&newPod).Return(podStatus, poderr),
 			)
@@ -210,7 +212,7 @@ var _ = Describe("Sync", func() {
 		ctx := context.Background()
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).
 				Return(nil, errors.New("random error")),
 		)
@@ -236,9 +238,9 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(nil, errors.New("random error")),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(nil, errors.New("random error")),
 		)
 
 		Expect(
@@ -262,9 +264,9 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
 			podhelper.EXPECT().CreatePod(ctx, &j).Return(errors.New("unable to create pod")),
 		)
 
@@ -290,9 +292,9 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
 			podhelper.EXPECT().CreatePod(ctx, &j).Return(nil),
 		)
 
@@ -319,9 +321,9 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelVersion, "sign").Return(labels),
+			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&newPod, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelVersion, utils.PodTypeSign, mld.Owner).Return(&newPod, nil),
+			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(&newPod, nil),
 			podhelper.EXPECT().IsPodChanged(&newPod, &newPod).Return(true, nil),
 			podhelper.EXPECT().DeletePod(ctx, &newPod).Return(nil),
 		)
