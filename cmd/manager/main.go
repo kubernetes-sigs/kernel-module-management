@@ -22,8 +22,24 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
+	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,22 +51,6 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
-	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -117,22 +117,7 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	podHelperAPI := utils.NewPodHelper(client)
 	buildHelperAPI := build.NewHelper()
-
-	buildAPI := pod.NewBuildManager(
-		client,
-		pod.NewMaker(client, buildHelperAPI, podHelperAPI, scheme),
-		podHelperAPI,
-		registryAPI,
-	)
-
-	signAPI := signpod.NewSignPodManager(
-		client,
-		signpod.NewSigner(client, scheme, podHelperAPI),
-		podHelperAPI,
-		registryAPI,
-	)
 
 	kernelAPI := module.NewKernelMapper(buildHelperAPI, sign.NewSignerHelper())
 
@@ -143,16 +128,6 @@ func main() {
 		scheme)
 	if err = dpc.SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.DevicePluginReconcilerName)
-	}
-
-	bsc := controllers.NewBuildSignReconciler(
-		client,
-		buildAPI,
-		signAPI,
-		kernelAPI,
-		filterAPI)
-	if err = bsc.SetupWithManager(mgr, constants.KernelLabel); err != nil {
-		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignReconcilerName)
 	}
 
 	mnc := controllers.NewModuleNMCReconciler(
@@ -194,6 +169,32 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeKernelClusterClaimReconcilerName)
 		}
 	} else {
+		podHelperAPI := utils.NewPodHelper(client)
+
+		buildAPI := pod.NewBuildManager(
+			client,
+			pod.NewMaker(client, buildHelperAPI, podHelperAPI, scheme),
+			podHelperAPI,
+			registryAPI,
+		)
+
+		signAPI := signpod.NewSignPodManager(
+			client,
+			signpod.NewSigner(client, scheme, podHelperAPI),
+			podHelperAPI,
+			registryAPI,
+		)
+
+		bsc := controllers.NewBuildSignReconciler(
+			client,
+			buildAPI,
+			signAPI,
+			kernelAPI,
+			filterAPI)
+		if err = bsc.SetupWithManager(mgr, constants.KernelLabel); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignReconcilerName)
+		}
+
 		helper := controllers.NewJobEventReconcilerHelper(client)
 
 		if err = controllers.NewBuildSignEventsReconciler(client, helper, eventRecorder).SetupWithManager(mgr); err != nil {
