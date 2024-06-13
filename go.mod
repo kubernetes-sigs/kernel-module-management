@@ -7,7 +7,7 @@ toolchain go1.22.2
 require (
 	github.com/a8m/envsubst v1.4.2
 	github.com/budougumi0617/cmpmock v0.0.4
-	github.com/docker/docker v26.1.3+incompatible
+	github.com/docker/docker v27.0.0+incompatible
 	github.com/go-logr/logr v1.4.2
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-containerregistry v0.19.1
