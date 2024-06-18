@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"regexp"
 	"strings"
 
@@ -90,4 +92,19 @@ func IsKernelModuleReadyNodeLabel(label string) (bool, string, string) {
 	}
 
 	return true, matches[1], matches[2]
+}
+
+func IsObjectSelectedByLabels(objectLabels map[string]string, selectorLabels map[string]string) (bool, error) {
+	objectLabelsSet := labels.Set(objectLabels)
+	sel := labels.NewSelector()
+
+	for k, v := range selectorLabels {
+		requirement, err := labels.NewRequirement(k, selection.Equals, []string{v})
+		if err != nil {
+			return false, fmt.Errorf("failed to create new label requirements: %v", err)
+		}
+		sel = sel.Add(*requirement)
+	}
+
+	return sel.Matches(objectLabelsSet), nil
 }

@@ -2,14 +2,14 @@ package filter
 
 import (
 	"context"
-	"reflect"
-
 	"github.com/go-logr/logr"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubectl/pkg/util/podutils"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -49,8 +49,9 @@ var nodeBecomesSchedulable predicate.Predicate = predicate.Funcs{
 			return false
 		}
 
-		isOldSchedulable := utils.IsNodeSchedulable(oldNode)
-		isNewSchedulable := utils.IsNodeSchedulable(newNode)
+		n := node.NewNode(nil)
+		isOldSchedulable := n.IsNodeSchedulable(oldNode)
+		isNewSchedulable := n.IsNodeSchedulable(newNode)
 		if isOldSchedulable != isNewSchedulable && isNewSchedulable {
 			return true
 		}
