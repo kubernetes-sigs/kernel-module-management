@@ -96,7 +96,7 @@ func (pm *podManager) Sync(
 		return "", fmt.Errorf("could not make Pod template: %v", err)
 	}
 
-	pod, err := pm.podHelper.GetModulePodByKernel(ctx, mld.Name, mld.Namespace, mld.KernelVersion, utils.PodTypeBuild, owner)
+	pod, err := pm.podHelper.GetModulePodByKernel(ctx, mld.Name, mld.Namespace, mld.KernelNormalizedVersion, utils.PodTypeBuild, owner)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoMatchingPod) {
 			return "", fmt.Errorf("error getting the build: %v", err)

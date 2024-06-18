@@ -16,6 +16,11 @@ import (
 type ModuleLoaderData struct {
 	// kernel version
 	KernelVersion string
+
+	// KernelNormalizedVersion is the kernel version with some characters replaced with '_' so that it can be used in
+	// a Kubernetes label or a container image tag.
+	KernelNormalizedVersion string
+
 	// Repo secret for DS images
 	ImageRepoSecret *v1.LocalObjectReference
 
