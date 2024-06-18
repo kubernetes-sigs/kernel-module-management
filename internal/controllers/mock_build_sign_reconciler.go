@@ -55,21 +55,6 @@ func (mr *MockbuildSignReconcilerHelperAPIMockRecorder) garbageCollect(ctx, mod,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "garbageCollect", reflect.TypeOf((*MockbuildSignReconcilerHelperAPI)(nil).garbageCollect), ctx, mod, mldMappings)
 }
 
-// getNodesListBySelector mocks base method.
-func (m *MockbuildSignReconcilerHelperAPI) getNodesListBySelector(ctx context.Context, mod *v1beta1.Module) ([]v1.Node, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getNodesListBySelector", ctx, mod)
-	ret0, _ := ret[0].([]v1.Node)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// getNodesListBySelector indicates an expected call of getNodesListBySelector.
-func (mr *MockbuildSignReconcilerHelperAPIMockRecorder) getNodesListBySelector(ctx, mod any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNodesListBySelector", reflect.TypeOf((*MockbuildSignReconcilerHelperAPI)(nil).getNodesListBySelector), ctx, mod)
-}
-
 // getRelevantKernelMappings mocks base method.
 func (m *MockbuildSignReconcilerHelperAPI) getRelevantKernelMappings(ctx context.Context, mod *v1beta1.Module, targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, error) {
 	m.ctrl.T.Helper()

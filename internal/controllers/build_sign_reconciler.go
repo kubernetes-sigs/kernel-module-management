@@ -19,13 +19,12 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
@@ -35,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"strings"
 )
 
 const BuildSignReconcilerName = "BuildSignReconciler"
@@ -43,6 +43,7 @@ const BuildSignReconcilerName = "BuildSignReconciler"
 type BuildSignReconciler struct {
 	filter         *filter.Filter
 	reconHelperAPI buildSignReconcilerHelperAPI
+	nodeAPI        node.Node
 }
 
 func NewBuildSignReconciler(
@@ -51,11 +52,13 @@ func NewBuildSignReconciler(
 	signAPI sign.SignManager,
 	kernelAPI module.KernelMapper,
 	filter *filter.Filter,
+	nodeAPI node.Node,
 ) *BuildSignReconciler {
 	reconHelperAPI := newBuildSignReconcilerHelper(client, buildAPI, signAPI, kernelAPI)
 	return &BuildSignReconciler{
 		reconHelperAPI: reconHelperAPI,
 		filter:         filter,
+		nodeAPI:        nodeAPI,
 	}
 }
 
@@ -73,8 +76,7 @@ func (r *BuildSignReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Mod
 	res := ctrl.Result{}
 
 	logger := log.FromContext(ctx)
-
-	targetedNodes, err := r.reconHelperAPI.getNodesListBySelector(ctx, mod)
+	targetedNodes, err := r.nodeAPI.GetNodesListBySelector(ctx, mod.Spec.Selector)
 	if err != nil {
 		return res, fmt.Errorf("could get targeted nodes for module %s: %w", mod.Name, err)
 	}
@@ -121,7 +123,6 @@ func (r *BuildSignReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Mod
 //go:generate mockgen -source=build_sign_reconciler.go -package=controllers -destination=mock_build_sign_reconciler.go buildSignReconcilerHelperAPI
 
 type buildSignReconcilerHelperAPI interface {
-	getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error)
 	getRelevantKernelMappings(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, error)
 	handleBuild(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
 	handleSigning(ctx context.Context, mld *api.ModuleLoaderData) (bool, error)
@@ -146,7 +147,6 @@ func newBuildSignReconcilerHelper(client client.Client,
 		kernelAPI: kernelAPI,
 	}
 }
-
 func (bsrh *buildSignReconcilerHelper) getRelevantKernelMappings(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	targetedNodes []v1.Node) (map[string]*api.ModuleLoaderData, error) {
@@ -181,26 +181,6 @@ func (bsrh *buildSignReconcilerHelper) getRelevantKernelMappings(ctx context.Con
 		mldMappings[kernelVersion] = mld
 	}
 	return mldMappings, nil
-}
-
-func (bsrh *buildSignReconcilerHelper) getNodesListBySelector(ctx context.Context, mod *kmmv1beta1.Module) ([]v1.Node, error) {
-	logger := log.FromContext(ctx)
-	logger.V(1).Info("Listing nodes", "selector", mod.Spec.Selector)
-
-	selectedNodes := v1.NodeList{}
-	opt := client.MatchingLabels(mod.Spec.Selector)
-	if err := bsrh.client.List(ctx, &selectedNodes, opt); err != nil {
-		logger.Error(err, "Could not list nodes")
-		return nil, fmt.Errorf("could not list nodes: %v", err)
-	}
-	nodes := make([]v1.Node, 0, len(selectedNodes.Items))
-
-	for _, node := range selectedNodes.Items {
-		if utils.IsNodeSchedulable(&node) {
-			nodes = append(nodes, node)
-		}
-	}
-	return nodes, nil
 }
 
 // handleBuild returns true if build is not needed or finished successfully

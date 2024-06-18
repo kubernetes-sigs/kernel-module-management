@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -223,12 +224,14 @@ var _ = Describe("DevicePluginReconciler_garbageCollect", func() {
 		ctrl *gomock.Controller
 		clnt *client.MockClient
 		dprh devicePluginReconcilerHelperAPI
+		mn   node.Node
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		dprh = newDevicePluginReconcilerHelper(clnt, nil, nil)
+		mn = node.NewMockNode(ctrl)
+		dprh = newDevicePluginReconcilerHelper(clnt, nil, mn, nil)
 	})
 
 	mod := &kmmv1beta1.Module{
@@ -302,12 +305,14 @@ var _ = Describe("DevicePluginReconciler_handleModuleDeletion", func() {
 		ctrl *gomock.Controller
 		clnt *client.MockClient
 		dprh devicePluginReconcilerHelperAPI
+		mn   node.Node
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		dprh = newDevicePluginReconcilerHelper(clnt, nil, nil)
+		mn = node.NewMockNode(ctrl)
+		dprh = newDevicePluginReconcilerHelper(clnt, nil, mn, nil)
 	})
 
 	existingDevicePluginDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
@@ -334,13 +339,15 @@ var _ = Describe("DevicePluginReconciler_setKMMOMetrics", func() {
 		clnt        *client.MockClient
 		mockMetrics *metrics.MockMetrics
 		dprh        devicePluginReconcilerHelperAPI
+		mn          node.Node
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mockMetrics = metrics.NewMockMetrics(ctrl)
-		dprh = newDevicePluginReconcilerHelper(clnt, mockMetrics, nil)
+		mn = node.NewMockNode(ctrl)
+		dprh = newDevicePluginReconcilerHelper(clnt, mockMetrics, mn, nil)
 	})
 
 	ctx := context.Background()
@@ -432,13 +439,15 @@ var _ = Describe("DevicePluginReconciler_moduleUpdateDevicePluginStatus", func()
 		clnt         *client.MockClient
 		statusWriter *client.MockStatusWriter
 		dprh         devicePluginReconcilerHelperAPI
+		mn           node.Node
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		statusWriter = client.NewMockStatusWriter(ctrl)
-		dprh = newDevicePluginReconcilerHelper(clnt, nil, nil)
+		mn = node.NewNode(clnt)
+		dprh = newDevicePluginReconcilerHelper(clnt, nil, mn, nil)
 	})
 
 	ctx := context.Background()

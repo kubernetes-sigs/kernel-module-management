@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"os"
 	"strconv"
 
@@ -118,13 +119,14 @@ func main() {
 
 	registryAPI := registry.NewRegistry()
 	buildHelperAPI := build.NewHelper()
-
+	nodeAPI := node.NewNode(client)
 	kernelAPI := module.NewKernelMapper(buildHelperAPI, sign.NewSignerHelper())
 
 	dpc := controllers.NewDevicePluginReconciler(
 		client,
 		metricsAPI,
 		filterAPI,
+		nodeAPI,
 		scheme)
 	if err = dpc.SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.DevicePluginReconcilerName)
@@ -136,6 +138,7 @@ func main() {
 		registryAPI,
 		nmcHelper,
 		filterAPI,
+		nodeAPI,
 		scheme,
 	)
 	if err = mnc.SetupWithManager(mgr); err != nil {
@@ -146,7 +149,7 @@ func main() {
 
 	eventRecorder := mgr.GetEventRecorderFor("kmm")
 
-	if err = controllers.NewNMCReconciler(client, scheme, workerImage, &cfg.Worker, eventRecorder).SetupWithManager(ctx, mgr); err != nil {
+	if err = controllers.NewNMCReconciler(client, scheme, workerImage, &cfg.Worker, eventRecorder, nodeAPI).SetupWithManager(ctx, mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeModulesConfigReconcilerName)
 	}
 
@@ -184,13 +187,13 @@ func main() {
 			podHelperAPI,
 			registryAPI,
 		)
-
 		bsc := controllers.NewBuildSignReconciler(
 			client,
 			buildAPI,
 			signAPI,
 			kernelAPI,
-			filterAPI)
+			filterAPI,
+			nodeAPI)
 		if err = bsc.SetupWithManager(mgr, constants.KernelLabel); err != nil {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignReconcilerName)
 		}

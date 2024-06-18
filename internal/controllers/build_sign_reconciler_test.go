@@ -7,8 +7,8 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
@@ -27,11 +27,13 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 		mockReconHelper *MockbuildSignReconcilerHelperAPI
 		mod             *kmmv1beta1.Module
 		bsr             *BuildSignReconciler
+		mn              *node.MockNode
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mockReconHelper = NewMockbuildSignReconcilerHelperAPI(ctrl)
+		mn = node.NewMockNode(ctrl)
 
 		mod = &kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: moduleName},
@@ -39,6 +41,7 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 
 		bsr = &BuildSignReconciler{
 			reconHelperAPI: mockReconHelper,
+			nodeAPI:        mn,
 		}
 	})
 
@@ -52,10 +55,10 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 		mappings := map[string]*api.ModuleLoaderData{"kernelVersion": &api.ModuleLoaderData{}}
 		returnedError := fmt.Errorf("some error")
 		if getNodesError {
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(nil, returnedError)
+			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector).Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mockReconHelper.EXPECT().getNodesListBySelector(ctx, &mod).Return(selectNodesList, nil)
+		mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector).Return(selectNodesList, nil)
 		if getMappingsError {
 			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, &mod, selectNodesList).Return(nil, returnedError)
 			goto executeTestFunction
@@ -90,7 +93,7 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 		selectNodesList := []v1.Node{v1.Node{}}
 		mappings := map[string]*api.ModuleLoaderData{"kernelVersion": &api.ModuleLoaderData{}}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(selectNodesList, nil),
+			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, mod, selectNodesList).Return(mappings, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(false, nil),
 			mockReconHelper.EXPECT().garbageCollect(ctx, mod, mappings).Return(nil),
@@ -106,7 +109,7 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 		selectNodesList := []v1.Node{v1.Node{}}
 		mappings := map[string]*api.ModuleLoaderData{"kernelVersion": &api.ModuleLoaderData{}}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(selectNodesList, nil),
+			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, mod, selectNodesList).Return(mappings, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(false, nil),
@@ -120,10 +123,11 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 	})
 
 	It("Good flow", func() {
+
 		selectNodesList := []v1.Node{v1.Node{}}
 		mappings := map[string]*api.ModuleLoaderData{"kernelVersion": &api.ModuleLoaderData{}}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getNodesListBySelector(ctx, mod).Return(selectNodesList, nil),
+			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector).Return(selectNodesList, nil),
 			mockReconHelper.EXPECT().getRelevantKernelMappings(ctx, mod, selectNodesList).Return(mappings, nil),
 			mockReconHelper.EXPECT().handleBuild(ctx, mappings["kernelVersion"]).Return(true, nil),
 			mockReconHelper.EXPECT().handleSigning(ctx, mappings["kernelVersion"]).Return(true, nil),
@@ -134,62 +138,6 @@ var _ = Describe("BuildSignReconciler_Reconcile", func() {
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
-	})
-})
-
-var _ = Describe("BuildSignReconciler_getNodesListBySelector", func() {
-	var (
-		ctrl *gomock.Controller
-		clnt *client.MockClient
-		bsrh buildSignReconcilerHelperAPI
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		bsrh = newBuildSignReconcilerHelper(clnt, nil, nil, nil)
-	})
-
-	It("list failed", func() {
-		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
-
-		nodes, err := bsrh.getNodesListBySelector(context.Background(), &kmmv1beta1.Module{})
-
-		Expect(err).To(HaveOccurred())
-		Expect(nodes).To(BeNil())
-	})
-
-	It("Return only schedulable nodes", func() {
-		node1 := v1.Node{
-			Spec: v1.NodeSpec{
-				Taints: []v1.Taint{
-					v1.Taint{
-						Effect: v1.TaintEffectNoSchedule,
-					},
-				},
-			},
-		}
-		node2 := v1.Node{}
-		node3 := v1.Node{
-			Spec: v1.NodeSpec{
-				Taints: []v1.Taint{
-					v1.Taint{
-						Effect: v1.TaintEffectPreferNoSchedule,
-					},
-				},
-			},
-		}
-		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
-				list.Items = []v1.Node{node1, node2, node3}
-				return nil
-			},
-		)
-		nodes, err := bsrh.getNodesListBySelector(context.Background(), &kmmv1beta1.Module{})
-
-		Expect(err).NotTo(HaveOccurred())
-		Expect(nodes).To(Equal([]v1.Node{node2, node3}))
-
 	})
 })
 

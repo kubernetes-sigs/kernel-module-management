@@ -99,21 +99,6 @@ func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getNMCsByModuleSet(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNMCsByModuleSet", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getNMCsByModuleSet), ctx, mod)
 }
 
-// getNodesListBySelector mocks base method.
-func (m *MockmoduleNMCReconcilerHelperAPI) getNodesListBySelector(ctx context.Context, mod *v1beta1.Module) ([]v1.Node, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getNodesListBySelector", ctx, mod)
-	ret0, _ := ret[0].([]v1.Node)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// getNodesListBySelector indicates an expected call of getNodesListBySelector.
-func (mr *MockmoduleNMCReconcilerHelperAPIMockRecorder) getNodesListBySelector(ctx, mod any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNodesListBySelector", reflect.TypeOf((*MockmoduleNMCReconcilerHelperAPI)(nil).getNodesListBySelector), ctx, mod)
-}
-
 // moduleUpdateWorkerPodsStatus mocks base method.
 func (m *MockmoduleNMCReconcilerHelperAPI) moduleUpdateWorkerPodsStatus(ctx context.Context, mod *v1beta1.Module, targetedNodes []v1.Node) error {
 	m.ctrl.T.Helper()
