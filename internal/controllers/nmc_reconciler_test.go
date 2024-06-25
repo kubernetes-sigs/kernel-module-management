@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -1379,6 +1380,60 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 	)
 })
 
+var _ = Describe("recordModuleEvents", func() {
+	var (
+		node         *v1.Node
+		h            *nmcReconcilerHelperImpl
+		modules      []types.NamespacedName
+		fakeRecorder *record.FakeRecorder
+		ctrl         *gomock.Controller
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		client := testclient.NewMockClient(ctrl)
+		pm := NewMockpodManager(ctrl)
+		fakeRecorder = record.NewFakeRecorder(10)
+		h = &nmcReconcilerHelperImpl{
+			client:   client,
+			pm:       pm,
+			recorder: fakeRecorder,
+			nodeAPI:  nil,
+		}
+		node = &v1.Node{}
+		modules = []types.NamespacedName{{Namespace: "example-ns", Name: "example-name"}}
+	})
+
+	closeAndGetAllEvents := func(events chan string) []string {
+		elems := make([]string, 0)
+
+		close(events)
+
+		for s := range events {
+			elems = append(elems, s)
+		}
+
+		return elems
+	}
+
+	DescribeTable("recording module events",
+		func(action, expectedEvent string) {
+			h.recordModuleEvents(node, modules, action)
+			events := closeAndGetAllEvents(fakeRecorder.Events)
+			Expect(events).To(HaveLen(1))
+			Expect(events[0]).To(Equal(expectedEvent))
+		},
+		Entry("Unload modules from kernel", "unload", "Normal ModuleUnloaded Module example-ns/example-name unloaded from the kernel map[module:example-ns/example-name]"),
+		Entry("Load modules into kernel", "load", "Normal ModuleLoaded Module example-ns/example-name loaded into the kernel map[module:example-ns/example-name]"),
+	)
+
+	It("Should not record any event for invalid action", func() {
+		h.recordModuleEvents(node, modules, "invalid")
+		events := closeAndGetAllEvents(fakeRecorder.Events)
+		Expect(events).To(BeEmpty())
+	})
+})
+
 const (
 	serviceAccountName = "some-sa"
 	workerImage        = "worker-image"
@@ -1904,4 +1959,230 @@ var _ = Describe("pullSecretHelperImpl_VolumesAndVolumeMounts", func() {
 		Expect(resVols).To(BeComparableTo(vols))
 		Expect(resVolMounts).To(BeComparableTo(volMounts))
 	})
+})
+
+var _ = Describe("getKernelModuleReadyLabels", func() {
+
+	DescribeTable("getKernelModuleReadyLabels different scenarios", func(labels map[string]string,
+		nodeModuleReadyLabelsEqual sets.Set[types.NamespacedName],
+		deprecatedNodeModuleReadyLabelsEqual sets.Set[string]) {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: labels,
+			},
+		}
+
+		nodeModuleReadyLabels := sets.New[types.NamespacedName]()
+		deprecatedNodeModuleReadyLabels := sets.New[string]()
+
+		getKernelModuleReadyLabels(&nodeModuleReadyLabels, &deprecatedNodeModuleReadyLabels, node)
+
+		Expect(nodeModuleReadyLabels).To(Equal(nodeModuleReadyLabelsEqual))
+		Expect(deprecatedNodeModuleReadyLabels).To(Equal(deprecatedNodeModuleReadyLabelsEqual))
+	},
+		Entry("Should be empty", map[string]string{},
+			sets.Set[types.NamespacedName]{},
+			sets.Set[string]{},
+		),
+
+		Entry("nodeModuleReadyLabels found", map[string]string{"kmm.node.kubernetes.io/example-ns.example-name.ready": ""},
+			sets.Set[types.NamespacedName]{
+				{Namespace: "example-ns", Name: "example-name"}: {},
+			},
+			sets.Set[string]{},
+		),
+
+		Entry("deprecatedNodeModuleReadyLabels found", map[string]string{"kmm.node.kubernetes.io/example-module.ready": ""},
+			sets.Set[types.NamespacedName]{},
+			sets.Set[string]{
+				"kmm.node.kubernetes.io/example-module.ready": {},
+			},
+		),
+	)
+})
+
+var _ = Describe("getSpecLabelsAndTheirConfigs", func() {
+
+	var (
+		nmc   kmmv1beta1.NodeModulesConfig
+		ns    string
+		name  string
+		image string
+	)
+
+	BeforeEach(func() {
+		ns = "example-ns"
+		name = "example-name"
+		image = "example-image"
+		nmc = kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmcName"},
+			Spec: kmmv1beta1.NodeModulesConfigSpec{
+				Modules: []kmmv1beta1.NodeModuleSpec{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Namespace: ns,
+							Name:      name,
+						},
+						Config: kmmv1beta1.ModuleConfig{ContainerImage: image},
+					},
+				},
+			},
+		}
+	})
+
+	It("Should work as expected", func() {
+		specLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
+		getSpecLabelsAndTheirConfigs(specLabels, &nmc)
+		Expect(specLabels).To(HaveKeyWithValue(types.NamespacedName{Namespace: ns, Name: name}, kmmv1beta1.ModuleConfig{ContainerImage: image}))
+
+	})
+})
+
+var _ = Describe("getStatusLabelsAndTheirConfigs", func() {
+
+	var (
+		nmc   kmmv1beta1.NodeModulesConfig
+		ns    string
+		name  string
+		image string
+	)
+
+	BeforeEach(func() {
+		ns = "example-ns"
+		name = "example-name"
+		image = "example-image"
+		nmc = kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmcName"},
+			Status: kmmv1beta1.NodeModulesConfigStatus{
+				Modules: []kmmv1beta1.NodeModuleStatus{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Namespace: ns,
+							Name:      name,
+						},
+						Config: kmmv1beta1.ModuleConfig{ContainerImage: image},
+					},
+				},
+			},
+		}
+	})
+
+	It("Should work as expected", func() {
+		statusLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
+		getStatusLabelsAndTheirConfigs(statusLabels, &nmc)
+		Expect(statusLabels).To(HaveKeyWithValue(types.NamespacedName{Namespace: ns, Name: name}, kmmv1beta1.ModuleConfig{ContainerImage: image}))
+
+	})
+})
+
+var _ = Describe("removeOrphanedLabels", func() {
+	var (
+		nsFirst    = "example-ns-1"
+		nsSecond   = "example-ns-2"
+		nameFirst  = "example-name-1"
+		nameSecond = "example-name-2"
+	)
+
+	DescribeTable("removeOrphanedLabels different scenarios", func(nodeModuleReadyLabels sets.Set[types.NamespacedName], specLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+		statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+		unloaded []types.NamespacedName,
+		node v1.Node,
+		expectedUnloaded []types.NamespacedName,
+	) {
+		unloaded = removeOrphanedLabels(nodeModuleReadyLabels, specLabels, statusLabels, unloaded, &node)
+		Expect(unloaded).To(Equal(expectedUnloaded))
+	},
+		Entry("Empty spec and status labels, should result of empty unloaded variable",
+			sets.Set[types.NamespacedName]{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			[]types.NamespacedName{},
+			v1.Node{},
+			[]types.NamespacedName{}),
+		Entry("ModuleConfig obj exists in specLabels so it should not be in unloaded variable",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsFirst, Name: nameFirst}:   {},
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			[]types.NamespacedName{},
+			v1.Node{},
+			[]types.NamespacedName{{Namespace: nsSecond, Name: nameSecond}}),
+
+		Entry("ModuleConfig obj exists in statusLabels so it should not be in unloaded variable",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsFirst, Name: nameFirst}:   {},
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {}},
+			[]types.NamespacedName{},
+			v1.Node{},
+			[]types.NamespacedName{{Namespace: nsSecond, Name: nameSecond}}),
+
+		Entry("Both ModuleConfig obj exist in specLabels or statusLabels so they should not be in unloaded variable",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsFirst, Name: nameFirst}:   {},
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsSecond, Name: nameSecond}: {}},
+			[]types.NamespacedName{},
+			v1.Node{},
+			[]types.NamespacedName{}))
+})
+
+var _ = Describe("addEqualLabels", func() {
+	var (
+		nsFirst    = "example-ns-1"
+		nsSecond   = "example-ns-2"
+		nameFirst  = "example-name-1"
+		nameSecond = "example-name-2"
+	)
+
+	DescribeTable("removeOrphanedLabels different scenarios", func(nodeModuleReadyLabels sets.Set[types.NamespacedName], specLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+		statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+		loaded []types.NamespacedName,
+		node v1.Node,
+		expectedUnloaded []types.NamespacedName,
+	) {
+		loaded = addEqualLabels(nodeModuleReadyLabels, specLabels, statusLabels, loaded, &node)
+		Expect(loaded).To(Equal(expectedUnloaded))
+	},
+		Entry("Empty spec and status labels, should result of empty loaded variable",
+			sets.Set[types.NamespacedName]{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			[]types.NamespacedName{},
+			v1.Node{},
+			[]types.NamespacedName{}),
+		Entry("specConfig and statusConfig are equal and nsn is not in nodeModuleReadyLabels, so nsn should be returned",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: "image"}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: "image"}},
+			[]types.NamespacedName{},
+			v1.Node{},
+			[]types.NamespacedName{{Namespace: nsFirst, Name: nameFirst}}),
+		Entry("specConfig and statusConfig aren't equal so nsn shouldn't not be returned",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: "image1"}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: "image2"}},
+			[]types.NamespacedName{},
+			v1.Node{},
+			[]types.NamespacedName{}),
+		Entry("nsn is in nodeModuleReadyLabels so nsn should not be returned",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsFirst, Name: nameFirst}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: "image"}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: "image"}},
+			[]types.NamespacedName{},
+			v1.Node{},
+			[]types.NamespacedName{}))
+
 })
