@@ -38,6 +38,13 @@ replacements:
         options:
           create: true
           delimiter: /
+      - select:
+          kind: MutatingWebhookConfiguration
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          create: true
+          delimiter: /
   - source:
       kind: Certificate
       fieldPath: metadata.name
@@ -52,6 +59,14 @@ replacements:
           index: 1
       - select:
           kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          create: true
+          delimiter: /
+          index: 1
+      - select:
+          kind: MutatingWebhookConfiguration
         fieldPaths:
           - metadata.annotations.[cert-manager.io/inject-ca-from]
         options:

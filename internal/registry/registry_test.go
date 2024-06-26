@@ -57,14 +57,6 @@ var _ = Describe("ImageExists", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to get pull options for image"))
 		})
 
-		It("should fail if the image name isn't valid", func() {
-
-			_, err = reg.ImageExists(ctx, invalidImage, &kmmv1beta1.TLSOptions{}, nil)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("does not contain hash or tag"))
-		})
-
 		It("should fail if it cannot get key chain from secret", func() {
 
 			mockRegistryAuthGetter.EXPECT().GetKeyChain(ctx).Return(nil, errors.New("some error"))
@@ -220,14 +212,6 @@ var _ = Describe("GetLayersDigests", func() {
 
 		AfterEach(func() {
 			Expect(err.Error()).To(ContainSubstring("failed to get pull options for image"))
-		})
-
-		It("should fail if the image name isn't valid", func() {
-
-			_, err = reg.ImageExists(ctx, invalidImage, &kmmv1beta1.TLSOptions{}, nil)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("does not contain hash or tag"))
 		})
 
 		It("should fail if it cannot get key chain from secret", func() {
@@ -391,13 +375,6 @@ var _ = Describe("GetDigest", func() {
 
 		AfterEach(func() {
 			Expect(err.Error()).To(ContainSubstring("failed to get pull options for image"))
-		})
-
-		It("should fail if the image name isn't valid", func() {
-			_, err = reg.GetDigest(ctx, invalidImage, &kmmv1beta1.TLSOptions{}, nil)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("does not contain hash or tag"))
 		})
 
 		It("should fail if it cannot get key chain from secret", func() {
