@@ -565,28 +565,15 @@ func (h *nmcReconcilerHelperImpl) UpdateNodeLabelsAndRecordEvents(ctx context.Co
 	nodeModuleReadyLabels := sets.New[types.NamespacedName]()
 	deprecatedNodeModuleReadyLabels := sets.New[string]()
 
-	for label := range node.GetLabels() {
-		if ok, namespace, name := utils.IsKernelModuleReadyNodeLabel(label); ok {
-			nodeModuleReadyLabels.Insert(types.NamespacedName{Namespace: namespace, Name: name})
-		}
-
-		if utils.IsDeprecatedKernelModuleReadyNodeLabel(label) {
-			deprecatedNodeModuleReadyLabels.Insert(label)
-		}
-	}
+	getKernelModuleReadyLabels(&nodeModuleReadyLabels, &deprecatedNodeModuleReadyLabels, node)
 
 	// get spec labels and their config
 	specLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
-	for _, module := range nmc.Spec.Modules {
-		specLabels[types.NamespacedName{Namespace: module.Namespace, Name: module.Name}] = module.Config
-	}
+	getSpecLabelsAndTheirConfigs(specLabels, nmc)
 
 	// get status labels and their config
 	statusLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
-	for _, module := range nmc.Status.Modules {
-		label := types.NamespacedName{Namespace: module.Namespace, Name: module.Name}
-		statusLabels[label] = module.Config
-	}
+	getStatusLabelsAndTheirConfigs(statusLabels, nmc)
 
 	unloaded := make([]types.NamespacedName, 0, len(nodeModuleReadyLabels))
 	loaded := make([]types.NamespacedName, 0, len(specLabels))
@@ -594,18 +581,7 @@ func (h *nmcReconcilerHelperImpl) UpdateNodeLabelsAndRecordEvents(ctx context.Co
 	patchFrom := client.MergeFrom(node.DeepCopy())
 
 	// label in node but not in spec or status - should be removed
-	for nsn := range nodeModuleReadyLabels {
-		_, inSpec := specLabels[nsn]
-		_, inStatus := statusLabels[nsn]
-		if !inSpec && !inStatus {
-			meta.RemoveLabel(
-				&node,
-				utils.GetKernelModuleReadyNodeLabel(nsn.Namespace, nsn.Name),
-			)
-
-			unloaded = append(unloaded, nsn)
-		}
-	}
+	unloaded = removeOrphanedLabels(nodeModuleReadyLabels, specLabels, statusLabels, unloaded, &node)
 
 	// v1 ready labels, deprecated - should be removed
 	for label := range deprecatedNodeModuleReadyLabels {
@@ -613,46 +589,45 @@ func (h *nmcReconcilerHelperImpl) UpdateNodeLabelsAndRecordEvents(ctx context.Co
 	}
 
 	// label in spec and status and config equal - should be added
-	for nsn, specConfig := range specLabels {
-		statusConfig, ok := statusLabels[nsn]
-		if ok && reflect.DeepEqual(specConfig, statusConfig) && !nodeModuleReadyLabels.Has(nsn) {
-			meta.SetLabel(
-				&node,
-				utils.GetKernelModuleReadyNodeLabel(nsn.Namespace, nsn.Name),
-				"",
-			)
-
-			loaded = append(loaded, nsn)
-		}
-	}
+	loaded = addEqualLabels(nodeModuleReadyLabels, specLabels, statusLabels, loaded, &node)
 
 	if err := h.client.Patch(ctx, &node, patchFrom); err != nil {
 		return fmt.Errorf("could not patch node: %v", err)
 	}
 
-	for _, nsn := range unloaded {
-		h.recorder.AnnotatedEventf(
-			&node,
-			map[string]string{"module": nsn.String()},
-			v1.EventTypeNormal,
-			"ModuleUnloaded",
-			"Module %s unloaded from the kernel",
-			nsn.String(),
-		)
-	}
-
-	for _, nsn := range loaded {
-		h.recorder.AnnotatedEventf(
-			&node,
-			map[string]string{"module": nsn.String()},
-			v1.EventTypeNormal,
-			"ModuleLoaded",
-			"Module %s loaded into the kernel",
-			nsn.String(),
-		)
-	}
+	h.recordModuleEvents(&node, unloaded, "unload")
+	h.recordModuleEvents(&node, loaded, "load")
 
 	return nil
+}
+
+func (h *nmcReconcilerHelperImpl) recordModuleEvents(node *v1.Node, modules []types.NamespacedName, action string) {
+
+	var eventType, reason, message string
+
+	switch action {
+	case "load":
+		eventType = v1.EventTypeNormal
+		reason = "ModuleLoaded"
+		message = "Module %s loaded into the kernel"
+	case "unload":
+		eventType = v1.EventTypeNormal
+		reason = "ModuleUnloaded"
+		message = "Module %s unloaded from the kernel"
+	default:
+		return
+	}
+
+	for _, nsn := range modules {
+		h.recorder.AnnotatedEventf(
+			node,
+			map[string]string{"module": nsn.String()},
+			eventType,
+			reason,
+			message,
+			nsn.String(),
+		)
+	}
 }
 
 const (
@@ -1210,4 +1185,66 @@ func (p *pullSecretHelperImpl) VolumesAndVolumeMounts(ctx context.Context, item 
 	}
 
 	return volumes, volumeMounts, nil
+}
+
+func getKernelModuleReadyLabels(nodeModuleReadyLabels *sets.Set[types.NamespacedName], deprecatedNodeModuleReadyLabels *sets.Set[string], node v1.Node) {
+	for label := range node.GetLabels() {
+		if ok, namespace, name := utils.IsKernelModuleReadyNodeLabel(label); ok {
+			nodeModuleReadyLabels.Insert(types.NamespacedName{Namespace: namespace, Name: name})
+		}
+
+		if utils.IsDeprecatedKernelModuleReadyNodeLabel(label) {
+			deprecatedNodeModuleReadyLabels.Insert(label)
+		}
+	}
+}
+
+func getSpecLabelsAndTheirConfigs(specLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig, nmc *kmmv1beta1.NodeModulesConfig) {
+	for _, module := range nmc.Spec.Modules {
+		specLabels[types.NamespacedName{Namespace: module.Namespace, Name: module.Name}] = module.Config
+	}
+}
+
+func getStatusLabelsAndTheirConfigs(statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig, nmc *kmmv1beta1.NodeModulesConfig) {
+	for _, module := range nmc.Status.Modules {
+		label := types.NamespacedName{Namespace: module.Namespace, Name: module.Name}
+		statusLabels[label] = module.Config
+	}
+}
+
+func removeOrphanedLabels(nodeModuleReadyLabels sets.Set[types.NamespacedName],
+	specLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+	statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+	unloaded []types.NamespacedName,
+	node *v1.Node) []types.NamespacedName {
+	for nsn := range nodeModuleReadyLabels {
+		_, inSpec := specLabels[nsn]
+		_, inStatus := statusLabels[nsn]
+		if !inSpec && !inStatus {
+			meta.RemoveLabel(
+				node,
+				utils.GetKernelModuleReadyNodeLabel(nsn.Namespace, nsn.Name),
+			)
+			unloaded = append(unloaded, nsn)
+		}
+	}
+	return unloaded
+}
+func addEqualLabels(nodeModuleReadyLabels sets.Set[types.NamespacedName],
+	specLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+	statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+	loaded []types.NamespacedName,
+	node *v1.Node) []types.NamespacedName {
+	for nsn, specConfig := range specLabels {
+		statusConfig, ok := statusLabels[nsn]
+		if ok && reflect.DeepEqual(specConfig, statusConfig) && !nodeModuleReadyLabels.Has(nsn) {
+			meta.SetLabel(
+				node,
+				utils.GetKernelModuleReadyNodeLabel(nsn.Namespace, nsn.Name),
+				"",
+			)
+			loaded = append(loaded, nsn)
+		}
+	}
+	return loaded
 }
