@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/go-logr/logr"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -111,9 +112,25 @@ func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
 	return nil, validateModprobe(mod.Spec.ModuleLoader.Container.Modprobe)
 }
 
+func validateImageFormat(img string) error {
+
+	if !strings.Contains(img, ":") && !strings.Contains(img, "@") {
+		return fmt.Errorf("container image must explicitely set a tag or digest; got: %s", img)
+	}
+
+	return nil
+}
+
 func validateModuleLoaderContainerSpec(container kmmv1beta1.ModuleLoaderContainerSpec) error {
+
 	if container.InTreeModulesToRemove != nil && container.InTreeModuleToRemove != "" { //nolint:staticcheck
 		return fmt.Errorf("only one of the Container's fields: InTreeModulesToRemove or InTreeModuleToRemove can be defined")
+	}
+
+	if contImg := container.ContainerImage; contImg != "" {
+		if err := validateImageFormat(contImg); err != nil {
+			return fmt.Errorf("failed to validate image format: %v", err)
+		}
 	}
 
 	for idx, km := range container.KernelMappings {
@@ -129,8 +146,12 @@ func validateModuleLoaderContainerSpec(container kmmv1beta1.ModuleLoaderContaine
 			return fmt.Errorf("invalid regexp at index %d: %v", idx, err)
 		}
 
-		if container.ContainerImage == "" && km.ContainerImage == "" {
-			return fmt.Errorf("missing spec.moduleLoader.container.kernelMappings[%d].containerImage", idx)
+		if kmImg := km.ContainerImage; kmImg == "" {
+			if container.ContainerImage == "" {
+				return fmt.Errorf("missing spec.moduleLoader.container.kernelMappings[%d].containerImage", idx)
+			}
+		} else if err := validateImageFormat(kmImg); err != nil {
+			return fmt.Errorf("failed to validate image format: %v", err)
 		}
 
 		if km.InTreeModulesToRemove != nil && km.InTreeModuleToRemove != "" { //nolint:staticcheck

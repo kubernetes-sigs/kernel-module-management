@@ -45,7 +45,7 @@ var (
 						ModuleName: "mod-name",
 					},
 					KernelMappings: []kmmv1beta1.KernelMapping{
-						{Regexp: "valid-regexp", ContainerImage: "image-url"},
+						{Regexp: "valid-regexp", ContainerImage: "image-url:mytag"},
 					},
 				},
 			},
@@ -75,6 +75,27 @@ var _ = Describe("maxCombinedLength", func() {
 	})
 })
 
+var _ = Describe("validateImageFormat", func() {
+
+	It("should fail if no tag or digest were specified", func() {
+
+		Expect(
+			validateImageFormat("image-ur"),
+		).To(HaveOccurred())
+	})
+
+	It("should work if a tag or digest were specified", func() {
+
+		Expect(
+			validateImageFormat("image-url:tag"),
+		).NotTo(HaveOccurred())
+
+		Expect(
+			validateImageFormat("image-url@sha256:xxxxxxxxxxxx"),
+		).NotTo(HaveOccurred())
+	})
+})
+
 var _ = Describe("validateModuleLoaderContainerSpec", func() {
 	It("should pass when there are not kernel mappings", func() {
 		Expect(
@@ -84,18 +105,36 @@ var _ = Describe("validateModuleLoaderContainerSpec", func() {
 		)
 	})
 
+	It("should fail if the containerImage doesn't contain a sha or tag", func() {
+
+		containerSpec := kmmv1beta1.ModuleLoaderContainerSpec{
+			ContainerImage: "image-url",
+			KernelMappings: []kmmv1beta1.KernelMapping{
+				{Regexp: "valid-regexp"},
+			},
+		}
+
+		Expect(
+			validateModuleLoaderContainerSpec(containerSpec),
+		).To(
+			MatchError(
+				ContainSubstring("failed to validate image format"),
+			),
+		)
+	})
+
 	It("should pass when regexp,literal and containerImage are valid", func() {
 		containerSpec1 := kmmv1beta1.ModuleLoaderContainerSpec{
 			KernelMappings: []kmmv1beta1.KernelMapping{
-				{Regexp: "valid-regexp", ContainerImage: "image-url"},
-				{Regexp: "^.*$", ContainerImage: "image-url"},
+				{Regexp: "valid-regexp", ContainerImage: "image-url:mytag"},
+				{Regexp: "^.*$", ContainerImage: "image-url:mytag"},
 			},
 		}
 
 		Expect(validateModuleLoaderContainerSpec(containerSpec1)).ToNot(HaveOccurred())
 
 		containerSpec2 := kmmv1beta1.ModuleLoaderContainerSpec{
-			ContainerImage: "image-url",
+			ContainerImage: "image-url:mytag",
 			KernelMappings: []kmmv1beta1.KernelMapping{
 				{Regexp: "valid-regexp"},
 			},
@@ -104,7 +143,7 @@ var _ = Describe("validateModuleLoaderContainerSpec", func() {
 		Expect(validateModuleLoaderContainerSpec(containerSpec2)).ToNot(HaveOccurred())
 
 		containerSpec3 := kmmv1beta1.ModuleLoaderContainerSpec{
-			ContainerImage: "image-url",
+			ContainerImage: "image-url:mytag",
 			KernelMappings: []kmmv1beta1.KernelMapping{
 				{Literal: "any-value"},
 			},
@@ -172,6 +211,22 @@ var _ = Describe("validateModuleLoaderContainerSpec", func() {
 		).To(
 			MatchError(
 				ContainSubstring("missing spec.moduleLoader.container.kernelMappings"),
+			),
+		)
+	})
+
+	It("should fail when a kernel-mapping has invalid containerName", func() {
+		containerSpec := kmmv1beta1.ModuleLoaderContainerSpec{
+			KernelMappings: []kmmv1beta1.KernelMapping{
+				{Regexp: "valid-regexp", ContainerImage: "image-url"},
+			},
+		}
+
+		Expect(
+			validateModuleLoaderContainerSpec(containerSpec),
+		).To(
+			MatchError(
+				ContainSubstring("failed to validate image format"),
 			),
 		)
 	})
@@ -412,7 +467,7 @@ var _ = Describe("ValidateUpdate", func() {
 						Modprobe: kmmv1beta1.ModprobeSpec{
 							ModuleName: "module-name",
 						},
-						ContainerImage: "image-url",
+						ContainerImage: "image-url:mytag",
 						KernelMappings: []kmmv1beta1.KernelMapping{
 							{Regexp: "valid-regexp"},
 						},
@@ -430,7 +485,7 @@ var _ = Describe("ValidateUpdate", func() {
 								Load: []string{"arg-1"}, Unload: []string{"arg-1"},
 							},
 						},
-						ContainerImage: "image-url",
+						ContainerImage: "image-url:mytag",
 						KernelMappings: []kmmv1beta1.KernelMapping{
 							{Regexp: "valid-regexp"},
 						},
