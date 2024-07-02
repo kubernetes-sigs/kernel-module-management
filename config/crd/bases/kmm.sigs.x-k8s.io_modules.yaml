@@ -44,6 +44,7 @@ spec:
                 description: |-
                   DevicePlugin allows overriding some properties of the container that deploys the device plugin on the node.
                   Name is ignored and is set automatically by the KMM Operator.
+                nullable: true
                 properties:
                   container:
                     properties:
@@ -2171,6 +2172,7 @@ spec:
                               - name
                               - value
                               type: object
+                            nullable: true
                             type: array
                           dockerfileConfigMap:
                             description: ConfigMap that holds Dockerfile contents
@@ -2299,6 +2301,7 @@ spec:
                                     - name
                                     - value
                                     type: object
+                                  nullable: true
                                   type: array
                                 dockerfileConfigMap:
                                   description: ConfigMap that holds Dockerfile contents
@@ -2374,6 +2377,7 @@ spec:
                                 before loading the kernel module from the ContainerImage
                               items:
                                 type: string
+                              nullable: true
                               type: array
                             literal:
                               description: Literal defines a literal target kernel

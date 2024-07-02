@@ -46,6 +46,7 @@ type KanikoParams struct {
 
 type Build struct {
 	// +optional
+	// +nullable
 	// BuildArgs is an array of build variables that are provided to the image building backend.
 	BuildArgs []BuildArg `json:"buildArgs"`
 
@@ -125,6 +126,7 @@ type KernelMapping struct {
 	InTreeModuleToRemove string `json:"inTreeModuleToRemove"`
 
 	// +optional
+	// +nullable
 	// InTreeModulesToRemove specifies any number of  in-tree kernel modules that should be removed (if present)
 	// before loading the kernel module from the ContainerImage
 	InTreeModulesToRemove []string `json:"inTreeModulesToRemove"`
@@ -315,6 +317,7 @@ type ModuleSpec struct {
 	// DevicePlugin allows overriding some properties of the container that deploys the device plugin on the node.
 	// Name is ignored and is set automatically by the KMM Operator.
 	// +optional
+	// +nullable
 	DevicePlugin *DevicePluginSpec `json:"devicePlugin"`
 
 	// ModuleLoader allows overriding some properties of the container that loads the kernel module on the node.
