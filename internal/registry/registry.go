@@ -113,10 +113,6 @@ func (r *registry) getPullOptions(ctx context.Context, image string, tlsOptions 
 		repo = tag[0]
 	}
 
-	if repo == "" {
-		return nil, fmt.Errorf("image url %s is not valid, does not contain hash or tag", image)
-	}
-
 	options := []crane.Option{
 		crane.WithContext(ctx),
 	}
