@@ -96,3 +96,17 @@ func (mr *MockNodeMockRecorder) IsNodeSchedulable(node any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNodeSchedulable", reflect.TypeOf((*MockNode)(nil).IsNodeSchedulable), node)
 }
+
+// UpdateLabels mocks base method.
+func (m *MockNode) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLabels", ctx, node, toBeAdded, toBeRemoved)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateLabels indicates an expected call of UpdateLabels.
+func (mr *MockNodeMockRecorder) UpdateLabels(ctx, node, toBeAdded, toBeRemoved any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLabels", reflect.TypeOf((*MockNode)(nil).UpdateLabels), ctx, node, toBeAdded, toBeRemoved)
+}
