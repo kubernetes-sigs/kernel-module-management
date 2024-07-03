@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("IsNodeSchedulable", func() {
@@ -118,6 +120,59 @@ var _ = Describe("GetNodesListBySelector", func() {
 	})
 })
 
+var (
+	loadedKernelModuleReadyNodeLabel   = utils.GetKernelModuleReadyNodeLabel("loaded-ns", "loaded-n")
+	unloadedKernelModuleReadyNodeLabel = utils.GetKernelModuleReadyNodeLabel("unloaded-ns", "unloaded-n")
+)
+
+var _ = Describe("UpdateLabels", func() {
+	var (
+		ctrl *gomock.Controller
+		n    Node
+		ctx  context.Context
+		clnt *client.MockClient
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		ctx = context.TODO()
+		n = NewNode(clnt)
+	})
+
+	It("Should work as expected", func() {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{},
+			},
+		}
+		loaded := []string{loadedKernelModuleReadyNodeLabel}
+		unloaded := []string{unloadedKernelModuleReadyNodeLabel}
+
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
+		err := n.UpdateLabels(ctx, &node, loaded, unloaded)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(node.Labels).To(HaveKey(loadedKernelModuleReadyNodeLabel))
+	})
+
+	It("Should fail to patch node", func() {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{},
+			},
+		}
+		loaded := []string{loadedKernelModuleReadyNodeLabel}
+		unloaded := []string{unloadedKernelModuleReadyNodeLabel}
+
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		err := n.UpdateLabels(ctx, &node, loaded, unloaded)
+		Expect(err).To(HaveOccurred())
+
+	})
+})
+
 var _ = Describe("GetNumTargetedNodes", func() {
 	var (
 		ctrl *gomock.Controller
@@ -131,7 +186,7 @@ var _ = Describe("GetNumTargetedNodes", func() {
 		mn = NewNode(clnt)
 	})
 
-	It("There are not schedulable nodes", func() {
+	It("There are no schedulable nodes", func() {
 		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
 
 		numOfNodes, err := mn.GetNumTargetedNodes(context.Background(), map[string]string{})
@@ -218,5 +273,39 @@ var _ = Describe("FindNodeCondition", func() {
 		}
 		conditionFound = mn.FindNodeCondition(node.Status.Conditions, v1.NodeReady)
 		Expect(conditionFound).To(BeNil())
+	})
+})
+
+var _ = Describe("addLabels", func() {
+	var node v1.Node
+
+	BeforeEach(func() {
+		node = v1.Node{}
+	})
+
+	It("Should add labels", func() {
+		labels := []string{loadedKernelModuleReadyNodeLabel}
+		addLabels(&node, labels)
+		Expect(node.Labels).To(HaveKey(loadedKernelModuleReadyNodeLabel))
+	})
+})
+
+var _ = Describe("removeLabels", func() {
+	var node v1.Node
+
+	BeforeEach(func() {
+		node = v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					loadedKernelModuleReadyNodeLabel: "",
+				},
+			},
+		}
+	})
+
+	It("Should remove labels", func() {
+		labels := []string{loadedKernelModuleReadyNodeLabel}
+		removeLabels(&node, labels)
+		Expect(node.Labels).ToNot(HaveKey(loadedKernelModuleReadyNodeLabel))
 	})
 })

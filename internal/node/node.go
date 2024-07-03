@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -13,6 +14,7 @@ type Node interface {
 	GetNodesListBySelector(ctx context.Context, selector map[string]string) ([]v1.Node, error)
 	GetNumTargetedNodes(ctx context.Context, selector map[string]string) (int, error)
 	FindNodeCondition(cond []v1.NodeCondition, conditionType v1.NodeConditionType) *v1.NodeCondition
+	UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error
 }
 
 type node struct {
@@ -71,4 +73,35 @@ func (n *node) FindNodeCondition(cond []v1.NodeCondition, conditionType v1.NodeC
 	}
 
 	return nil
+}
+
+func (n *node) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error {
+	patchFrom := client.MergeFrom(node.DeepCopy())
+
+	addLabels(node, toBeAdded)
+	removeLabels(node, toBeRemoved)
+
+	if err := n.client.Patch(ctx, node, patchFrom); err != nil {
+		return fmt.Errorf("could not patch node: %v", err)
+	}
+	return nil
+}
+
+func addLabels(node *v1.Node, labels []string) {
+	for _, label := range labels {
+		meta.SetLabel(
+			node,
+			label,
+			"",
+		)
+	}
+}
+
+func removeLabels(node *v1.Node, labels []string) {
+	for _, label := range labels {
+		meta.RemoveLabel(
+			node,
+			label,
+		)
+	}
 }

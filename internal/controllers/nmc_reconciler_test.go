@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -36,7 +37,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const nmcName = "nmc"
+const (
+	nmcName     = "nmc"
+	nsFirst     = "example-ns-1"
+	nsSecond    = "example-ns-2"
+	nameFirst   = "example-name-1"
+	nameSecond  = "example-name-2"
+	imageFirst  = "example-image-1"
+	imageSecond = "example-image-2"
+)
 
 var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 	var (
@@ -101,6 +110,12 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			mod1Name = "mod1"
 			mod2Name = "mod2"
 		)
+		var (
+			loaded   []types.NamespacedName
+			unloaded []types.NamespacedName
+			err      error
+			node     v1.Node
+		)
 		spec0 := kmmv1beta1.NodeModuleSpec{
 			ModuleItem: kmmv1beta1.ModuleItem{
 				Namespace: namespace,
@@ -155,7 +170,9 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec1, nil),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc),
-			wh.EXPECT().UpdateNodeLabelsAndRecordEvents(ctx, nmc),
+			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &node).Return(nil),
+			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(loaded, unloaded, err),
+			wh.EXPECT().RecordEvents(&node, loaded, unloaded),
 		)
 
 		Expect(
@@ -171,6 +188,11 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			mod1Name = "mod1"
 			mod2Name = "mod2"
 		)
+		var (
+			node v1.Node
+			err  error
+		)
+
 		spec0 := kmmv1beta1.NodeModuleSpec{
 			ModuleItem: kmmv1beta1.ModuleItem{
 				Namespace: namespace,
@@ -217,10 +239,11 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0).Return(fmt.Errorf("some error")),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2).Return(fmt.Errorf("some error")),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc).Return(fmt.Errorf("some error")),
-			wh.EXPECT().UpdateNodeLabelsAndRecordEvents(ctx, nmc).Return(fmt.Errorf("some error")),
+			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &node).Return(nil),
+			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(nil, nil, fmt.Errorf("some error")),
 		)
 
-		_, err := r.Reconcile(ctx, req)
+		_, err = r.Reconcile(ctx, req)
 		Expect(err).ToNot(BeNil())
 	})
 })
@@ -1158,39 +1181,148 @@ var _ = Describe("nmcReconcilerHelperImpl_RemovePodFinalizers", func() {
 const (
 	moduleName      = "my-module"
 	moduleNamespace = "my-module-namespace"
+	nodeName        = "node-name"
 )
 
-var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func() {
+var kernelModuleLabelName = utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName)
+
+var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabels", func() {
 	var (
-		ctx          = context.TODO()
+		ctx             context.Context
+		client          *testclient.MockClient
+		fakeRecorder    *record.FakeRecorder
+		n               *node.MockNode
+		nmc             kmmv1beta1.NodeModulesConfig
+		wh              nmcReconcilerHelper
+		mlph            *MocklabelPreparationHelper
+		firstLabelName  string
+		secondLabelName string
+	)
+
+	BeforeEach(func() {
+		ctx = context.TODO()
+		ctrl := gomock.NewController(GinkgoT())
+		client = testclient.NewMockClient(ctrl)
+		nmc = kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmcName"},
+			Spec: kmmv1beta1.NodeModulesConfigSpec{
+				Modules: []kmmv1beta1.NodeModuleSpec{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Namespace: nsFirst,
+							Name:      nameFirst,
+						},
+						Config: kmmv1beta1.ModuleConfig{},
+					},
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Namespace: nsSecond,
+							Name:      nameSecond,
+						},
+						Config: kmmv1beta1.ModuleConfig{},
+					},
+				},
+			},
+		}
+		fakeRecorder = record.NewFakeRecorder(10)
+		n = node.NewMockNode(ctrl)
+		wh = newNMCReconcilerHelper(client, nil, fakeRecorder, n)
+		mlph = NewMocklabelPreparationHelper(ctrl)
+		wh = &nmcReconcilerHelperImpl{
+			client:   client,
+			pm:       nil,
+			recorder: fakeRecorder,
+			nodeAPI:  n,
+			lph:      mlph,
+		}
+		firstLabelName = fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.ready", nsFirst, nameFirst)
+		secondLabelName = fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.ready", nsSecond, nameSecond)
+	})
+
+	It("failed to get node", func() {
+		client.EXPECT().Get(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+		err := client.Get(ctx, types.NamespacedName{Name: nmc.Name}, &v1.Node{})
+		Expect(err).To(HaveOccurred())
+	})
+	It("Should fail patching node after change in labels", func() {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					firstLabelName: "",
+				},
+				Name: nodeName,
+			},
+		}
+		emptySet := sets.Set[types.NamespacedName]{}
+		emptyMap := map[types.NamespacedName]kmmv1beta1.ModuleConfig{}
+
+		gomock.InOrder(
+			mlph.EXPECT().getNodeKernelModuleReadyLabels(node).Return(emptySet),
+			mlph.EXPECT().getDeprecatedKernelModuleReadyLabels(node).Return(sets.Set[string]{}),
+			mlph.EXPECT().getSpecLabelsAndTheirConfigs(&nmc).Return(emptyMap),
+			mlph.EXPECT().getStatusLabelsAndTheirConfigs(&nmc).Return(emptyMap),
+			mlph.EXPECT().removeOrphanedLabels(emptySet, emptyMap, emptyMap).Return([]types.NamespacedName{{Name: nameSecond, Namespace: nsSecond}}),
+			mlph.EXPECT().addEqualLabels(emptySet, emptyMap, emptyMap).Return([]types.NamespacedName{{Name: nameFirst, Namespace: nsFirst}}),
+			n.EXPECT().
+				UpdateLabels(
+					ctx,
+					&node,
+					[]string{firstLabelName},
+					[]string{secondLabelName},
+				).Return(fmt.Errorf("some error")),
+		)
+		_, _, err := wh.UpdateNodeLabels(ctx, &nmc, &node)
+		Expect(err).To(HaveOccurred())
+	})
+	It("Should work as expected", func() {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					firstLabelName: "",
+				},
+				Name: nodeName,
+			},
+		}
+		emptySet := sets.Set[types.NamespacedName]{}
+		emptyMap := map[types.NamespacedName]kmmv1beta1.ModuleConfig{}
+
+		gomock.InOrder(
+			mlph.EXPECT().getNodeKernelModuleReadyLabels(node).Return(emptySet),
+			mlph.EXPECT().getDeprecatedKernelModuleReadyLabels(node).Return(sets.Set[string]{}),
+			mlph.EXPECT().getSpecLabelsAndTheirConfigs(&nmc).Return(emptyMap),
+			mlph.EXPECT().getStatusLabelsAndTheirConfigs(&nmc).Return(emptyMap),
+			mlph.EXPECT().removeOrphanedLabels(emptySet, emptyMap, emptyMap).Return([]types.NamespacedName{{Name: nameSecond, Namespace: nsSecond}}),
+			mlph.EXPECT().addEqualLabels(emptySet, emptyMap, emptyMap).Return([]types.NamespacedName{{Name: nameFirst, Namespace: nsFirst}}),
+			n.EXPECT().
+				UpdateLabels(
+					ctx,
+					&node,
+					[]string{firstLabelName},
+					[]string{secondLabelName},
+				).Return(nil),
+		)
+		_, _, err := wh.UpdateNodeLabels(ctx, &nmc, &node)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(node.Labels).To(HaveKey(firstLabelName))
+
+	})
+})
+
+var _ = Describe("nmcReconcilerHelperImpl_RecordEvents", func() {
+	var (
 		client       *testclient.MockClient
-		expectedNode v1.Node
 		fakeRecorder *record.FakeRecorder
-		nmc          kmmv1beta1.NodeModulesConfig
+		n            node.Node
 		wh           nmcReconcilerHelper
 	)
 
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client = testclient.NewMockClient(ctrl)
-		expectedNode = v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "node name",
-				Labels: map[string]string{},
-			},
-		}
-		nmc = kmmv1beta1.NodeModulesConfig{
-			ObjectMeta: metav1.ObjectMeta{Name: "nmcName"},
-		}
+		n = node.NewNode(client)
 		fakeRecorder = record.NewFakeRecorder(10)
-		wh = newNMCReconcilerHelper(client, nil, fakeRecorder, nil)
+		wh = newNMCReconcilerHelper(client, nil, fakeRecorder, n)
 	})
-
-	moduleConfig := kmmv1beta1.ModuleConfig{
-		KernelVersion:         "some version",
-		ContainerImage:        "some image",
-		InTreeModulesToRemove: []string{"some kernel module"},
-	}
 
 	closeAndGetAllEvents := func(events chan string) []string {
 		elems := make([]string, 0)
@@ -1206,13 +1338,6 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 
 	_ = closeAndGetAllEvents(make(chan string))
 
-	It("failed to get node", func() {
-		client.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
-
-		err := wh.UpdateNodeLabelsAndRecordEvents(ctx, &nmc)
-		Expect(err).To(HaveOccurred())
-	})
-
 	type testCase struct {
 		nodeLabelPresent    bool
 		specPresent         bool
@@ -1225,61 +1350,10 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 	}
 
 	DescribeTable(
-		"nodes labels scenarios",
-		func(tc testCase) {
-			nodeLabels := map[string]string{"kmm.node.kubernetes.io/deprecated-label.ready": ""}
+		"RecordEvents different scenarios",
+		func(tc testCase, loaded []types.NamespacedName, unloaded []types.NamespacedName, node v1.Node) {
 
-			if tc.nodeLabelPresent {
-				nodeLabels[utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName)] = ""
-			}
-			if tc.specPresent {
-				nmc.Spec.Modules = []kmmv1beta1.NodeModuleSpec{
-					{
-						ModuleItem: kmmv1beta1.ModuleItem{
-							Name:      moduleName,
-							Namespace: moduleNamespace,
-						},
-						Config: moduleConfig,
-					},
-				}
-			}
-			if tc.statusPresent {
-				nmc.Status.Modules = []kmmv1beta1.NodeModuleStatus{
-					{
-						ModuleItem: kmmv1beta1.ModuleItem{
-							Name:      moduleName,
-							Namespace: moduleNamespace,
-						},
-					},
-				}
-				if tc.statusConfigPresent {
-					statusConfig := moduleConfig
-					if !tc.configsEqual {
-						statusConfig.ContainerImage = "some other container image"
-					}
-					nmc.Status.Modules[0].Config = statusConfig
-				}
-			}
-
-			if tc.resultLabelPresent {
-				resultLabels := map[string]string{utils.GetKernelModuleReadyNodeLabel(moduleNamespace, moduleName): ""}
-				expectedNode.SetLabels(resultLabels)
-			}
-
-			gomock.InOrder(
-				client.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ interface{}, _ interface{}, node *v1.Node, _ ...ctrlclient.GetOption) error {
-						node.SetName("node name")
-						node.SetLabels(nodeLabels)
-						return nil
-					},
-				),
-				client.EXPECT().Patch(ctx, &expectedNode, gomock.Any()).Return(nil),
-			)
-
-			err := wh.UpdateNodeLabelsAndRecordEvents(ctx, &nmc)
-			Expect(err).NotTo(HaveOccurred())
-
+			wh.RecordEvents(&node, loaded, unloaded)
 			events := closeAndGetAllEvents(fakeRecorder.Events)
 
 			if !tc.addsReadyLabel && !tc.removesReadyLabel {
@@ -1303,6 +1377,14 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 				nodeLabelPresent:  true,
 				removesReadyLabel: true,
 			},
+			[]types.NamespacedName{},
+			[]types.NamespacedName{{Namespace: moduleNamespace, Name: moduleName}},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{},
+					Name:   nodeName,
+				},
+			},
 		),
 		Entry(
 			"node label present, spec present, status missing",
@@ -1310,6 +1392,16 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 				nodeLabelPresent:   true,
 				specPresent:        true,
 				resultLabelPresent: true,
+			},
+			[]types.NamespacedName{},
+			[]types.NamespacedName{},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						kernelModuleLabelName: "",
+					},
+					Name: nodeName,
+				},
 			},
 		),
 		Entry(
@@ -1320,6 +1412,16 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 				statusPresent:      true,
 				resultLabelPresent: true,
 			},
+			[]types.NamespacedName{},
+			[]types.NamespacedName{},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						kernelModuleLabelName: "",
+					},
+					Name: nodeName,
+				},
+			},
 		),
 		Entry(
 			"node label present, spec present, status present, status config present, configs not equal",
@@ -1329,6 +1431,16 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 				statusPresent:       true,
 				statusConfigPresent: true,
 				resultLabelPresent:  true,
+			},
+			[]types.NamespacedName{},
+			[]types.NamespacedName{},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						kernelModuleLabelName: "",
+					},
+					Name: nodeName,
+				},
 			},
 		),
 		Entry(
@@ -1341,20 +1453,54 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 				configsEqual:        true,
 				resultLabelPresent:  true,
 			},
+			[]types.NamespacedName{},
+			[]types.NamespacedName{},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						kernelModuleLabelName: "",
+					},
+					Name: nodeName,
+				},
+			},
 		),
 		Entry(
 			"node label missing, spec missing, status missing",
 			testCase{},
+			[]types.NamespacedName{},
+			[]types.NamespacedName{},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{},
+					Name:   nodeName,
+				},
+			},
 		),
 		Entry(
 			"node label missing, spec present, status missing",
 			testCase{specPresent: true},
+			[]types.NamespacedName{},
+			[]types.NamespacedName{},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{},
+					Name:   nodeName,
+				},
+			},
 		),
 		Entry(
 			"node label missing, spec present, status present, status config missing",
 			testCase{
 				specPresent:   true,
 				statusPresent: true,
+			},
+			[]types.NamespacedName{},
+			[]types.NamespacedName{},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{},
+					Name:   nodeName,
+				},
 			},
 		),
 		Entry(
@@ -1363,6 +1509,14 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 				specPresent:         true,
 				statusPresent:       true,
 				statusConfigPresent: true,
+			},
+			[]types.NamespacedName{},
+			[]types.NamespacedName{},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{},
+					Name:   nodeName,
+				},
 			},
 		),
 		Entry(
@@ -1374,6 +1528,16 @@ var _ = Describe("nmcReconcilerHelperImpl_UpdateNodeLabelsAndRecordEvents", func
 				configsEqual:        true,
 				resultLabelPresent:  true,
 				addsReadyLabel:      true,
+			},
+			[]types.NamespacedName{{Namespace: moduleNamespace, Name: moduleName}},
+			[]types.NamespacedName{},
+			v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						kernelModuleLabelName: "",
+					},
+					Name: nodeName,
+				},
 			},
 		),
 	)
@@ -1904,4 +2068,230 @@ var _ = Describe("pullSecretHelperImpl_VolumesAndVolumeMounts", func() {
 		Expect(resVols).To(BeComparableTo(vols))
 		Expect(resVolMounts).To(BeComparableTo(volMounts))
 	})
+})
+
+var _ = Describe("getKernelModuleReadyLabels", func() {
+	lph := newLabelPreparationHelper()
+
+	DescribeTable("getKernelModuleReadyLabels different scenarios", func(labels map[string]string,
+		nodeModuleReadyLabelsEqual sets.Set[types.NamespacedName]) {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: labels,
+			},
+		}
+
+		nodeModuleReadyLabels := lph.getNodeKernelModuleReadyLabels(node)
+
+		Expect(nodeModuleReadyLabels).To(Equal(nodeModuleReadyLabelsEqual))
+	},
+		Entry("Should be empty", map[string]string{},
+			sets.Set[types.NamespacedName]{},
+		),
+
+		Entry("nodeModuleReadyLabels found", map[string]string{"invalid": ""},
+			sets.Set[types.NamespacedName]{},
+		),
+
+		Entry("nodeModuleReadyLabels found", map[string]string{fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.ready", nsFirst, nameFirst): ""},
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsFirst, Name: nameFirst}: {},
+			},
+		),
+	)
+})
+
+var _ = Describe("getDeprecatedKernelModuleReadyLabels", func() {
+
+	lph := newLabelPreparationHelper()
+	DescribeTable("getDeprecatedKernelModuleReadyLabels different scenarios", func(labels map[string]string,
+		deprecatedNodeModuleReadyLabelsEqual sets.Set[string]) {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: labels,
+			},
+		}
+
+		deprecatedNodeModuleReadyLabels := lph.getDeprecatedKernelModuleReadyLabels(node)
+
+		Expect(deprecatedNodeModuleReadyLabels).To(Equal(deprecatedNodeModuleReadyLabelsEqual))
+	},
+		Entry("Should be empty", map[string]string{},
+			sets.Set[string]{},
+		),
+
+		Entry("deprecated node module ready labels not found", map[string]string{"invalid": ""},
+			sets.Set[string]{},
+		),
+
+		Entry("deprecated node module ready labels found", map[string]string{fmt.Sprintf("kmm.node.kubernetes.io/%s.ready", nameFirst): ""},
+			sets.Set[string]{
+				fmt.Sprintf("kmm.node.kubernetes.io/%s.ready", nameFirst): {},
+			},
+		),
+	)
+})
+
+var _ = Describe("getSpecLabelsAndTheirConfigs", func() {
+
+	var (
+		nmc kmmv1beta1.NodeModulesConfig
+		lph labelPreparationHelper
+	)
+
+	BeforeEach(func() {
+		nmc = kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmcName"},
+			Spec: kmmv1beta1.NodeModulesConfigSpec{
+				Modules: []kmmv1beta1.NodeModuleSpec{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Namespace: nsFirst,
+							Name:      nameFirst,
+						},
+						Config: kmmv1beta1.ModuleConfig{ContainerImage: imageFirst},
+					},
+				},
+			},
+		}
+		lph = newLabelPreparationHelper()
+	})
+	It("Should not have module not from nmc", func() {
+		specLabels := lph.getSpecLabelsAndTheirConfigs(&nmc)
+		Expect(specLabels).ToNot(HaveKey(types.NamespacedName{Namespace: nsSecond, Name: nameSecond}))
+	})
+
+	It("Should have module from nmc", func() {
+		specLabels := lph.getSpecLabelsAndTheirConfigs(&nmc)
+		Expect(specLabels).To(HaveKeyWithValue(types.NamespacedName{Namespace: nsFirst, Name: nameFirst}, kmmv1beta1.ModuleConfig{ContainerImage: imageFirst}))
+	})
+})
+
+var _ = Describe("getStatusLabelsAndTheirConfigs", func() {
+
+	var (
+		nmc kmmv1beta1.NodeModulesConfig
+		lph labelPreparationHelper
+	)
+
+	BeforeEach(func() {
+		nmc = kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmcName"},
+			Status: kmmv1beta1.NodeModulesConfigStatus{
+				Modules: []kmmv1beta1.NodeModuleStatus{
+					{
+						ModuleItem: kmmv1beta1.ModuleItem{
+							Namespace: nsFirst,
+							Name:      nameFirst,
+						},
+						Config: kmmv1beta1.ModuleConfig{ContainerImage: imageFirst},
+					},
+				},
+			},
+		}
+		lph = newLabelPreparationHelper()
+	})
+	It("Should not have module not from nmc", func() {
+		statusLabels := lph.getStatusLabelsAndTheirConfigs(&nmc)
+		Expect(statusLabels).To(HaveKeyWithValue(types.NamespacedName{Namespace: nsFirst, Name: nameFirst}, kmmv1beta1.ModuleConfig{ContainerImage: imageFirst}))
+	})
+
+	It("Should have module from nmc", func() {
+		statusLabels := lph.getStatusLabelsAndTheirConfigs(&nmc)
+		Expect(statusLabels).ToNot(HaveKey(types.NamespacedName{Namespace: nsSecond, Name: nameSecond}))
+	})
+
+})
+
+var _ = Describe("removeOrphanedLabels", func() {
+
+	var lph = labelPreparationHelperImpl{}
+
+	DescribeTable("removeOrphanedLabels different scenarios", func(nodeModuleReadyLabels sets.Set[types.NamespacedName],
+		specLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+		statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+		node v1.Node,
+		expectedUnloaded []types.NamespacedName,
+	) {
+		unloaded := lph.removeOrphanedLabels(nodeModuleReadyLabels, specLabels, statusLabels)
+		Expect(unloaded).To(Equal(expectedUnloaded))
+	},
+		Entry("Empty spec and status labels, should result of empty unloaded variable",
+			sets.Set[types.NamespacedName]{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			v1.Node{},
+			[]types.NamespacedName{}),
+		Entry("ModuleConfig obj exists in specLabels so it should not be in unloaded variable",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsFirst, Name: nameFirst}:   {},
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			v1.Node{},
+			[]types.NamespacedName{{Namespace: nsSecond, Name: nameSecond}}),
+
+		Entry("ModuleConfig obj exists in statusLabels so it should not be in unloaded variable",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsFirst, Name: nameFirst}:   {},
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {}},
+			v1.Node{},
+			[]types.NamespacedName{{Namespace: nsSecond, Name: nameSecond}}),
+
+		Entry("Both ModuleConfig obj exist in specLabels or statusLabels so they should not be in unloaded variable",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsFirst, Name: nameFirst}:   {},
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsSecond, Name: nameSecond}: {}},
+			v1.Node{},
+			[]types.NamespacedName{}))
+})
+
+var _ = Describe("addEqualLabels", func() {
+	var lph = labelPreparationHelperImpl{}
+
+	DescribeTable("addEqualLabels different scenarios", func(nodeModuleReadyLabels sets.Set[types.NamespacedName], specLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+		statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig,
+		node v1.Node,
+		expectedUnloaded []types.NamespacedName,
+	) {
+		loaded := lph.addEqualLabels(nodeModuleReadyLabels, specLabels, statusLabels)
+		Expect(loaded).To(Equal(expectedUnloaded))
+	},
+		Entry("Empty spec and status labels, should result of empty loaded variable",
+			sets.Set[types.NamespacedName]{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{},
+			v1.Node{},
+			[]types.NamespacedName{}),
+		Entry("specConfig and statusConfig are equal and nsn is not in nodeModuleReadyLabels, so nsn should be returned",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: imageFirst}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: imageFirst}},
+			v1.Node{},
+			[]types.NamespacedName{{Namespace: nsFirst, Name: nameFirst}}),
+		Entry("specConfig and statusConfig aren't equal so nsn shouldn't not be returned",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsSecond, Name: nameSecond}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: imageFirst}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: imageSecond}},
+			v1.Node{},
+			[]types.NamespacedName{}),
+		Entry("nsn is in nodeModuleReadyLabels so nsn should not be returned",
+			sets.Set[types.NamespacedName]{
+				{Namespace: nsFirst, Name: nameFirst}: {},
+			},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: imageFirst}},
+			map[types.NamespacedName]kmmv1beta1.ModuleConfig{{Namespace: nsFirst, Name: nameFirst}: {ContainerImage: imageFirst}},
+			v1.Node{},
+			[]types.NamespacedName{}))
 })
