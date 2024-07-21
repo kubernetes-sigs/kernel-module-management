@@ -145,7 +145,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		if err := r.helper.ProcessUnconfiguredModuleStatus(ctrl.LoggerInto(ctx, logger), &nmcObj, status); err != nil {
 			errs = append(
 				errs,
-				fmt.Errorf("erorr processing orphan status for Module %s: %v", statusNameKey, err),
+				fmt.Errorf("error processing orphan status for Module %s: %v", statusNameKey, err),
 			)
 		}
 	}

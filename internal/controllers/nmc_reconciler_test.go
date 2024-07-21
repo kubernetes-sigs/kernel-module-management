@@ -184,14 +184,22 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 
 	It("should complete all the reconcile functions and return combined error", func() {
 		const (
-			mod0Name = "mod0"
-			mod1Name = "mod1"
-			mod2Name = "mod2"
+			errorMeassge = "some error"
+			mod0Name     = "mod0"
+			mod1Name     = "mod1"
+			mod2Name     = "mod2"
 		)
 		var (
 			node v1.Node
 			err  error
 		)
+
+		expectedErrors := []error{
+			fmt.Errorf("error processing Module %s: %v", namespace+"/"+mod0Name, errorMeassge),
+			fmt.Errorf("error processing orphan status for Module %s: %v", namespace+"/"+mod2Name, errorMeassge),
+			fmt.Errorf("failed to GC in-use labels for NMC %s: %v", types.NamespacedName{Name: nmcName}, errorMeassge),
+			fmt.Errorf("could not update node's labels for NMC %s: %v", types.NamespacedName{Name: nmcName}, errorMeassge),
+		}
 
 		spec0 := kmmv1beta1.NodeModuleSpec{
 			ModuleItem: kmmv1beta1.ModuleItem{
@@ -236,15 +244,15 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
 				}),
 			wh.EXPECT().SyncStatus(ctx, nmc).Return(nil),
-			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0).Return(fmt.Errorf("some error")),
-			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2).Return(fmt.Errorf("some error")),
-			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc).Return(fmt.Errorf("some error")),
+			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0).Return(fmt.Errorf(errorMeassge)),
+			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2).Return(fmt.Errorf(errorMeassge)),
+			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc).Return(fmt.Errorf(errorMeassge)),
 			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &node).Return(nil),
-			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(nil, nil, fmt.Errorf("some error")),
+			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(nil, nil, fmt.Errorf(errorMeassge)),
 		)
 
 		_, err = r.Reconcile(ctx, req)
-		Expect(err).ToNot(BeNil())
+		Expect(err).To(Equal(errors.Join(expectedErrors...)))
 	})
 })
 
