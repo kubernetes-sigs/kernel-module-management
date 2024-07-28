@@ -36,7 +36,6 @@ spec:
       containers:
         - image: webhook-server:latest
           name: webhook-server
-          imagePullPolicy: Always
           args: [--config=controller_config.yaml]
           securityContext:
             allowPrivilegeEscalation: false

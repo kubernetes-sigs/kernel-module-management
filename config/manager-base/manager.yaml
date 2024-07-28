@@ -51,7 +51,6 @@ spec:
             value: gcr.io/kaniko-project/executor:latest
           - name: RELATED_IMAGE_SIGN
             value: signer
-        imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:
