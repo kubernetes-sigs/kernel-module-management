@@ -84,4 +84,4 @@ Recommended value: `spc_t`.
 If set, the value of this field will be written by the worker into the `/sys/module/firmware_class/parameters/path` file
 on the node.
 This sets the [kernel's firmware search path](firmwares.md#setting-the-kernels-firmware-search-path).  
-Recommended value: `/var/lib/firmware` if you need to set that value through the worker app; otherwise, unset.
+Recommended value: `/lib/firmware` if you need to set that value through the worker app; otherwise, unset.
