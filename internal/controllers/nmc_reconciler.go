@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
@@ -828,12 +829,28 @@ func (p *podManagerImpl) LoaderPodTemplate(ctx context.Context, nmc client.Objec
 		return nil, fmt.Errorf("could not create the base Pod: %v", err)
 	}
 
+	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
+		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
+			return nil, fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
+		}
+	}
+
 	args := []string{"kmod", "load", configFullPath}
 
 	privileged := false
+	if nms.Config.Modprobe.FirmwarePath != "" {
 
-	if p.workerCfg.SetFirmwareClassPath != nil {
-		args = append(args, "--"+worker.FlagFirmwareClassPath, *p.workerCfg.SetFirmwareClassPath)
+		firmwareClassPath := p.workerCfg.SetFirmwareClassPath
+		if firmwareClassPath == nil {
+			return nil, fmt.Errorf("firmwarePath was set but firmwareClassPath wasn't set")
+		}
+
+		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareClassPath)
+		if err = setFirmwareVolume(pod, firmwareClassPath); err != nil {
+			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
+		}
+
+		args = append(args, "--"+worker.FlagFirmwareClassPath, *firmwareClassPath)
 		privileged = true
 	}
 
@@ -843,19 +860,6 @@ func (p *podManagerImpl) LoaderPodTemplate(ctx context.Context, nmc client.Objec
 
 	if err = setWorkerSecurityContext(pod, p.workerCfg, privileged); err != nil {
 		return nil, fmt.Errorf("could not set the worker Pod as privileged: %v", err)
-	}
-
-	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
-		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
-			return nil, fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
-		}
-	}
-
-	if nms.Config.Modprobe.FirmwarePath != "" {
-		args = append(args, "--"+worker.FlagFirmwareMountPath, worker.FirmwareMountPath)
-		if err = setFirmwareVolume(pod, p.workerCfg.SetFirmwareClassPath); err != nil {
-			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
-		}
 	}
 
 	if err = setWorkerContainerArgs(pod, args); err != nil {
@@ -890,8 +894,12 @@ func (p *podManagerImpl) UnloaderPodTemplate(ctx context.Context, nmc client.Obj
 	}
 
 	if nms.Config.Modprobe.FirmwarePath != "" {
-		args = append(args, "--"+worker.FlagFirmwareMountPath, worker.FirmwareMountPath)
-		if err = setFirmwareVolume(pod, p.workerCfg.SetFirmwareClassPath); err != nil {
+		firmwareClassPath := p.workerCfg.SetFirmwareClassPath
+		if firmwareClassPath == nil {
+			return nil, fmt.Errorf("firmwarePath was set but firmwareClassPath wasn't set")
+		}
+		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareClassPath)
+		if err = setFirmwareVolume(pod, firmwareClassPath); err != nil {
 			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
 		}
 	}
@@ -1109,14 +1117,13 @@ func setFirmwareVolume(pod *v1.Pod, hostFirmwarePath *string) error {
 		return errors.New("could not find the worker container")
 	}
 
-	firmwareVolumeMount := v1.VolumeMount{
-		Name:      volNameVarLibFirmware,
-		MountPath: worker.FirmwareMountPath,
+	if hostFirmwarePath == nil {
+		return errors.New("hostFirmwarePath must be set")
 	}
 
-	hostMountPath := "/var/lib/firmware"
-	if hostFirmwarePath != nil {
-		hostMountPath = *hostFirmwarePath
+	firmwareVolumeMount := v1.VolumeMount{
+		Name:      volNameVarLibFirmware,
+		MountPath: *hostFirmwarePath,
 	}
 
 	hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
@@ -1124,7 +1131,7 @@ func setFirmwareVolume(pod *v1.Pod, hostFirmwarePath *string) error {
 		Name: volNameVarLibFirmware,
 		VolumeSource: v1.VolumeSource{
 			HostPath: &v1.HostPathVolumeSource{
-				Path: hostMountPath,
+				Path: *hostFirmwarePath,
 				Type: &hostPathDirectoryOrCreate,
 			},
 		},

@@ -124,7 +124,9 @@ spec:
 
         dirName: /opt  # Optional
 
-        # Optional. Will copy /firmware/* into /var/lib/firmware/ on the node.
+        # Optional. Will copy /firmware/* on the node into the path specified
+        # in the `kmm-operator-manager-config` at `worker.setFirmwareClassPath`
+        # before `modprobe` is called to insert the kernel module..
         firmwarePath: /firmware
         
         parameters:  # Optional
