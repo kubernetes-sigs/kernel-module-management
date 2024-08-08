@@ -10,3 +10,4 @@ metrics:
 worker:
   runAsUser: 0
   seLinuxType: spc_t
+  setFirmwareClassPath: /lib/firmware
