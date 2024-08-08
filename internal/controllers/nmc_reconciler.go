@@ -831,8 +831,18 @@ func (p *podManagerImpl) LoaderPodTemplate(ctx context.Context, nmc client.Objec
 
 	args := []string{"kmod", "load", configFullPath}
 
-	privileged := false
+	if nms.Config.Modprobe.FirmwarePath != "" {
+		firmwareClassPath := p.workerCfg.SetFirmwareClassPath
+		if firmwareClassPath == nil {
+			return nil, fmt.Errorf("firmwarePath was set but firmwareClassPath wasn't set")
+		}
+		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareClassPath)
+		if err = setFirmwareVolume(pod, firmwareClassPath); err != nil {
+			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
+		}
+	}
 
+	privileged := false
 	if p.workerCfg.SetFirmwareClassPath != nil {
 		args = append(args, "--"+worker.FlagFirmwareClassPath, *p.workerCfg.SetFirmwareClassPath)
 		privileged = true
@@ -849,17 +859,6 @@ func (p *podManagerImpl) LoaderPodTemplate(ctx context.Context, nmc client.Objec
 	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
 		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
 			return nil, fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
-		}
-	}
-
-	if nms.Config.Modprobe.FirmwarePath != "" {
-		firmwareClassPath := p.workerCfg.SetFirmwareClassPath
-		if firmwareClassPath == nil {
-			return nil, fmt.Errorf("firmwarePath was set but firmwareClassPath wasn't set")
-		}
-		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareClassPath)
-		if err = setFirmwareVolume(pod, firmwareClassPath); err != nil {
-			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
 		}
 	}
 
