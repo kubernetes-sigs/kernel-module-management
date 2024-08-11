@@ -12,5 +12,5 @@ metrics:
 worker:
   runAsUser: 1234
   seLinuxType: mySELinuxType
-  setFirmwareClassPath: /some/path
+  firmwareHostPath: /some/path
 

@@ -10,5 +10,4 @@ metrics:
 worker:
   runAsUser: 0
   seLinuxType: spc_t
-  #FIXME: rename
-  setFirmwareClassPath: /lib/firmware
+  firmwareHostPath: /lib/firmware
