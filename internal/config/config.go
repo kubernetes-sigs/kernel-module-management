@@ -17,9 +17,9 @@ type Job struct {
 }
 
 type Worker struct {
-	RunAsUser            *int64  `yaml:"runAsUser"`
-	SELinuxType          string  `yaml:"seLinuxType"`
-	SetFirmwareClassPath *string `yaml:"setFirmwareClassPath,omitempty"`
+	RunAsUser        *int64  `yaml:"runAsUser"`
+	SELinuxType      string  `yaml:"seLinuxType"`
+	FirmwareHostPath *string `yaml:"firmwareHostPath,omitempty"`
 }
 
 type LeaderElection struct {

@@ -840,17 +840,17 @@ func (p *podManagerImpl) LoaderPodTemplate(ctx context.Context, nmc client.Objec
 	privileged := false
 	if nms.Config.Modprobe.FirmwarePath != "" {
 
-		firmwareClassPath := p.workerCfg.SetFirmwareClassPath
-		if firmwareClassPath == nil {
-			return nil, fmt.Errorf("firmwarePath was set but firmwareClassPath wasn't set")
+		firmwareHostPath := p.workerCfg.FirmwareHostPath
+		if firmwareHostPath == nil {
+			return nil, fmt.Errorf("firmwareHostPath wasn't set, while the Module requires firmware loading")
 		}
 
-		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareClassPath)
-		if err = setFirmwareVolume(pod, firmwareClassPath); err != nil {
+		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareHostPath)
+		if err = setFirmwareVolume(pod, firmwareHostPath); err != nil {
 			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
 		}
 
-		args = append(args, "--"+worker.FlagFirmwareClassPath, *firmwareClassPath)
+		args = append(args, "--"+worker.FlagFirmwareClassPath, *firmwareHostPath)
 		privileged = true
 	}
 
@@ -894,13 +894,13 @@ func (p *podManagerImpl) UnloaderPodTemplate(ctx context.Context, nmc client.Obj
 	}
 
 	if nms.Config.Modprobe.FirmwarePath != "" {
-		firmwareClassPath := p.workerCfg.SetFirmwareClassPath
-		if firmwareClassPath == nil {
-			return nil, fmt.Errorf("firmwarePath was set but firmwareClassPath wasn't set")
+		firmwareHostPath := p.workerCfg.FirmwareHostPath
+		if firmwareHostPath == nil {
+			return nil, fmt.Errorf("firmwareHostPath was not set while the Module requires firmware unloading")
 		}
-		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareClassPath)
-		if err = setFirmwareVolume(pod, firmwareClassPath); err != nil {
-			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
+		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareHostPath)
+		if err = setFirmwareVolume(pod, firmwareHostPath); err != nil {
+			return nil, fmt.Errorf("could not map host volume needed for firmware unloading: %v", err)
 		}
 	}
 
@@ -1110,20 +1110,20 @@ func setWorkerSofdepConfig(pod *v1.Pod, modulesLoadingOrder []string) error {
 	return nil
 }
 
-func setFirmwareVolume(pod *v1.Pod, hostFirmwarePath *string) error {
+func setFirmwareVolume(pod *v1.Pod, firmwareHostPath *string) error {
 	const volNameVarLibFirmware = "var-lib-firmware"
 	container, _ := podcmd.FindContainerByName(pod, workerContainerName)
 	if container == nil {
 		return errors.New("could not find the worker container")
 	}
 
-	if hostFirmwarePath == nil {
+	if firmwareHostPath == nil {
 		return errors.New("hostFirmwarePath must be set")
 	}
 
 	firmwareVolumeMount := v1.VolumeMount{
 		Name:      volNameVarLibFirmware,
-		MountPath: *hostFirmwarePath,
+		MountPath: *firmwareHostPath,
 	}
 
 	hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
@@ -1131,7 +1131,7 @@ func setFirmwareVolume(pod *v1.Pod, hostFirmwarePath *string) error {
 		Name: volNameVarLibFirmware,
 		VolumeSource: v1.VolumeSource{
 			HostPath: &v1.HostPathVolumeSource{
-				Path: *hostFirmwarePath,
+				Path: *firmwareHostPath,
 				Type: &hostPathDirectoryOrCreate,
 			},
 		},
