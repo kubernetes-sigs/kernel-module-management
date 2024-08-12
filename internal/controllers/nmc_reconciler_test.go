@@ -1927,10 +1927,7 @@ softdep b pre: c
 
 	args := []string{"kmod", subcommand, "/etc/kmm-worker/config.yaml"}
 	if withFirmware {
-		args = append(args, "--set-firmware-mount-path", *firmwareHostPath)
-		if isLoaderPod && firmwareHostPath != nil {
-			args = append(args, "--set-firmware-class-path", *firmwareHostPath)
-		}
+		args = append(args, "--firmware-path", *firmwareHostPath)
 	} else {
 		configAnnotationValue = strings.ReplaceAll(configAnnotationValue, "firmwarePath: /firmware-path\n  ", "")
 	}

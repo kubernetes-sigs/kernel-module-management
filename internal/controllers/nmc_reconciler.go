@@ -845,12 +845,11 @@ func (p *podManagerImpl) LoaderPodTemplate(ctx context.Context, nmc client.Objec
 			return nil, fmt.Errorf("firmwareHostPath wasn't set, while the Module requires firmware loading")
 		}
 
-		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareHostPath)
+		args = append(args, "--"+worker.FlagFirmwarePath, *firmwareHostPath)
 		if err = setFirmwareVolume(pod, firmwareHostPath); err != nil {
 			return nil, fmt.Errorf("could not map host volume needed for firmware loading: %v", err)
 		}
 
-		args = append(args, "--"+worker.FlagFirmwareClassPath, *firmwareHostPath)
 		privileged = true
 	}
 
@@ -898,7 +897,7 @@ func (p *podManagerImpl) UnloaderPodTemplate(ctx context.Context, nmc client.Obj
 		if firmwareHostPath == nil {
 			return nil, fmt.Errorf("firmwareHostPath was not set while the Module requires firmware unloading")
 		}
-		args = append(args, "--"+worker.FlagFirmwareMountPath, *firmwareHostPath)
+		args = append(args, "--"+worker.FlagFirmwarePath, *firmwareHostPath)
 		if err = setFirmwareVolume(pod, firmwareHostPath); err != nil {
 			return nil, fmt.Errorf("could not map host volume needed for firmware unloading: %v", err)
 		}

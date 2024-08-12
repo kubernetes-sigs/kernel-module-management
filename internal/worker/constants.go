@@ -1,8 +1,7 @@
 package worker
 
 const (
-	FlagFirmwareClassPath = "set-firmware-class-path"
-	FlagFirmwareMountPath = "set-firmware-mount-path"
+	FlagFirmwarePath = "firmware-path"
 
 	FirmwareClassPathLocation = "/sys/module/firmware_class/parameters/path"
 	ImagesDir                 = "/var/run/kmm/images"
