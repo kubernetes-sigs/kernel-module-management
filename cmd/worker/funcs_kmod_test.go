@@ -47,38 +47,30 @@ var _ = Describe("kmodLoadFunc", func() {
 
 	DescribeTable(
 		"set firmware class and firmware mount path if defined",
-		func(flagFirmwareClassPathValue, flagFirmwareMountPath *string) {
+		func(flagFirmwarePath *string) {
 			cfg := &kmmv1beta1.ModuleConfig{}
 			ctx := context.TODO()
 
 			cmd := &cobra.Command{}
 			cmd.SetContext(ctx)
-			cmd.Flags().String(worker.FlagFirmwareClassPath, "", "")
-			cmd.Flags().String(worker.FlagFirmwareMountPath, "", "")
+			cmd.Flags().String(worker.FlagFirmwarePath, "", "")
 
-			readConfig := ch.EXPECT().ReadConfigFile(configPath).Return(cfg, nil)
-			var loadKmod *gomock.Call
-			if flagFirmwareMountPath != nil {
+			if flagFirmwarePath != nil {
 				Expect(
-					cmd.Flags().Set(worker.FlagFirmwareMountPath, *flagFirmwareMountPath),
+					cmd.Flags().Set(worker.FlagFirmwarePath, *flagFirmwarePath),
 				).NotTo(
 					HaveOccurred(),
 				)
-				loadKmod = wo.EXPECT().LoadKmod(ctx, cfg, *flagFirmwareMountPath).After(readConfig)
+				gomock.InOrder(
+					ch.EXPECT().ReadConfigFile(configPath).Return(cfg, nil),
+					wo.EXPECT().SetFirmwareClassPath(*flagFirmwarePath),
+					wo.EXPECT().LoadKmod(ctx, cfg, *flagFirmwarePath),
+				)
 			} else {
-				loadKmod = wo.EXPECT().LoadKmod(ctx, cfg, "").After(readConfig)
-			}
-
-			if flagFirmwareClassPathValue != nil {
-				Expect(
-					cmd.Flags().Set(worker.FlagFirmwareClassPath, *flagFirmwareClassPathValue),
-				).NotTo(
-					HaveOccurred(),
+				gomock.InOrder(
+					ch.EXPECT().ReadConfigFile(configPath).Return(cfg, nil),
+					wo.EXPECT().LoadKmod(ctx, cfg, ""),
 				)
-
-				setFirmwarePath := wo.EXPECT().SetFirmwareClassPath(*flagFirmwareClassPathValue)
-				setFirmwarePath.After(readConfig)
-				loadKmod.After(setFirmwarePath)
 			}
 
 			Expect(
@@ -87,10 +79,8 @@ var _ = Describe("kmodLoadFunc", func() {
 				HaveOccurred(),
 			)
 		},
-		Entry("flags not defined", nil, nil),
-		Entry("class path defined and empty, mount path not defined", ptr.To(""), nil),
-		Entry("class path defined and not empty, mount path not defined", ptr.To("/some/path"), nil),
-		Entry("class path defined and empty, mount path defined", ptr.To(""), ptr.To("some mount path")),
-		Entry("class path defined and not empty, mount path defined", ptr.To("/some/path"), ptr.To("some mount path")),
+		Entry("fimrwarePath not defined", nil),
+		Entry("fimrwarePath path defined and empty", ptr.To("")),
+		Entry("firmwarePath defined", ptr.To("/some/path")),
 	)
 })

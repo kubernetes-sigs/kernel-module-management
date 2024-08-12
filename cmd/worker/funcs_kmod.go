@@ -36,15 +36,14 @@ func kmodLoadFunc(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not read config file %s: %v", cfgPath, err)
 	}
 
-	if flag := cmd.Flags().Lookup(worker.FlagFirmwareClassPath); flag.Changed {
-		logger.V(1).Info(worker.FlagFirmwareClassPath + " set, setting firmware_class.path")
+	mountPathFlag := cmd.Flags().Lookup(worker.FlagFirmwarePath)
+	if mountPathFlag.Changed {
+		logger.V(1).Info(worker.FlagFirmwarePath + " set, setting firmware_class.path")
 
-		if err := w.SetFirmwareClassPath(flag.Value.String()); err != nil {
+		if err := w.SetFirmwareClassPath(mountPathFlag.Value.String()); err != nil {
 			return fmt.Errorf("could not set the firmware_class.path parameter: %v", err)
 		}
 	}
-
-	mountPathFlag := cmd.Flags().Lookup(worker.FlagFirmwareMountPath)
 
 	return w.LoadKmod(cmd.Context(), cfg, mountPathFlag.Value.String())
 }
@@ -59,25 +58,17 @@ func kmodUnloadFunc(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not read config file %s: %v", cfgPath, err)
 	}
 
-	mountPathFlag := cmd.Flags().Lookup(worker.FlagFirmwareMountPath)
-
-	return w.UnloadKmod(cmd.Context(), cfg, mountPathFlag.Value.String())
+	return w.UnloadKmod(cmd.Context(), cfg, cmd.Flags().Lookup(worker.FlagFirmwarePath).Value.String())
 }
 
 func setCommandsFlags() {
 	kmodLoadCmd.Flags().String(
-		worker.FlagFirmwareClassPath,
+		worker.FlagFirmwarePath,
 		"",
-		"if set, this value will be written to "+worker.FirmwareClassPathLocation,
-	)
-
-	kmodLoadCmd.Flags().String(
-		worker.FlagFirmwareMountPath,
-		"",
-		"if set, this the value that firmware host path is mounted to")
+		"if set, this value will be written to "+worker.FirmwareClassPathLocation+" and it is also the value that firmware host path is mounted to")
 
 	kmodUnloadCmd.Flags().String(
-		worker.FlagFirmwareMountPath,
+		worker.FlagFirmwarePath,
 		"",
 		"if set, this the value that firmware host path is mounted to")
 }
