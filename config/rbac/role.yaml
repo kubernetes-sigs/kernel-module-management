@@ -38,6 +38,8 @@ rules:
   - ""
   resources:
   - configmaps
+  - secrets
+  - serviceaccounts
   verbs:
   - get
   - list
@@ -46,14 +48,6 @@ rules:
   - ""
   resources:
   - namespaces
-  verbs:
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - nodes
   verbs:
   - get
@@ -72,22 +66,6 @@ rules:
   - patch
   - watch
 - apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
   - kmm.sigs.x-k8s.io
   resources:
   - modules
@@ -101,6 +79,7 @@ rules:
   - kmm.sigs.x-k8s.io
   resources:
   - modules/status
+  - preflightvalidations/status
   verbs:
   - get
   - patch
@@ -134,11 +113,3 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - kmm.sigs.x-k8s.io
-  resources:
-  - preflightvalidations/status
-  verbs:
-  - get
-  - patch
-  - update
