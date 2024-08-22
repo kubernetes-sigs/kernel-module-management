@@ -258,7 +258,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 })
 
 var moduleConfig = kmmv1beta1.ModuleConfig{
-	KernelVersion:         "kernel version",
+	KernelVersion:         "kernel-version",
 	ContainerImage:        "container image",
 	InsecurePull:          true,
 	InTreeModulesToRemove: []string{"intree1", "intree2"},
@@ -1758,7 +1758,7 @@ var _ = Describe("podManagerImpl_CreateUnloaderPod", func() {
 
 	It("should work as expected", func() {
 
-		expected := getBaseWorkerPod("unload", nmc, ptr.To("some-path"), true, false)
+		expected := getBaseWorkerPod("unload", nmc, ptr.To("/lib/firmware"), true, false)
 
 		container, _ := podcmd.FindContainerByName(expected, "worker")
 		Expect(container).NotTo(BeNil())
@@ -1782,7 +1782,7 @@ var _ = Describe("podManagerImpl_CreateUnloaderPod", func() {
 		)
 
 		workerCfg := *workerCfg
-		workerCfg.FirmwareHostPath = ptr.To("some-path")
+		workerCfg.FirmwareHostPath = ptr.To("/lib/firmware")
 
 		pm := newPodManager(client, workerImage, scheme, &workerCfg)
 		pm.(*podManagerImpl).psh = psh
@@ -1892,7 +1892,7 @@ func getBaseWorkerPod(subcommand string, owner ctrlclient.Object, firmwareHostPa
 	const (
 		volNameLibModules     = "lib-modules"
 		volNameUsrLibModules  = "usr-lib-modules"
-		volNameVarLibFirmware = "var-lib-firmware"
+		volNameVarLibFirmware = "lib-firmware"
 	)
 
 	action := WorkerActionLoad
@@ -1908,7 +1908,7 @@ inTreeModulesToRemove:
 - intree1
 - intree2
 insecurePull: true
-kernelVersion: kernel version
+kernelVersion: kernel-version
 modprobe:
   dirName: /dir
   firmwarePath: /firmware-path
@@ -1925,9 +1925,20 @@ modprobe:
 softdep b pre: c
 `
 
+	var initContainerArg = `
+mkdir -p /tmp/dir/lib/modules;
+cp -R /dir/lib/modules/kernel-version /tmp/dir/lib/modules;
+`
+
+	const initContainerArgFirmwareAddition = `
+mkdir -p /tmp/firmware-path;
+cp -R /firmware-path/* /tmp/firmware-path;
+`
+
 	args := []string{"kmod", subcommand, "/etc/kmm-worker/config.yaml"}
 	if withFirmware {
 		args = append(args, "--firmware-path", *firmwareHostPath)
+		initContainerArg = strings.Join([]string{initContainerArg, initContainerArgFirmwareAddition}, "")
 	} else {
 		configAnnotationValue = strings.ReplaceAll(configAnnotationValue, "firmwarePath: /firmware-path\n  ", "")
 	}
@@ -1948,6 +1959,24 @@ softdep b pre: c
 			},
 		},
 		Spec: v1.PodSpec{
+			InitContainers: []v1.Container{
+				{
+					Name:    "image-extractor",
+					Image:   "container image",
+					Command: []string{"/bin/sh", "-c"},
+					Args:    []string{initContainerArg},
+					Resources: v1.ResourceRequirements{
+						Limits:   limits,
+						Requests: requests,
+					},
+					VolumeMounts: []v1.VolumeMount{
+						{
+							Name:      volNameTmp,
+							MountPath: sharedFilesDir,
+						},
+					},
+				},
+			},
 			Containers: []v1.Container{
 				{
 					Name:  "worker",
@@ -1972,6 +2001,11 @@ softdep b pre: c
 						{
 							Name:      volNameUsrLibModules,
 							MountPath: "/usr/lib/modules",
+							ReadOnly:  true,
+						},
+						{
+							Name:      volNameTmp,
+							MountPath: sharedFilesDir,
 							ReadOnly:  true,
 						},
 						{
@@ -2017,6 +2051,12 @@ softdep b pre: c
 							Path: "/usr/lib/modules",
 							Type: &hostPathDirectory,
 						},
+					},
+				},
+				{
+					Name: volNameTmp,
+					VolumeSource: v1.VolumeSource{
+						EmptyDir: &v1.EmptyDirVolumeSource{},
 					},
 				},
 				{
