@@ -153,6 +153,8 @@ jobs:
 
       - name: Create the minikube cluster
         uses: ./.github/actions/create-minikube-cluster
+        with:
+          start-args: --insecure-registry=host.minikube.internal:5000
 
       - name: Download container images
         uses: actions/download-artifact@v4
