@@ -4,10 +4,12 @@ kind: Kustomization
 resources:
 - deployment.yaml
 
-commonLabels:
-  app.kubernetes.io/component: webhook-server
 
 images:
 - name: webhook-server
   newName: gcr.io/k8s-staging-kmm/kernel-module-management-webhook-server
   newTag: latest
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/component: webhook-server

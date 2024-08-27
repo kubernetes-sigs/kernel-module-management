@@ -13,77 +13,79 @@ namespace: kmm-operator-system
 namePrefix: kmm-operator-
 
 # Labels to add to all resources and selectors.
-commonLabels:
-  app.kubernetes.io/name: kmm
-  app.kubernetes.io/component: kmm
-  app.kubernetes.io/part-of: kmm
 
-replacements:
   # Replacements below adjust the value of the cert-manager.io/inject-ca-from annotation in CRDs and webhook objects.
-  - source:
-      kind: Certificate
-      fieldPath: metadata.namespace
-    targets:
-      - select:
-          kind: CustomResourceDefinition
-          name: preflightvalidations.kmm.sigs.x-k8s.io
-        fieldPaths:
-          - metadata.annotations.[cert-manager.io/inject-ca-from]
-        options:
-          create: true
-          delimiter: /
-      - select:
-          kind: ValidatingWebhookConfiguration
-        fieldPaths:
-          - metadata.annotations.[cert-manager.io/inject-ca-from]
-        options:
-          create: true
-          delimiter: /
-  - source:
-      kind: Certificate
-      fieldPath: metadata.name
-    targets:
-      - select:
-          kind: CustomResourceDefinition
-          name: preflightvalidations.kmm.sigs.x-k8s.io
-        fieldPaths:
-          - metadata.annotations.[cert-manager.io/inject-ca-from]
-        options:
-          create: true
-          delimiter: /
-          index: 1
-      - select:
-          kind: ValidatingWebhookConfiguration
-        fieldPaths:
-          - metadata.annotations.[cert-manager.io/inject-ca-from]
-        options:
-          create: true
-          delimiter: /
-          index: 1
   # Replacements below adjust the DNS names of the webhook certificate based on the service name.
-  - source:
-      kind: Service
-      name: webhook-service
-      fieldPath: metadata.name
-    targets:
-      - select:
-          kind: Certificate
-        fieldPaths:
-          - spec.dnsNames.*
-        options:
-          delimiter: .
-  - source:
-      kind: Service
-      name: webhook-service
-      fieldPath: metadata.namespace
-    targets:
-      - select:
-          kind: Certificate
-        fieldPaths:
-          - spec.dnsNames.*
-        options:
-          delimiter: .
-          index: 1
+replacements:
+- source:
+    fieldPath: metadata.namespace
+    kind: Certificate
+  targets:
+  - fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      create: true
+      delimiter: /
+    select:
+      kind: CustomResourceDefinition
+      name: preflightvalidations.kmm.sigs.x-k8s.io
+  - fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      create: true
+      delimiter: /
+    select:
+      kind: ValidatingWebhookConfiguration
+- source:
+    fieldPath: metadata.name
+    kind: Certificate
+  targets:
+  - fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      create: true
+      delimiter: /
+      index: 1
+    select:
+      kind: CustomResourceDefinition
+      name: preflightvalidations.kmm.sigs.x-k8s.io
+  - fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      create: true
+      delimiter: /
+      index: 1
+    select:
+      kind: ValidatingWebhookConfiguration
+- source:
+    fieldPath: metadata.name
+    kind: Service
+    name: webhook-service
+  targets:
+  - fieldPaths:
+    - spec.dnsNames.*
+    options:
+      delimiter: .
+    select:
+      kind: Certificate
+- source:
+    fieldPath: metadata.namespace
+    kind: Service
+    name: webhook-service
+  targets:
+  - fieldPaths:
+    - spec.dnsNames.*
+    options:
+      delimiter: .
+      index: 1
+    select:
+      kind: Certificate
 
 configurations:
 - kustomizeconfig.yaml
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/component: kmm
+    app.kubernetes.io/name: kmm
+    app.kubernetes.io/part-of: kmm
