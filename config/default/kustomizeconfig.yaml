@@ -1,4 +1,3 @@
 namePrefix:
 - kind: Deployment
-  name: controller
   path: spec/template/spec/volumes/secret/secretName
