@@ -18,5 +18,4 @@ varReference:
 namePrefix:
 - kind: Certificate
   group: cert-manager.io
-  name: serving-cert
   path: spec/secretName
