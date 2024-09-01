@@ -11,6 +11,7 @@ spec:
       modprobe:
         moduleName: kmm_ci_a
         modulesLoadingOrder: [kmm_ci_a, kmm_ci_b]
+        firmwarePath: /firmware
       kernelMappings:
         - regexp: '^.+$'
           containerImage: host.minikube.internal:5000/$MOD_NAMESPACE/$MOD_NAME:$KERNEL_FULL_VERSION

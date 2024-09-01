@@ -17,10 +17,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build the image
-        run: make docker-build IMG=kmm:local
+        run: make docker-build IMG=localhost/k8s-sigs/kmm:local
 
       - name: Export the image
-        run: docker save -o kmm_local.tar kmm:local
+        run: docker save -o kmm_local.tar localhost/k8s-sigs/kmm:local
 
       - name: Upload the image
         uses: actions/upload-artifact@v4
@@ -40,10 +40,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build the image
-        run: make docker-build-hub HUB_IMG=kmm-hub:local
+        run: make docker-build-hub HUB_IMG=localhost/k8s-sigs/kmm-hub:local
 
       - name: Export the image
-        run: docker save -o kmm-hub_local.tar kmm-hub:local
+        run: docker save -o kmm-hub_local.tar localhost/k8s-sigs/kmm-hub:local
 
       - name: Upload the image
         uses: actions/upload-artifact@v4
@@ -63,10 +63,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build the image
-        run:  make signimage-build SIGNER_IMG=kmm-signimage:local
+        run:  make signimage-build SIGNER_IMG=localhost/k8s-sigs/kmm-signimage:local
 
       - name: Export the image
-        run: docker save -o kmm-signimage_local.tar kmm-signimage:local
+        run: docker save -o kmm-signimage_local.tar localhost/k8s-sigs/kmm-signimage:local
 
       - name: Upload the image
         uses: actions/upload-artifact@v4
@@ -86,10 +86,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build the image
-        run:  make workerimage-build WORKER_IMG=kmm-worker:local
+        run:  make workerimage-build WORKER_IMG=localhost/k8s-sigs/kmm-worker:local
 
       - name: Export the image
-        run: docker save -o kmm-worker_local.tar kmm-worker:local
+        run: docker save -o kmm-worker_local.tar localhost/k8s-sigs/kmm-worker:local
 
       - name: Upload the image
         uses: actions/upload-artifact@v4
@@ -109,10 +109,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build the image
-        run: make webhookimage-build WEBHOOK_IMG=kmm-webhook-server:local
+        run: make webhookimage-build WEBHOOK_IMG=localhost/k8s-sigs/kmm-webhook-server:local
 
       - name: Export the image
-        run: docker save -o kmm-webhook-server_local.tar kmm-webhook-server:local
+        run: docker save -o kmm-webhook-server_local.tar localhost/k8s-sigs/kmm-webhook-server:local
 
       - name: Upload the image
         uses: actions/upload-artifact@v4
@@ -151,10 +151,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract firmware host path
+        id: firmware
+        run: |
+          echo "firmware_host_path=$(grep firmwareHostPath config/manager/controller_config.yaml | cut -d" " -f4-)" \
+          >> $GITHUB_OUTPUT
+
       - name: Create the minikube cluster
         uses: ./.github/actions/create-minikube-cluster
         with:
-          start-args: --insecure-registry=host.minikube.internal:5000
+          start-args: |
+            --insecure-registry=host.minikube.internal:5000 \
+            --container-runtime=crio \
+            --mount --mount-string="${{ steps.firmware.outputs.firmware_host_path }}:${{ steps.firmware.outputs.firmware_host_path }}"
 
       - name: Download container images
         uses: actions/download-artifact@v4
@@ -163,20 +172,30 @@ jobs:
 
       - name: Import the KMM operator, webhook server and worker images into minikube
         run: |
-          minikube image load artifacts/ci-image-kmm/kmm_local.tar
-          minikube image load artifacts/ci-image-webhook-server/kmm-webhook-server_local.tar
-          minikube image load artifacts/ci-image-worker/kmm-worker_local.tar
+
+          # minikube image load from a tar file is changing the image name and breaking the flow
+          docker image load  -i artifacts/ci-image-kmm/kmm_local.tar
+          docker image load  -i artifacts/ci-image-webhook-server/kmm-webhook-server_local.tar
+          docker image load  -i artifacts/ci-image-worker/kmm-worker_local.tar
+
+          minikube image load localhost/k8s-sigs/kmm:local
+          minikube image load localhost/k8s-sigs/kmm-webhook-server:local
+          minikube image load localhost/k8s-sigs/kmm-worker:local
 
       - name: Import the KMM-hub operator image into minikube
-        run: minikube image load artifacts/ci-image-kmm-hub/kmm-hub_local.tar
+        run: |
+
+          # minikube image load from a tar file is changing the image name and breaking the flow
+          docker image load  -i artifacts/ci-image-kmm-hub/kmm-hub_local.tar
+          minikube image load localhost/k8s-sigs/kmm-hub:local
         if: ${{ matrix.import_hub_image }}
 
       # This image is pulled by the signing pod, so it needs to be stored externally - not in the minikube container runtime.
       - name: Copy the signing image into the registry
         run: |
           docker load -i artifacts/ci-image-signer/kmm-signimage_local.tar
-          docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
-          docker push localhost:5000/kmm/signimage:local
+          docker tag localhost/k8s-sigs/kmm-signimage:local localhost:5000/k8s-sigs/signimage:local
+          docker push localhost:5000/k8s-sigs/signimage:local
 
       - name: Set some Ubuntu environment variables
         run: |
@@ -238,15 +257,15 @@ jobs:
           docker load -i artifacts/ci-image-webhook-server/kmm-webhook-server_local.tar
           docker load -i artifacts/ci-image-worker/kmm-worker_local.tar
 
-          docker tag kmm:local localhost:5000/kmm/kmm:local
-          docker tag kmm-signimage:local localhost:5000/kmm/signimage:local
-          docker tag kmm-webhook-server:local localhost:5000/kmm/webhook-server:local
-          docker tag kmm-worker:local localhost:5000/kmm/worker:local
+          docker tag localhost/k8s-sigs/kmm:local localhost:5000/k8s-sigs/kmm:local
+          docker tag localhost/k8s-sigs/kmm-signimage:local localhost:5000/k8s-sigs/signimage:local
+          docker tag localhost/k8s-sigs/kmm-webhook-server:local localhost:5000/k8s-sigs/webhook-server:local
+          docker tag localhost/k8s-sigs/kmm-worker:local localhost:5000/k8s-sigs/worker:local
 
-          docker push localhost:5000/kmm/kmm:local
-          docker push localhost:5000/kmm/signimage:local
-          docker push localhost:5000/kmm/webhook-server:local
-          docker push localhost:5000/kmm/worker:local
+          docker push localhost:5000/k8s-sigs/kmm:local
+          docker push localhost:5000/k8s-sigs/signimage:local
+          docker push localhost:5000/k8s-sigs/webhook-server:local
+          docker push localhost:5000/k8s-sigs/worker:local
 
       - name: Set some Ubuntu environment variables
         run: |

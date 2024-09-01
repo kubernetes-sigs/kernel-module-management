@@ -6,16 +6,16 @@ resources:
 
 images:
 - name: gcr.io/k8s-staging-kmm/kernel-module-management-operator
-  newName: kmm
+  newName: localhost/k8s-sigs/kmm
   newTag: local
 - name: gcr.io/k8s-staging-kmm/kernel-module-management-signimage
-  newName: host.minikube.internal:5000/kmm/signimage
+  newName: host.minikube.internal:5000/k8s-sigs/signimage
   newTag: local
 - name: gcr.io/k8s-staging-kmm/kernel-module-management-webhook-server
-  newName: kmm-webhook-server
+  newName: localhost/k8s-sigs/kmm-webhook-server
   newTag: local
 - name: gcr.io/k8s-staging-kmm/kernel-module-management-worker
-  newName: kmm-worker
+  newName: localhost/k8s-sigs/kmm-worker
   newTag: local
 
 patches:

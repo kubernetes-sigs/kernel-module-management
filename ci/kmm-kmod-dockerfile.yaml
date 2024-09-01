@@ -34,4 +34,8 @@ data:
 
     COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_a.ko /opt/lib/modules/${KERNEL_VERSION}/
     COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_b.ko /opt/lib/modules/${KERNEL_VERSION}/
+
+    RUN mkdir /firmware && \
+      echo -n "kmm_kmod_firmware validation string" > /firmware/kmm_kmod_firmware.bin
+
     RUN depmod -b /opt
