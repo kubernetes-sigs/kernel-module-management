@@ -14,7 +14,6 @@ import (
 
 var _ = Describe("worker_LoadKmod", func() {
 	var (
-		im       *MockImageMounter
 		mr       *MockModprobeRunner
 		w        Worker
 		imageDir string
@@ -23,9 +22,8 @@ var _ = Describe("worker_LoadKmod", func() {
 
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
-		im = NewMockImageMounter(ctrl)
 		mr = NewMockModprobeRunner(ctrl)
-		w = NewWorker(im, mr, GinkgoLogr)
+		w = NewWorker(mr, GinkgoLogr)
 
 		var err error
 		imageDir, err = os.MkdirTemp("", "imageDir")
@@ -187,7 +185,7 @@ var _ = Describe("worker_LoadKmod", func() {
 })
 
 var _ = Describe("worker_SetFirmwareClassPath", func() {
-	w := NewWorker(nil, nil, GinkgoLogr)
+	w := NewWorker(nil, GinkgoLogr)
 
 	AfterEach(func() {
 		firmwareClassPathLocation = FirmwareClassPathLocation
@@ -235,7 +233,6 @@ var _ = Describe("worker_SetFirmwareClassPath", func() {
 
 var _ = Describe("worker_UnloadKmod", func() {
 	var (
-		im       *MockImageMounter
 		mr       *MockModprobeRunner
 		w        Worker
 		imageDir string
@@ -244,9 +241,8 @@ var _ = Describe("worker_UnloadKmod", func() {
 
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
-		im = NewMockImageMounter(ctrl)
 		mr = NewMockModprobeRunner(ctrl)
-		w = NewWorker(im, mr, GinkgoLogr)
+		w = NewWorker(mr, GinkgoLogr)
 		var err error
 		imageDir, err = os.MkdirTemp("", "imageDir")
 		Expect(err).Should(BeNil())
