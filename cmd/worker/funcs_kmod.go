@@ -16,12 +16,8 @@ func rootFuncPreRunE(cmd *cobra.Command, args []string) error {
 	}
 	logger.Info("Starting worker", "version", Version, "git commit", commit)
 
-	im, err := getImageMounter(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to get appropriate ImageMounter: %v", err)
-	}
 	mr := worker.NewModprobeRunner(logger)
-	w = worker.NewWorker(im, mr, logger)
+	w = worker.NewWorker(mr, logger)
 
 	return nil
 }
@@ -71,13 +67,4 @@ func setCommandsFlags() {
 		worker.FlagFirmwarePath,
 		"",
 		"if set, this the value that firmware host path is mounted to")
-}
-
-func getImageMounter(cmd *cobra.Command) (worker.ImageMounter, error) {
-	logger.Info("Reading pull secrets", "base dir", worker.PullSecretsDir)
-	keyChain, err := worker.ReadKubernetesSecrets(cmd.Context(), worker.PullSecretsDir, logger)
-	if err != nil {
-		return nil, fmt.Errorf("could not read pull secrets: %v", err)
-	}
-	return worker.NewRemoteImageMounter(worker.ImagesDir, keyChain, logger), nil
 }

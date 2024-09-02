@@ -22,14 +22,12 @@ type Worker interface {
 }
 
 type worker struct {
-	im     ImageMounter
 	logger logr.Logger
 	mr     ModprobeRunner
 }
 
-func NewWorker(im ImageMounter, mr ModprobeRunner, logger logr.Logger) Worker {
+func NewWorker(mr ModprobeRunner, logger logr.Logger) Worker {
 	return &worker{
-		im:     im,
 		logger: logger,
 		mr:     mr,
 	}
