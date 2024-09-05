@@ -54,6 +54,11 @@ spec:
                       properties:
                         containerImage:
                           type: string
+                        imagePullPolicy:
+                          default: IfNotPresent
+                          description: PullPolicy describes a policy for if/when to
+                            pull a container image
+                          type: string
                         inTreeModuleToRemove:
                           type: string
                         inTreeModulesToRemove:
@@ -151,6 +156,7 @@ spec:
                           type: object
                       required:
                       - containerImage
+                      - imagePullPolicy
                       - insecurePull
                       - kernelVersion
                       - modprobe
@@ -200,6 +206,11 @@ spec:
                       properties:
                         containerImage:
                           type: string
+                        imagePullPolicy:
+                          default: IfNotPresent
+                          description: PullPolicy describes a policy for if/when to
+                            pull a container image
+                          type: string
                         inTreeModuleToRemove:
                           type: string
                         inTreeModulesToRemove:
@@ -297,6 +308,7 @@ spec:
                           type: object
                       required:
                       - containerImage
+                      - imagePullPolicy
                       - insecurePull
                       - kernelVersion
                       - modprobe
