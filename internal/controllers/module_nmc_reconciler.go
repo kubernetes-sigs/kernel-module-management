@@ -333,6 +333,7 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 	moduleConfig := kmmv1beta1.ModuleConfig{
 		KernelVersion:         mld.KernelVersion,
 		ContainerImage:        mld.ContainerImage,
+		ImagePullPolicy:       mld.ImagePullPolicy,
 		InTreeModulesToRemove: mld.InTreeModulesToRemove,
 		Modprobe:              mld.Modprobe,
 	}

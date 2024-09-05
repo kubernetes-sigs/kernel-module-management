@@ -1052,10 +1052,11 @@ func (p *podManagerImpl) baseWorkerPod(ctx context.Context, nmc client.Object, i
 		Spec: v1.PodSpec{
 			InitContainers: []v1.Container{
 				{
-					Name:    initContainerName,
-					Image:   moduleConfig.ContainerImage,
-					Command: []string{"/bin/sh", "-c"},
-					Args:    []string{""},
+					Name:            initContainerName,
+					Image:           moduleConfig.ContainerImage,
+					ImagePullPolicy: moduleConfig.ImagePullPolicy,
+					Command:         []string{"/bin/sh", "-c"},
+					Args:            []string{""},
 					VolumeMounts: []v1.VolumeMount{
 						{
 							Name:      volNameTmp,
