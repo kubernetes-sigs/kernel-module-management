@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	kmmcmd "github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -17,7 +18,8 @@ func rootFuncPreRunE(cmd *cobra.Command, args []string) error {
 	logger.Info("Starting worker", "version", Version, "git commit", commit)
 
 	mr := worker.NewModprobeRunner(logger)
-	w = worker.NewWorker(mr, logger)
+	fsh := utils.NewFSHelper(logger)
+	w = worker.NewWorker(mr, fsh, logger)
 
 	return nil
 }
