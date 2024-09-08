@@ -24,12 +24,14 @@ type Worker interface {
 type worker struct {
 	logger logr.Logger
 	mr     ModprobeRunner
+	fh     utils.FSHelper
 }
 
-func NewWorker(mr ModprobeRunner, logger logr.Logger) Worker {
+func NewWorker(mr ModprobeRunner, fh utils.FSHelper, logger logr.Logger) Worker {
 	return &worker{
 		logger: logger,
 		mr:     mr,
+		fh:     fh,
 	}
 }
 
@@ -140,25 +142,7 @@ func (w *worker) UnloadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, f
 	//remove firmware files only (no directories)
 	if cfg.Modprobe.FirmwarePath != "" {
 		imageFirmwarePath := filepath.Join(sharedFilesDir, cfg.Modprobe.FirmwarePath)
-		err := filepath.Walk(imageFirmwarePath, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() {
-				relPath, err := filepath.Rel(imageFirmwarePath, path)
-				if err != nil {
-					w.logger.Info(utils.WarnString("failed to get relative path"), "imageFirmwarePath", imageFirmwarePath, "path", path, "error", err)
-					return nil
-				}
-				fileToRemove := filepath.Join(firmwareMountPath, relPath)
-				w.logger.Info("Removing firmware file", "file", fileToRemove)
-				err = os.Remove(fileToRemove)
-				if err != nil {
-					w.logger.Info(utils.WarnString("failed to delete file"), "file", fileToRemove, "error", err)
-				}
-			}
-			return nil
-		})
+		err := w.fh.RemoveSrcFilesFromDst(imageFirmwarePath, firmwareMountPath)
 		if err != nil {
 			w.logger.Info(utils.WarnString("failed to remove all firmware blobs"), "error", err)
 		}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -23,7 +24,7 @@ var _ = Describe("worker_LoadKmod", func() {
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		mr = NewMockModprobeRunner(ctrl)
-		w = NewWorker(mr, GinkgoLogr)
+		w = NewWorker(mr, nil, GinkgoLogr)
 
 		var err error
 		imageDir, err = os.MkdirTemp("", "imageDir")
@@ -185,7 +186,7 @@ var _ = Describe("worker_LoadKmod", func() {
 })
 
 var _ = Describe("worker_SetFirmwareClassPath", func() {
-	w := NewWorker(nil, GinkgoLogr)
+	w := NewWorker(nil, nil, GinkgoLogr)
 
 	AfterEach(func() {
 		firmwareClassPathLocation = FirmwareClassPathLocation
@@ -234,6 +235,7 @@ var _ = Describe("worker_SetFirmwareClassPath", func() {
 var _ = Describe("worker_UnloadKmod", func() {
 	var (
 		mr       *MockModprobeRunner
+		fh       *utils.MockFSHelper
 		w        Worker
 		imageDir string
 		hostDir  string
@@ -242,7 +244,8 @@ var _ = Describe("worker_UnloadKmod", func() {
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		mr = NewMockModprobeRunner(ctrl)
-		w = NewWorker(mr, GinkgoLogr)
+		fh = utils.NewMockFSHelper(ctrl)
+		w = NewWorker(mr, fh, GinkgoLogr)
 		var err error
 		imageDir, err = os.MkdirTemp("", "imageDir")
 		Expect(err).Should(BeNil())
@@ -331,37 +334,14 @@ var _ = Describe("worker_UnloadKmod", func() {
 			},
 		}
 
-		// prepare the image firmware directories + files
-		err := os.MkdirAll(imageDir+"/"+"firmwareDir/binDir", 0750)
-		Expect(err).Should(BeNil())
-		err = os.WriteFile(imageDir+"/"+"firmwareDir/firmwareFile1", []byte("some data 1"), 0660)
-		Expect(err).Should(BeNil())
-		err = os.WriteFile(imageDir+"/"+"firmwareDir/binDir/firmwareFile2", []byte("some data 2"), 0660)
-		Expect(err).Should(BeNil())
-
-		// prepare the mapped host firmware directories + files
-		err = os.MkdirAll(hostDir+"/binDir", 0750)
-		Expect(err).Should(BeNil())
-		err = os.WriteFile(hostDir+"/firmwareFile1", []byte("some data 1"), 0660)
-		Expect(err).Should(BeNil())
-		err = os.WriteFile(hostDir+"/binDir/firmwareFile2", []byte("some data 2"), 0660)
-		Expect(err).Should(BeNil())
-
 		mr.EXPECT().Run(ctx, "-rvd", filepath.Join(sharedFilesDir, dirName), moduleName)
+		fh.EXPECT().RemoveSrcFilesFromDst(filepath.Join(sharedFilesDir, cfg.Modprobe.FirmwarePath), hostDir).Return(nil)
 
 		Expect(
 			w.UnloadKmod(ctx, &cfg, hostDir),
 		).NotTo(
 			HaveOccurred(),
 		)
-
-		// check only the files deletion
-		_, err = os.Stat(hostDir + "/binDir")
-		Expect(err).Should(BeNil())
-		_, err = os.Stat(hostDir + "/binDir/firwmwareFile2")
-		Expect(err).NotTo(BeNil())
-		_, err = os.Stat(hostDir + "/firwmwareFile1")
-		Expect(err).NotTo(BeNil())
 	})
 })
 
