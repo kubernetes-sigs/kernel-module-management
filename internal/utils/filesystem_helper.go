@@ -2,8 +2,10 @@ package utils
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/go-logr/logr"
 )
@@ -12,6 +14,7 @@ import (
 
 type FSHelper interface {
 	RemoveSrcFilesFromDst(srcDir, dstDir string) error
+	FileExists(root, fileRegex string) (bool, error)
 }
 
 type fsHelper struct {
@@ -48,4 +51,28 @@ func (fh *fsHelper) RemoveSrcFilesFromDst(srcDir, dstDir string) error {
 		return fmt.Errorf("failed to remove files %s/* from %s\n", srcDir, dstDir)
 	}
 	return nil
+}
+
+func (fh *fsHelper) FileExists(root, fileRegex string) (bool, error) {
+	regex, err := regexp.Compile(fileRegex)
+	if err != nil {
+		return false, fmt.Errorf("failed to compile regex %s: %v", fileRegex, err)
+	}
+
+	found := false
+	// Walk through the directory
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Match file names against the regex
+		if !d.IsDir() && regex.MatchString(d.Name()) {
+			found = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+
+	return found, err
 }
