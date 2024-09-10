@@ -47,10 +47,26 @@ func (w *worker) LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, fir
 
 	if inTreeModulesToRemove != nil {
 		w.logger.Info("Unloading in-tree modules", "names", inTreeModulesToRemove)
+		modulesToUnload := make([]string, 0, len(inTreeModulesToRemove))
+		for _, module := range inTreeModulesToRemove {
+			exists, err := w.fh.FileExists("/lib/modules", fmt.Sprintf("^%s.ko", module))
+			if err != nil {
+				w.logger.Info(utils.WarnString(fmt.Sprintf("failed to check if module file %s present on the host:", module)), "error", err)
+				continue
+			}
+			if !exists {
+				w.logger.Info("not trying to unload in-tree module, since its file is not present on the host", "module", module)
+				continue
+			}
+			w.logger.Info("adding module to the list of intree modules to be unloadded", "module", module)
+			modulesToUnload = append(modulesToUnload, module)
+		}
 
-		runArgs := append([]string{"-rv"}, inTreeModulesToRemove...)
-		if err := w.mr.Run(ctx, runArgs...); err != nil {
-			return fmt.Errorf("could not remove in-tree modules %s: %v", strings.Join(inTreeModulesToRemove, ""), err)
+		if len(modulesToUnload) > 0 {
+			runArgs := append([]string{"-rv"}, modulesToUnload...)
+			if err := w.mr.Run(ctx, runArgs...); err != nil {
+				return fmt.Errorf("could not remove in-tree modules %s: %v", strings.Join(modulesToUnload, ""), err)
+			}
 		}
 	}
 

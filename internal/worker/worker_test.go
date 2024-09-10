@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -15,6 +16,7 @@ import (
 
 var _ = Describe("worker_LoadKmod", func() {
 	var (
+		fh       *utils.MockFSHelper
 		mr       *MockModprobeRunner
 		w        Worker
 		imageDir string
@@ -23,8 +25,9 @@ var _ = Describe("worker_LoadKmod", func() {
 
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
+		fh = utils.NewMockFSHelper(ctrl)
 		mr = NewMockModprobeRunner(ctrl)
-		w = NewWorker(mr, nil, GinkgoLogr)
+		w = NewWorker(mr, fh, GinkgoLogr)
 
 		var err error
 		imageDir, err = os.MkdirTemp("", "imageDir")
@@ -66,8 +69,8 @@ var _ = Describe("worker_LoadKmod", func() {
 		)
 	})
 
-	It("should remove the in-tree module if configured", func() {
-		inTreeModulesToRemove := []string{"intree1", "intree2"}
+	It("should remove present-on-host in-tree module if configured", func() {
+		inTreeModulesToRemove := []string{"intree1", "intree2", "intree3", "intree4"}
 
 		cfg := v1beta1.ModuleConfig{
 			ContainerImage:        imageName,
@@ -79,7 +82,11 @@ var _ = Describe("worker_LoadKmod", func() {
 		}
 
 		gomock.InOrder(
-			mr.EXPECT().Run(ctx, "-rv", "intree1", "intree2"),
+			fh.EXPECT().FileExists("/lib/modules", "^intree1.ko").Return(true, nil),
+			fh.EXPECT().FileExists("/lib/modules", "^intree2.ko").Return(false, nil),
+			fh.EXPECT().FileExists("/lib/modules", "^intree3.ko").Return(true, nil),
+			fh.EXPECT().FileExists("/lib/modules", "^intree4.ko").Return(false, fmt.Errorf("some error")),
+			mr.EXPECT().Run(ctx, "-rv", "intree1", "intree3"),
 			mr.EXPECT().Run(ctx, "-vd", filepath.Join(sharedFilesDir, dirName), moduleName),
 		)
 
@@ -102,6 +109,7 @@ var _ = Describe("worker_LoadKmod", func() {
 		}
 
 		gomock.InOrder(
+			fh.EXPECT().FileExists("/lib/modules", "^intreeToRemove.ko").Return(true, nil),
 			mr.EXPECT().Run(ctx, "-rv", "intreeToRemove"),
 			mr.EXPECT().Run(ctx, "-vd", filepath.Join(sharedFilesDir, dirName), moduleName),
 		)

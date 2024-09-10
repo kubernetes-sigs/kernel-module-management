@@ -14,6 +14,7 @@ var _ = Describe("RemoveSrcFilesFromDst", func() {
 		// source
 		err := os.MkdirAll("./srcDir/level1", 0750)
 		Expect(err).NotTo(HaveOccurred())
+		defer os.RemoveAll("./srcDir")
 		err = os.MkdirAll("./srcDir/level2", 0750)
 		Expect(err).NotTo(HaveOccurred())
 		err = os.MkdirAll("./srcDir/level4", 0750)
@@ -25,6 +26,7 @@ var _ = Describe("RemoveSrcFilesFromDst", func() {
 		// destination
 		err = os.MkdirAll("./dstDir/level1", 0750)
 		Expect(err).NotTo(HaveOccurred())
+		defer os.RemoveAll("./dstDir")
 		err = os.MkdirAll("./dstDir/level2", 0750)
 		Expect(err).NotTo(HaveOccurred())
 		err = os.MkdirAll("./dstDir/level3", 0750)
@@ -42,9 +44,45 @@ var _ = Describe("RemoveSrcFilesFromDst", func() {
 		verifyFileNotExists("./dstDir/level2/testfile2")
 
 		verifyFileExists("./dstDir/level3/testfile3")
+	})
+})
 
-		defer os.RemoveAll("./dstDir")
-		defer os.RemoveAll("./srcDir")
+var _ = Describe("FileExists", func() {
+	It("test files", func() {
+		err := os.MkdirAll("./testDir/level_1_0", 0750)
+		Expect(err).NotTo(HaveOccurred())
+		defer os.RemoveAll("./testDir")
+		err = os.MkdirAll("./testDir/level_1_1", 0750)
+		Expect(err).NotTo(HaveOccurred())
+		err = os.MkdirAll("./testDir/level_2_0", 0750)
+		Expect(err).NotTo(HaveOccurred())
+		err = os.MkdirAll("./testDir/level_2_1", 0750)
+		Expect(err).NotTo(HaveOccurred())
+		createEmptyFile("./testDir/level_1_1/not_ko_file")
+		createEmptyFile("./testDir/level_2_1/module1.ko.kz")
+		createEmptyFile("./testDir/level_1_0/module2.ko")
+
+		helper := NewFSHelper(logr.Discard())
+
+		By("find existing file by full name")
+		exists, err := helper.FileExists("testDir", "module2.ko")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(BeTrue())
+
+		By("find existing file by regexp name")
+		exists, err = helper.FileExists("testDir", `.*\.ko*$`)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(BeTrue())
+
+		By("find existing file by regexp name, comparing prefix")
+		exists, err = helper.FileExists("testDir", `^module1.ko`)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(BeTrue())
+
+		By("find non-existing file by regexp name")
+		exists, err = helper.FileExists("testDir", `.*\.koz.*$`)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(BeFalse())
 	})
 })
 

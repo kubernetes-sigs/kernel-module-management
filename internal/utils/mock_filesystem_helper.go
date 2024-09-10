@@ -37,6 +37,21 @@ func (m *MockFSHelper) EXPECT() *MockFSHelperMockRecorder {
 	return m.recorder
 }
 
+// FileExists mocks base method.
+func (m *MockFSHelper) FileExists(root, fileRegex string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FileExists", root, fileRegex)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FileExists indicates an expected call of FileExists.
+func (mr *MockFSHelperMockRecorder) FileExists(root, fileRegex any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FileExists", reflect.TypeOf((*MockFSHelper)(nil).FileExists), root, fileRegex)
+}
+
 // RemoveSrcFilesFromDst mocks base method.
 func (m *MockFSHelper) RemoveSrcFilesFromDst(srcDir, dstDir string) error {
 	m.ctrl.T.Helper()
