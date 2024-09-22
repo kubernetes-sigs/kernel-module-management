@@ -430,7 +430,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		)
 	})
 
-	It("should create an unloader Pod if the spec is different from the status", func() {
+	It("should create an unloader Pod if the spec is different from the status and kernels are equal", func() {
 		nmc := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
 		}
@@ -440,7 +440,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 				Name:      name,
 				Namespace: namespace,
 			},
-			Config: kmmv1beta1.ModuleConfig{ContainerImage: "old-container-image"},
+			Config: kmmv1beta1.ModuleConfig{ContainerImage: "old-container-image", KernelVersion: "same kernel"},
 		}
 
 		status := &kmmv1beta1.NodeModuleStatus{
@@ -448,12 +448,45 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 				Name:      name,
 				Namespace: namespace,
 			},
-			Config: kmmv1beta1.ModuleConfig{ContainerImage: "new-container-image"},
+			Config: kmmv1beta1.ModuleConfig{ContainerImage: "new-container-image", KernelVersion: "same kernel"},
 		}
 
 		gomock.InOrder(
 			pm.EXPECT().GetWorkerPod(ctx, podName, namespace),
 			pm.EXPECT().CreateUnloaderPod(ctx, nmc, status),
+		)
+
+		Expect(
+			wh.ProcessModuleSpec(ctx, nmc, spec, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should create an loader Pod if the spec is different from the status and kernels different equal", func() {
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+		}
+
+		spec := &kmmv1beta1.NodeModuleSpec{
+			ModuleItem: kmmv1beta1.ModuleItem{
+				Name:      name,
+				Namespace: namespace,
+			},
+			Config: kmmv1beta1.ModuleConfig{ContainerImage: "old-container-image", KernelVersion: "old kernel"},
+		}
+
+		status := &kmmv1beta1.NodeModuleStatus{
+			ModuleItem: kmmv1beta1.ModuleItem{
+				Name:      name,
+				Namespace: namespace,
+			},
+			Config: kmmv1beta1.ModuleConfig{ContainerImage: "new-container-image", KernelVersion: "new kernel"},
+		}
+
+		gomock.InOrder(
+			pm.EXPECT().GetWorkerPod(ctx, podName, namespace),
+			pm.EXPECT().CreateLoaderPod(ctx, nmc, spec),
 		)
 
 		Expect(
