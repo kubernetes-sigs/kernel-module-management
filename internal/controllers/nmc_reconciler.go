@@ -321,14 +321,23 @@ func (h *nmcReconcilerHelperImpl) ProcessModuleSpec(
 	}
 
 	if pod == nil {
+		// new module is introduced, need to load it
 		if status == nil {
 			logger.Info("Missing status; creating loader Pod")
 			return h.pm.CreateLoaderPod(ctx, nmcObj, spec)
 		}
 
+		/* configuration changed for module: if spec status contain the same kernel,
+		unload the kernel module, otherwise - load kernel modules, since the pod
+		is not running, the module cannot be loaded using the old kernel configuration
+		*/
 		if !reflect.DeepEqual(spec.Config, status.Config) {
-			logger.Info("Outdated config in status; creating unloader Pod")
-			return h.pm.CreateUnloaderPod(ctx, nmcObj, status)
+			if spec.Config.KernelVersion == status.Config.KernelVersion {
+				logger.Info("Outdated config in status; creating unloader Pod")
+				return h.pm.CreateUnloaderPod(ctx, nmcObj, status)
+			}
+			logger.Info("Outdated config in status and kernels differ, probably due to upgrade; creating loader Pod")
+			return h.pm.CreateLoaderPod(ctx, nmcObj, spec)
 		}
 
 		node := v1.Node{}
@@ -342,6 +351,7 @@ func (h *nmcReconcilerHelperImpl) ProcessModuleSpec(
 			return fmt.Errorf("node %s has no Ready condition", nmcObj.Name)
 		}
 
+		// node has been rebooted, load the module using the spec
 		if readyCondition.Status == v1.ConditionTrue && status.LastTransitionTime.Before(&readyCondition.LastTransitionTime) {
 			logger.Info("Outdated last transition time status; creating loader Pod")
 
