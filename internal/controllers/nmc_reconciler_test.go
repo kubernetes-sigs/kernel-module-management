@@ -396,14 +396,14 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		client *testclient.MockClient
 		pm     *MockpodManager
 		wh     nmcReconcilerHelper
-		nm     node.Node
+		nm     *node.MockNode
 	)
 
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client = testclient.NewMockClient(ctrl)
 		pm = NewMockpodManager(ctrl)
-		nm = node.NewNode(client)
+		nm = node.NewMockNode(ctrl)
 		wh = newNMCReconcilerHelper(client, pm, nil, nm)
 	})
 
@@ -534,40 +534,6 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		)
 	})
 
-	It("should return an error if the node has no ready condition", func() {
-		nmc := &kmmv1beta1.NodeModulesConfig{
-			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
-		}
-
-		spec := &kmmv1beta1.NodeModuleSpec{
-			ModuleItem: kmmv1beta1.ModuleItem{
-				Name:      name,
-				Namespace: namespace,
-			},
-			Config: moduleConfig,
-		}
-
-		status := &kmmv1beta1.NodeModuleStatus{
-			ModuleItem: kmmv1beta1.ModuleItem{
-				Name:      name,
-				Namespace: namespace,
-			},
-			Config:             moduleConfig,
-			LastTransitionTime: metav1.Now(),
-		}
-
-		gomock.InOrder(
-			pm.EXPECT().GetWorkerPod(ctx, podName, namespace),
-			client.EXPECT().Get(ctx, types.NamespacedName{Name: nmcName}, &v1.Node{}),
-		)
-
-		Expect(
-			wh.ProcessModuleSpec(ctx, nmc, spec, status),
-		).To(
-			HaveOccurred(),
-		)
-	})
-
 	nmc := &kmmv1beta1.NodeModulesConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: nmcName},
 	}
@@ -593,28 +559,21 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 
 	DescribeTable(
 		"should create a loader Pod if status is older than the Ready condition",
-		func(cs v1.ConditionStatus, shouldCreate bool) {
+		func(shouldCreate bool) {
 
-			getPod := pm.
-				EXPECT().
-				GetWorkerPod(ctx, podName, namespace)
+			returnValue := false
+			if shouldCreate {
+				returnValue = true
+			}
 
-			getNode := client.
-				EXPECT().
-				Get(ctx, types.NamespacedName{Name: nmcName}, &v1.Node{}).
-				Do(func(_ context.Context, _ types.NamespacedName, node *v1.Node, _ ...ctrl.Options) {
-					node.Status.Conditions = []v1.NodeCondition{
-						{
-							Type:               v1.NodeReady,
-							Status:             cs,
-							LastTransitionTime: now,
-						},
-					}
-				}).
-				After(getPod)
+			gomock.InOrder(
+				pm.EXPECT().GetWorkerPod(ctx, podName, namespace),
+				client.EXPECT().Get(ctx, types.NamespacedName{Name: nmcName}, &v1.Node{}),
+				nm.EXPECT().NodeBecomeReadyAfter(gomock.Any(), status.LastTransitionTime).Return(returnValue),
+			)
 
 			if shouldCreate {
-				pm.EXPECT().CreateLoaderPod(ctx, nmc, spec).After(getNode)
+				pm.EXPECT().CreateLoaderPod(ctx, nmc, spec)
 			}
 
 			Expect(
@@ -623,8 +582,8 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 				HaveOccurred(),
 			)
 		},
-		Entry(nil, v1.ConditionFalse, false),
-		Entry(nil, v1.ConditionTrue, true),
+		Entry("pod status is newer then node's Ready condition, worker pod should not be created", false),
+		Entry("pod status is older then node's Ready condition, worker pod should be created", true),
 	)
 
 	It("should do nothing if the pod is not loading a kmod", func() {
@@ -1355,16 +1314,16 @@ var _ = Describe("nmcReconcilerHelperImpl_RecordEvents", func() {
 	var (
 		client       *testclient.MockClient
 		fakeRecorder *record.FakeRecorder
-		n            node.Node
-		wh           nmcReconcilerHelper
+		//nm           *node.MockNode
+		wh nmcReconcilerHelper
 	)
 
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client = testclient.NewMockClient(ctrl)
-		n = node.NewNode(client)
+		//nm = node.NewMockNode(ctrl)
 		fakeRecorder = record.NewFakeRecorder(10)
-		wh = newNMCReconcilerHelper(client, nil, fakeRecorder, n)
+		wh = newNMCReconcilerHelper(client, nil, fakeRecorder, nil)
 	})
 
 	closeAndGetAllEvents := func(events chan string) []string {

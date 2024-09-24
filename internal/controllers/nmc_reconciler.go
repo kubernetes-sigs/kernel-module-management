@@ -346,15 +346,8 @@ func (h *nmcReconcilerHelperImpl) ProcessModuleSpec(
 			return fmt.Errorf("could not get node %s: %v", nmcObj.Name, err)
 		}
 
-		readyCondition := h.nodeAPI.FindNodeCondition(node.Status.Conditions, v1.NodeReady)
-		if readyCondition == nil {
-			return fmt.Errorf("node %s has no Ready condition", nmcObj.Name)
-		}
-
-		// node has been rebooted, load the module using the spec
-		if readyCondition.Status == v1.ConditionTrue && status.LastTransitionTime.Before(&readyCondition.LastTransitionTime) {
-			logger.Info("Outdated last transition time status; creating loader Pod")
-
+		if h.nodeAPI.NodeBecomeReadyAfter(&node, status.LastTransitionTime) {
+			logger.Info("node has been rebooted and become ready after kernel module was loaded; creating loader Pod")
 			return h.pm.CreateLoaderPod(ctx, nmcObj, spec)
 		}
 
