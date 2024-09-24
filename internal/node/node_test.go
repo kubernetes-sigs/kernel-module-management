@@ -10,6 +10,7 @@ import (
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"time"
 )
 
 var _ = Describe("IsNodeSchedulable", func() {
@@ -229,50 +230,52 @@ var _ = Describe("GetNumTargetedNodes", func() {
 	})
 })
 
-var _ = Describe("FindNodeCondition", func() {
+var _ = Describe("NodeBecomeReadyAfter", func() {
 	var (
-		ctrl           *gomock.Controller
-		clnt           *client.MockClient
-		mn             Node
-		conditionFound *v1.NodeCondition
+		n         Node
+		testNode  v1.Node
+		timestamp time.Time
 	)
 
 	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		mn = NewNode(clnt)
-	})
-
-	It("Finds condition", func() {
-		condition := v1.NodeCondition{
-			Type: v1.NodeReady,
-		}
-		node := v1.Node{
+		n = NewNode(nil)
+		timestamp = time.Now()
+		testNode = v1.Node{
 			Status: v1.NodeStatus{
 				Conditions: []v1.NodeCondition{
-					condition,
-				},
-			},
-		}
-		conditionFound = mn.FindNodeCondition(node.Status.Conditions, v1.NodeReady)
-		Expect(conditionFound).To(Equal(&condition))
-	})
-
-	It("Does not find condition", func() {
-		node := v1.Node{
-			Status: v1.NodeStatus{
-				Conditions: []v1.NodeCondition{
+					{
+						Type: v1.NodeMemoryPressure,
+					},
 					{
 						Type: v1.NodeDiskPressure,
 					},
 					{
-						Type: v1.NodeMemoryPressure,
+						Type: v1.NodeReady,
+					},
+					{
+						Type: v1.NodeNetworkUnavailable,
 					},
 				},
 			},
 		}
-		conditionFound = mn.FindNodeCondition(node.Status.Conditions, v1.NodeReady)
-		Expect(conditionFound).To(BeNil())
+	})
+
+	It("ready condition is true, its timestamp is after the test timestamp", func() {
+		testTimestamp := metav1.NewTime(timestamp)
+		testNode.Status.Conditions[2].Status = v1.ConditionTrue
+		testNode.Status.Conditions[2].LastTransitionTime = metav1.NewTime(timestamp.Add(2 * time.Minute))
+
+		res := n.NodeBecomeReadyAfter(&testNode, testTimestamp)
+		Expect(res).To(BeTrue())
+	})
+
+	It("ready condition is true, its timestamp is before the test timestamp", func() {
+		testTimestamp := metav1.NewTime(timestamp.Add(2 * time.Minute))
+		testNode.Status.Conditions[2].Status = v1.ConditionTrue
+		testNode.Status.Conditions[2].LastTransitionTime = metav1.NewTime(timestamp)
+
+		res := n.NodeBecomeReadyAfter(&testNode, testTimestamp)
+		Expect(res).To(BeFalse())
 	})
 })
 

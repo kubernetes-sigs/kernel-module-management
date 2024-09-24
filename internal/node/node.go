@@ -5,16 +5,19 @@ import (
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+//go:generate mockgen -source=node.go -package=node -destination=mock_node.go
 
 type Node interface {
 	IsNodeSchedulable(node *v1.Node) bool
 	GetNodesListBySelector(ctx context.Context, selector map[string]string) ([]v1.Node, error)
 	GetNumTargetedNodes(ctx context.Context, selector map[string]string) (int, error)
-	FindNodeCondition(cond []v1.NodeCondition, conditionType v1.NodeConditionType) *v1.NodeCondition
 	UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error
+	NodeBecomeReadyAfter(node *v1.Node, checkTime metav1.Time) bool
 }
 
 type node struct {
@@ -63,18 +66,6 @@ func (n *node) GetNumTargetedNodes(ctx context.Context, selector map[string]stri
 	return len(targetedNode), nil
 }
 
-func (n *node) FindNodeCondition(cond []v1.NodeCondition, conditionType v1.NodeConditionType) *v1.NodeCondition {
-	for i := 0; i < len(cond); i++ {
-		c := cond[i]
-
-		if c.Type == conditionType {
-			return &c
-		}
-	}
-
-	return nil
-}
-
 func (n *node) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error {
 	patchFrom := client.MergeFrom(node.DeepCopy())
 
@@ -85,6 +76,17 @@ func (n *node) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeR
 		return fmt.Errorf("could not patch node: %v", err)
 	}
 	return nil
+}
+
+func (n *node) NodeBecomeReadyAfter(node *v1.Node, timestamp metav1.Time) bool {
+	conds := node.Status.Conditions
+	for i := 0; i < len(conds); i++ {
+		c := conds[i]
+		if c.Type == v1.NodeReady && c.Status == v1.ConditionTrue && timestamp.Before(&c.LastTransitionTime) {
+			return true
+		}
+	}
+	return false
 }
 
 func addLabels(node *v1.Node, labels []string) {

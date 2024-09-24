@@ -14,6 +14,7 @@ import (
 
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
+	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MockNode is a mock of Node interface.
@@ -37,20 +38,6 @@ func NewMockNode(ctrl *gomock.Controller) *MockNode {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockNode) EXPECT() *MockNodeMockRecorder {
 	return m.recorder
-}
-
-// FindNodeCondition mocks base method.
-func (m *MockNode) FindNodeCondition(cond []v1.NodeCondition, conditionType v1.NodeConditionType) *v1.NodeCondition {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindNodeCondition", cond, conditionType)
-	ret0, _ := ret[0].(*v1.NodeCondition)
-	return ret0
-}
-
-// FindNodeCondition indicates an expected call of FindNodeCondition.
-func (mr *MockNodeMockRecorder) FindNodeCondition(cond, conditionType any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindNodeCondition", reflect.TypeOf((*MockNode)(nil).FindNodeCondition), cond, conditionType)
 }
 
 // GetNodesListBySelector mocks base method.
@@ -95,6 +82,20 @@ func (m *MockNode) IsNodeSchedulable(node *v1.Node) bool {
 func (mr *MockNodeMockRecorder) IsNodeSchedulable(node any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNodeSchedulable", reflect.TypeOf((*MockNode)(nil).IsNodeSchedulable), node)
+}
+
+// NodeBecomeReadyAfter mocks base method.
+func (m *MockNode) NodeBecomeReadyAfter(node *v1.Node, checkTime v10.Time) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NodeBecomeReadyAfter", node, checkTime)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// NodeBecomeReadyAfter indicates an expected call of NodeBecomeReadyAfter.
+func (mr *MockNodeMockRecorder) NodeBecomeReadyAfter(node, checkTime any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NodeBecomeReadyAfter", reflect.TypeOf((*MockNode)(nil).NodeBecomeReadyAfter), node, checkTime)
 }
 
 // UpdateLabels mocks base method.
