@@ -58,31 +58,31 @@ func (mr *MocknmcReconcilerHelperMockRecorder) GarbageCollectInUseLabels(ctx, nm
 }
 
 // ProcessModuleSpec mocks base method.
-func (m *MocknmcReconcilerHelper) ProcessModuleSpec(ctx context.Context, nmc *v1beta1.NodeModulesConfig, spec *v1beta1.NodeModuleSpec, status *v1beta1.NodeModuleStatus) error {
+func (m *MocknmcReconcilerHelper) ProcessModuleSpec(ctx context.Context, nmc *v1beta1.NodeModulesConfig, spec *v1beta1.NodeModuleSpec, status *v1beta1.NodeModuleStatus, node *v1.Node) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessModuleSpec", ctx, nmc, spec, status)
+	ret := m.ctrl.Call(m, "ProcessModuleSpec", ctx, nmc, spec, status, node)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ProcessModuleSpec indicates an expected call of ProcessModuleSpec.
-func (mr *MocknmcReconcilerHelperMockRecorder) ProcessModuleSpec(ctx, nmc, spec, status any) *gomock.Call {
+func (mr *MocknmcReconcilerHelperMockRecorder) ProcessModuleSpec(ctx, nmc, spec, status, node any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessModuleSpec", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).ProcessModuleSpec), ctx, nmc, spec, status)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessModuleSpec", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).ProcessModuleSpec), ctx, nmc, spec, status, node)
 }
 
 // ProcessUnconfiguredModuleStatus mocks base method.
-func (m *MocknmcReconcilerHelper) ProcessUnconfiguredModuleStatus(ctx context.Context, nmc *v1beta1.NodeModulesConfig, status *v1beta1.NodeModuleStatus) error {
+func (m *MocknmcReconcilerHelper) ProcessUnconfiguredModuleStatus(ctx context.Context, nmc *v1beta1.NodeModulesConfig, status *v1beta1.NodeModuleStatus, node *v1.Node) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessUnconfiguredModuleStatus", ctx, nmc, status)
+	ret := m.ctrl.Call(m, "ProcessUnconfiguredModuleStatus", ctx, nmc, status, node)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ProcessUnconfiguredModuleStatus indicates an expected call of ProcessUnconfiguredModuleStatus.
-func (mr *MocknmcReconcilerHelperMockRecorder) ProcessUnconfiguredModuleStatus(ctx, nmc, status any) *gomock.Call {
+func (mr *MocknmcReconcilerHelperMockRecorder) ProcessUnconfiguredModuleStatus(ctx, nmc, status, node any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessUnconfiguredModuleStatus", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).ProcessUnconfiguredModuleStatus), ctx, nmc, status)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessUnconfiguredModuleStatus", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).ProcessUnconfiguredModuleStatus), ctx, nmc, status, node)
 }
 
 // RecordEvents mocks base method.
