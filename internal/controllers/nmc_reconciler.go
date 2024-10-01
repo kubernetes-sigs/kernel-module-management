@@ -67,8 +67,9 @@ const (
 //+kubebuilder:rbac:groups="core",resources=serviceaccounts,verbs=get;list;watch
 
 type NMCReconciler struct {
-	client client.Client
-	helper nmcReconcilerHelper
+	client  client.Client
+	helper  nmcReconcilerHelper
+	nodeAPI node.Node
 }
 
 func NewNMCReconciler(
@@ -82,8 +83,9 @@ func NewNMCReconciler(
 	pm := newPodManager(client, workerImage, scheme, workerCfg)
 	helper := newNMCReconcilerHelper(client, pm, recorder, nodeAPI)
 	return &NMCReconciler{
-		client: client,
-		helper: helper,
+		client:  client,
+		helper:  helper,
+		nodeAPI: nodeAPI,
 	}
 }
 
@@ -124,6 +126,11 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 	node := v1.Node{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: nmcObj.Name}, &node); err != nil {
 		return ctrl.Result{}, fmt.Errorf("could not get node %s: %v", nmcObj.Name, err)
+	}
+
+	// skipping handling NMC spec, labelling, events until node becomes ready
+	if !r.nodeAPI.IsNodeSchedulable(&node) {
+		return ctrl.Result{}, nil
 	}
 
 	errs := make([]error, 0, len(nmcObj.Spec.Modules)+len(nmcObj.Status.Modules))
