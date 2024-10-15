@@ -19,7 +19,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	go.uber.org/mock v0.4.0
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
-	golang.org/x/text v0.18.0
+	golang.org/x/text v0.19.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.31.1
 	k8s.io/apimachinery v0.31.1
