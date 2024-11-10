@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubectl/pkg/cmd/util/podcmd"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -749,7 +748,6 @@ type podManager interface {
 
 type podManagerImpl struct {
 	client      client.Client
-	psh         pullSecretHelper
 	scheme      *runtime.Scheme
 	workerCfg   *config.Worker
 	workerImage string
@@ -758,7 +756,6 @@ type podManagerImpl struct {
 func newPodManager(client client.Client, workerImage string, scheme *runtime.Scheme, workerCfg *config.Worker) podManager {
 	return &podManagerImpl{
 		client:      client,
-		psh:         &pullSecretHelperImpl{client: client},
 		scheme:      scheme,
 		workerCfg:   workerCfg,
 		workerImage: workerImage,
@@ -982,11 +979,6 @@ func (p *podManagerImpl) baseWorkerPod(ctx context.Context, nmc client.Object, i
 
 	hostPathDirectory := v1.HostPathDirectory
 
-	psv, psvm, err := p.psh.VolumesAndVolumeMounts(ctx, item)
-	if err != nil {
-		return nil, fmt.Errorf("could not list pull secrets for worker Pod: %v", err)
-	}
-
 	volumes := []v1.Volume{
 		{
 			Name: volumeNameConfig,
@@ -1052,6 +1044,11 @@ func (p *podManagerImpl) baseWorkerPod(ctx context.Context, nmc client.Object, i
 		},
 	}
 
+	var imagePullSecrets []v1.LocalObjectReference
+	if item.ImageRepoSecret != nil {
+		imagePullSecrets = append(imagePullSecrets, *item.ImageRepoSecret)
+	}
+
 	nodeName := nmc.GetName()
 	pod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1088,7 +1085,7 @@ func (p *podManagerImpl) baseWorkerPod(ctx context.Context, nmc client.Object, i
 				{
 					Name:         workerContainerName,
 					Image:        p.workerImage,
-					VolumeMounts: append(volumeMounts, psvm...),
+					VolumeMounts: volumeMounts,
 					Resources: v1.ResourceRequirements{
 						Requests: requests,
 						Limits:   limits,
@@ -1098,17 +1095,18 @@ func (p *podManagerImpl) baseWorkerPod(ctx context.Context, nmc client.Object, i
 			NodeName:           nodeName,
 			RestartPolicy:      v1.RestartPolicyOnFailure,
 			ServiceAccountName: item.ServiceAccountName,
-			Volumes:            append(volumes, psv...),
+			ImagePullSecrets:   imagePullSecrets,
+			Volumes:            volumes,
 		},
 	}
 
-	if err = ctrl.SetControllerReference(nmc, &pod, p.scheme); err != nil {
+	if err := ctrl.SetControllerReference(nmc, &pod, p.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner as controller: %v", err)
 	}
 
 	kmodsPathContainerImg := filepath.Join(moduleConfig.Modprobe.DirName, "lib", "modules", moduleConfig.KernelVersion)
 	kmodsPathWorkerImg := filepath.Join(sharedFilesDir, moduleConfig.Modprobe.DirName, "lib", "modules")
-	if err = addCopyCommand(&pod, kmodsPathContainerImg, kmodsPathWorkerImg); err != nil {
+	if err := addCopyCommand(&pod, kmodsPathContainerImg, kmodsPathWorkerImg); err != nil {
 		return nil, fmt.Errorf("could not add the copy command to the init container: %v", err)
 	}
 
@@ -1259,98 +1257,4 @@ func getModulesOrderAnnotationValue(modulesNames []string) string {
 		fmt.Fprintf(&softDepData, "softdep %s pre: %s\n", modulesNames[i], modulesNames[i+1])
 	}
 	return softDepData.String()
-}
-
-//go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go pullSecretHelper
-
-type pullSecretHelper interface {
-	VolumesAndVolumeMounts(ctx context.Context, nms *kmmv1beta1.ModuleItem) ([]v1.Volume, []v1.VolumeMount, error)
-}
-
-type pullSecretHelperImpl struct {
-	client client.Client
-}
-
-func (p *pullSecretHelperImpl) VolumesAndVolumeMounts(ctx context.Context, item *kmmv1beta1.ModuleItem) ([]v1.Volume, []v1.VolumeMount, error) {
-	logger := ctrl.LoggerFrom(ctx)
-
-	secretNames := sets.New[string]()
-
-	type pullSecret struct {
-		secretName string
-		volumeName string
-		optional   bool
-	}
-
-	pullSecrets := make([]pullSecret, 0)
-
-	if irs := item.ImageRepoSecret; irs != nil {
-		secretNames.Insert(irs.Name)
-
-		ps := pullSecret{
-			secretName: irs.Name,
-			volumeName: volNameImageRepoSecret,
-		}
-
-		pullSecrets = append(pullSecrets, ps)
-	}
-
-	if san := item.ServiceAccountName; san != "" {
-		sa := v1.ServiceAccount{}
-		nsn := types.NamespacedName{Namespace: item.Namespace, Name: san}
-
-		logger.V(1).Info("Getting service account", "name", nsn)
-
-		if err := p.client.Get(ctx, nsn, &sa); err != nil {
-			return nil, nil, fmt.Errorf("could not get ServiceAccount %s: %v", nsn, err)
-		}
-
-		for _, s := range sa.ImagePullSecrets {
-			if secretNames.Has(s.Name) {
-				continue
-			}
-
-			secretNames.Insert(s.Name)
-
-			hashValue, err := hashstructure.Hash(s.Name, hashstructure.FormatV2, nil)
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to hash secret %s: %v", s.Name, err)
-			}
-
-			ps := pullSecret{
-				secretName: s.Name,
-				volumeName: fmt.Sprintf("pull-secret-%d", hashValue),
-				optional:   true, // to match the node's container runtime behaviour
-			}
-
-			pullSecrets = append(pullSecrets, ps)
-		}
-	}
-
-	volumes := make([]v1.Volume, 0, len(pullSecrets))
-	volumeMounts := make([]v1.VolumeMount, 0, len(pullSecrets))
-
-	for _, s := range pullSecrets {
-		v := v1.Volume{
-			Name: s.volumeName,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: s.secretName,
-					Optional:   ptr.To(s.optional),
-				},
-			},
-		}
-
-		volumes = append(volumes, v)
-
-		vm := v1.VolumeMount{
-			Name:      s.volumeName,
-			ReadOnly:  true,
-			MountPath: filepath.Join(worker.PullSecretsDir, s.secretName),
-		}
-
-		volumeMounts = append(volumeMounts, vm)
-	}
-
-	return volumes, volumeMounts, nil
 }
