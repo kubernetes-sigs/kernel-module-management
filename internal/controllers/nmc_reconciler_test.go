@@ -1047,14 +1047,7 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 			},
 			Spec: v1.PodSpec{
 				ServiceAccountName: serviceAccountName,
-				Volumes: []v1.Volume{
-					{
-						Name: volNameImageRepoSecret,
-						VolumeSource: v1.VolumeSource{
-							Secret: &v1.SecretVolumeSource{SecretName: irsName},
-						},
-					},
-				},
+				ImagePullSecrets:   []v1.LocalObjectReference{v1.LocalObjectReference{Name: irsName}},
 			},
 			Status: v1.PodStatus{
 				Phase: v1.PodSucceeded,
