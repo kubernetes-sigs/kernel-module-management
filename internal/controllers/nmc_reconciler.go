@@ -538,16 +538,9 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 				continue
 			}
 
-			if irsName, err := getImageRepoSecretName(&p); err != nil {
-				logger.Info(
-					utils.WarnString("Error while looking for the imageRepoSecret volume"),
-					"error",
-					err,
-				)
-			} else if irsName != "" {
-				status.ImageRepoSecret = &v1.LocalObjectReference{Name: irsName}
+			if p.Spec.ImagePullSecrets != nil {
+				status.ImageRepoSecret = &p.Spec.ImagePullSecrets[0]
 			}
-
 			status.ServiceAccountName = p.Spec.ServiceAccountName
 
 			podLTT := GetContainerStatus(p.Status.ContainerStatuses, workerContainerName).
@@ -729,9 +722,8 @@ const (
 	configFileName = "config.yaml"
 	configFullPath = volMountPointConfig + "/" + configFileName
 
-	volNameConfig          = "config"
-	volNameImageRepoSecret = "image-repo-secret"
-	volMountPointConfig    = "/etc/kmm-worker"
+	volNameConfig       = "config"
+	volMountPointConfig = "/etc/kmm-worker"
 )
 
 //go:generate mockgen -source=nmc_reconciler.go -package=controllers -destination=mock_nmc_reconciler.go podManager
@@ -1233,22 +1225,6 @@ func setHashAnnotation(pod *v1.Pod) error {
 	pod.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
 
 	return nil
-}
-
-func getImageRepoSecretName(pod *v1.Pod) (string, error) {
-	for _, v := range pod.Spec.Volumes {
-		if v.Name == volNameImageRepoSecret {
-			svs := v.VolumeSource.Secret
-
-			if svs == nil {
-				return "", fmt.Errorf("volume %s is not of type secret", volNameImageRepoSecret)
-			}
-
-			return svs.SecretName, nil
-		}
-	}
-
-	return "", nil
 }
 
 func getModulesOrderAnnotationValue(modulesNames []string) string {
