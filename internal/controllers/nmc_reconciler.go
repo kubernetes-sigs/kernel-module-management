@@ -127,8 +127,12 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		return ctrl.Result{}, fmt.Errorf("could not get node %s: %v", nmcObj.Name, err)
 	}
 
-	// skipping handling NMC spec, labelling, events until node becomes ready
+	// skipping handling NMC spec, events until node becomes ready
+	// removing label of loaded kmods
 	if !r.nodeAPI.IsNodeSchedulable(&node) {
+		if err := r.nodeAPI.RemoveNodeReadyLabels(ctx, &node); err != nil {
+			return ctrl.Result{}, fmt.Errorf("could remove node %s labels: %v", node.Name, err)
+		}
 		return ctrl.Result{}, nil
 	}
 
