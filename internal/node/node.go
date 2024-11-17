@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -18,6 +19,7 @@ type Node interface {
 	GetNumTargetedNodes(ctx context.Context, selector map[string]string) (int, error)
 	UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error
 	NodeBecomeReadyAfter(node *v1.Node, checkTime metav1.Time) bool
+	RemoveNodeReadyLabels(ctx context.Context, node *v1.Node) error
 }
 
 type node struct {
@@ -74,6 +76,20 @@ func (n *node) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeR
 
 	if err := n.client.Patch(ctx, node, patchFrom); err != nil {
 		return fmt.Errorf("could not patch node: %v", err)
+	}
+	return nil
+}
+
+func (n *node) RemoveNodeReadyLabels(ctx context.Context, node *v1.Node) error {
+	var labelsToRemove []string
+	for label := range node.GetLabels() {
+		if ok, _, _ := utils.IsKernelModuleReadyNodeLabel(label); ok ||
+			utils.IsDeprecatedKernelModuleReadyNodeLabel(label) {
+			labelsToRemove = append(labelsToRemove, label)
+		}
+	}
+	if err := n.UpdateLabels(ctx, node, []string{}, labelsToRemove); err != nil {
+		return fmt.Errorf("could update node %s labels: %v", node.Name, err)
 	}
 	return nil
 }
