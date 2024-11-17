@@ -98,6 +98,20 @@ func (mr *MockNodeMockRecorder) NodeBecomeReadyAfter(node, checkTime any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NodeBecomeReadyAfter", reflect.TypeOf((*MockNode)(nil).NodeBecomeReadyAfter), node, checkTime)
 }
 
+// RemoveNodeReadyLabels mocks base method.
+func (m *MockNode) RemoveNodeReadyLabels(ctx context.Context, node *v1.Node) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveNodeReadyLabels", ctx, node)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveNodeReadyLabels indicates an expected call of RemoveNodeReadyLabels.
+func (mr *MockNodeMockRecorder) RemoveNodeReadyLabels(ctx, node any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveNodeReadyLabels", reflect.TypeOf((*MockNode)(nil).RemoveNodeReadyLabels), ctx, node)
+}
+
 // UpdateLabels mocks base method.
 func (m *MockNode) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error {
 	m.ctrl.T.Helper()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -121,9 +120,10 @@ var _ = Describe("GetNodesListBySelector", func() {
 	})
 })
 
-var (
-	loadedKernelModuleReadyNodeLabel   = utils.GetKernelModuleReadyNodeLabel("loaded-ns", "loaded-n")
-	unloadedKernelModuleReadyNodeLabel = utils.GetKernelModuleReadyNodeLabel("unloaded-ns", "unloaded-n")
+const (
+	loadedKernelModuleReadyNodeLabel   = "kmm.node.kubernetes.io/loaded-ns.loaded-n.ready"
+	unloadedKernelModuleReadyNodeLabel = "kmm.node.kubernetes.io/unloaded-ns.unloaded-n.ready"
+	notKernelModuleReadyNodeLabel      = "example.node.kubernetes.io/label-not-to-be-removed"
 )
 
 var _ = Describe("UpdateLabels", func() {
@@ -276,6 +276,44 @@ var _ = Describe("NodeBecomeReadyAfter", func() {
 
 		res := n.NodeBecomeReadyAfter(&testNode, testTimestamp)
 		Expect(res).To(BeFalse())
+	})
+})
+
+var _ = Describe("RemoveNodeReadyLabels", func() {
+	var (
+		ctrl *gomock.Controller
+		n    Node
+		node *v1.Node
+		ctx  context.Context
+		clnt *client.MockClient
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		ctx = context.TODO()
+		n = NewNode(clnt)
+		node = &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					loadedKernelModuleReadyNodeLabel: "",
+					notKernelModuleReadyNodeLabel:    "",
+				},
+			},
+		}
+	})
+
+	It("Should remove all kmod labels", func() {
+		clnt.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+		err := n.RemoveNodeReadyLabels(ctx, node)
+		Expect(err).To(BeNil())
+		Expect(node.Labels).ToNot(HaveKey(loadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).To(HaveKey(notKernelModuleReadyNodeLabel))
+	})
+	It("Should fail", func() {
+		clnt.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+		err := n.RemoveNodeReadyLabels(ctx, node)
+		Expect(err).ToNot(BeNil())
 	})
 })
 
