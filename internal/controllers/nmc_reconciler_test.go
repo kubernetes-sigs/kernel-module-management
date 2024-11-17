@@ -37,13 +37,15 @@ import (
 )
 
 const (
-	nmcName     = "nmc"
-	nsFirst     = "example-ns-1"
-	nsSecond    = "example-ns-2"
-	nameFirst   = "example-name-1"
-	nameSecond  = "example-name-2"
-	imageFirst  = "example-image-1"
-	imageSecond = "example-image-2"
+	nmcName          = "nmc"
+	nsFirst          = "example-ns-1"
+	nsSecond         = "example-ns-2"
+	nameFirst        = "example-name-1"
+	nameSecond       = "example-name-2"
+	imageFirst       = "example-image-1"
+	imageSecond      = "example-image-2"
+	kmodName         = "kmm.node.kubernetes.io/test-ns.test-module.ready"
+	labelNotToRemove = "example.node.kubernetes.io/label-not-to-be-removed"
 )
 
 var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
@@ -126,11 +128,25 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should not continue if node is not schedulable", func() {
+	It("should remove kmod labels and not continue if node is not schedulable", func() {
 		nmc := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
 		}
-		node := v1.Node{}
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					kmodName:         "",
+					labelNotToRemove: "",
+				},
+			},
+		}
+		expectedNode := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					labelNotToRemove: "",
+				},
+			},
+		}
 		gomock.InOrder(
 			kubeClient.
 				EXPECT().
@@ -139,12 +155,70 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
 				}),
 			wh.EXPECT().SyncStatus(ctx, nmc),
-			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &node).Return(nil),
+			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &v1.Node{}).DoAndReturn(
+				func(_ context.Context, _ types.NamespacedName, fetchedNode *v1.Node, _ ...ctrlclient.Options) error {
+					*fetchedNode = node
+					return nil
+				},
+			),
 			nm.EXPECT().IsNodeSchedulable(&node).Return(false),
+			nm.EXPECT().RemoveNodeReadyLabels(ctx, &node).DoAndReturn(
+				func(_ context.Context, obj ctrlclient.Object) error {
+					delete(node.ObjectMeta.Labels, kmodName)
+					return nil
+				},
+			),
 		)
 
 		_, err := r.Reconcile(ctx, req)
 		Expect(err).To(BeNil())
+		Expect(node).To(Equal(expectedNode))
+	})
+
+	It("should fail to remove kmod labels and not continue if node is not schedulable", func() {
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+		}
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					kmodName:         "",
+					labelNotToRemove: "",
+				},
+			},
+		}
+		expectedNode := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					labelNotToRemove: "",
+				},
+			},
+		}
+		gomock.InOrder(
+			kubeClient.
+				EXPECT().
+				Get(ctx, nmcNsn, &kmmv1beta1.NodeModulesConfig{}).
+				Do(func(_ context.Context, _ types.NamespacedName, kubeNmc ctrlclient.Object, _ ...ctrlclient.Options) {
+					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
+				}),
+			wh.EXPECT().SyncStatus(ctx, nmc),
+			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &v1.Node{}).DoAndReturn(
+				func(_ context.Context, _ types.NamespacedName, fetchedNode *v1.Node, _ ...ctrlclient.Options) error {
+					*fetchedNode = node
+					return nil
+				},
+			),
+			nm.EXPECT().IsNodeSchedulable(&node).Return(false),
+			nm.EXPECT().RemoveNodeReadyLabels(ctx, &node).DoAndReturn(
+				func(_ context.Context, obj ctrlclient.Object) error {
+					return fmt.Errorf("some error")
+				},
+			),
+		)
+
+		_, err := r.Reconcile(ctx, req)
+		Expect(err).To(HaveOccurred())
+		Expect(node).ToNot(Equal(expectedNode))
 	})
 
 	It("should process spec entries and orphan statuses", func() {
