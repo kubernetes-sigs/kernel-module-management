@@ -28,7 +28,7 @@ require (
 	k8s.io/kubectl v0.31.2
 	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8
 	open-cluster-management.io/api v0.15.0
-	sigs.k8s.io/controller-runtime v0.19.1
+	sigs.k8s.io/controller-runtime v0.19.2
 	sigs.k8s.io/yaml v1.4.0
 )
 
