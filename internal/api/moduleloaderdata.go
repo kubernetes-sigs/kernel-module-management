@@ -62,6 +62,10 @@ type ModuleLoaderData struct {
 
 	// used for setting the owner field of pods/buildconfigs
 	Owner metav1.Object
+
+	// If specified, the pod's tolerations.
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
 
 func (mld *ModuleLoaderData) NamespacedName() types.NamespacedName {

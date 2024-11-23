@@ -41,47 +41,47 @@ func (m *MockNode) EXPECT() *MockNodeMockRecorder {
 }
 
 // GetNodesListBySelector mocks base method.
-func (m *MockNode) GetNodesListBySelector(ctx context.Context, selector map[string]string) ([]v1.Node, error) {
+func (m *MockNode) GetNodesListBySelector(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) ([]v1.Node, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNodesListBySelector", ctx, selector)
+	ret := m.ctrl.Call(m, "GetNodesListBySelector", ctx, selector, tolerations)
 	ret0, _ := ret[0].([]v1.Node)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetNodesListBySelector indicates an expected call of GetNodesListBySelector.
-func (mr *MockNodeMockRecorder) GetNodesListBySelector(ctx, selector any) *gomock.Call {
+func (mr *MockNodeMockRecorder) GetNodesListBySelector(ctx, selector, tolerations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodesListBySelector", reflect.TypeOf((*MockNode)(nil).GetNodesListBySelector), ctx, selector)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodesListBySelector", reflect.TypeOf((*MockNode)(nil).GetNodesListBySelector), ctx, selector, tolerations)
 }
 
 // GetNumTargetedNodes mocks base method.
-func (m *MockNode) GetNumTargetedNodes(ctx context.Context, selector map[string]string) (int, error) {
+func (m *MockNode) GetNumTargetedNodes(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNumTargetedNodes", ctx, selector)
+	ret := m.ctrl.Call(m, "GetNumTargetedNodes", ctx, selector, tolerations)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetNumTargetedNodes indicates an expected call of GetNumTargetedNodes.
-func (mr *MockNodeMockRecorder) GetNumTargetedNodes(ctx, selector any) *gomock.Call {
+func (mr *MockNodeMockRecorder) GetNumTargetedNodes(ctx, selector, tolerations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNumTargetedNodes", reflect.TypeOf((*MockNode)(nil).GetNumTargetedNodes), ctx, selector)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNumTargetedNodes", reflect.TypeOf((*MockNode)(nil).GetNumTargetedNodes), ctx, selector, tolerations)
 }
 
 // IsNodeSchedulable mocks base method.
-func (m *MockNode) IsNodeSchedulable(node *v1.Node) bool {
+func (m *MockNode) IsNodeSchedulable(node *v1.Node, tolerations []v1.Toleration) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsNodeSchedulable", node)
+	ret := m.ctrl.Call(m, "IsNodeSchedulable", node, tolerations)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // IsNodeSchedulable indicates an expected call of IsNodeSchedulable.
-func (mr *MockNodeMockRecorder) IsNodeSchedulable(node any) *gomock.Call {
+func (mr *MockNodeMockRecorder) IsNodeSchedulable(node, tolerations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNodeSchedulable", reflect.TypeOf((*MockNode)(nil).IsNodeSchedulable), node)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNodeSchedulable", reflect.TypeOf((*MockNode)(nil).IsNodeSchedulable), node, tolerations)
 }
 
 // NodeBecomeReadyAfter mocks base method.
