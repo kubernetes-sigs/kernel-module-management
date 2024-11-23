@@ -76,7 +76,7 @@ func (r *BuildSignReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Mod
 	res := ctrl.Result{}
 
 	logger := log.FromContext(ctx)
-	targetedNodes, err := r.nodeAPI.GetNodesListBySelector(ctx, mod.Spec.Selector)
+	targetedNodes, err := r.nodeAPI.GetNodesListBySelector(ctx, mod.Spec.Selector, mod.Spec.Tolerations)
 	if err != nil {
 		return res, fmt.Errorf("could get targeted nodes for module %s: %w", mod.Name, err)
 	}

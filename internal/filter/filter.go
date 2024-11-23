@@ -50,8 +50,8 @@ var nodeBecomesSchedulable predicate.Predicate = predicate.Funcs{
 		}
 
 		n := node.NewNode(nil)
-		isOldSchedulable := n.IsNodeSchedulable(oldNode)
-		isNewSchedulable := n.IsNodeSchedulable(newNode)
+		isOldSchedulable := n.IsNodeSchedulable(oldNode, nil)
+		isNewSchedulable := n.IsNodeSchedulable(newNode, nil)
 		if isOldSchedulable != isNewSchedulable && isNewSchedulable {
 			return true
 		}

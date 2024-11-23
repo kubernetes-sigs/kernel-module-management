@@ -34,6 +34,8 @@ type ModuleConfig struct {
 	//+optional
 	InTreeModuleToRemove string       `json:"inTreeModuleToRemove,omitempty"`
 	Modprobe             ModprobeSpec `json:"modprobe"`
+	//+optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
 
 type ModuleItem struct {

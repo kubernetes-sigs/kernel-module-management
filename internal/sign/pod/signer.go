@@ -189,6 +189,7 @@ func (s *signer) MakePodTemplate(
 		RestartPolicy: v1.RestartPolicyNever,
 		Volumes:       volumes,
 		NodeSelector:  mld.Selector,
+		Tolerations:   mld.Tolerations,
 	}
 
 	podSpecHash, err := s.getHashAnnotationValue(ctx, signConfig.KeySecret.Name,
