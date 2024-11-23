@@ -134,6 +134,7 @@ func (m *maker) podSpec(mld *api.ModuleLoaderData, containerImage string, pushIm
 		RestartPolicy: v1.RestartPolicyNever,
 		Volumes:       volumes(mld.ImageRepoSecret, buildConfig),
 		NodeSelector:  selector,
+		Tolerations:   mld.Tolerations,
 	}
 }
 

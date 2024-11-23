@@ -127,15 +127,6 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		return ctrl.Result{}, fmt.Errorf("could not get node %s: %v", nmcObj.Name, err)
 	}
 
-	// skipping handling NMC spec, events until node becomes ready
-	// removing label of loaded kmods
-	if !r.nodeAPI.IsNodeSchedulable(&node) {
-		if err := r.nodeAPI.RemoveNodeReadyLabels(ctx, &node); err != nil {
-			return ctrl.Result{}, fmt.Errorf("could remove node %s labels: %v", node.Name, err)
-		}
-		return ctrl.Result{}, nil
-	}
-
 	errs := make([]error, 0, len(nmcObj.Spec.Modules)+len(nmcObj.Status.Modules))
 
 	for _, mod := range nmcObj.Spec.Modules {
@@ -143,6 +134,11 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 
 		logger := logger.WithValues("module", moduleNameKey)
 
+		// skipping handling NMC spec module until node is ready
+		if !r.nodeAPI.IsNodeSchedulable(&node, mod.Config.Tolerations) {
+			delete(statusMap, moduleNameKey)
+			continue
+		}
 		if err := r.helper.ProcessModuleSpec(ctrl.LoggerInto(ctx, logger), &nmcObj, &mod, statusMap[moduleNameKey], &node); err != nil {
 			errs = append(
 				errs,
@@ -167,6 +163,14 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 				fmt.Errorf("error processing orphan status for Module %s: %v", statusNameKey, err),
 			)
 		}
+	}
+
+	// removing label of loaded kmods
+	if !r.nodeAPI.IsNodeSchedulable(&node, nil) {
+		if err := r.nodeAPI.RemoveNodeReadyLabels(ctx, &node); err != nil {
+			return ctrl.Result{}, fmt.Errorf("could remove node %s labels: %v", node.Name, err)
+		}
+		return ctrl.Result{}, nil
 	}
 
 	if err := r.helper.GarbageCollectInUseLabels(ctx, &nmcObj); err != nil {
@@ -1093,6 +1097,7 @@ func (p *podManagerImpl) baseWorkerPod(ctx context.Context, nmc client.Object, i
 			ServiceAccountName: item.ServiceAccountName,
 			ImagePullSecrets:   imagePullSecrets,
 			Volumes:            volumes,
+			Tolerations:        moduleConfig.Tolerations,
 		},
 	}
 

@@ -280,7 +280,7 @@ func (dprh *devicePluginReconcilerHelper) moduleUpdateDevicePluginStatus(ctx con
 	}
 
 	// get the number of nodes targeted by selector (which also relevant for device plugin)
-	numTargetedNodes, err := dprh.nodeAPI.GetNumTargetedNodes(ctx, mod.Spec.Selector)
+	numTargetedNodes, err := dprh.nodeAPI.GetNumTargetedNodes(ctx, mod.Spec.Selector, mod.Spec.Tolerations)
 	if err != nil {
 		return fmt.Errorf("failed to determine the number of nodes that should be targeted by Module's %s/%s selector: %v", mod.Namespace, mod.Name, err)
 	}

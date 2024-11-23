@@ -328,6 +328,10 @@ type ModuleSpec struct {
 
 	// Selector describes on which nodes the Module should be loaded and optionally built.
 	Selector map[string]string `json:"selector"`
+
+	// If specified, the pod's tolerations.
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
 
 // DaemonSetStatus contains the status for a daemonset deployed during
