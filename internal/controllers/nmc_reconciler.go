@@ -128,7 +128,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 	}
 
 	errs := make([]error, 0, len(nmcObj.Spec.Modules)+len(nmcObj.Status.Modules))
-
+	var readyLabelsToRemove []string
 	for _, mod := range nmcObj.Spec.Modules {
 		moduleNameKey := mod.Namespace + "/" + mod.Name
 
@@ -136,6 +136,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 
 		// skipping handling NMC spec module until node is ready
 		if !r.nodeAPI.IsNodeSchedulable(&node, mod.Config.Tolerations) {
+			readyLabelsToRemove = append(readyLabelsToRemove, utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name))
 			delete(statusMap, moduleNameKey)
 			continue
 		}
@@ -166,8 +167,8 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 	}
 
 	// removing label of loaded kmods
-	if !r.nodeAPI.IsNodeSchedulable(&node, nil) {
-		if err := r.nodeAPI.RemoveNodeReadyLabels(ctx, &node); err != nil {
+	if readyLabelsToRemove != nil {
+		if err := r.nodeAPI.UpdateLabels(ctx, &node, nil, readyLabelsToRemove); err != nil {
 			return ctrl.Result{}, fmt.Errorf("could remove node %s labels: %v", node.Name, err)
 		}
 		return ctrl.Result{}, nil
