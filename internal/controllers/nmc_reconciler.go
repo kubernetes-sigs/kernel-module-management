@@ -167,7 +167,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 
 	// removing label of loaded kmods
 	if !r.nodeAPI.IsNodeSchedulable(&node, nil) {
-		if err := r.nodeAPI.RemoveNodeReadyLabels(ctx, &node); err != nil {
+		if err := r.nodeAPI.RemoveNodeReadyLabels(ctx, &node, &nmcObj); err != nil {
 			return ctrl.Result{}, fmt.Errorf("could remove node %s labels: %v", node.Name, err)
 		}
 		return ctrl.Result{}, nil
