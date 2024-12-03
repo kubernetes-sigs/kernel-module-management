@@ -160,9 +160,10 @@ var _ = Describe("GetNodesListBySelector", func() {
 })
 
 const (
-	loadedKernelModuleReadyNodeLabel   = "kmm.node.kubernetes.io/loaded-ns.loaded-n.ready"
-	unloadedKernelModuleReadyNodeLabel = "kmm.node.kubernetes.io/unloaded-ns.unloaded-n.ready"
-	notKernelModuleReadyNodeLabel      = "example.node.kubernetes.io/label-not-to-be-removed"
+	firstloadedKernelModuleReadyNodeLabel  = "kmm.node.kubernetes.io/loaded1-ns.loaded1-n.ready"
+	secondloadedKernelModuleReadyNodeLabel = "kmm.node.kubernetes.io/loaded2-ns.loaded2-n.ready"
+	unloadedKernelModuleReadyNodeLabel     = "kmm.node.kubernetes.io/unloaded-ns.unloaded-n.ready"
+	notKernelModuleReadyNodeLabel          = "example.node.kubernetes.io/label-not-to-be-removed"
 )
 
 var _ = Describe("UpdateLabels", func() {
@@ -186,14 +187,14 @@ var _ = Describe("UpdateLabels", func() {
 				Labels: map[string]string{},
 			},
 		}
-		loaded := []string{loadedKernelModuleReadyNodeLabel}
+		loaded := []string{firstloadedKernelModuleReadyNodeLabel}
 		unloaded := []string{unloadedKernelModuleReadyNodeLabel}
 
 		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 		err := n.UpdateLabels(ctx, &node, loaded, unloaded)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(node.Labels).To(HaveKey(loadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).To(HaveKey(firstloadedKernelModuleReadyNodeLabel))
 	})
 
 	It("Should fail to patch node", func() {
@@ -202,7 +203,7 @@ var _ = Describe("UpdateLabels", func() {
 				Labels: map[string]string{},
 			},
 		}
-		loaded := []string{loadedKernelModuleReadyNodeLabel}
+		loaded := []string{firstloadedKernelModuleReadyNodeLabel}
 		unloaded := []string{unloadedKernelModuleReadyNodeLabel}
 
 		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
@@ -318,58 +319,6 @@ var _ = Describe("NodeBecomeReadyAfter", func() {
 	})
 })
 
-var _ = Describe("RemoveNodeReadyLabels", func() {
-	var (
-		ctrl *gomock.Controller
-		n    Node
-		node *v1.Node
-		ctx  context.Context
-		clnt *client.MockClient
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		ctx = context.TODO()
-		n = NewNode(clnt)
-		node = &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{
-					loadedKernelModuleReadyNodeLabel: "",
-					notKernelModuleReadyNodeLabel:    "",
-				},
-			},
-		}
-	})
-
-	It("Should remove all kmod labels", func() {
-		clnt.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-		err := n.RemoveNodeReadyLabels(ctx, node)
-		Expect(err).To(BeNil())
-		Expect(node.Labels).ToNot(HaveKey(loadedKernelModuleReadyNodeLabel))
-		Expect(node.Labels).To(HaveKey(notKernelModuleReadyNodeLabel))
-	})
-	It("Should fail", func() {
-		clnt.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
-		err := n.RemoveNodeReadyLabels(ctx, node)
-		Expect(err).ToNot(BeNil())
-	})
-})
-
-var _ = Describe("addLabels", func() {
-	var node v1.Node
-
-	BeforeEach(func() {
-		node = v1.Node{}
-	})
-
-	It("Should add labels", func() {
-		labels := []string{loadedKernelModuleReadyNodeLabel}
-		addLabels(&node, labels)
-		Expect(node.Labels).To(HaveKey(loadedKernelModuleReadyNodeLabel))
-	})
-})
-
 var _ = Describe("removeLabels", func() {
 	var node v1.Node
 
@@ -377,15 +326,15 @@ var _ = Describe("removeLabels", func() {
 		node = v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
-					loadedKernelModuleReadyNodeLabel: "",
+					firstloadedKernelModuleReadyNodeLabel: "",
 				},
 			},
 		}
 	})
 
 	It("Should remove labels", func() {
-		labels := []string{loadedKernelModuleReadyNodeLabel}
+		labels := []string{firstloadedKernelModuleReadyNodeLabel}
 		removeLabels(&node, labels)
-		Expect(node.Labels).ToNot(HaveKey(loadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).ToNot(HaveKey(firstloadedKernelModuleReadyNodeLabel))
 	})
 })

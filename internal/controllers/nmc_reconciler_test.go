@@ -131,8 +131,8 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 	It("should remove kmod labels and not continue if node is not schedulable", func() {
 		spec0 := kmmv1beta1.NodeModuleSpec{
 			ModuleItem: kmmv1beta1.ModuleItem{
-				Namespace: namespace,
-				Name:      "mod0",
+				Namespace: "test-ns",
+				Name:      "test-module",
 			},
 		}
 		nmc := &kmmv1beta1.NodeModulesConfig{
@@ -171,9 +171,8 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				},
 			),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
-			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
-			nm.EXPECT().RemoveNodeReadyLabels(ctx, &node).DoAndReturn(
-				func(_ context.Context, obj ctrlclient.Object) error {
+			nm.EXPECT().UpdateLabels(ctx, &node, nil, []string{kmodName}).DoAndReturn(
+				func(_ context.Context, obj ctrlclient.Object, _, _ []string) error {
 					delete(node.ObjectMeta.Labels, kmodName)
 					return nil
 				},
@@ -186,8 +185,17 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 	})
 
 	It("should fail to remove kmod labels and not continue if node is not schedulable", func() {
+		spec0 := kmmv1beta1.NodeModuleSpec{
+			ModuleItem: kmmv1beta1.ModuleItem{
+				Namespace: "test-ns",
+				Name:      "test-module",
+			},
+		}
 		nmc := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			Spec: kmmv1beta1.NodeModulesConfigSpec{
+				Modules: []kmmv1beta1.NodeModuleSpec{spec0},
+			},
 		}
 		node := v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -219,8 +227,8 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				},
 			),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
-			nm.EXPECT().RemoveNodeReadyLabels(ctx, &node).DoAndReturn(
-				func(_ context.Context, obj ctrlclient.Object) error {
+			nm.EXPECT().UpdateLabels(ctx, &node, nil, []string{kmodName}).DoAndReturn(
+				func(_ context.Context, obj ctrlclient.Object, _, _ []string) error {
 					return fmt.Errorf("some error")
 				},
 			),
@@ -299,7 +307,6 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec1, nil, &node),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2, &node),
-			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc),
 			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(loaded, unloaded, err),
 			wh.EXPECT().RecordEvents(&node, loaded, unloaded),
@@ -378,7 +385,6 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0, &node).Return(fmt.Errorf(errorMeassge)),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2, &node).Return(fmt.Errorf(errorMeassge)),
-			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc).Return(fmt.Errorf(errorMeassge)),
 			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(nil, nil, fmt.Errorf(errorMeassge)),
 		)
