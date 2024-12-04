@@ -408,8 +408,10 @@ func (h *nmcReconcilerHelperImpl) ProcessUnconfiguredModuleStatus(
 	   it also fixes the scenario when node's kernel was upgraded, so unload pod will fail anyway
 	*/
 	if h.nodeAPI.NodeBecomeReadyAfter(node, status.LastTransitionTime) {
-		logger.Info("node was rebooted, no need to unload kernel module that is not present in kernel, will wait until NMC spec is updated")
-		return nil
+		logger.Info("node was rebooted and spec is missing: delete the status to allow Module CR unload, if needed")
+		patchFrom := client.MergeFrom(nmcObj.DeepCopy())
+		nmc.RemoveModuleStatus(&nmcObj.Status.Modules, status.Namespace, status.Name)
+		return h.client.Status().Patch(ctx, nmcObj, patchFrom)
 	}
 
 	pod, err := h.pm.GetWorkerPod(ctx, podName, status.Namespace)
