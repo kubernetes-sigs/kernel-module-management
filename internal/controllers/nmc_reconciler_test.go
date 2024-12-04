@@ -706,6 +706,8 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		podName = workerPodName(nmcName, name)
 
 		client *testclient.MockClient
+		sw     *testclient.MockStatusWriter
+
 		pm     *MockpodManager
 		nm     *node.MockNode
 		helper nmcReconcilerHelper
@@ -714,6 +716,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 	BeforeEach(func() {
 		ctrl := gomock.NewController(GinkgoT())
 		client = testclient.NewMockClient(ctrl)
+		sw = testclient.NewMockStatusWriter(ctrl)
 		pm = NewMockpodManager(ctrl)
 		nm = node.NewMockNode(ctrl)
 		helper = newNMCReconcilerHelper(client, pm, nil, nm)
@@ -733,7 +736,11 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 	node := v1.Node{}
 
 	It("should do nothing , if the node has been rebooted/ready lately", func() {
-		nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(true)
+		gomock.InOrder(
+			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(true),
+			client.EXPECT().Status().Return(sw),
+			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
+		)
 
 		Expect(
 			helper.ProcessUnconfiguredModuleStatus(ctx, nmc, status, &node),
