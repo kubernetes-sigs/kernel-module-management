@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
@@ -19,7 +20,7 @@ type Node interface {
 	GetNumTargetedNodes(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) (int, error)
 	UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error
 	NodeBecomeReadyAfter(node *v1.Node, checkTime metav1.Time) bool
-	RemoveNodeReadyLabels(ctx context.Context, node *v1.Node) error
+	RemoveNodeReadyLabels(ctx context.Context, node *v1.Node, nmcObj *v1beta1.NodeModulesConfig) error
 }
 
 type node struct {
@@ -87,14 +88,8 @@ func (n *node) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeR
 	return nil
 }
 
-func (n *node) RemoveNodeReadyLabels(ctx context.Context, node *v1.Node) error {
-	var labelsToRemove []string
-	for label := range node.GetLabels() {
-		if ok, _, _ := utils.IsKernelModuleReadyNodeLabel(label); ok ||
-			utils.IsDeprecatedKernelModuleReadyNodeLabel(label) {
-			labelsToRemove = append(labelsToRemove, label)
-		}
-	}
+func (n *node) RemoveNodeReadyLabels(ctx context.Context, node *v1.Node, nmcObj *v1beta1.NodeModulesConfig) error {
+	labelsToRemove := getLabelsToRemove(node, nmcObj)
 	if err := n.UpdateLabels(ctx, node, []string{}, labelsToRemove); err != nil {
 		return fmt.Errorf("could update node %s labels: %v", node.Name, err)
 	}
@@ -129,4 +124,28 @@ func removeLabels(node *v1.Node, labels []string) {
 			label,
 		)
 	}
+}
+
+func getLabelsToRemove(node *v1.Node, nmcObj *v1beta1.NodeModulesConfig) []string {
+	var labelsToRemove []string
+	for _, module := range nmcObj.Spec.Modules {
+		shouldRemoveLabel := false
+		for _, taint := range node.Spec.Taints {
+			isTolerated := false
+			for _, toleration := range module.Config.Tolerations {
+				if toleration.ToleratesTaint(&taint) {
+					isTolerated = true
+					break
+				}
+			}
+			if !isTolerated {
+				shouldRemoveLabel = true
+				break
+			}
+		}
+		if shouldRemoveLabel {
+			labelsToRemove = append(labelsToRemove, utils.GetKernelModuleReadyNodeLabel(module.Namespace, module.Name))
+		}
+	}
+	return labelsToRemove
 }

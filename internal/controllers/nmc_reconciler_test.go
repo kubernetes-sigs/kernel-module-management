@@ -172,8 +172,8 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
-			nm.EXPECT().RemoveNodeReadyLabels(ctx, &node).DoAndReturn(
-				func(_ context.Context, obj ctrlclient.Object) error {
+			nm.EXPECT().RemoveNodeReadyLabels(ctx, &node, nmc).DoAndReturn(
+				func(_ context.Context, obj ctrlclient.Object, _ *kmmv1beta1.NodeModulesConfig) error {
 					delete(node.ObjectMeta.Labels, kmodName)
 					return nil
 				},
@@ -219,8 +219,8 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				},
 			),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
-			nm.EXPECT().RemoveNodeReadyLabels(ctx, &node).DoAndReturn(
-				func(_ context.Context, obj ctrlclient.Object) error {
+			nm.EXPECT().RemoveNodeReadyLabels(ctx, &node, nmc).DoAndReturn(
+				func(_ context.Context, obj ctrlclient.Object, _ *kmmv1beta1.NodeModulesConfig) error {
 					return fmt.Errorf("some error")
 				},
 			),

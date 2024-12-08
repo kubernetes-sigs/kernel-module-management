@@ -12,6 +12,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -99,17 +100,17 @@ func (mr *MockNodeMockRecorder) NodeBecomeReadyAfter(node, checkTime any) *gomoc
 }
 
 // RemoveNodeReadyLabels mocks base method.
-func (m *MockNode) RemoveNodeReadyLabels(ctx context.Context, node *v1.Node) error {
+func (m *MockNode) RemoveNodeReadyLabels(ctx context.Context, node *v1.Node, nmcObj *v1beta1.NodeModulesConfig) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveNodeReadyLabels", ctx, node)
+	ret := m.ctrl.Call(m, "RemoveNodeReadyLabels", ctx, node, nmcObj)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RemoveNodeReadyLabels indicates an expected call of RemoveNodeReadyLabels.
-func (mr *MockNodeMockRecorder) RemoveNodeReadyLabels(ctx, node any) *gomock.Call {
+func (mr *MockNodeMockRecorder) RemoveNodeReadyLabels(ctx, node, nmcObj any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveNodeReadyLabels", reflect.TypeOf((*MockNode)(nil).RemoveNodeReadyLabels), ctx, node)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveNodeReadyLabels", reflect.TypeOf((*MockNode)(nil).RemoveNodeReadyLabels), ctx, node, nmcObj)
 }
 
 // UpdateLabels mocks base method.

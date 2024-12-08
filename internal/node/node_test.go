@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -160,9 +161,10 @@ var _ = Describe("GetNodesListBySelector", func() {
 })
 
 const (
-	loadedKernelModuleReadyNodeLabel   = "kmm.node.kubernetes.io/loaded-ns.loaded-n.ready"
-	unloadedKernelModuleReadyNodeLabel = "kmm.node.kubernetes.io/unloaded-ns.unloaded-n.ready"
-	notKernelModuleReadyNodeLabel      = "example.node.kubernetes.io/label-not-to-be-removed"
+	firstloadedKernelModuleReadyNodeLabel  = "kmm.node.kubernetes.io/loaded1-ns.loaded1-n.ready"
+	secondloadedKernelModuleReadyNodeLabel = "kmm.node.kubernetes.io/loaded2-ns.loaded2-n.ready"
+	unloadedKernelModuleReadyNodeLabel     = "kmm.node.kubernetes.io/unloaded-ns.unloaded-n.ready"
+	notKernelModuleReadyNodeLabel          = "example.node.kubernetes.io/label-not-to-be-removed"
 )
 
 var _ = Describe("UpdateLabels", func() {
@@ -186,14 +188,14 @@ var _ = Describe("UpdateLabels", func() {
 				Labels: map[string]string{},
 			},
 		}
-		loaded := []string{loadedKernelModuleReadyNodeLabel}
+		loaded := []string{firstloadedKernelModuleReadyNodeLabel}
 		unloaded := []string{unloadedKernelModuleReadyNodeLabel}
 
 		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 		err := n.UpdateLabels(ctx, &node, loaded, unloaded)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(node.Labels).To(HaveKey(loadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).To(HaveKey(firstloadedKernelModuleReadyNodeLabel))
 	})
 
 	It("Should fail to patch node", func() {
@@ -202,7 +204,7 @@ var _ = Describe("UpdateLabels", func() {
 				Labels: map[string]string{},
 			},
 		}
-		loaded := []string{loadedKernelModuleReadyNodeLabel}
+		loaded := []string{firstloadedKernelModuleReadyNodeLabel}
 		unloaded := []string{unloadedKernelModuleReadyNodeLabel}
 
 		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
@@ -325,6 +327,7 @@ var _ = Describe("RemoveNodeReadyLabels", func() {
 		node *v1.Node
 		ctx  context.Context
 		clnt *client.MockClient
+		nmc  *v1beta1.NodeModulesConfig
 	)
 
 	BeforeEach(func() {
@@ -332,26 +335,64 @@ var _ = Describe("RemoveNodeReadyLabels", func() {
 		clnt = client.NewMockClient(ctrl)
 		ctx = context.TODO()
 		n = NewNode(clnt)
+		nmc = &v1beta1.NodeModulesConfig{
+			Spec: v1beta1.NodeModulesConfigSpec{
+				Modules: []v1beta1.NodeModuleSpec{
+					{
+						ModuleItem: v1beta1.ModuleItem{
+							Name:      "loaded1-n",
+							Namespace: "loaded1-ns",
+						},
+						Config: v1beta1.ModuleConfig{
+							Tolerations: []v1.Toleration{
+								{Key: "TestKey", Value: "TestValue", Effect: v1.TaintEffectNoSchedule},
+							},
+						},
+					},
+					{
+						ModuleItem: v1beta1.ModuleItem{
+							Name:      "loaded2-n",
+							Namespace: "loaded2-ns",
+						},
+					},
+				},
+			},
+		}
 		node = &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
-					loadedKernelModuleReadyNodeLabel: "",
-					notKernelModuleReadyNodeLabel:    "",
+					firstloadedKernelModuleReadyNodeLabel:  "",
+					secondloadedKernelModuleReadyNodeLabel: "",
+					notKernelModuleReadyNodeLabel:          "",
 				},
 			},
 		}
 	})
 
-	It("Should remove all kmod labels", func() {
-		clnt.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-		err := n.RemoveNodeReadyLabels(ctx, node)
+	It("Should not remove any kmod labels from a node", func() {
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+		err := n.RemoveNodeReadyLabels(ctx, node, nmc)
 		Expect(err).To(BeNil())
-		Expect(node.Labels).ToNot(HaveKey(loadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).To(HaveKey(firstloadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).To(HaveKey(secondloadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).To(HaveKey(notKernelModuleReadyNodeLabel))
+	})
+	It("Should remove only kmod labels with tolerations to the taints", func() {
+		node.Spec = v1.NodeSpec{
+			Taints: []v1.Taint{
+				{Key: "TestKey", Value: "TestValue", Effect: v1.TaintEffectNoSchedule},
+			},
+		}
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+		err := n.RemoveNodeReadyLabels(ctx, node, nmc)
+		Expect(err).To(BeNil())
+		Expect(node.Labels).To(HaveKey(firstloadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).ToNot(HaveKey(secondloadedKernelModuleReadyNodeLabel))
 		Expect(node.Labels).To(HaveKey(notKernelModuleReadyNodeLabel))
 	})
 	It("Should fail", func() {
-		clnt.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
-		err := n.RemoveNodeReadyLabels(ctx, node)
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+		err := n.RemoveNodeReadyLabels(ctx, node, nmc)
 		Expect(err).ToNot(BeNil())
 	})
 })
@@ -364,9 +405,9 @@ var _ = Describe("addLabels", func() {
 	})
 
 	It("Should add labels", func() {
-		labels := []string{loadedKernelModuleReadyNodeLabel}
+		labels := []string{firstloadedKernelModuleReadyNodeLabel}
 		addLabels(&node, labels)
-		Expect(node.Labels).To(HaveKey(loadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).To(HaveKey(firstloadedKernelModuleReadyNodeLabel))
 	})
 })
 
@@ -377,15 +418,71 @@ var _ = Describe("removeLabels", func() {
 		node = v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
-					loadedKernelModuleReadyNodeLabel: "",
+					firstloadedKernelModuleReadyNodeLabel: "",
 				},
 			},
 		}
 	})
 
 	It("Should remove labels", func() {
-		labels := []string{loadedKernelModuleReadyNodeLabel}
+		labels := []string{firstloadedKernelModuleReadyNodeLabel}
 		removeLabels(&node, labels)
-		Expect(node.Labels).ToNot(HaveKey(loadedKernelModuleReadyNodeLabel))
+		Expect(node.Labels).ToNot(HaveKey(firstloadedKernelModuleReadyNodeLabel))
+	})
+})
+
+var _ = Describe("getLabelsToRemove", func() {
+	var (
+		node *v1.Node
+		nmc  *v1beta1.NodeModulesConfig
+	)
+
+	BeforeEach(func() {
+		nmc = &v1beta1.NodeModulesConfig{
+			Spec: v1beta1.NodeModulesConfigSpec{
+				Modules: []v1beta1.NodeModuleSpec{
+					{
+						ModuleItem: v1beta1.ModuleItem{
+							Name:      "loaded1-n",
+							Namespace: "loaded1-ns",
+						},
+						Config: v1beta1.ModuleConfig{
+							Tolerations: []v1.Toleration{
+								{Key: "TestKey", Value: "TestValue", Effect: v1.TaintEffectNoSchedule},
+							},
+						},
+					},
+					{
+						ModuleItem: v1beta1.ModuleItem{
+							Name:      "loaded2-n",
+							Namespace: "loaded2-ns",
+						},
+					},
+				},
+			},
+		}
+		node = &v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					firstloadedKernelModuleReadyNodeLabel:  "",
+					secondloadedKernelModuleReadyNodeLabel: "",
+					notKernelModuleReadyNodeLabel:          "",
+				},
+			},
+		}
+	})
+
+	It("Should not get any kmod labels from a taintless node", func() {
+		labels := getLabelsToRemove(node, nmc)
+		Expect(labels).To(BeNil())
+	})
+	It("Should get only kmod labels without tolerations to the taints", func() {
+		node.Spec = v1.NodeSpec{
+			Taints: []v1.Taint{
+				{Key: "TestKey", Value: "TestValue", Effect: v1.TaintEffectNoSchedule},
+			},
+		}
+		labels := getLabelsToRemove(node, nmc)
+		Expect(labels).To(Equal([]string{secondloadedKernelModuleReadyNodeLabel}))
 	})
 })
