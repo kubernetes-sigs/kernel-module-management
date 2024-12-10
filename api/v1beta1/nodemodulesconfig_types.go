@@ -25,6 +25,7 @@ type ModuleConfig struct {
 	KernelVersion  string `json:"kernelVersion"`
 	ContainerImage string `json:"containerImage"`
 	// +kubebuilder:default=IfNotPresent
+	//+optional
 	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy"`
 	// When InsecurePull is true, the container image can be pulled without TLS.
 	InsecurePull bool `json:"insecurePull"`

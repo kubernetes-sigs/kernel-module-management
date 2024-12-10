@@ -194,7 +194,6 @@ spec:
                           type: array
                       required:
                       - containerImage
-                      - imagePullPolicy
                       - insecurePull
                       - kernelVersion
                       - modprobe
@@ -384,7 +383,6 @@ spec:
                           type: array
                       required:
                       - containerImage
-                      - imagePullPolicy
                       - insecurePull
                       - kernelVersion
                       - modprobe
