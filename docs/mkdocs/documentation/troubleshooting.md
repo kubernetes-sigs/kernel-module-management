@@ -15,8 +15,8 @@ In the commands below, the value of `$namespace` depends on your [installation m
 
 | Component | Command                                                                     |
 |-----------|-----------------------------------------------------------------------------|
-| KMM       | `kubectl logs -fn "$namespace" deployments/kmm-operator-webhook-server`     |
-| KMM-Hub   | `kubectl logs -fn "$namespace" deployments/kmm-operator-hub-webhook-server` |
+| KMM       | `kubectl logs -fn "$namespace" deployments/kmm-operator-webhook`     |
+| KMM-Hub   | `kubectl logs -fn "$namespace" deployments/kmm-operator-hub-webhook` |
 
 ## Observing events
 
