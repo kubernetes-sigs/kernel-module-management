@@ -12,7 +12,7 @@ patches:
     apiVersion: apps/v1
     kind: Deployment
     metadata:
-      name: webhook-server
+      name: webhook
       namespace: system
     spec:
       template:

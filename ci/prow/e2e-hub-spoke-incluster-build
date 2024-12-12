@@ -51,9 +51,9 @@ make deploy deploy-hub
 
 kubectl wait --for=condition=Available -n ${OPERATOR_NAMESPACE} \
   deployment/kmm-operator-hub-controller \
-  deployment/kmm-operator-hub-webhook-server \
+  deployment/kmm-operator-hub-webhook \
   deployment/kmm-operator-controller \
-  deployment/kmm-operator-webhook-server \
+  deployment/kmm-operator-webhook \
 
 # Make the ManagedCluster selected by the ManagedClusterModule
 kubectl label managedcluster minikube name=minikube

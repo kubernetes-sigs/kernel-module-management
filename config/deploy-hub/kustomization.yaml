@@ -15,7 +15,7 @@ resources:
 patches:
 - target:
     kind: Deployment
-    name: webhook-server
+    name: webhook
   patch: |-
     - op: add
       path: /spec/template/spec/containers/0/args/-

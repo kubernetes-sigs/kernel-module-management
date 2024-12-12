@@ -47,5 +47,5 @@ make bundle bundle-build bundle-push \
     --timeout 5m0s
 kubectl wait --for=condition=Available -n operators --timeout=1m \
     deployment/kmm-operator-controller \
-    deployment/kmm-operator-webhook-server
+    deployment/kmm-operator-webhook
 
