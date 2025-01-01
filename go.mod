@@ -1,8 +1,8 @@
 module github.com/kubernetes-sigs/kernel-module-management
 
-go 1.22.0
+go 1.23.0
 
-toolchain go1.22.2
+toolchain go1.23.4
 
 require (
 	github.com/a8m/envsubst v1.4.2
