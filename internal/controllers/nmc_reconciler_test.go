@@ -383,10 +383,10 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			wh.EXPECT().SyncStatus(ctx, nmc).Return(nil),
 			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &node).Return(nil),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
-			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0, &node).Return(fmt.Errorf(errorMeassge)),
-			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2, &node).Return(fmt.Errorf(errorMeassge)),
-			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc).Return(fmt.Errorf(errorMeassge)),
-			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(nil, nil, fmt.Errorf(errorMeassge)),
+			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0, &node).Return(errors.New(errorMeassge)),
+			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2, &node).Return(errors.New(errorMeassge)),
+			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc).Return(errors.New(errorMeassge)),
+			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(nil, nil, errors.New(errorMeassge)),
 		)
 
 		_, err = r.Reconcile(ctx, req)
