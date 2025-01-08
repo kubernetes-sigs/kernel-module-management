@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	reConfiguredLabel = regexp.MustCompile(`^beta\.kmm\.node\.kubernetes\.io/([a-zA-Z0-9-]+)\.([a-zA-Z0-9-]+)\.module-configured$`)
-	reInUseLabel      = regexp.MustCompile(`^beta\.kmm\.node\.kubernetes\.io/([a-zA-Z0-9-]+)\.([a-zA-Z0-9-]+)\.module-in-use$`)
+	reConfiguredLabel = regexp.MustCompile(`^beta\.kmm\.node\.kubernetes\.io/([a-zA-Z0-9-]+)\.([a-zA-Z0-9-\.]+)\.module-configured$`)
+	reInUseLabel      = regexp.MustCompile(`^beta\.kmm\.node\.kubernetes\.io/([a-zA-Z0-9-]+)\.([a-zA-Z0-9-\.]+)\.module-in-use$`)
 )
 
 func IsModuleConfiguredLabel(s string) (bool, string, string) {
