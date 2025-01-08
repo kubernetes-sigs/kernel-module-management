@@ -14,6 +14,15 @@ var _ = Describe("ModuleConfiguredLabel", func() {
 			Equal("beta.kmm.node.kubernetes.io/a.b.module-configured"),
 		)
 	})
+
+	It("should work as expected with a dot in the name", func() {
+
+		Expect(
+			ModuleConfiguredLabel("a", "b.1"),
+		).To(
+			Equal("beta.kmm.node.kubernetes.io/a.b.1.module-configured"),
+		)
+	})
 })
 
 var _ = Describe("ModuleInUseLabel", func() {
@@ -23,6 +32,15 @@ var _ = Describe("ModuleInUseLabel", func() {
 			ModuleInUseLabel("a", "b"),
 		).To(
 			Equal("beta.kmm.node.kubernetes.io/a.b.module-in-use"),
+		)
+	})
+
+	It("should work as expected with a dot in the name", func() {
+
+		Expect(
+			ModuleInUseLabel("a", "b.1"),
+		).To(
+			Equal("beta.kmm.node.kubernetes.io/a.b.1.module-in-use"),
 		)
 	})
 })
@@ -47,6 +65,7 @@ var _ = Describe("IsModuleConfiguredLabel", func() {
 		Entry(nil, "beta.kmm.node.kubernetes.io/..module-configured", false, "", ""),
 		Entry(nil, "beta.kmm.node.kubernetes.io/a123.b456.module-configured", true, "a123", "b456"),
 		Entry(nil, "beta.kmm.node.kubernetes.io/with-hypen.withouthypen.module-configured", true, "with-hypen", "withouthypen"),
+		Entry(nil, "beta.kmm.node.kubernetes.io/my-namespace.my-name.stil-my-name.module-configured", true, "my-namespace", "my-name.stil-my-name"),
 	)
 })
 
@@ -70,5 +89,6 @@ var _ = Describe("IsModuleInUseLabel", func() {
 		Entry(nil, "beta.kmm.node.kubernetes.io/..module-in-use", false, "", ""),
 		Entry(nil, "beta.kmm.node.kubernetes.io/a123.b456.module-in-use", true, "a123", "b456"),
 		Entry(nil, "beta.kmm.node.kubernetes.io/with-hypen.withouthypen.module-in-use", true, "with-hypen", "withouthypen"),
+		Entry(nil, "beta.kmm.node.kubernetes.io/my-namespace.my-name.stil-my-name.module-in-use", true, "my-namespace", "my-name.stil-my-name"),
 	)
 })
