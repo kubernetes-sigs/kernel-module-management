@@ -36,7 +36,7 @@ kubectl apply -f ci/secret_kmm-kmod-signing.yaml
 kubectl wait --for=condition=Available deployment/kmm-operator-controller deployment/kmm-operator-webhook -n kmm-operator-system
 
 echo "Add an kmm-ci Module that contains a valid mapping..."
-kubectl apply -f ci/module-kmm-ci-build-sign.yaml
+timeout 1m bash -c 'until kubectl apply -f ci/module-kmm-ci-build-sign.yaml; do sleep 3; done'
 
 echo "Check that the module gets loaded on the node..."
 timeout 10m bash -c 'until minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
