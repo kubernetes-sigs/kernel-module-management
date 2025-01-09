@@ -59,7 +59,7 @@ kubectl wait --for=condition=Available -n ${OPERATOR_NAMESPACE} \
 kubectl label managedcluster minikube name=minikube
 
 # Apply the ManagedClusterModule
-kubectl apply -f ci/managedclustermodule-kmm-ci-build-sign.yaml
+timeout 1m bash -c 'until kubectl apply -f ci/managedclustermodule-kmm-ci-build-sign.yaml; do sleep 3; done'
 
 # Waiting for the manifestwork to be created
 timeout 1m bash -c 'until kubectl -n ${MINIKUBE} get manifestwork/mod-example; do sleep 1; done'
