@@ -1,0 +1,99 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: moduleimagesconfigs.kmm.sigs.x-k8s.io
+spec:
+  group: kmm.sigs.x-k8s.io
+  names:
+    kind: ModuleImagesConfig
+    listKind: ModuleImagesConfigList
+    plural: moduleimagesconfigs
+    shortNames:
+    - mic
+    singular: moduleimagesconfig
+  scope: Namespaced
+  versions:
+  - name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: ModuleImagesConfig keeps the request for images' state for a
+          KMM Module.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ModuleImagesConfigSpec describes the images of the Module whose status needs to be verified
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+            properties:
+              images:
+                items:
+                  description: ModuleImageSpec describes the image whose state needs
+                    to be queried
+                  properties:
+                    generation:
+                      description: generation counter of the image config
+                      type: integer
+                    image:
+                      description: image
+                      type: string
+                  required:
+                  - generation
+                  - image
+                  type: object
+                type: array
+            required:
+            - images
+            type: object
+          status:
+            description: |-
+              ModuleImagesConfigStatus describes the status of the images that need to be verified (defined in the spec)
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+            properties:
+              imagesStates:
+                items:
+                  properties:
+                    image:
+                      description: image
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration counter is updated on each status
+                        update
+                      type: integer
+                    status:
+                      description: |-
+                        status of the image
+                        one of: Exists, notExists
+                      type: string
+                  required:
+                  - image
+                  - observedGeneration
+                  - status
+                  type: object
+                type: array
+            required:
+            - imagesStates
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
