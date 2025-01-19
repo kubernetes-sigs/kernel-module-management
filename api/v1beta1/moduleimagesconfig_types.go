@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -35,6 +36,14 @@ type ModuleImageSpec struct {
 	Image string `json:"image"`
 	// generation counter of the image config
 	Generation int `json:"generation"`
+
+	// Build contains build instructions, in case image needs building
+	// +optional
+	Build *Build `json:"build,omitempty"`
+
+	// Sign contains sign instructions, in case image needs signing
+	// +optional
+	Sign *Sign `json:"sign,omitempty"`
 }
 
 // ModuleImagesConfigSpec describes the images of the Module whose status needs to be verified
@@ -42,6 +51,10 @@ type ModuleImageSpec struct {
 // +kubebuilder:validation:Required
 type ModuleImagesConfigSpec struct {
 	Images []ModuleImageSpec `json:"images"`
+
+	// ImageRepoSecret contains pull secret for the image's repo, if needed
+	// +optional
+	ImageRepoSecret *v1.LocalObjectReference `json:"imageRepoSecret,omitempty"`
 }
 
 type ModuleImageState struct {
