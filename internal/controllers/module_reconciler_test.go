@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -29,27 +30,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
+var _ = Describe("ModuleReconciler_Reconcile", func() {
 	var (
 		ctrl                *gomock.Controller
 		mockNamespaceHelper *MocknamespaceLabeler
-		mockReconHelper     *MockmoduleNMCReconcilerHelperAPI
+		mockReconHelper     *MockmoduleReconcilerHelperAPI
 		mod                 *kmmv1beta1.Module
-		mnr                 *ModuleNMCReconciler
+		mr                  *ModuleReconciler
 		mn                  *node.MockNode
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		mockNamespaceHelper = NewMocknamespaceLabeler(ctrl)
-		mockReconHelper = NewMockmoduleNMCReconcilerHelperAPI(ctrl)
+		mockReconHelper = NewMockmoduleReconcilerHelperAPI(ctrl)
 		mn = node.NewMockNode(ctrl)
 
 		mod = &kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName, Namespace: namespace},
 		}
 
-		mnr = &ModuleNMCReconciler{
+		mr = &ModuleReconciler{
 			nsLabeler:   mockNamespaceHelper,
 			reconHelper: mockReconHelper,
 			nodeAPI:     mn,
@@ -76,7 +77,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(nil),
 		)
 
-		res, err := mnr.Reconcile(ctx, mod)
+		res, err := mr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
@@ -147,7 +148,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 		}
 
 	executeTestFunction:
-		res, err := mnr.Reconcile(ctx, mod)
+		res, err := mr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).To(HaveOccurred())
@@ -174,7 +175,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes).Return(nil),
 		)
 
-		res, err := mnr.Reconcile(ctx, mod)
+		res, err := mr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
@@ -192,7 +193,7 @@ var _ = Describe("ModuleNMCReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes).Return(nil),
 		)
 
-		res, err := mnr.Reconcile(ctx, mod)
+		res, err := mr.Reconcile(ctx, mod)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
@@ -204,7 +205,7 @@ var _ = Describe("setFinalizerAndStatus", func() {
 		ctrl         *gomock.Controller
 		clnt         *client.MockClient
 		statusWriter *client.MockStatusWriter
-		mnrh         moduleNMCReconcilerHelperAPI
+		mrh          moduleReconcilerHelperAPI
 		mod          kmmv1beta1.Module
 		expectedMod  *kmmv1beta1.Module
 	)
@@ -213,7 +214,7 @@ var _ = Describe("setFinalizerAndStatus", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		statusWriter = client.NewMockStatusWriter(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, nil, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, nil, nil, scheme)
 		mod = kmmv1beta1.Module{}
 		expectedMod = mod.DeepCopy()
 	})
@@ -222,7 +223,7 @@ var _ = Describe("setFinalizerAndStatus", func() {
 
 	It("finalizer is already set", func() {
 		controllerutil.AddFinalizer(&mod, constants.ModuleFinalizer)
-		err := mnrh.setFinalizerAndStatus(ctx, &mod)
+		err := mrh.setFinalizerAndStatus(ctx, &mod)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -232,14 +233,14 @@ var _ = Describe("setFinalizerAndStatus", func() {
 		clnt.EXPECT().Status().Return(statusWriter)
 		statusWriter.EXPECT().Update(ctx, expectedMod).Return(nil)
 
-		err := mnrh.setFinalizerAndStatus(ctx, &mod)
+		err := mrh.setFinalizerAndStatus(ctx, &mod)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("finalizer is not set, failed to patch the Module", func() {
 		clnt.EXPECT().Patch(ctx, &mod, gomock.Any()).Return(fmt.Errorf("some error"))
 
-		err := mnrh.setFinalizerAndStatus(ctx, &mod)
+		err := mrh.setFinalizerAndStatus(ctx, &mod)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -249,7 +250,7 @@ var _ = Describe("setFinalizerAndStatus", func() {
 		clnt.EXPECT().Status().Return(statusWriter)
 		statusWriter.EXPECT().Update(ctx, expectedMod).Return(fmt.Errorf("some error"))
 
-		err := mnrh.setFinalizerAndStatus(ctx, &mod)
+		err := mrh.setFinalizerAndStatus(ctx, &mod)
 		Expect(err).To(HaveOccurred())
 	})
 })
@@ -265,7 +266,7 @@ var _ = Describe("finalizeModule", func() {
 		ctrl                   *gomock.Controller
 		clnt                   *client.MockClient
 		helper                 *nmc.MockHelper
-		mnrh                   moduleNMCReconcilerHelperAPI
+		mrh                    moduleReconcilerHelperAPI
 		mod                    *kmmv1beta1.Module
 		matchConfiguredModules = map[string]string{nmc.ModuleConfiguredLabel(moduleNamespace, moduleName): ""}
 		matchLoadedModules     = map[string]string{nmc.ModuleInUseLabel(moduleNamespace, moduleName): ""}
@@ -276,7 +277,7 @@ var _ = Describe("finalizeModule", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, helper, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, nil, helper, scheme)
 		mod = &kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName, Namespace: moduleNamespace},
 		}
@@ -288,7 +289,7 @@ var _ = Describe("finalizeModule", func() {
 			List(ctx, &kmmv1beta1.NodeModulesConfigList{}, matchConfiguredModules).
 			Return(fmt.Errorf("some error"))
 
-		err := mnrh.finalizeModule(ctx, mod)
+		err := mrh.finalizeModule(ctx, mod)
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -312,7 +313,7 @@ var _ = Describe("finalizeModule", func() {
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error")),
 		)
 
-		err := mnrh.finalizeModule(ctx, mod)
+		err := mrh.finalizeModule(ctx, mod)
 
 		Expect(err).To(HaveOccurred())
 
@@ -330,7 +331,7 @@ var _ = Describe("finalizeModule", func() {
 			clnt.EXPECT().Patch(ctx, mod, gomock.Any()).Return(nil),
 		)
 
-		err := mnrh.finalizeModule(ctx, mod)
+		err := mrh.finalizeModule(ctx, mod)
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -352,7 +353,7 @@ var _ = Describe("finalizeModule", func() {
 		)
 
 		Expect(
-			mnrh.finalizeModule(ctx, mod),
+			mrh.finalizeModule(ctx, mod),
 		).NotTo(
 			HaveOccurred(),
 		)
@@ -370,7 +371,7 @@ var _ = Describe("finalizeModule", func() {
 			clnt.EXPECT().Patch(ctx, mod, gomock.Any()).Return(fmt.Errorf("some error")),
 		)
 
-		err := mnrh.finalizeModule(ctx, mod)
+		err := mrh.finalizeModule(ctx, mod)
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -380,13 +381,13 @@ var _ = Describe("getNMCsByModuleSet", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		mnrh moduleNMCReconcilerHelperAPI
+		mrh  moduleReconcilerHelperAPI
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, nil, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, nil, nil, scheme)
 	})
 
 	ctx := context.Background()
@@ -394,7 +395,7 @@ var _ = Describe("getNMCsByModuleSet", func() {
 	It("list failed", func() {
 		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
 
-		nodes, err := mnrh.getNMCsByModuleSet(ctx, &kmmv1beta1.Module{})
+		nodes, err := mrh.getNMCsByModuleSet(ctx, &kmmv1beta1.Module{})
 
 		Expect(err).To(HaveOccurred())
 		Expect(nodes).To(BeNil())
@@ -417,7 +418,7 @@ var _ = Describe("getNMCsByModuleSet", func() {
 			},
 		)
 
-		nmcsSet, err := mnrh.getNMCsByModuleSet(ctx, &kmmv1beta1.Module{})
+		nmcsSet, err := mrh.getNMCsByModuleSet(ctx, &kmmv1beta1.Module{})
 
 		expectedSet := sets.New[string]([]string{"nmc1", "nmc2", "nmc3"}...)
 
@@ -439,7 +440,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		clnt          *client.MockClient
 		mockKernel    *module.MockKernelMapper
 		mockHelper    *nmc.MockHelper
-		mnrh          moduleNMCReconcilerHelperAPI
+		mrh           moduleReconcilerHelperAPI
 		node          v1.Node
 		targetedNodes []v1.Node
 	)
@@ -449,7 +450,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		clnt = client.NewMockClient(ctrl)
 		mockKernel = module.NewMockKernelMapper(ctrl)
 		mockHelper = nmc.NewMockHelper(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, mockKernel, nil, mockHelper, scheme)
+		mrh = newModuleReconcilerHelper(clnt, mockKernel, nil, mockHelper, scheme)
 		node = v1.Node{
 			ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 			Status: v1.NodeStatus{
@@ -467,7 +468,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		currentNMCs := sets.New[string](nodeName)
 		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
 
-		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+		scheduleData, errs := mrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(len(errs)).To(Equal(1))
 		Expect(scheduleData).To(Equal(map[string]schedulingData{}))
@@ -485,7 +486,7 @@ var _ = Describe("prepareSchedulingData", func() {
 
 			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, module.ErrNoMatchingKernelMapping)
 
-			scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+			scheduleData, errs := mrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 			Expect(errs).To(BeEmpty())
 			Expect(scheduleData).To(Equal(expectedScheduleData))
@@ -499,7 +500,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		currentNMCs := sets.New[string](nodeName)
 		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
 
-		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+		scheduleData, errs := mrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		expectedScheduleData := map[string]schedulingData{nodeName: schedulingData{action: actionAdd, mld: &mld, node: &node}}
 		Expect(errs).To(BeEmpty())
@@ -510,7 +511,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		currentNMCs := sets.New[string]("some other node")
 		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
 
-		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+		scheduleData, errs := mrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(errs).To(BeEmpty())
 		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{action: actionAdd, mld: &mld, node: &node}))
@@ -521,7 +522,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		currentNMCs := sets.New[string]("some other node")
 		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(nil, fmt.Errorf("some error"))
 
-		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+		scheduleData, errs := mrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(errs).NotTo(BeEmpty())
 		expectedScheduleData := map[string]schedulingData{"some other node": schedulingData{action: actionDelete}}
@@ -548,7 +549,7 @@ var _ = Describe("prepareSchedulingData", func() {
 			mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, otherNodeKernelVersion).Return(&otherNodeMLD, nil),
 		)
 
-		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, sets.New[string]())
+		scheduleData, errs := mrh.prepareSchedulingData(ctx, &mod, targetedNodes, sets.New[string]())
 		Expect(errs).To(BeEmpty())
 
 		expected := map[string]schedulingData{
@@ -566,7 +567,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		mld.ModuleVersion = "moduleVersion1"
 		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
 
-		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+		scheduleData, errs := mrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(errs).To(BeEmpty())
 		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{action: actionAdd, mld: &mld, node: &node}))
@@ -579,7 +580,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		mld.ModuleVersion = "moduleVersion2"
 		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
 
-		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+		scheduleData, errs := mrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(errs).To(BeEmpty())
 		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{}))
@@ -590,7 +591,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		mld.ModuleVersion = "moduleVersion2"
 		mockKernel.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil)
 
-		scheduleData, errs := mnrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
+		scheduleData, errs := mrh.prepareSchedulingData(ctx, &mod, targetedNodes, currentNMCs)
 
 		Expect(errs).To(BeEmpty())
 		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{action: actionDelete}))
@@ -608,7 +609,7 @@ var _ = Describe("enableModuleOnNode", func() {
 		ctrl                 *gomock.Controller
 		clnt                 *client.MockClient
 		rgst                 *registry.MockRegistry
-		mnrh                 moduleNMCReconcilerHelperAPI
+		mrh                  moduleReconcilerHelperAPI
 		helper               *nmc.MockHelper
 		mld                  *api.ModuleLoaderData
 		node                 v1.Node
@@ -621,7 +622,7 @@ var _ = Describe("enableModuleOnNode", func() {
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
 		rgst = registry.NewMockRegistry(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, rgst, helper, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, rgst, helper, scheme)
 		node = v1.Node{
 			ObjectMeta: metav1.ObjectMeta{Name: "nodeName"},
 		}
@@ -646,21 +647,21 @@ var _ = Describe("enableModuleOnNode", func() {
 	It("Build configured and image does not exist", func() {
 		mld.Build = &kmmv1beta1.Build{}
 		rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(false, nil)
-		err := mnrh.enableModuleOnNode(ctx, mld, &node)
+		err := mrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("Sign configured and image does not exist", func() {
 		mld.Sign = &kmmv1beta1.Sign{}
 		rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(false, nil)
-		err := mnrh.enableModuleOnNode(ctx, mld, &node)
+		err := mrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("Build configured and failed to check if image exists", func() {
 		mld.Build = &kmmv1beta1.Build{}
 		rgst.EXPECT().ImageExists(ctx, mld.ContainerImage, gomock.Any(), gomock.Any()).Return(false, fmt.Errorf("some error"))
-		err := mnrh.enableModuleOnNode(ctx, mld, &node)
+		err := mrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -675,7 +676,7 @@ var _ = Describe("enableModuleOnNode", func() {
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 		)
 
-		err := mnrh.enableModuleOnNode(ctx, mld, &node)
+		err := mrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -707,7 +708,7 @@ var _ = Describe("enableModuleOnNode", func() {
 			clnt.EXPECT().Patch(ctx, &nmcWithLabels, gomock.Any()).Return(nil),
 		)
 
-		err := mnrh.enableModuleOnNode(ctx, mld, &node)
+		err := mrh.enableModuleOnNode(ctx, mld, &node)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
@@ -717,7 +718,7 @@ var _ = Describe("disableModuleOnNode", func() {
 		ctx             context.Context
 		ctrl            *gomock.Controller
 		clnt            *client.MockClient
-		mnrh            moduleNMCReconcilerHelperAPI
+		mrh             moduleReconcilerHelperAPI
 		helper          *nmc.MockHelper
 		nodeName        string
 		moduleName      string
@@ -729,7 +730,7 @@ var _ = Describe("disableModuleOnNode", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
-		mnrh = newModuleNMCReconcilerHelper(clnt, nil, nil, helper, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, nil, helper, scheme)
 		nodeName = "node name"
 		moduleName = "moduleName"
 		moduleNamespace = "moduleNamespace"
@@ -749,7 +750,7 @@ var _ = Describe("disableModuleOnNode", func() {
 			helper.EXPECT().RemoveModuleConfig(nmc, moduleNamespace, moduleName).Return(nil),
 		)
 
-		err := mnrh.disableModuleOnNode(ctx, moduleNamespace, moduleName, nodeName)
+		err := mrh.disableModuleOnNode(ctx, moduleNamespace, moduleName, nodeName)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
@@ -759,7 +760,7 @@ var _ = Describe("removeModuleFromNMC", func() {
 		ctx             context.Context
 		ctrl            *gomock.Controller
 		clnt            *client.MockClient
-		mnrh            *moduleNMCReconcilerHelper
+		mrh             *moduleReconcilerHelper
 		helper          *nmc.MockHelper
 		nmcName         string
 		moduleName      string
@@ -771,7 +772,7 @@ var _ = Describe("removeModuleFromNMC", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
-		mnrh = &moduleNMCReconcilerHelper{client: clnt, nmcHelper: helper}
+		mrh = &moduleReconcilerHelper{client: clnt, nmcHelper: helper}
 		nmcName = "NMC name"
 		moduleName = "moduleName"
 		moduleNamespace = "moduleNamespace"
@@ -791,7 +792,7 @@ var _ = Describe("removeModuleFromNMC", func() {
 			helper.EXPECT().RemoveModuleConfig(nmc, moduleNamespace, moduleName).Return(nil),
 		)
 
-		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
+		err := mrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -809,7 +810,7 @@ var _ = Describe("removeModuleFromNMC", func() {
 			helper.EXPECT().RemoveModuleConfig(nmc, moduleNamespace, moduleName).Return(fmt.Errorf("some error")),
 		)
 
-		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
+		err := mrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -835,7 +836,7 @@ var _ = Describe("removeModuleFromNMC", func() {
 			clnt.EXPECT().Patch(ctx, &nmcWithoutLabel, gomock.Any()),
 		)
 
-		err := mnrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
+		err := mrh.removeModuleFromNMC(ctx, nmc, moduleNamespace, moduleName)
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
@@ -846,7 +847,7 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 		ctrl         *gomock.Controller
 		clnt         *client.MockClient
 		mod          kmmv1beta1.Module
-		mnrh         *moduleNMCReconcilerHelper
+		mrh          *moduleReconcilerHelper
 		helper       *nmc.MockHelper
 		statusWriter *client.MockStatusWriter
 	)
@@ -863,12 +864,12 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 				Namespace: "modNamespace",
 			},
 		}
-		mnrh = &moduleNMCReconcilerHelper{client: clnt, nmcHelper: helper}
+		mrh = &moduleReconcilerHelper{client: clnt, nmcHelper: helper}
 	})
 
 	It("faled to get configured NMCs", func() {
 		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
-		err := mnrh.moduleUpdateWorkerPodsStatus(ctx, &mod, nil)
+		err := mrh.moduleUpdateWorkerPodsStatus(ctx, &mod, nil)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -893,7 +894,7 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 			statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any()),
 		)
 
-		err := mnrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
+		err := mrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -941,7 +942,7 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 		clnt.EXPECT().Status().Return(statusWriter)
 		statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any())
 
-		err := mnrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
+		err := mrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
 		Expect(err).NotTo(HaveOccurred())
 	},
 		Entry("2 targeted nodes, module not in status", 2, false, false, 2, 1, 0),
@@ -979,7 +980,7 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 			statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any()),
 		)
 
-		err := mnrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
+		err := mrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
