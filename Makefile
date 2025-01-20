@@ -189,7 +189,7 @@ KUSTOMIZE_CONFIG_CERT_MANAGER ?= https://github.com/cert-manager/cert-manager/re
 .PHONY: deploy-cert-manager
 deploy-cert-manager:
 	kubectl apply -f $(KUSTOMIZE_CONFIG_CERT_MANAGER)
-	kubectl -n cert-manager wait --timeout=2m --for=condition=Available deployment \
+	kubectl -n cert-manager wait --timeout=5m --for=condition=Available deployment \
 		cert-manager \
 		cert-manager-cainjector \
 		cert-manager-webhook
