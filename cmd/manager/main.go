@@ -19,9 +19,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"os"
 	"strconv"
+
+	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
@@ -132,7 +133,7 @@ func main() {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.DevicePluginReconcilerName)
 	}
 
-	mnc := controllers.NewModuleNMCReconciler(
+	mnc := controllers.NewModuleReconciler(
 		client,
 		kernelAPI,
 		registryAPI,
@@ -142,7 +143,7 @@ func main() {
 		scheme,
 	)
 	if err = mnc.SetupWithManager(mgr); err != nil {
-		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleNMCReconcilerName)
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleReconcilerName)
 	}
 
 	ctx := ctrl.SetupSignalHandler()

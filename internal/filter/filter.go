@@ -2,6 +2,8 @@ package filter
 
 import (
 	"context"
+	"reflect"
+
 	"github.com/go-logr/logr"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	v1 "k8s.io/api/core/v1"
@@ -9,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubectl/pkg/util/podutils"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -147,14 +148,14 @@ func ListModulesForNMC(_ context.Context, obj client.Object) []reconcile.Request
 	return modules.UnsortedList()
 }
 
-func ModuleNMCReconcilerNodePredicate() predicate.Predicate {
+func ModuleReconcilerNodePredicate() predicate.Predicate {
 	return predicate.And(
 		skipDeletions,
 		predicate.Or(nodeBecomesSchedulable, predicate.LabelChangedPredicate{}),
 	)
 }
 
-func ModuleNMCReconcilePodPredicate() predicate.Predicate {
+func ModuleReconcilePodPredicate() predicate.Predicate {
 	return predicate.And(
 		skipDeletions,
 		skipCreations,
@@ -224,7 +225,7 @@ func (f *Filter) FindModulesForNode(ctx context.Context, node client.Object) []r
 }
 
 // FindModulesForNMCNodeChange finds the modules that are affected by node changes that result
-// in ModuleNMCReconcilerNodePredicate predicate. First it find all the Module that can run on the node, based
+// in ModuleReconcilerNodePredicate predicate. First it find all the Module that can run on the node, based
 // on the Modules' Selector field and on node's labels. Then, in case NMC for the node exists, it adds all the
 // Modules already set in NMC ( in case they were not added in a previous step).
 func (f *Filter) FindModulesForNMCNodeChange(ctx context.Context, node client.Object) []reconcile.Request {

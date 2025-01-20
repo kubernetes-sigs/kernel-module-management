@@ -36,9 +36,9 @@ import (
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=nodemodulesconfigs,verbs=get;list;watch;patch;create;delete
 
 const (
-	ModuleNMCReconcilerName = "ModuleNMCReconciler"
-	actionDelete            = "delete"
-	actionAdd               = "add"
+	ModuleReconcilerName = "ModuleReconciler"
+	actionDelete         = "delete"
+	actionAdd            = "add"
 )
 
 type schedulingData struct {
@@ -47,22 +47,22 @@ type schedulingData struct {
 	node   *v1.Node
 }
 
-type ModuleNMCReconciler struct {
+type ModuleReconciler struct {
 	filter      *filter.Filter
 	nsLabeler   namespaceLabeler
-	reconHelper moduleNMCReconcilerHelperAPI
+	reconHelper moduleReconcilerHelperAPI
 	nodeAPI     node.Node
 }
 
-func NewModuleNMCReconciler(client client.Client,
+func NewModuleReconciler(client client.Client,
 	kernelAPI module.KernelMapper,
 	registryAPI registry.Registry,
 	nmcHelper nmc.Helper,
 	filter *filter.Filter,
 	nodeAPI node.Node,
-	scheme *runtime.Scheme) *ModuleNMCReconciler {
-	reconHelper := newModuleNMCReconcilerHelper(client, kernelAPI, registryAPI, nmcHelper, scheme)
-	return &ModuleNMCReconciler{
+	scheme *runtime.Scheme) *ModuleReconciler {
+	reconHelper := newModuleReconcilerHelper(client, kernelAPI, registryAPI, nmcHelper, scheme)
+	return &ModuleReconciler{
 		filter:      filter,
 		nsLabeler:   newNamespaceLabeler(client),
 		reconHelper: reconHelper,
@@ -70,59 +70,59 @@ func NewModuleNMCReconciler(client client.Client,
 	}
 }
 
-func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (ctrl.Result, error) {
+func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	logger.Info("Starting Module-NMC reconciliation")
+	logger.Info("Starting Module reconciliation")
 
 	if mod.GetDeletionTimestamp() != nil {
 		//Module is being deleted
-		if err := mnr.nsLabeler.tryRemovingLabel(ctx, mod.Namespace, mod.Name); err != nil {
+		if err := mr.nsLabeler.tryRemovingLabel(ctx, mod.Namespace, mod.Name); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while trying to remove the label on namespace %s: %v", mod.Namespace, err)
 		}
 
-		err := mnr.reconHelper.finalizeModule(ctx, mod)
+		err := mr.reconHelper.finalizeModule(ctx, mod)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to finalize Module %s/%s: %v", mod.Namespace, mod.Name, err)
 		}
 		return ctrl.Result{}, nil
 	}
 
-	if err := mnr.nsLabeler.setLabel(ctx, mod.Namespace); err != nil {
+	if err := mr.nsLabeler.setLabel(ctx, mod.Namespace); err != nil {
 		return ctrl.Result{}, fmt.Errorf("could not set label %q on namespace %s: %v", constants.NamespaceLabelKey, mod.Namespace, err)
 	}
 
-	err := mnr.reconHelper.setFinalizerAndStatus(ctx, mod)
+	err := mr.reconHelper.setFinalizerAndStatus(ctx, mod)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to set finalizer on Module %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
 
 	// get nodes targeted by selector
-	targetedNodes, err := mnr.nodeAPI.GetNodesListBySelector(ctx, mod.Spec.Selector, mod.Spec.Tolerations)
+	targetedNodes, err := mr.nodeAPI.GetNodesListBySelector(ctx, mod.Spec.Selector, mod.Spec.Tolerations)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get list of nodes by selector: %v", err)
 	}
 
-	currentNMCs, err := mnr.reconHelper.getNMCsByModuleSet(ctx, mod)
+	currentNMCs, err := mr.reconHelper.getNMCsByModuleSet(ctx, mod)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get NMCs for Module %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
 
-	sdMap, prepareErrs := mnr.reconHelper.prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs)
+	sdMap, prepareErrs := mr.reconHelper.prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs)
 	errs := make([]error, 0, len(sdMap)+1)
 	errs = append(errs, prepareErrs...)
 
 	for nodeName, sd := range sdMap {
 		if sd.action == actionAdd {
-			err = mnr.reconHelper.enableModuleOnNode(ctx, sd.mld, sd.node)
+			err = mr.reconHelper.enableModuleOnNode(ctx, sd.mld, sd.node)
 		}
 		if sd.action == actionDelete {
-			err = mnr.reconHelper.disableModuleOnNode(ctx, mod.Namespace, mod.Name, nodeName)
+			err = mr.reconHelper.disableModuleOnNode(ctx, mod.Namespace, mod.Name, nodeName)
 		}
 		errs = append(errs, err)
 	}
 
-	err = mnr.reconHelper.moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes)
+	err = mr.reconHelper.moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes)
 	errs = append(errs, err)
 
 	err = errors.Join(errs...)
@@ -132,31 +132,31 @@ func (mnr *ModuleNMCReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.M
 	return ctrl.Result{}, nil
 }
 
-func (mnr *ModuleNMCReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (mr *ModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.
 		NewControllerManagedBy(mgr).
 		For(&kmmv1beta1.Module{}).
-		Owns(&v1.Pod{}, builder.WithPredicates(filter.ModuleNMCReconcilePodPredicate())).
+		Owns(&v1.Pod{}, builder.WithPredicates(filter.ModuleReconcilePodPredicate())).
 		Watches(
 			&v1.Node{},
-			handler.EnqueueRequestsFromMapFunc(mnr.filter.FindModulesForNMCNodeChange),
+			handler.EnqueueRequestsFromMapFunc(mr.filter.FindModulesForNMCNodeChange),
 			builder.WithPredicates(
-				filter.ModuleNMCReconcilerNodePredicate(),
+				filter.ModuleReconcilerNodePredicate(),
 			),
 		).
 		Watches(
 			&kmmv1beta1.NodeModulesConfig{},
 			handler.EnqueueRequestsFromMapFunc(filter.ListModulesForNMC),
 		).
-		Named(ModuleNMCReconcilerName).
+		Named(ModuleReconcilerName).
 		Complete(
-			reconcile.AsReconciler[*kmmv1beta1.Module](mgr.GetClient(), mnr),
+			reconcile.AsReconciler[*kmmv1beta1.Module](mgr.GetClient(), mr),
 		)
 }
 
-//go:generate mockgen -source=module_nmc_reconciler.go -package=controllers -destination=mock_module_nmc_reconciler.go moduleNMCReconcilerHelperAPI,namespaceLabeler
+//go:generate mockgen -source=module_reconciler.go -package=controllers -destination=mock_module_reconciler.go moduleReconcilerHelperAPI,namespaceLabeler
 
-type moduleNMCReconcilerHelperAPI interface {
+type moduleReconcilerHelperAPI interface {
 	setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error)
@@ -166,7 +166,7 @@ type moduleNMCReconcilerHelperAPI interface {
 	moduleUpdateWorkerPodsStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error
 }
 
-type moduleNMCReconcilerHelper struct {
+type moduleReconcilerHelper struct {
 	client      client.Client
 	kernelAPI   module.KernelMapper
 	registryAPI registry.Registry
@@ -174,13 +174,13 @@ type moduleNMCReconcilerHelper struct {
 	scheme      *runtime.Scheme
 }
 
-func newModuleNMCReconcilerHelper(
+func newModuleReconcilerHelper(
 	client client.Client,
 	kernelAPI module.KernelMapper,
 	registryAPI registry.Registry,
 	nmcHelper nmc.Helper,
-	scheme *runtime.Scheme) moduleNMCReconcilerHelperAPI {
-	return &moduleNMCReconcilerHelper{
+	scheme *runtime.Scheme) moduleReconcilerHelperAPI {
+	return &moduleReconcilerHelper{
 		client:      client,
 		kernelAPI:   kernelAPI,
 		registryAPI: registryAPI,
@@ -189,7 +189,7 @@ func newModuleNMCReconcilerHelper(
 	}
 }
 
-func (mnrh *moduleNMCReconcilerHelper) setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error {
+func (mrh *moduleReconcilerHelper) setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error {
 	if controllerutil.ContainsFinalizer(mod, constants.ModuleFinalizer) {
 		return nil
 	}
@@ -199,7 +199,7 @@ func (mnrh *moduleNMCReconcilerHelper) setFinalizerAndStatus(ctx context.Context
 
 	modCopy := mod.DeepCopy()
 	controllerutil.AddFinalizer(mod, constants.ModuleFinalizer)
-	err := mnrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
+	err := mrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
 	if err != nil {
 		return fmt.Errorf("failed to set finalizer for module %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
@@ -208,10 +208,10 @@ func (mnrh *moduleNMCReconcilerHelper) setFinalizerAndStatus(ctx context.Context
 	//mod.Status.ModuleLoader.DesiredNumber = 0
 	//mod.Status.ModuleLoader.AvailableNumber = 0
 
-	return mnrh.client.Status().Update(ctx, mod)
+	return mrh.client.Status().Update(ctx, mod)
 }
 
-func (mnrh *moduleNMCReconcilerHelper) finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error {
+func (mrh *moduleReconcilerHelper) finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error {
 	nmcList := kmmv1beta1.NodeModulesConfigList{}
 
 	modNSN := types.NamespacedName{Namespace: mod.Namespace, Name: mod.Name}
@@ -220,13 +220,13 @@ func (mnrh *moduleNMCReconcilerHelper) finalizeModule(ctx context.Context, mod *
 		nmc.ModuleConfiguredLabel(mod.Namespace, mod.Name): "",
 	}
 
-	if err := mnrh.client.List(ctx, &nmcList, matchesConfigured); err != nil {
+	if err := mrh.client.List(ctx, &nmcList, matchesConfigured); err != nil {
 		return fmt.Errorf("failed to list NMCs with %s configured in the cluster: %v", modNSN, err)
 	}
 
 	errs := make([]error, 0, len(nmcList.Items))
 	for _, nmc := range nmcList.Items {
-		err := mnrh.removeModuleFromNMC(ctx, &nmc, mod.Namespace, mod.Name)
+		err := mrh.removeModuleFromNMC(ctx, &nmc, mod.Namespace, mod.Name)
 		errs = append(errs, err)
 	}
 
@@ -242,7 +242,7 @@ func (mnrh *moduleNMCReconcilerHelper) finalizeModule(ctx context.Context, mod *
 		nmc.ModuleInUseLabel(mod.Namespace, mod.Name): "",
 	}
 
-	if err := mnrh.client.List(ctx, &nmcList, matchesInUse); err != nil {
+	if err := mrh.client.List(ctx, &nmcList, matchesInUse); err != nil {
 		return fmt.Errorf("failed to list NMCs with %s loaded in the cluster: %v", modNSN, err)
 	}
 
@@ -255,11 +255,11 @@ func (mnrh *moduleNMCReconcilerHelper) finalizeModule(ctx context.Context, mod *
 	modCopy := mod.DeepCopy()
 	controllerutil.RemoveFinalizer(mod, constants.ModuleFinalizer)
 
-	return mnrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
+	return mrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
 }
 
-func (mnrh *moduleNMCReconcilerHelper) getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error) {
-	nmcList, err := mnrh.getNMCsForModule(ctx, mod)
+func (mrh *moduleReconcilerHelper) getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error) {
+	nmcList, err := mrh.getNMCsForModule(ctx, mod)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get list of %s/%s module's NMC for map: %v", mod.Namespace, mod.Name, err)
 	}
@@ -271,13 +271,13 @@ func (mnrh *moduleNMCReconcilerHelper) getNMCsByModuleSet(ctx context.Context, m
 	return result, nil
 }
 
-func (mnrh *moduleNMCReconcilerHelper) getNMCsForModule(ctx context.Context, mod *kmmv1beta1.Module) ([]kmmv1beta1.NodeModulesConfig, error) {
+func (mrh *moduleReconcilerHelper) getNMCsForModule(ctx context.Context, mod *kmmv1beta1.Module) ([]kmmv1beta1.NodeModulesConfig, error) {
 	logger := log.FromContext(ctx)
-	moduleNMCLabel := nmc.ModuleConfiguredLabel(mod.Namespace, mod.Name)
-	logger.V(1).Info("Listing nmcs", "selector", moduleNMCLabel)
+	moduleLabel := nmc.ModuleConfiguredLabel(mod.Namespace, mod.Name)
+	logger.V(1).Info("Listing nmcs", "selector", moduleLabel)
 	selectedNMCs := kmmv1beta1.NodeModulesConfigList{}
-	opt := client.MatchingLabels(map[string]string{moduleNMCLabel: ""})
-	if err := mnrh.client.List(ctx, &selectedNMCs, opt); err != nil {
+	opt := client.MatchingLabels(map[string]string{moduleLabel: ""})
+	if err := mrh.client.List(ctx, &selectedNMCs, opt); err != nil {
 		return nil, fmt.Errorf("could not list NMCs: %v", err)
 	}
 
@@ -288,7 +288,7 @@ func (mnrh *moduleNMCReconcilerHelper) getNMCsForModule(ctx context.Context, mod
 // in case there is an error during handling one of the nodes, function continues to the next node
 // It returns the map of scheduling data per successfully processed node, and slice of errors
 // per unsuccessfuly processed nodes
-func (mnrh *moduleNMCReconcilerHelper) prepareSchedulingData(ctx context.Context,
+func (mrh *moduleReconcilerHelper) prepareSchedulingData(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	targetedNodes []v1.Node,
 	currentNMCs sets.Set[string]) (map[string]schedulingData, []error) {
@@ -298,7 +298,7 @@ func (mnrh *moduleNMCReconcilerHelper) prepareSchedulingData(ctx context.Context
 	errs := make([]error, 0, len(targetedNodes))
 	for _, node := range targetedNodes {
 		kernelVersion := strings.TrimSuffix(node.Status.NodeInfo.KernelVersion, "+")
-		mld, err := mnrh.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
+		mld, err := mrh.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
 		if err != nil && !errors.Is(err, module.ErrNoMatchingKernelMapping) {
 			// deleting earlier, so as not to change NMC in case we failed to determine mld
 			currentNMCs.Delete(node.Name)
@@ -315,11 +315,11 @@ func (mnrh *moduleNMCReconcilerHelper) prepareSchedulingData(ctx context.Context
 	return result, errs
 }
 
-func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error {
+func (mrh *moduleReconcilerHelper) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error {
 	logger := log.FromContext(ctx)
 
 	if module.ShouldBeBuilt(mld) || module.ShouldBeSigned(mld) {
-		exists, err := module.ImageExists(ctx, mnrh.client, mnrh.registryAPI, mld, mld.Namespace, mld.ContainerImage)
+		exists, err := module.ImageExists(ctx, mrh.client, mrh.registryAPI, mld, mld.Namespace, mld.ContainerImage)
 		if err != nil {
 			return fmt.Errorf("failed to verify that image %s exists: %v", mld.ContainerImage, err)
 		}
@@ -347,15 +347,15 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 		ObjectMeta: metav1.ObjectMeta{Name: node.Name},
 	}
 
-	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmcObj, func() error {
-		if err := mnrh.nmcHelper.SetModuleConfig(nmcObj, mld, &moduleConfig); err != nil {
+	opRes, err := controllerutil.CreateOrPatch(ctx, mrh.client, nmcObj, func() error {
+		if err := mrh.nmcHelper.SetModuleConfig(nmcObj, mld, &moduleConfig); err != nil {
 			return err
 		}
 
 		meta.SetLabel(nmcObj, nmc.ModuleConfiguredLabel(mld.Namespace, mld.Name), "")
 		meta.SetLabel(nmcObj, nmc.ModuleInUseLabel(mld.Namespace, mld.Name), "")
 
-		return controllerutil.SetOwnerReference(node, nmcObj, mnrh.scheme)
+		return controllerutil.SetOwnerReference(node, nmcObj, mrh.scheme)
 	})
 
 	if err != nil {
@@ -365,18 +365,18 @@ func (mnrh *moduleNMCReconcilerHelper) enableModuleOnNode(ctx context.Context, m
 	return nil
 }
 
-func (mnrh *moduleNMCReconcilerHelper) disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error {
+func (mrh *moduleReconcilerHelper) disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error {
 	nmc := &kmmv1beta1.NodeModulesConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 	}
 
-	return mnrh.removeModuleFromNMC(ctx, nmc, modNamespace, modName)
+	return mrh.removeModuleFromNMC(ctx, nmc, modNamespace, modName)
 }
 
-func (mnrh *moduleNMCReconcilerHelper) removeModuleFromNMC(ctx context.Context, nmcObj *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) error {
+func (mrh *moduleReconcilerHelper) removeModuleFromNMC(ctx context.Context, nmcObj *kmmv1beta1.NodeModulesConfig, modNamespace, modName string) error {
 	logger := log.FromContext(ctx)
-	opRes, err := controllerutil.CreateOrPatch(ctx, mnrh.client, nmcObj, func() error {
-		if err := mnrh.nmcHelper.RemoveModuleConfig(nmcObj, modNamespace, modName); err != nil {
+	opRes, err := controllerutil.CreateOrPatch(ctx, mrh.client, nmcObj, func() error {
+		if err := mrh.nmcHelper.RemoveModuleConfig(nmcObj, modNamespace, modName); err != nil {
 			return err
 		}
 
@@ -393,23 +393,23 @@ func (mnrh *moduleNMCReconcilerHelper) removeModuleFromNMC(ctx context.Context, 
 	return nil
 }
 
-func (mnrh *moduleNMCReconcilerHelper) moduleUpdateWorkerPodsStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error {
+func (mrh *moduleReconcilerHelper) moduleUpdateWorkerPodsStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error {
 	logger := log.FromContext(ctx)
 	// get nmcs with configured
-	nmcs, err := mnrh.getNMCsForModule(ctx, mod)
+	nmcs, err := mrh.getNMCsForModule(ctx, mod)
 	if err != nil {
 		return fmt.Errorf("failed to get configured NMCs for module %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
 
 	numAvailable := 0
 	for _, nmc := range nmcs {
-		modSpec, _ := mnrh.nmcHelper.GetModuleSpecEntry(&nmc, mod.Namespace, mod.Name)
+		modSpec, _ := mrh.nmcHelper.GetModuleSpecEntry(&nmc, mod.Namespace, mod.Name)
 		if modSpec == nil {
 			logger.Info(utils.WarnString(
 				fmt.Sprintf("module %s/%s spec is missing in NMC %s although config label is present", mod.Namespace, mod.Name, nmc.Name)))
 			continue
 		}
-		modStatus := mnrh.nmcHelper.GetModuleStatusEntry(&nmc, mod.Namespace, mod.Name)
+		modStatus := mrh.nmcHelper.GetModuleStatusEntry(&nmc, mod.Namespace, mod.Name)
 		if modStatus != nil && reflect.DeepEqual(modSpec.Config, modStatus.Config) {
 			numAvailable += 1
 		}
@@ -421,7 +421,7 @@ func (mnrh *moduleNMCReconcilerHelper) moduleUpdateWorkerPodsStatus(ctx context.
 	mod.Status.ModuleLoader.DesiredNumber = int32(len(nmcs))
 	mod.Status.ModuleLoader.AvailableNumber = int32(numAvailable)
 
-	return mnrh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
+	return mrh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
 }
 
 type namespaceLabeler interface {
