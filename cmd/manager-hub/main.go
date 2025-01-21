@@ -18,8 +18,6 @@ package main
 
 import (
 	"flag"
-	"time"
-
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,7 +36,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/cache"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -135,14 +132,10 @@ func main() {
 	ctrlLogger.Info("Adding controller")
 
 	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
-
-	cache := cache.New[string](10 * time.Minute)
 	ctx := ctrl.SetupSignalHandler()
-	cache.StartCollecting(ctx, 10*time.Minute)
-
 	mcmr := hub.NewManagedClusterModuleReconciler(
 		client,
-		manifestwork.NewCreator(client, scheme, kernelAPI, registryAPI, cache, operatorNamespace),
+		manifestwork.NewCreator(client, scheme, kernelAPI, registryAPI, operatorNamespace),
 		cluster.NewClusterAPI(client, kernelAPI, buildAPI, signAPI, operatorNamespace),
 		statusupdater.NewManagedClusterModuleStatusUpdater(client),
 		filterAPI,
@@ -177,5 +170,4 @@ func main() {
 		cmd.FatalError(setupLogger, err, "problem running manager")
 	}
 
-	cache.WaitForTermination()
 }

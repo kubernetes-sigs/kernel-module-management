@@ -15,7 +15,6 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/cache"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
@@ -27,7 +26,6 @@ var (
 	clnt         *client.MockClient
 	mockKM       *module.MockKernelMapper
 	mockRegistry *registry.MockRegistry
-	mockCache    *cache.MockCache[string]
 )
 
 var _ = Describe("GarbageCollect", func() {
@@ -36,7 +34,6 @@ var _ = Describe("GarbageCollect", func() {
 		clnt = client.NewMockClient(ctrl)
 		mockKM = module.NewMockKernelMapper(ctrl)
 		mockRegistry = registry.NewMockRegistry(ctrl)
-		mockCache = cache.NewMockCache[string](ctrl)
 	})
 
 	ctx := context.Background()
@@ -95,7 +92,7 @@ var _ = Describe("GarbageCollect", func() {
 			clnt.EXPECT().Delete(ctx, &mwToBeCollected),
 		)
 
-		mwc := NewCreator(clnt, scheme, nil, nil, nil, "")
+		mwc := NewCreator(clnt, scheme, nil, nil, "")
 
 		err := mwc.GarbageCollect(context.Background(), clusterList, mcm)
 		Expect(err).NotTo(HaveOccurred())
@@ -153,7 +150,7 @@ var _ = Describe("GetOwnedManifestWorks", func() {
 			),
 		)
 
-		mwc := NewCreator(clnt, scheme, nil, nil, nil, "")
+		mwc := NewCreator(clnt, scheme, nil, nil, "")
 
 		ownedManifestWorks, err := mwc.GetOwnedManifestWorks(context.Background(), mcm)
 		Expect(err).NotTo(HaveOccurred())
@@ -173,7 +170,6 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 	var (
 		mcm hubv1beta1.ManagedClusterModule
 		mld api.ModuleLoaderData
-		ctx context.Context
 		mw  *workv1.ManifestWork
 	)
 
@@ -182,7 +178,6 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 		clnt = client.NewMockClient(ctrl)
 		mockKM = module.NewMockKernelMapper(ctrl)
 		mockRegistry = registry.NewMockRegistry(ctrl)
-		mockCache = cache.NewMockCache[string](ctrl)
 
 		mcm = hubv1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{Name: mcmName},
@@ -214,12 +209,10 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 		}
 
 		mw = &workv1.ManifestWork{}
-
-		ctx = context.Background()
 	})
 
 	It("should return an error if the ManifestWork is nil", func() {
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
+		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, "")
 
 		Expect(
 			mwc.SetManifestWorkAsDesired(context.Background(), nil, hubv1beta1.ManagedClusterModule{}, nil),
@@ -233,7 +226,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(gomock.Any(), kernelVersion).Return(nil, errors.New("no-mappings-found")),
 		)
 
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
+		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, "")
 
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
 		Expect(err).NotTo(HaveOccurred())
@@ -245,79 +238,6 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 		Expect(manifestModuleSpec.ModuleLoader.Container.KernelMappings).To(BeEmpty())
 	})
 
-	It("should not make a registry call if the container image already includes a digest", func() {
-		mld.ContainerImage = imageName + "@digest"
-
-		expectedKernelMapping := kmmv1beta1.KernelMapping{
-			Literal:        kernelVersion,
-			ContainerImage: mld.ContainerImage,
-		}
-
-		gomock.InOrder(
-			mockKM.EXPECT().GetModuleLoaderDataForKernel(gomock.Any(), kernelVersion).Return(&mld, nil),
-		)
-
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
-
-		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mw.Spec.Workload.Manifests).To(HaveLen(1))
-
-		manifestModuleSpec := (mw.Spec.Workload.Manifests[0].RawExtension.Object).(*kmmv1beta1.Module).Spec
-		Expect(manifestModuleSpec.ModuleLoader.Container.KernelMappings).To(HaveLen(1))
-		Expect(manifestModuleSpec.ModuleLoader.Container.KernelMappings[0]).To(Equal(expectedKernelMapping))
-	})
-
-	It("should not make a registry call if the container image digest is found in the cache", func() {
-		mld.ContainerImage = imageName + ":tag"
-		digest := "a-digest"
-
-		expectedKernelMapping := kmmv1beta1.KernelMapping{
-			Literal:        kernelVersion,
-			ContainerImage: imageName + "@" + digest,
-		}
-
-		gomock.InOrder(
-			mockKM.EXPECT().GetModuleLoaderDataForKernel(gomock.Any(), kernelVersion).Return(&mld, nil),
-			mockCache.EXPECT().Get(mld.ContainerImage).Return(digest, true),
-		)
-
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
-
-		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mw.Spec.Workload.Manifests).To(HaveLen(1))
-
-		manifestModuleSpec := (mw.Spec.Workload.Manifests[0].RawExtension.Object).(*kmmv1beta1.Module).Spec
-		Expect(manifestModuleSpec.ModuleLoader.Container.KernelMappings).To(HaveLen(1))
-		Expect(manifestModuleSpec.ModuleLoader.Container.KernelMappings[0]).To(Equal(expectedKernelMapping))
-	})
-
-	It("should not replace the container image tag if the digest is not found in the cache and the registry call fails", func() {
-		expectedKernelMapping := kmmv1beta1.KernelMapping{
-			Literal:        kernelVersion,
-			ContainerImage: mld.ContainerImage,
-		}
-
-		gomock.InOrder(
-			mockKM.EXPECT().GetModuleLoaderDataForKernel(gomock.Any(), kernelVersion).Return(&mld, nil),
-			mockCache.EXPECT().Get(mld.ContainerImage).Return(nil, false),
-			mockRegistry.EXPECT().GetDigest(ctx, mld.ContainerImage+":latest", gomock.Any(), nil).Return("", errors.New("generic-error")),
-		)
-
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
-
-		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mw.Spec.Workload.Manifests).To(HaveLen(1))
-
-		manifestModuleSpec := (mw.Spec.Workload.Manifests[0].RawExtension.Object).(*kmmv1beta1.Module).Spec
-		Expect(manifestModuleSpec.ModuleLoader.Container.Build).To(BeNil())
-		Expect(manifestModuleSpec.ModuleLoader.Container.Sign).To(BeNil())
-		Expect(manifestModuleSpec.ModuleLoader.Container.KernelMappings).To(HaveLen(1))
-		Expect(manifestModuleSpec.ModuleLoader.Container.KernelMappings[0]).To(Equal(expectedKernelMapping))
-	})
-
 	It("should work as expected", func() {
 		expectedResourceIdentifier := workv1.ResourceIdentifier{
 			Group:     "kmm.sigs.x-k8s.io",
@@ -326,7 +246,6 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			Namespace: spokeNamespace,
 		}
 
-		digest := "a-digest"
 		expectedModuleSpec := kmmv1beta1.ModuleSpec{
 			ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
 				Container: kmmv1beta1.ModuleLoaderContainerSpec{
@@ -335,7 +254,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 					KernelMappings: []kmmv1beta1.KernelMapping{
 						{
 							Literal:        kernelVersion,
-							ContainerImage: imageName + "@" + digest,
+							ContainerImage: imageName,
 						},
 					},
 				},
@@ -345,12 +264,9 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 
 		gomock.InOrder(
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(gomock.Any(), kernelVersion).Return(&mld, nil),
-			mockCache.EXPECT().Get(mld.ContainerImage).Return(nil, false),
-			mockRegistry.EXPECT().GetDigest(ctx, mld.ContainerImage+":latest", gomock.Any(), nil).Return(digest, nil),
-			mockCache.EXPECT().Set(mld.ContainerImage, digest),
 		)
 
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, mockCache, "")
+		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, "")
 
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
 
