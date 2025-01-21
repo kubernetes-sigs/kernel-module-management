@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -38,6 +39,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		mod                 *kmmv1beta1.Module
 		mr                  *ModuleReconciler
 		mn                  *node.MockNode
+		mockMicAPI          *mic.MockModuleImagesConfigAPI
 	)
 
 	BeforeEach(func() {
@@ -45,6 +47,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		mockNamespaceHelper = NewMocknamespaceLabeler(ctrl)
 		mockReconHelper = NewMockmoduleReconcilerHelperAPI(ctrl)
 		mn = node.NewMockNode(ctrl)
+		mockMicAPI = mic.NewMockModuleImagesConfigAPI(ctrl)
 
 		mod = &kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName, Namespace: namespace},
@@ -54,6 +57,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			nsLabeler:   mockNamespaceHelper,
 			reconHelper: mockReconHelper,
 			nodeAPI:     mn,
+			micAPI:      mockMicAPI,
 		}
 	})
 
@@ -64,6 +68,11 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 	}
 	targetedNodes := []v1.Node{node}
+	images := []kmmv1beta1.ModuleImageSpec{
+		{
+			Image: "example.registry.com/org/image:tag",
+		},
+	}
 	currentNMCs := sets.New[string](nodeName)
 	mld := api.ModuleLoaderData{KernelVersion: "some version"}
 	enableSchedulingData := schedulingData{action: actionAdd, mld: &mld, node: &node}
@@ -84,14 +93,16 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 	})
 
 	type errorFlowTestCase struct {
-		setFinalizerAndStatusError bool
-		getNodesError              bool
-		getNMCsMapError            bool
-		prepareSchedulingError     bool
-		shouldBeOnNode             bool
-		disableEnableError         bool
-		moduleUpdateStatusErr      bool
-		setLabelError              bool
+		setFinalizerAndStatusError    bool
+		getNodesError                 bool
+		prepareImagesError            bool
+		getNMCsMapError               bool
+		prepareSchedulingError        bool
+		handleModuleImagesConfigError bool
+		shouldBeOnNode                bool
+		disableEnableError            bool
+		moduleUpdateStatusErr         bool
+		setLabelError                 bool
 	}
 
 	DescribeTable("check error flows", func(c errorFlowTestCase) {
@@ -116,6 +127,20 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(targetedNodes, nil)
+		if c.prepareImagesError {
+			mockReconHelper.EXPECT().prepareImages(ctx, mod, targetedNodes).Return(nil, returnedError)
+			goto executeTestFunction
+		} else {
+			mockReconHelper.EXPECT().prepareImages(ctx, mod, targetedNodes).Return(images, nil)
+		}
+		if c.handleModuleImagesConfigError {
+			mockMicAPI.EXPECT().HandleModuleImagesConfig(ctx, mod.Name, mod.Namespace, images,
+				mod.Spec.ImageRepoSecret, mod).Return(returnedError)
+			goto executeTestFunction
+		} else {
+			mockMicAPI.EXPECT().HandleModuleImagesConfig(ctx, mod.Name, mod.Namespace, images,
+				mod.Spec.ImageRepoSecret, mod).Return(nil)
+		}
 		if c.getNMCsMapError {
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(nil, returnedError)
 			goto executeTestFunction
@@ -155,6 +180,8 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 	},
 		Entry("setFinalizerAndStatus failed", errorFlowTestCase{setFinalizerAndStatusError: true}),
 		Entry("getNodesListBySelector failed", errorFlowTestCase{getNodesError: true}),
+		Entry("prepareImages failed", errorFlowTestCase{prepareImagesError: true}),
+		Entry("handleModuleImagesConfig failed", errorFlowTestCase{handleModuleImagesConfigError: true}),
 		Entry("getNMCsByModuleMap failed", errorFlowTestCase{getNMCsMapError: true}),
 		Entry("prepareSchedulingData failed", errorFlowTestCase{prepareSchedulingError: true}),
 		Entry("enableModuleOnNode failed", errorFlowTestCase{shouldBeOnNode: true, disableEnableError: true}),
@@ -169,6 +196,8 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
 			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
 			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().prepareImages(ctx, mod, targetedNodes).Return(images, nil),
+			mockMicAPI.EXPECT().HandleModuleImagesConfig(ctx, mod.Name, mod.Namespace, images, mod.Spec.ImageRepoSecret, mod).Return(nil),
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(nil),
@@ -187,6 +216,8 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
 			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
 			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().prepareImages(ctx, mod, targetedNodes).Return(images, nil),
+			mockMicAPI.EXPECT().HandleModuleImagesConfig(ctx, mod.Name, mod.Namespace, images, mod.Spec.ImageRepoSecret, mod).Return(nil),
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 			mockReconHelper.EXPECT().disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name).Return(nil),
@@ -374,6 +405,68 @@ var _ = Describe("finalizeModule", func() {
 		err := mrh.finalizeModule(ctx, mod)
 
 		Expect(err).To(HaveOccurred())
+	})
+})
+
+var _ = Describe("prepareImages", func() {
+
+	const (
+		moduleName      = "moduleName"
+		moduleNamespace = "moduleNamespace"
+	)
+
+	var (
+		ctx              context.Context
+		ctrl             *gomock.Controller
+		clnt             *client.MockClient
+		mockKernelMapper *module.MockKernelMapper
+		helper           *nmc.MockHelper
+		mrh              moduleReconcilerHelperAPI
+		mod              *kmmv1beta1.Module
+		targetedNodes    []v1.Node
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mockKernelMapper = module.NewMockKernelMapper(ctrl)
+		helper = nmc.NewMockHelper(ctrl)
+		mrh = newModuleReconcilerHelper(clnt, mockKernelMapper, nil, helper, scheme)
+		mod = &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: moduleNamespace,
+			},
+		}
+		targetedNodes = []v1.Node{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nodeName,
+				},
+			},
+		}
+	})
+
+	It("should return errors if we failed to get moduleLoaderData for kernel", func() {
+
+		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(nil, errors.New("some error"))
+
+		_, err := mrh.prepareImages(ctx, mod, targetedNodes)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to get moduleLoaderData for kernel"))
+	})
+
+	It("should work as expected", func() {
+
+		img := "example.registry.com/org/image:tag"
+		mld := &api.ModuleLoaderData{ContainerImage: img}
+		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(mld, nil)
+
+		images, err := mrh.prepareImages(ctx, mod, targetedNodes)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(images)).To(Equal(1))
+		Expect(images[0].Image).To(Equal(img))
 	})
 })
 
@@ -596,6 +689,9 @@ var _ = Describe("prepareSchedulingData", func() {
 		Expect(errs).To(BeEmpty())
 		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{action: actionDelete}))
 	})
+})
+
+var _ = Describe("prepareImages", func() {
 })
 
 var _ = Describe("enableModuleOnNode", func() {
