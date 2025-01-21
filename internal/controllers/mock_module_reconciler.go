@@ -113,6 +113,21 @@ func (mr *MockmoduleReconcilerHelperAPIMockRecorder) moduleUpdateWorkerPodsStatu
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "moduleUpdateWorkerPodsStatus", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).moduleUpdateWorkerPodsStatus), ctx, mod, targetedNodes)
 }
 
+// prepareImages mocks base method.
+func (m *MockmoduleReconcilerHelperAPI) prepareImages(ctx context.Context, mod *v1beta1.Module, targetedNodes []v1.Node) ([]v1beta1.ModuleImageSpec, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "prepareImages", ctx, mod, targetedNodes)
+	ret0, _ := ret[0].([]v1beta1.ModuleImageSpec)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// prepareImages indicates an expected call of prepareImages.
+func (mr *MockmoduleReconcilerHelperAPIMockRecorder) prepareImages(ctx, mod, targetedNodes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareImages", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).prepareImages), ctx, mod, targetedNodes)
+}
+
 // prepareSchedulingData mocks base method.
 func (m *MockmoduleReconcilerHelperAPI) prepareSchedulingData(ctx context.Context, mod *v1beta1.Module, targetedNodes []v1.Node, currentNMCs sets.Set[string]) (map[string]schedulingData, []error) {
 	m.ctrl.T.Helper()

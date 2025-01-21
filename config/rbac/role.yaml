@@ -68,6 +68,18 @@ rules:
 - apiGroups:
   - kmm.sigs.x-k8s.io
   resources:
+  - moduleimagesconfigs
+  - nodemodulesconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - kmm.sigs.x-k8s.io
+  resources:
   - modules
   verbs:
   - get
@@ -84,17 +96,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - kmm.sigs.x-k8s.io
-  resources:
-  - nodemodulesconfigs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - watch
 - apiGroups:
   - kmm.sigs.x-k8s.io
   resources:
