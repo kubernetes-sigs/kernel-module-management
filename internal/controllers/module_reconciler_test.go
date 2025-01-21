@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -38,6 +39,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		mod                 *kmmv1beta1.Module
 		mr                  *ModuleReconciler
 		mn                  *node.MockNode
+		mockMicAPI          *mic.MockMIC
 	)
 
 	BeforeEach(func() {
@@ -45,6 +47,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		mockNamespaceHelper = NewMocknamespaceLabeler(ctrl)
 		mockReconHelper = NewMockmoduleReconcilerHelperAPI(ctrl)
 		mn = node.NewMockNode(ctrl)
+		mockMicAPI = mic.NewMockMIC(ctrl)
 
 		mod = &kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName, Namespace: namespace},
@@ -54,6 +57,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			nsLabeler:   mockNamespaceHelper,
 			reconHelper: mockReconHelper,
 			nodeAPI:     mn,
+			micAPI:      mockMicAPI,
 		}
 	})
 
@@ -86,6 +90,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 	type errorFlowTestCase struct {
 		setFinalizerAndStatusError bool
 		getNodesError              bool
+		handleMICError             bool
 		getNMCsMapError            bool
 		prepareSchedulingError     bool
 		shouldBeOnNode             bool
@@ -116,6 +121,12 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(targetedNodes, nil)
+		if c.handleMICError {
+			mockReconHelper.EXPECT().handleMIC(ctx, mod, targetedNodes).Return(returnedError)
+			goto executeTestFunction
+		} else {
+			mockReconHelper.EXPECT().handleMIC(ctx, mod, targetedNodes).Return(nil)
+		}
 		if c.getNMCsMapError {
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(nil, returnedError)
 			goto executeTestFunction
@@ -155,6 +166,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 	},
 		Entry("setFinalizerAndStatus failed", errorFlowTestCase{setFinalizerAndStatusError: true}),
 		Entry("getNodesListBySelector failed", errorFlowTestCase{getNodesError: true}),
+		Entry("handleMIC failed", errorFlowTestCase{handleMICError: true}),
 		Entry("getNMCsByModuleMap failed", errorFlowTestCase{getNMCsMapError: true}),
 		Entry("prepareSchedulingData failed", errorFlowTestCase{prepareSchedulingError: true}),
 		Entry("enableModuleOnNode failed", errorFlowTestCase{shouldBeOnNode: true, disableEnableError: true}),
@@ -169,6 +181,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
 			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
 			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().handleMIC(ctx, mod, targetedNodes).Return(nil),
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 			mockReconHelper.EXPECT().enableModuleOnNode(ctx, &mld, &node).Return(nil),
@@ -187,6 +200,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
 			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
 			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().handleMIC(ctx, mod, targetedNodes).Return(nil),
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
 			mockReconHelper.EXPECT().disableModuleOnNode(ctx, mod.Namespace, mod.Name, node.Name).Return(nil),
@@ -214,7 +228,7 @@ var _ = Describe("setFinalizerAndStatus", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		statusWriter = client.NewMockStatusWriter(ctrl)
-		mrh = newModuleReconcilerHelper(clnt, nil, nil, nil, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, nil, nil, nil, scheme)
 		mod = kmmv1beta1.Module{}
 		expectedMod = mod.DeepCopy()
 	})
@@ -277,7 +291,7 @@ var _ = Describe("finalizeModule", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
-		mrh = newModuleReconcilerHelper(clnt, nil, nil, helper, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, nil, nil, helper, scheme)
 		mod = &kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName, Namespace: moduleNamespace},
 		}
@@ -377,6 +391,88 @@ var _ = Describe("finalizeModule", func() {
 	})
 })
 
+var _ = Describe("handleMIC", func() {
+
+	const (
+		moduleName      = "moduleName"
+		moduleNamespace = "moduleNamespace"
+	)
+
+	var (
+		ctx              context.Context
+		ctrl             *gomock.Controller
+		clnt             *client.MockClient
+		mockKernelMapper *module.MockKernelMapper
+		mockMICAPI       *mic.MockMIC
+		helper           *nmc.MockHelper
+		mrh              moduleReconcilerHelperAPI
+		mod              *kmmv1beta1.Module
+		targetedNodes    []v1.Node
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mockKernelMapper = module.NewMockKernelMapper(ctrl)
+		mockMICAPI = mic.NewMockMIC(ctrl)
+		helper = nmc.NewMockHelper(ctrl)
+		mrh = newModuleReconcilerHelper(clnt, mockKernelMapper, nil, mockMICAPI, helper, scheme)
+		mod = &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: moduleNamespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				ImageRepoSecret: &v1.LocalObjectReference{
+					Name: "my-secret",
+				},
+			},
+		}
+		targetedNodes = []v1.Node{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nodeName,
+				},
+			},
+		}
+	})
+
+	It("should return an error if we failed to get moduleLoaderData for kernel", func() {
+
+		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(nil, errors.New("some error"))
+		mockMICAPI.EXPECT().ApplyMIC(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
+
+		err := mrh.handleMIC(ctx, mod, targetedNodes)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to get moduleLoaderData for kernel"))
+	})
+
+	It("should return an error if we failed to apply the MIC", func() {
+
+		img := "example.registry.com/org/image:tag"
+		mld := &api.ModuleLoaderData{ContainerImage: img}
+		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(mld, nil)
+		mockMICAPI.EXPECT().ApplyMIC(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret,
+			mod).Return(errors.New("some error"))
+
+		err := mrh.handleMIC(ctx, mod, targetedNodes)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to apply"))
+	})
+
+	It("should work as expected", func() {
+
+		img := "example.registry.com/org/image:tag"
+		mld := &api.ModuleLoaderData{ContainerImage: img}
+		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(mld, nil)
+		mockMICAPI.EXPECT().ApplyMIC(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
+
+		err := mrh.handleMIC(ctx, mod, targetedNodes)
+		Expect(err).NotTo(HaveOccurred())
+	})
+})
+
 var _ = Describe("getNMCsByModuleSet", func() {
 	var (
 		ctrl *gomock.Controller
@@ -387,7 +483,7 @@ var _ = Describe("getNMCsByModuleSet", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mrh = newModuleReconcilerHelper(clnt, nil, nil, nil, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, nil, nil, nil, scheme)
 	})
 
 	ctx := context.Background()
@@ -450,7 +546,7 @@ var _ = Describe("prepareSchedulingData", func() {
 		clnt = client.NewMockClient(ctrl)
 		mockKernel = module.NewMockKernelMapper(ctrl)
 		mockHelper = nmc.NewMockHelper(ctrl)
-		mrh = newModuleReconcilerHelper(clnt, mockKernel, nil, mockHelper, scheme)
+		mrh = newModuleReconcilerHelper(clnt, mockKernel, nil, nil, mockHelper, scheme)
 		node = v1.Node{
 			ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 			Status: v1.NodeStatus{
@@ -622,7 +718,7 @@ var _ = Describe("enableModuleOnNode", func() {
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
 		rgst = registry.NewMockRegistry(ctrl)
-		mrh = newModuleReconcilerHelper(clnt, nil, rgst, helper, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, rgst, nil, helper, scheme)
 		node = v1.Node{
 			ObjectMeta: metav1.ObjectMeta{Name: "nodeName"},
 		}
@@ -730,7 +826,7 @@ var _ = Describe("disableModuleOnNode", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
-		mrh = newModuleReconcilerHelper(clnt, nil, nil, helper, scheme)
+		mrh = newModuleReconcilerHelper(clnt, nil, nil, nil, helper, scheme)
 		nodeName = "node name"
 		moduleName = "moduleName"
 		moduleNamespace = "moduleNamespace"

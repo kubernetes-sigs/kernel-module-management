@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -122,6 +123,7 @@ func main() {
 	buildHelperAPI := build.NewHelper()
 	nodeAPI := node.NewNode(client)
 	kernelAPI := module.NewKernelMapper(buildHelperAPI, sign.NewSignerHelper())
+	micAPI := mic.NewModuleImagesConfigAPI(client, scheme)
 
 	dpc := controllers.NewDevicePluginReconciler(
 		client,
@@ -140,6 +142,7 @@ func main() {
 		nmcHelper,
 		filterAPI,
 		nodeAPI,
+		micAPI,
 		scheme,
 	)
 	if err = mnc.SetupWithManager(mgr); err != nil {
