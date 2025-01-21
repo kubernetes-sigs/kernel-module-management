@@ -7,7 +7,6 @@ import (
 	reflect "reflect"
 	"strings"
 
-	"github.com/google/go-containerregistry/pkg/name"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,7 +20,6 @@ import (
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/cache"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
@@ -67,7 +65,6 @@ type manifestWorkGenerator struct {
 	scheme            *runtime.Scheme
 	kernelAPI         module.KernelMapper
 	registryAPI       registry.Registry
-	cache             cache.Cache[string]
 	operatorNamespace string
 }
 
@@ -76,14 +73,12 @@ func NewCreator(
 	scheme *runtime.Scheme,
 	kernelAPI module.KernelMapper,
 	registryAPI registry.Registry,
-	cache cache.Cache[string],
 	operatorNamespace string) ManifestWorkCreator {
 	return &manifestWorkGenerator{
 		client:            client,
 		scheme:            scheme,
 		kernelAPI:         kernelAPI,
 		registryAPI:       registryAPI,
-		cache:             cache,
 		operatorNamespace: operatorNamespace,
 	}
 }
@@ -233,36 +228,10 @@ func (mwg *manifestWorkGenerator) managedClusterKernelMappings(
 		)
 
 		mapping := mwg.mappingFromModuleLoaderData(mld)
-
-		digest, err := mwg.imageDigestForModuleLoaderData(ctx, mld)
-		if err != nil {
-			kernelVersionLogger.Error(err, "skipping image tag replacement")
-		}
-		if digest != "" {
-			mapping.ContainerImage, err = mwg.replaceTagWithDigest(mapping.ContainerImage, digest)
-
-			if err != nil {
-				kernelVersionLogger.Error(err, "skipping image tag replacement")
-			} else {
-				kernelVersionLogger.V(1).Info("replaced container image tag with digest",
-					"image", mld.ContainerImage,
-					"imageWithDigest", mapping.ContainerImage,
-				)
-			}
-		}
-
 		mappings = append(mappings, mapping)
 	}
 
 	return mappings
-}
-
-func (mwg *manifestWorkGenerator) replaceTagWithDigest(image, digest string) (string, error) {
-	ref, err := name.ParseReference(image, name.WithDefaultRegistry(""))
-	if err != nil {
-		return "", fmt.Errorf("could not parse the container image name: %v", err)
-	}
-	return ref.Context().Name() + "@" + digest, nil
 }
 
 func (mwg *manifestWorkGenerator) mappingFromModuleLoaderData(mld *api.ModuleLoaderData) kmmv1beta1.KernelMapping {
@@ -271,30 +240,4 @@ func (mwg *manifestWorkGenerator) mappingFromModuleLoaderData(mld *api.ModuleLoa
 		Literal:               mld.KernelVersion,
 		InTreeModulesToRemove: mld.InTreeModulesToRemove,
 	}
-}
-
-func (mwg *manifestWorkGenerator) imageDigestForModuleLoaderData(ctx context.Context, mld *api.ModuleLoaderData) (string, error) {
-	ref, err := name.ParseReference(mld.ContainerImage, name.WithDefaultRegistry(""))
-	if err != nil {
-		return "", fmt.Errorf("could not parse the container image name: %v", err)
-	}
-
-	// the identifier is either a tag or a digest, only digests contain a ':'
-	if identifier := ref.Identifier(); identifier != "" && strings.Contains(identifier, ":") {
-		return "", errors.New("image already contains a digest")
-	}
-
-	value, found := mwg.cache.Get(mld.ContainerImage)
-	if found && value.(string) != "" {
-		return value.(string), nil
-	}
-
-	digest, err := module.ImageDigest(ctx, mwg.client, mwg.registryAPI, mld, mwg.operatorNamespace, ref.Name())
-	if err != nil {
-		return "", fmt.Errorf("could not get image digest: %v", err)
-	}
-
-	mwg.cache.Set(mld.ContainerImage, digest)
-
-	return digest, nil
 }
