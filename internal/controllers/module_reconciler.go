@@ -12,6 +12,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
@@ -34,6 +35,7 @@ import (
 //+kubebuilder:rbac:groups="core",resources=namespaces,verbs=get;list;patch;watch
 //+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;watch
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=nodemodulesconfigs,verbs=get;list;watch;patch;create;delete
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=moduleimagesconfigs,verbs=get;list;watch;patch;create;delete
 
 const (
 	ModuleReconcilerName = "ModuleReconciler"
@@ -52,6 +54,7 @@ type ModuleReconciler struct {
 	nsLabeler   namespaceLabeler
 	reconHelper moduleReconcilerHelperAPI
 	nodeAPI     node.Node
+	micAPI      mic.MIC
 }
 
 func NewModuleReconciler(client client.Client,
@@ -60,8 +63,9 @@ func NewModuleReconciler(client client.Client,
 	nmcHelper nmc.Helper,
 	filter *filter.Filter,
 	nodeAPI node.Node,
+	micAPI mic.MIC,
 	scheme *runtime.Scheme) *ModuleReconciler {
-	reconHelper := newModuleReconcilerHelper(client, kernelAPI, registryAPI, nmcHelper, scheme)
+	reconHelper := newModuleReconcilerHelper(client, kernelAPI, registryAPI, micAPI, nmcHelper, scheme)
 	return &ModuleReconciler{
 		filter:      filter,
 		nsLabeler:   newNamespaceLabeler(client),
@@ -103,6 +107,10 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 		return ctrl.Result{}, fmt.Errorf("failed to get list of nodes by selector: %v", err)
 	}
 
+	if err := mr.reconHelper.handleMIC(ctx, mod, targetedNodes); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to handle MIC: %v", err)
+	}
+
 	currentNMCs, err := mr.reconHelper.getNMCsByModuleSet(ctx, mod)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get NMCs for Module %s/%s: %v", mod.Namespace, mod.Name, err)
@@ -137,6 +145,7 @@ func (mr *ModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		NewControllerManagedBy(mgr).
 		For(&kmmv1beta1.Module{}).
 		Owns(&v1.Pod{}, builder.WithPredicates(filter.ModuleReconcilePodPredicate())).
+		Owns(&kmmv1beta1.ModuleImagesConfig{}, builder.WithPredicates(filter.ModuleReconcileMICPredicate())).
 		Watches(
 			&v1.Node{},
 			handler.EnqueueRequestsFromMapFunc(mr.filter.FindModulesForNMCNodeChange),
@@ -157,6 +166,7 @@ func (mr *ModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //go:generate mockgen -source=module_reconciler.go -package=controllers -destination=mock_module_reconciler.go moduleReconcilerHelperAPI,namespaceLabeler
 
 type moduleReconcilerHelperAPI interface {
+	handleMIC(ctx context.Context, mod *kmmv1beta1.Module, nodes []v1.Node) error
 	setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error)
@@ -170,6 +180,7 @@ type moduleReconcilerHelper struct {
 	client      client.Client
 	kernelAPI   module.KernelMapper
 	registryAPI registry.Registry
+	micAPI      mic.MIC
 	nmcHelper   nmc.Helper
 	scheme      *runtime.Scheme
 }
@@ -178,12 +189,14 @@ func newModuleReconcilerHelper(
 	client client.Client,
 	kernelAPI module.KernelMapper,
 	registryAPI registry.Registry,
+	micAPI mic.MIC,
 	nmcHelper nmc.Helper,
 	scheme *runtime.Scheme) moduleReconcilerHelperAPI {
 	return &moduleReconcilerHelper{
 		client:      client,
 		kernelAPI:   kernelAPI,
 		registryAPI: registryAPI,
+		micAPI:      micAPI,
 		nmcHelper:   nmcHelper,
 		scheme:      scheme,
 	}
@@ -313,6 +326,41 @@ func (mrh *moduleReconcilerHelper) prepareSchedulingData(ctx context.Context,
 		result[nmcName] = schedulingData{action: actionDelete}
 	}
 	return result, errs
+}
+
+func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error {
+
+	var (
+		logger = log.FromContext(ctx)
+		images []kmmv1beta1.ModuleImageSpec
+		errs   []error
+	)
+
+	for _, node := range targetedNodes {
+		kernelVersion := strings.TrimSuffix(node.Status.NodeInfo.KernelVersion, "+")
+		mld, err := mrh.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
+		if err != nil {
+			if !errors.Is(err, module.ErrNoMatchingKernelMapping) {
+				logger.Info(utils.WarnString(fmt.Sprintf("internal errors while fetching kernel mapping for kernel %s: %v",
+					kernelVersion, err)))
+				errs = append(errs, fmt.Errorf("failed to get moduleLoaderData for kernel %s: %v", kernelVersion, err))
+			}
+			// node is not targeted by module
+			continue
+		}
+		mis := kmmv1beta1.ModuleImageSpec{
+			Image: mld.ContainerImage,
+			Build: mld.Build,
+			Sign:  mld.Sign,
+		}
+		images = append(images, mis)
+	}
+
+	if err := mrh.micAPI.ApplyMIC(ctx, mod.Name, mod.Namespace, images, mod.Spec.ImageRepoSecret, mod); err != nil {
+		errs = append(errs, fmt.Errorf("failed to apply %s/%s MIC: %v", mod.Namespace, mod.Name, err))
+	}
+
+	return errors.Join(errs...)
 }
 
 func (mrh *moduleReconcilerHelper) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error {

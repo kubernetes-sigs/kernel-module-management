@@ -99,6 +99,20 @@ func (mr *MockmoduleReconcilerHelperAPIMockRecorder) getNMCsByModuleSet(ctx, mod
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNMCsByModuleSet", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).getNMCsByModuleSet), ctx, mod)
 }
 
+// handleMIC mocks base method.
+func (m *MockmoduleReconcilerHelperAPI) handleMIC(ctx context.Context, mod *v1beta1.Module, nodes []v1.Node) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "handleMIC", ctx, mod, nodes)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// handleMIC indicates an expected call of handleMIC.
+func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleMIC(ctx, mod, nodes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleMIC", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleMIC), ctx, mod, nodes)
+}
+
 // moduleUpdateWorkerPodsStatus mocks base method.
 func (m *MockmoduleReconcilerHelperAPI) moduleUpdateWorkerPodsStatus(ctx context.Context, mod *v1beta1.Module, targetedNodes []v1.Node) error {
 	m.ctrl.T.Helper()
