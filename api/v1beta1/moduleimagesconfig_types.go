@@ -41,7 +41,7 @@ type ModuleImageSpec struct {
 	// image
 	Image string `json:"image"`
 	// generation counter of the image config
-	Generation int `json:"generation"`
+	Generation string `json:"generation"`
 
 	// Build contains build instructions, in case image needs building
 	// +optional
@@ -70,7 +70,7 @@ type ModuleImageState struct {
 	// one of: Exists, notExists
 	Status ImageState `json:"status"`
 	// observedGeneration counter is updated on each status update
-	ObservedGeneration int `json:"observedGeneration"`
+	ObservedGeneration string `json:"observedGeneration"`
 }
 
 // ModuleImagesConfigStatus describes the status of the images that need to be verified (defined in the spec)
