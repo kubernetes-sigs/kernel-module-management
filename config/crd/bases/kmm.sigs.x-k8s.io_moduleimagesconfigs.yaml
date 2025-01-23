@@ -155,7 +155,7 @@ spec:
                       type: object
                     generation:
                       description: generation counter of the image config
-                      type: integer
+                      type: string
                     image:
                       description: image
                       type: string
@@ -243,7 +243,7 @@ spec:
                     observedGeneration:
                       description: observedGeneration counter is updated on each status
                         update
-                      type: integer
+                      type: string
                     status:
                       description: |-
                         status of the image
