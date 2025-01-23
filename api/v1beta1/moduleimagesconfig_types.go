@@ -40,8 +40,6 @@ const (
 type ModuleImageSpec struct {
 	// image
 	Image string `json:"image"`
-	// generation counter of the image config
-	Generation string `json:"generation"`
 
 	// Build contains build instructions, in case image needs building
 	// +optional
@@ -56,6 +54,9 @@ type ModuleImageSpec struct {
 // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 // +kubebuilder:validation:Required
 type ModuleImagesConfigSpec struct {
+	// updating counter triggers a new reconcilation
+	Generation int64 `json:"regeneration"`
+
 	Images []ModuleImageSpec `json:"images"`
 
 	// ImageRepoSecret contains pull secret for the image's repo, if needed
@@ -69,8 +70,6 @@ type ModuleImageState struct {
 	// status of the image
 	// one of: Exists, notExists
 	Status ImageState `json:"status"`
-	// observedGeneration counter is updated on each status update
-	ObservedGeneration string `json:"observedGeneration"`
 }
 
 // ModuleImagesConfigStatus describes the status of the images that need to be verified (defined in the spec)
