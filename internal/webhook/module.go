@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"regexp"
 	"strings"
 
@@ -107,6 +108,10 @@ func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
 
 	if err := validateModuleLoaderContainerSpec(mod.Spec.ModuleLoader.Container); err != nil {
 		return nil, fmt.Errorf("failed to validate kernel mappings: %v", err)
+	}
+
+	if err := validateModuleTolerarations(mod); err != nil {
+		return nil, fmt.Errorf("failed to validate Module's tolerations: %v", err)
 	}
 
 	return nil, validateModprobe(mod.Spec.ModuleLoader.Container.Modprobe)
@@ -205,5 +210,16 @@ func validateModprobe(modprobe kmmv1beta1.ModprobeSpec) error {
 		}
 	}
 
+	return nil
+}
+func validateModuleTolerarations(mod *kmmv1beta1.Module) error {
+	for _, toleration := range mod.Spec.Tolerations {
+		switch toleration.Effect {
+		case corev1.TaintEffectNoSchedule, corev1.TaintEffectNoExecute, corev1.TaintEffectPreferNoSchedule:
+			continue
+		default:
+			return fmt.Errorf("invalid toleration effect %s. allowed values are NoSchedule, NoExecute, PreferNoSchedule", toleration.Effect)
+		}
+	}
 	return nil
 }
