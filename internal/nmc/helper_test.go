@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
+	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -105,6 +106,11 @@ var _ = Describe("SetModuleConfig", func() {
 
 	It("changing existing module config", func() {
 		const saName = "test-sa"
+		testToleration := v1.Toleration{
+			Key:    "some key",
+			Value:  "some value",
+			Effect: v1.TaintEffectNoExecute,
+		}
 
 		nmc.Spec.Modules = []kmmv1beta1.NodeModuleSpec{
 			{
@@ -127,6 +133,7 @@ var _ = Describe("SetModuleConfig", func() {
 			Name:               name,
 			Namespace:          namespace,
 			ServiceAccountName: saName,
+			Tolerations:        []v1.Toleration{testToleration},
 		}
 
 		err := nmcHelper.SetModuleConfig(&nmc, &mld, &moduleConfig)
@@ -135,6 +142,7 @@ var _ = Describe("SetModuleConfig", func() {
 		Expect(len(nmc.Spec.Modules)).To(Equal(2))
 		Expect(nmc.Spec.Modules[1].Config.InTreeModulesToRemove).To(Equal([]string{"in-tree-module1", "in-tree-module2"}))
 		Expect(nmc.Spec.Modules[1].ServiceAccountName).To(Equal(saName))
+		Expect(nmc.Spec.Modules[1].Tolerations).To(Equal([]v1.Toleration{testToleration}))
 	})
 })
 
