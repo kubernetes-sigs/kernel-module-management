@@ -18,6 +18,7 @@ package webhook
 
 import (
 	"context"
+	v1 "k8s.io/api/core/v1"
 	"strings"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -550,4 +551,33 @@ var _ = Describe("ValidateDelete", func() {
 		_, err := moduleWebhook.ValidateDelete(context.TODO(), &kmmv1beta1.Module{})
 		Expect(err).To(MatchError(NotImplemented))
 	})
+})
+
+var _ = Describe("validateModuleTolerarations", func() {
+	It("should fail when Module has an invalid toleration effect", func() {
+		mod := validModule
+		mod.Spec.Tolerations = []v1.Toleration{
+			{
+				Key: "Test-Key1", Operator: "Test-Equal1", Value: "Test-Value1", Effect: v1.TaintEffectPreferNoSchedule,
+			},
+			{
+				Key: "Test-Key2", Operator: "Test-Equal2", Value: "Test-Value2", Effect: "Test-Effect",
+			},
+		}
+
+		err := validateModuleTolerarations(&mod)
+		Expect(err).To(HaveOccurred())
+	})
+	It("should work when all tolerations have valid effects ", func() {
+		mod := validModule
+		mod.Spec.Tolerations = []v1.Toleration{
+			{
+				Key: "Test-Key", Operator: "Test-Equal", Value: "Test-Value", Effect: v1.TaintEffectPreferNoSchedule,
+			},
+		}
+
+		err := validateModuleTolerarations(&mod)
+		Expect(err).ToNot(HaveOccurred())
+	})
+
 })
