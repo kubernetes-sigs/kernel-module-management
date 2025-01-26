@@ -69,6 +69,7 @@ func (h *helper) SetModuleConfig(
 	foundEntry.Config = *moduleConfig
 	foundEntry.ImageRepoSecret = mld.ImageRepoSecret
 	foundEntry.ServiceAccountName = saName
+	foundEntry.Tolerations = mld.Tolerations
 
 	return nil
 }
