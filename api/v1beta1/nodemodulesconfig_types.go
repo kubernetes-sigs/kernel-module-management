@@ -34,8 +34,6 @@ type ModuleConfig struct {
 	//+optional
 	InTreeModuleToRemove string       `json:"inTreeModuleToRemove,omitempty"`
 	Modprobe             ModprobeSpec `json:"modprobe"`
-	//+optional
-	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
 
 type ModuleItem struct {
@@ -43,6 +41,9 @@ type ModuleItem struct {
 	Name               string                   `json:"name"`
 	Namespace          string                   `json:"namespace"`
 	ServiceAccountName string                   `json:"serviceAccountName"`
+	//+optional
+	// tolerations define which tolerations should be added for every load/unload pod running on the node
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
 
 type NodeModuleSpec struct {
