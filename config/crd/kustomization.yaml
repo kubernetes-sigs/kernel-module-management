@@ -7,6 +7,8 @@ kind: Kustomization
 resources:
 - bases/kmm.sigs.x-k8s.io_modules.yaml
 - bases/kmm.sigs.x-k8s.io_nodemodulesconfigs.yaml
+- bases/kmm.sigs.x-k8s.io_moduleimagesconfigs.yaml
+- bases/kmm.sigs.x-k8s.io_modulebuildsignconfigs.yaml
 - bases/kmm.sigs.x-k8s.io_preflightvalidations.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
