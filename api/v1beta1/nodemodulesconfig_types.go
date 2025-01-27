@@ -85,7 +85,6 @@ type NodeModulesConfigStatus struct {
 // +kubebuilder:subresource:status
 
 // NodeModulesConfig keeps spec and state of the KMM modules on a node.
-// +kubebuilder:resource:path=nodemodulesconfigs,scope=Cluster
 // +kubebuilder:resource:path=nodemodulesconfigs,scope=Cluster,shortName=nmc
 // +operator-sdk:csv:customresourcedefinitions:displayName="Node Modules Config"
 type NodeModulesConfig struct {

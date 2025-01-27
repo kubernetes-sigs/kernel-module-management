@@ -24,7 +24,7 @@ import (
 // +kubebuilder:subresource:status
 
 // ModuleBuildSignConfig keeps the request for images' build/sign for a KMM Module.
-// +kubebuilder:resource:path=modulebuildsignconfig,scope=Namespaced,shortName=mbsc
+// +kubebuilder:resource:path=modulebuildsignconfigs,scope=Namespaced,shortName=mbsc
 // +operator-sdk:csv:customresourcedefinitions:displayName="Module Build Sign Config"
 type ModuleBuildSignConfig struct {
 	metav1.TypeMeta   `json:",inline"`

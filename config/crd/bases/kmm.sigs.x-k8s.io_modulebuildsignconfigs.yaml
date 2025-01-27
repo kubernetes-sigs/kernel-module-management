@@ -4,13 +4,13 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.1
-  name: modulebuildsignconfig.kmm.sigs.x-k8s.io
+  name: modulebuildsignconfigs.kmm.sigs.x-k8s.io
 spec:
   group: kmm.sigs.x-k8s.io
   names:
     kind: ModuleBuildSignConfig
     listKind: ModuleBuildSignConfigList
-    plural: modulebuildsignconfig
+    plural: modulebuildsignconfigs
     shortNames:
     - mbsc
     singular: modulebuildsignconfig
