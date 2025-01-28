@@ -6,6 +6,7 @@ toolchain go1.23.4
 
 require (
 	github.com/a8m/envsubst v1.4.2
+	github.com/apex/log v1.9.0
 	github.com/budougumi0617/cmpmock v0.1.1
 	github.com/go-logr/logr v1.4.2
 	github.com/google/go-cmp v0.6.0
