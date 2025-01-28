@@ -387,6 +387,7 @@ func (dsci *daemonSetCreatorImpl) setDevicePluginAsDesired(
 				NodeSelector:       nodeSelector,
 				ServiceAccountName: mod.Spec.DevicePlugin.ServiceAccountName,
 				Volumes:            append([]v1.Volume{devicePluginVolume}, mod.Spec.DevicePlugin.Volumes...),
+				Tolerations:        mod.Spec.Tolerations,
 			},
 		},
 	}

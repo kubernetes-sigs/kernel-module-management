@@ -628,6 +628,12 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 		args := []string{"some", "args"}
 		command := []string{"some", "command"}
 
+		testToleration := v1.Toleration{
+			Key:    "test-key",
+			Value:  "test-value",
+			Effect: v1.TaintEffectNoExecute,
+		}
+
 		const ipp = v1.PullIfNotPresent
 
 		mod := kmmv1beta1.Module{
@@ -655,6 +661,7 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 				},
 				ImageRepoSecret: &repoSecret,
 				Selector:        map[string]string{"has-feature-x": "true"},
+				Tolerations:     []v1.Toleration{testToleration},
 			},
 		}
 		ds := appsv1.DaemonSet{
@@ -733,6 +740,7 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 							},
 							dpVol,
 						},
+						Tolerations: []v1.Toleration{testToleration},
 					},
 				},
 			},
