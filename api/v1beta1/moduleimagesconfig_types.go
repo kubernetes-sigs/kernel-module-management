@@ -26,7 +26,7 @@ type ImageState string
 const (
 	// ImageExists means that image exists in the specified repo
 	ImageExists ImageState = "Exists"
-	// ImageNotExists means that image does not exist in the specified repo
+	// ImageDoesNotExist means that image does not exist in the specified repo
 	ImageDoesNotExist ImageState = "DoesNotExist"
 	// ImageNeedsBuilding means that image does not exists, but has Build/Sign sections and can be built
 	ImageNeedsBuilding ImageState = "NeedsBuilding"
@@ -54,9 +54,6 @@ type ModuleImageSpec struct {
 // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 // +kubebuilder:validation:Required
 type ModuleImagesConfigSpec struct {
-	// updating counter triggers a new reconcilation
-	Generation int64 `json:"regeneration"`
-
 	Images []ModuleImageSpec `json:"images"`
 
 	// ImageRepoSecret contains pull secret for the image's repo, if needed

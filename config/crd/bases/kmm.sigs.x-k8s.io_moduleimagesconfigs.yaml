@@ -222,13 +222,8 @@ spec:
                   - image
                   type: object
                 type: array
-              regeneration:
-                description: updating counter triggers a new reconcilation
-                format: int64
-                type: integer
             required:
             - images
-            - regeneration
             type: object
           status:
             description: |-
