@@ -9,6 +9,7 @@
 package mbsc
 
 import (
+	context "context"
 	reflect "reflect"
 
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -36,6 +37,21 @@ func NewMockMBSC(ctrl *gomock.Controller) *MockMBSC {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockMBSC) EXPECT() *MockMBSCMockRecorder {
 	return m.recorder
+}
+
+// GetMBSC mocks base method.
+func (m *MockMBSC) GetMBSC(ctx context.Context, name, namespace string) (*v1beta1.ModuleBuildSignConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMBSC", ctx, name, namespace)
+	ret0, _ := ret[0].(*v1beta1.ModuleBuildSignConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMBSC indicates an expected call of GetMBSC.
+func (mr *MockMBSCMockRecorder) GetMBSC(ctx, name, namespace any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMBSC", reflect.TypeOf((*MockMBSC)(nil).GetMBSC), ctx, name, namespace)
 }
 
 // SetModuleImageSpec mocks base method.
