@@ -54,3 +54,43 @@ func (mr *MockMICMockRecorder) ApplyMIC(ctx, name, ns, images, imageRepoSecret, 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyMIC", reflect.TypeOf((*MockMIC)(nil).ApplyMIC), ctx, name, ns, images, imageRepoSecret, owner)
 }
+
+// GetImageState mocks base method.
+func (m *MockMIC) GetImageState(micObj *v1beta1.ModuleImagesConfig, image string) v1beta1.ImageState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetImageState", micObj, image)
+	ret0, _ := ret[0].(v1beta1.ImageState)
+	return ret0
+}
+
+// GetImageState indicates an expected call of GetImageState.
+func (mr *MockMICMockRecorder) GetImageState(micObj, image any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetImageState", reflect.TypeOf((*MockMIC)(nil).GetImageState), micObj, image)
+}
+
+// GetModuleImageSpec mocks base method.
+func (m *MockMIC) GetModuleImageSpec(micObj *v1beta1.ModuleImagesConfig, image string) *v1beta1.ModuleImageSpec {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetModuleImageSpec", micObj, image)
+	ret0, _ := ret[0].(*v1beta1.ModuleImageSpec)
+	return ret0
+}
+
+// GetModuleImageSpec indicates an expected call of GetModuleImageSpec.
+func (mr *MockMICMockRecorder) GetModuleImageSpec(micObj, image any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleImageSpec", reflect.TypeOf((*MockMIC)(nil).GetModuleImageSpec), micObj, image)
+}
+
+// SetImageStatus mocks base method.
+func (m *MockMIC) SetImageStatus(micObj *v1beta1.ModuleImagesConfig, image string, status v1beta1.ImageState) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetImageStatus", micObj, image, status)
+}
+
+// SetImageStatus indicates an expected call of SetImageStatus.
+func (mr *MockMICMockRecorder) SetImageStatus(micObj, image, status any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetImageStatus", reflect.TypeOf((*MockMIC)(nil).SetImageStatus), micObj, image, status)
+}
