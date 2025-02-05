@@ -131,3 +131,112 @@ var _ = Describe("ApplyMIC", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
+
+var _ = Describe("GetModuleImageSpec", func() {
+	var (
+		micAPI MIC
+	)
+
+	BeforeEach(func() {
+		micAPI = NewModuleImagesConfigAPI(nil, nil)
+	})
+
+	testMic := kmmv1beta1.ModuleImagesConfig{
+		Spec: kmmv1beta1.ModuleImagesConfigSpec{
+			Images: []kmmv1beta1.ModuleImageSpec{
+				{
+					Image: "image 1",
+				},
+				{
+					Image: "image 2",
+				},
+			},
+		},
+	}
+
+	It("check image present and not present scenarious", func() {
+
+		By("image spec is present")
+		res := micAPI.GetModuleImageSpec(&testMic, "image 1")
+		Expect(res).ToNot(BeNil())
+		Expect(res.Image).To(Equal("image 1"))
+
+		By("image spec is not present")
+		res = micAPI.GetModuleImageSpec(&testMic, "image 3")
+		Expect(res).To(BeNil())
+	})
+})
+
+var _ = Describe("SetImageStatus", func() {
+	var (
+		micAPI MIC
+	)
+
+	BeforeEach(func() {
+		micAPI = NewModuleImagesConfigAPI(nil, nil)
+	})
+
+	testMic := kmmv1beta1.ModuleImagesConfig{
+		Status: kmmv1beta1.ModuleImagesConfigStatus{
+			ImagesStates: []kmmv1beta1.ModuleImageState{
+				{
+					Image:  "image 1",
+					Status: kmmv1beta1.ImageDoesNotExist,
+				},
+				{
+					Image:  "image 2",
+					Status: kmmv1beta1.ImageExists,
+				},
+			},
+		},
+	}
+
+	It("set images status for both present and not present statuses", func() {
+
+		By("image status is present")
+		micAPI.SetImageStatus(&testMic, "image 1", kmmv1beta1.ImageExists)
+		Expect(testMic.Status.ImagesStates[0].Image).To(Equal("image 1"))
+		Expect(testMic.Status.ImagesStates[0].Status).To(Equal(kmmv1beta1.ImageExists))
+
+		By("image status is not present")
+		micAPI.SetImageStatus(&testMic, "image 3", kmmv1beta1.ImageDoesNotExist)
+		Expect(testMic.Status.ImagesStates[2].Image).To(Equal("image 3"))
+		Expect(testMic.Status.ImagesStates[2].Status).To(Equal(kmmv1beta1.ImageDoesNotExist))
+	})
+})
+
+var _ = Describe("GetImageState", func() {
+	var (
+		micAPI MIC
+	)
+
+	BeforeEach(func() {
+		micAPI = NewModuleImagesConfigAPI(nil, nil)
+	})
+
+	testMic := kmmv1beta1.ModuleImagesConfig{
+		Status: kmmv1beta1.ModuleImagesConfigStatus{
+			ImagesStates: []kmmv1beta1.ModuleImageState{
+				{
+					Image:  "image 1",
+					Status: kmmv1beta1.ImageDoesNotExist,
+				},
+				{
+					Image:  "image 2",
+					Status: kmmv1beta1.ImageExists,
+				},
+			},
+		},
+	}
+
+	It("get images status for both present and not present statuses", func() {
+
+		By("image status is present")
+		res := micAPI.GetImageState(&testMic, "image 1")
+		Expect(res).To(Equal(kmmv1beta1.ImageDoesNotExist))
+
+		By("image status is not present")
+		res = micAPI.GetImageState(&testMic, "image 3")
+		Expect(res).To(BeEmpty())
+	})
+})

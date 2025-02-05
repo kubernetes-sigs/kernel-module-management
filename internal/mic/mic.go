@@ -18,6 +18,9 @@ import (
 type MIC interface {
 	ApplyMIC(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
 		imageRepoSecret *v1.LocalObjectReference, owner metav1.Object) error
+	GetModuleImageSpec(micObj *kmmv1beta1.ModuleImagesConfig, image string) *kmmv1beta1.ModuleImageSpec
+	SetImageStatus(micObj *kmmv1beta1.ModuleImagesConfig, image string, status kmmv1beta1.ImageState)
+	GetImageState(micObj *kmmv1beta1.ModuleImagesConfig, image string) kmmv1beta1.ImageState
 }
 
 type micImpl struct {
@@ -60,4 +63,36 @@ func (mici *micImpl) ApplyMIC(ctx context.Context, name, ns string, images []kmm
 	logger.Info("Applied MIC", "name", name, "namespace", ns, "result", opRes)
 
 	return nil
+}
+
+func (mici *micImpl) GetModuleImageSpec(micObj *kmmv1beta1.ModuleImagesConfig, image string) *kmmv1beta1.ModuleImageSpec {
+	for _, imageSpec := range micObj.Spec.Images {
+		if imageSpec.Image == image {
+			return &imageSpec
+		}
+	}
+	return nil
+}
+
+func (mici *micImpl) SetImageStatus(micObj *kmmv1beta1.ModuleImagesConfig, image string, status kmmv1beta1.ImageState) {
+	imageState := kmmv1beta1.ModuleImageState{
+		Image:  image,
+		Status: status,
+	}
+	for i, imageStatus := range micObj.Status.ImagesStates {
+		if imageStatus.Image == image {
+			micObj.Status.ImagesStates[i] = imageState
+			return
+		}
+	}
+	micObj.Status.ImagesStates = append(micObj.Status.ImagesStates, imageState)
+}
+
+func (mici *micImpl) GetImageState(micObj *kmmv1beta1.ModuleImagesConfig, image string) kmmv1beta1.ImageState {
+	for _, imageState := range micObj.Status.ImagesStates {
+		if imageState.Image == image {
+			return imageState.Status
+		}
+	}
+	return ""
 }
