@@ -104,32 +104,10 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 		return ctrl.Result{}, fmt.Errorf("failed to handle MIC: %v", err)
 	}
 
-	currentNMCs, err := mr.reconHelper.getNMCsByModuleSet(ctx, mod)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get NMCs for Module %s/%s: %v", mod.Namespace, mod.Name, err)
+	if err := mr.reconHelper.handleNMC(ctx, mod, targetedNodes); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to handle NMC: %v", err)
 	}
 
-	sdMap, prepareErrs := mr.reconHelper.prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs)
-	errs := make([]error, 0, len(sdMap)+1)
-	errs = append(errs, prepareErrs...)
-
-	for nodeName, sd := range sdMap {
-		if sd.action == actionAdd {
-			err = mr.reconHelper.enableModuleOnNode(ctx, sd.mld, sd.node)
-		}
-		if sd.action == actionDelete {
-			err = mr.reconHelper.disableModuleOnNode(ctx, mod.Namespace, mod.Name, nodeName)
-		}
-		errs = append(errs, err)
-	}
-
-	err = mr.reconHelper.moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes)
-	errs = append(errs, err)
-
-	err = errors.Join(errs...)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile module %s/%s config: %v", mod.Namespace, mod.Name, err)
-	}
 	return ctrl.Result{}, nil
 }
 
@@ -161,6 +139,7 @@ func (mr *ModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 type moduleReconcilerHelperAPI interface {
 	handleMIC(ctx context.Context, mod *kmmv1beta1.Module, nodes []v1.Node) error
 	handleModuleInDeletionProcess(ctx context.Context, mod *kmmv1beta1.Module) error
+	handleNMC(ctx context.Context, mod *kmmv1beta1.Module, nodes []v1.Node) error
 	setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error)
@@ -214,6 +193,33 @@ func (mrh *moduleReconcilerHelper) handleModuleInDeletionProcess(ctx context.Con
 	}
 
 	return nil
+}
+
+func (mrh *moduleReconcilerHelper) handleNMC(ctx context.Context, mod *kmmv1beta1.Module, nodes []v1.Node) error {
+
+	currentNMCs, err := mrh.getNMCsByModuleSet(ctx, mod)
+	if err != nil {
+		return fmt.Errorf("failed to get NMCs for Module %s/%s: %v", mod.Namespace, mod.Name, err)
+	}
+
+	sdMap, prepareErrs := mrh.prepareSchedulingData(ctx, mod, nodes, currentNMCs)
+	errs := make([]error, 0, len(sdMap)+1)
+	errs = append(errs, prepareErrs...)
+
+	for nodeName, sd := range sdMap {
+		if sd.action == actionAdd {
+			err = mrh.enableModuleOnNode(ctx, sd.mld, sd.node)
+		}
+		if sd.action == actionDelete {
+			err = mrh.disableModuleOnNode(ctx, mod.Namespace, mod.Name, nodeName)
+		}
+		errs = append(errs, err)
+	}
+
+	err = mrh.moduleUpdateWorkerPodsStatus(ctx, mod, nodes)
+	errs = append(errs, err)
+
+	return errors.Join(errs...)
 }
 
 func (mrh *moduleReconcilerHelper) setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error {
