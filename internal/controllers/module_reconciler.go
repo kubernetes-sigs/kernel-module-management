@@ -66,9 +66,11 @@ func NewModuleReconciler(client client.Client,
 	micAPI mic.MIC,
 	scheme *runtime.Scheme) *ModuleReconciler {
 	reconHelper := newModuleReconcilerHelper(client, kernelAPI, registryAPI, micAPI, nmcHelper, scheme)
+	nsLabeler := newNamespaceLabeler(client)
+	reconHelper := newModuleReconcilerHelper(client, kernelAPI, registryAPI, nmcHelper, nsLabeler, scheme)
 	return &ModuleReconciler{
 		filter:      filter,
-		nsLabeler:   newNamespaceLabeler(client),
+		nsLabeler:   nsLabeler,
 		reconHelper: reconHelper,
 		nodeAPI:     nodeAPI,
 	}
@@ -79,17 +81,8 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 
 	logger.Info("Starting Module reconciliation")
 
-	if mod.GetDeletionTimestamp() != nil {
-		//Module is being deleted
-		if err := mr.nsLabeler.tryRemovingLabel(ctx, mod.Namespace, mod.Name); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error while trying to remove the label on namespace %s: %v", mod.Namespace, err)
-		}
-
-		err := mr.reconHelper.finalizeModule(ctx, mod)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to finalize Module %s/%s: %v", mod.Namespace, mod.Name, err)
-		}
-		return ctrl.Result{}, nil
+	if err := mr.reconHelper.handleModuleInDeletionProcess(ctx, mod); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to handle module %s/%s deletion: %v", mod.Namespace, mod.Name, err)
 	}
 
 	if err := mr.nsLabeler.setLabel(ctx, mod.Namespace); err != nil {
@@ -167,6 +160,7 @@ func (mr *ModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 type moduleReconcilerHelperAPI interface {
 	handleMIC(ctx context.Context, mod *kmmv1beta1.Module, nodes []v1.Node) error
+	handleModuleInDeletionProcess(ctx context.Context, mod *kmmv1beta1.Module) error
 	setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error)
@@ -182,6 +176,7 @@ type moduleReconcilerHelper struct {
 	registryAPI registry.Registry
 	micAPI      mic.MIC
 	nmcHelper   nmc.Helper
+	nsLabeler   namespaceLabeler
 	scheme      *runtime.Scheme
 }
 
@@ -191,6 +186,7 @@ func newModuleReconcilerHelper(
 	registryAPI registry.Registry,
 	micAPI mic.MIC,
 	nmcHelper nmc.Helper,
+	nsLabeler namespaceLabeler,
 	scheme *runtime.Scheme) moduleReconcilerHelperAPI {
 	return &moduleReconcilerHelper{
 		client:      client,
@@ -198,8 +194,26 @@ func newModuleReconcilerHelper(
 		registryAPI: registryAPI,
 		micAPI:      micAPI,
 		nmcHelper:   nmcHelper,
+		nsLabeler:   nsLabeler,
 		scheme:      scheme,
 	}
+}
+
+func (mrh *moduleReconcilerHelper) handleModuleInDeletionProcess(ctx context.Context, mod *kmmv1beta1.Module) error {
+
+	if mod.GetDeletionTimestamp() == nil {
+		return nil
+	}
+
+	if err := mrh.nsLabeler.tryRemovingLabel(ctx, mod.Namespace, mod.Name); err != nil {
+		return fmt.Errorf("error while trying to remove the label on namespace %s: %v", mod.Namespace, err)
+	}
+
+	if err := mrh.finalizeModule(ctx, mod); err != nil {
+		fmt.Errorf("failed to finalize Module %s/%s: %v", mod.Namespace, mod.Name, err)
+	}
+
+	return nil
 }
 
 func (mrh *moduleReconcilerHelper) setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error {

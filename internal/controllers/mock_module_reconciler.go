@@ -113,6 +113,20 @@ func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleMIC(ctx, mod, nodes a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleMIC", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleMIC), ctx, mod, nodes)
 }
 
+// handleModuleInDeletionProcess mocks base method.
+func (m *MockmoduleReconcilerHelperAPI) handleModuleInDeletionProcess(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "handleModuleInDeletionProcess", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// handleModuleInDeletionProcess indicates an expected call of handleModuleInDeletionProcess.
+func (mr *MockmoduleReconcilerHelperAPIMockRecorder) handleModuleInDeletionProcess(ctx, mod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleModuleInDeletionProcess", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).handleModuleInDeletionProcess), ctx, mod)
+}
+
 // moduleUpdateWorkerPodsStatus mocks base method.
 func (m *MockmoduleReconcilerHelperAPI) moduleUpdateWorkerPodsStatus(ctx context.Context, mod *v1beta1.Module, targetedNodes []v1.Node) error {
 	m.ctrl.T.Helper()
