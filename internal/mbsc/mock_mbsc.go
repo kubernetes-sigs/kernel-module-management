@@ -14,6 +14,8 @@ import (
 
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	gomock "go.uber.org/mock/gomock"
+	v1 "k8s.io/api/core/v1"
+	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MockMBSC is a mock of MBSC interface.
@@ -39,29 +41,31 @@ func (m *MockMBSC) EXPECT() *MockMBSCMockRecorder {
 	return m.recorder
 }
 
-// GetMBSC mocks base method.
-func (m *MockMBSC) GetMBSC(ctx context.Context, name, namespace string) (*v1beta1.ModuleBuildSignConfig, error) {
+// CreateOrPatch mocks base method.
+func (m *MockMBSC) CreateOrPatch(ctx context.Context, name, namespace string, moduleImageSpec *v1beta1.ModuleImageSpec, imageRepoSecret *v1.LocalObjectReference, owner v10.Object) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMBSC", ctx, name, namespace)
+	ret := m.ctrl.Call(m, "CreateOrPatch", ctx, name, namespace, moduleImageSpec, imageRepoSecret, owner)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateOrPatch indicates an expected call of CreateOrPatch.
+func (mr *MockMBSCMockRecorder) CreateOrPatch(ctx, name, namespace, moduleImageSpec, imageRepoSecret, owner any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrPatch", reflect.TypeOf((*MockMBSC)(nil).CreateOrPatch), ctx, name, namespace, moduleImageSpec, imageRepoSecret, owner)
+}
+
+// Get mocks base method.
+func (m *MockMBSC) Get(ctx context.Context, name, namespace string) (*v1beta1.ModuleBuildSignConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, name, namespace)
 	ret0, _ := ret[0].(*v1beta1.ModuleBuildSignConfig)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetMBSC indicates an expected call of GetMBSC.
-func (mr *MockMBSCMockRecorder) GetMBSC(ctx, name, namespace any) *gomock.Call {
+// Get indicates an expected call of Get.
+func (mr *MockMBSCMockRecorder) Get(ctx, name, namespace any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMBSC", reflect.TypeOf((*MockMBSC)(nil).GetMBSC), ctx, name, namespace)
-}
-
-// SetModuleImageSpec mocks base method.
-func (m *MockMBSC) SetModuleImageSpec(mbscObj *v1beta1.ModuleBuildSignConfig, moduleImageSpec *v1beta1.ModuleImageSpec) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetModuleImageSpec", mbscObj, moduleImageSpec)
-}
-
-// SetModuleImageSpec indicates an expected call of SetModuleImageSpec.
-func (mr *MockMBSCMockRecorder) SetModuleImageSpec(mbscObj, moduleImageSpec any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetModuleImageSpec", reflect.TypeOf((*MockMBSC)(nil).SetModuleImageSpec), mbscObj, moduleImageSpec)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockMBSC)(nil).Get), ctx, name, namespace)
 }
