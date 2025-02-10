@@ -24,36 +24,30 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/mbsc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const (
-	MICReconcilerName = "MICReconciler"
-
-	moduleImageLabelKey = "kmm.node.kubernetes.io/module-image-config"
-	imageLabelKey       = "kmm.node.kubernetes.io/module-image"
-
-	pullerContainerName = "puller"
-)
+const MICReconcilerName = "MICReconciler"
 
 // micReconciler reconciles a MIC (moduleimagesconfig) object
 type micReconciler struct {
 	micReconHelper micReconcilerHelper
-	podHelper      pullPodManager
+	imagePullerAPI pod.ImagePuller
 }
 
-func NewMICReconciler(client client.Client, micAPI mic.MIC, mbscAPI mbsc.MBSC, scheme *runtime.Scheme) *micReconciler {
-	podHelper := newPullPodManager(client, scheme)
-	micReconHelper := newMICReconcilerHelper(client, podHelper, micAPI, mbscAPI, scheme)
+func NewMICReconciler(client client.Client, micAPI mic.MIC, mbscAPI mbsc.MBSC, imagePullerAPI pod.ImagePuller,
+	scheme *runtime.Scheme) *micReconciler {
+
+	micReconHelper := newMICReconcilerHelper(client, imagePullerAPI, micAPI, mbscAPI, scheme)
 	return &micReconciler{
 		micReconHelper: micReconHelper,
-		podHelper:      podHelper,
+		imagePullerAPI: imagePullerAPI,
 	}
 }
 
@@ -76,7 +70,7 @@ func (r *micReconciler) Reconcile(ctx context.Context, micObj *kmmv1beta1.Module
 		return res, nil
 	}
 
-	pods, err := r.podHelper.listImagesPullPods(ctx, micObj)
+	pods, err := r.imagePullerAPI.ListPullPods(ctx, micObj)
 	if err != nil {
 		return res, fmt.Errorf("failed to get the image pods for mic %s: %v", micObj.Name, err)
 	}
@@ -106,24 +100,25 @@ type micReconcilerHelper interface {
 }
 
 type micReconcilerHelperImpl struct {
-	client     client.Client
-	podHelper  pullPodManager
-	micHelper  mic.MIC
-	mbscHelper mbsc.MBSC
-	scheme     *runtime.Scheme
+	client         client.Client
+	imagePullerAPI pod.ImagePuller
+	micHelper      mic.MIC
+	mbscHelper     mbsc.MBSC
+	scheme         *runtime.Scheme
 }
 
 func newMICReconcilerHelper(client client.Client,
-	pullPodHelper pullPodManager,
+	imagePullerAPI pod.ImagePuller,
 	micAPI mic.MIC,
 	mbscAPI mbsc.MBSC,
 	scheme *runtime.Scheme) micReconcilerHelper {
+
 	return &micReconcilerHelperImpl{
-		client:     client,
-		podHelper:  pullPodHelper,
-		mbscHelper: mbscAPI,
-		micHelper:  micAPI,
-		scheme:     scheme,
+		client:         client,
+		imagePullerAPI: imagePullerAPI,
+		mbscHelper:     mbscAPI,
+		micHelper:      micAPI,
+		scheme:         scheme,
 	}
 }
 
@@ -137,7 +132,7 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByPullPods(ctx context.Context,
 	patchFrom := client.MergeFrom(micObj.DeepCopy())
 
 	for _, p := range pods {
-		image := p.Labels[imageLabelKey]
+		image := mrhi.imagePullerAPI.GetPullPodImage(p)
 		imageSpec := mrhi.micHelper.GetModuleImageSpec(micObj, image)
 		logger := logger.WithValues("image", image)
 		if imageSpec == nil {
@@ -175,7 +170,7 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByPullPods(ctx context.Context,
 	// we won't have pods to calculate the status
 	errs := make([]error, 0, len(podsToDelete))
 	for _, pod := range podsToDelete {
-		err = mrhi.podHelper.deletePod(ctx, &pod)
+		err = mrhi.imagePullerAPI.DeletePod(ctx, &pod)
 		errs = append(errs, err)
 	}
 
@@ -225,9 +220,10 @@ func (mrhi *micReconcilerHelperImpl) processImagesSpecs(ctx context.Context, mic
 		switch imageState {
 		case "":
 			// image State is not set: either new image or pull pod is still running
-			if mrhi.podHelper.getPullPodForImage(pullPods, imageSpec.Image) == nil {
+			if mrhi.imagePullerAPI.GetPullPodForImage(pullPods, imageSpec.Image) == nil {
 				// no pull pod- create it, otherwise we wait for it to finish
-				err = mrhi.podHelper.createPullPod(ctx, &imageSpec, micObj)
+				err := mrhi.imagePullerAPI.CreatePullPod(ctx, &imageSpec, micObj)
+				errs = append(errs, err)
 			}
 		case kmmv1beta1.ImageDoesNotExist:
 			if imageSpec.Build == nil && imageSpec.Sign == nil {
@@ -244,102 +240,4 @@ func (mrhi *micReconcilerHelperImpl) processImagesSpecs(ctx context.Context, mic
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
-}
-
-//go:generate mockgen -source=mic_reconciler.go -package=controllers -destination=mock_mic_reconciler.go pullPodManager
-type pullPodManager interface {
-	listImagesPullPods(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig) ([]v1.Pod, error)
-	deletePod(ctx context.Context, pod *v1.Pod) error
-	createPullPod(ctx context.Context, imageSpec *kmmv1beta1.ModuleImageSpec, micObj *kmmv1beta1.ModuleImagesConfig) error
-	getPullPodForImage(pods []v1.Pod, image string) *v1.Pod
-}
-
-type pullPodManagerImpl struct {
-	client client.Client
-	scheme *runtime.Scheme
-}
-
-func newPullPodManager(client client.Client, scheme *runtime.Scheme) pullPodManager {
-	return &pullPodManagerImpl{
-		client: client,
-		scheme: scheme,
-	}
-}
-
-func (ppmi *pullPodManagerImpl) listImagesPullPods(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig) ([]v1.Pod, error) {
-	logger := ctrl.LoggerFrom(ctx).WithValues("mic name", micObj.Name)
-
-	pl := v1.PodList{}
-
-	hl := client.HasLabels{imageLabelKey}
-	ml := client.MatchingLabels{moduleImageLabelKey: micObj.Name}
-
-	logger.V(1).Info("Listing mic image Pods")
-
-	if err := ppmi.client.List(ctx, &pl, client.InNamespace(micObj.Namespace), hl, ml); err != nil {
-		return nil, fmt.Errorf("could not list mic image pods for mic %s: %v", micObj.Name, err)
-	}
-
-	return pl.Items, nil
-}
-
-func (ppmi *pullPodManagerImpl) deletePod(ctx context.Context, pod *v1.Pod) error {
-	logger := ctrl.LoggerFrom(ctx)
-	if pod.DeletionTimestamp != nil {
-		logger.Info("DeletionTimestamp set, pod is already in deletion", "pod", pod.Name)
-		return nil
-	}
-	if err := ppmi.client.Delete(ctx, pod); client.IgnoreNotFound(err) != nil {
-		return fmt.Errorf("failed to delete pull pod %s/%s: %v", pod.Namespace, pod.Name, err)
-	}
-	return nil
-}
-
-func (ppmi *pullPodManagerImpl) createPullPod(ctx context.Context, imageSpec *kmmv1beta1.ModuleImageSpec, micObj *kmmv1beta1.ModuleImagesConfig) error {
-	restartPolicy := v1.RestartPolicyOnFailure
-	if imageSpec.Build != nil || imageSpec.Sign != nil {
-		restartPolicy = v1.RestartPolicyNever
-	}
-	var imagePullSecrets []v1.LocalObjectReference
-	if micObj.Spec.ImageRepoSecret != nil {
-		imagePullSecrets = []v1.LocalObjectReference{*micObj.Spec.ImageRepoSecret}
-	}
-
-	pullPod := v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: micObj.Name + "-pull-pod-",
-			Namespace:    micObj.Namespace,
-			Labels: map[string]string{
-				moduleImageLabelKey: micObj.Name,
-				imageLabelKey:       imageSpec.Image,
-			},
-		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:    pullerContainerName,
-					Image:   imageSpec.Image,
-					Command: []string{"/bin/sh", "-c", "exit 0"},
-				},
-			},
-			RestartPolicy:    restartPolicy,
-			ImagePullSecrets: imagePullSecrets,
-		},
-	}
-
-	err := ctrl.SetControllerReference(micObj, &pullPod, ppmi.scheme)
-	if err != nil {
-		return fmt.Errorf("failed to set MIC object %s as owner on pullPod for image %s: %v", micObj.Name, imageSpec.Image, err)
-	}
-
-	return ppmi.client.Create(ctx, &pullPod)
-}
-
-func (ppmi *pullPodManagerImpl) getPullPodForImage(pods []v1.Pod, image string) *v1.Pod {
-	for i, pod := range pods {
-		if image == pod.Labels[imageLabelKey] {
-			return &pods[i]
-		}
-	}
-	return nil
 }
