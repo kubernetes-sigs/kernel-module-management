@@ -16,7 +16,7 @@ import (
 //go:generate mockgen -source=mic.go -package=mic -destination=mock_mic.go
 
 type MIC interface {
-	ApplyMIC(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
+	CreateOrPatch(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
 		imageRepoSecret *v1.LocalObjectReference, owner metav1.Object) error
 	GetModuleImageSpec(micObj *kmmv1beta1.ModuleImagesConfig, image string) *kmmv1beta1.ModuleImageSpec
 	SetImageStatus(micObj *kmmv1beta1.ModuleImagesConfig, image string, status kmmv1beta1.ImageState)
@@ -28,14 +28,14 @@ type micImpl struct {
 	scheme *runtime.Scheme
 }
 
-func NewModuleImagesConfigAPI(client client.Client, scheme *runtime.Scheme) MIC {
+func New(client client.Client, scheme *runtime.Scheme) MIC {
 	return &micImpl{
 		client: client,
 		scheme: scheme,
 	}
 }
 
-func (mici *micImpl) ApplyMIC(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
+func (mici *micImpl) CreateOrPatch(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
 	imageRepoSecret *v1.LocalObjectReference, owner metav1.Object) error {
 
 	logger := log.FromContext(ctx)

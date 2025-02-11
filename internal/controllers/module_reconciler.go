@@ -356,7 +356,7 @@ func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta
 		images = append(images, mis)
 	}
 
-	if err := mrh.micAPI.ApplyMIC(ctx, mod.Name, mod.Namespace, images, mod.Spec.ImageRepoSecret, mod); err != nil {
+	if err := mrh.micAPI.CreateOrPatch(ctx, mod.Name, mod.Namespace, images, mod.Spec.ImageRepoSecret, mod); err != nil {
 		errs = append(errs, fmt.Errorf("failed to apply %s/%s MIC: %v", mod.Namespace, mod.Name, err))
 	}
 
