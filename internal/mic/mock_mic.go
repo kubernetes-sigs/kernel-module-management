@@ -41,18 +41,18 @@ func (m *MockMIC) EXPECT() *MockMICMockRecorder {
 	return m.recorder
 }
 
-// ApplyMIC mocks base method.
-func (m *MockMIC) ApplyMIC(ctx context.Context, name, ns string, images []v1beta1.ModuleImageSpec, imageRepoSecret *v1.LocalObjectReference, owner v10.Object) error {
+// CreateOrPatch mocks base method.
+func (m *MockMIC) CreateOrPatch(ctx context.Context, name, ns string, images []v1beta1.ModuleImageSpec, imageRepoSecret *v1.LocalObjectReference, owner v10.Object) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyMIC", ctx, name, ns, images, imageRepoSecret, owner)
+	ret := m.ctrl.Call(m, "CreateOrPatch", ctx, name, ns, images, imageRepoSecret, owner)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ApplyMIC indicates an expected call of ApplyMIC.
-func (mr *MockMICMockRecorder) ApplyMIC(ctx, name, ns, images, imageRepoSecret, owner any) *gomock.Call {
+// CreateOrPatch indicates an expected call of CreateOrPatch.
+func (mr *MockMICMockRecorder) CreateOrPatch(ctx, name, ns, images, imageRepoSecret, owner any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyMIC", reflect.TypeOf((*MockMIC)(nil).ApplyMIC), ctx, name, ns, images, imageRepoSecret, owner)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrPatch", reflect.TypeOf((*MockMIC)(nil).CreateOrPatch), ctx, name, ns, images, imageRepoSecret, owner)
 }
 
 // GetImageState mocks base method.

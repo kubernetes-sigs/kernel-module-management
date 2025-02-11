@@ -123,7 +123,7 @@ func main() {
 	buildHelperAPI := build.NewHelper()
 	nodeAPI := node.NewNode(client)
 	kernelAPI := module.NewKernelMapper(buildHelperAPI, sign.NewSignerHelper())
-	micAPI := mic.NewModuleImagesConfigAPI(client, scheme)
+	micAPI := mic.New(client, scheme)
 
 	dpc := controllers.NewDevicePluginReconciler(
 		client,

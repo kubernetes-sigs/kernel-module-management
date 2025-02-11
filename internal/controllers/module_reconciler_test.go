@@ -441,7 +441,7 @@ var _ = Describe("handleMIC", func() {
 	It("should return an error if we failed to get moduleLoaderData for kernel", func() {
 
 		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(nil, errors.New("some error"))
-		mockMICAPI.EXPECT().ApplyMIC(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
+		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
 
 		err := mrh.handleMIC(ctx, mod, targetedNodes)
 		Expect(err).To(HaveOccurred())
@@ -453,7 +453,7 @@ var _ = Describe("handleMIC", func() {
 		img := "example.registry.com/org/image:tag"
 		mld := &api.ModuleLoaderData{ContainerImage: img}
 		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(mld, nil)
-		mockMICAPI.EXPECT().ApplyMIC(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret,
+		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret,
 			mod).Return(errors.New("some error"))
 
 		err := mrh.handleMIC(ctx, mod, targetedNodes)
@@ -466,7 +466,7 @@ var _ = Describe("handleMIC", func() {
 		img := "example.registry.com/org/image:tag"
 		mld := &api.ModuleLoaderData{ContainerImage: img}
 		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(mld, nil)
-		mockMICAPI.EXPECT().ApplyMIC(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
+		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
 
 		err := mrh.handleMIC(ctx, mod, targetedNodes)
 		Expect(err).NotTo(HaveOccurred())

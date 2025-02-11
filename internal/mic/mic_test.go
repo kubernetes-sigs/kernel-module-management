@@ -36,7 +36,7 @@ var _ = Describe("ApplyMIC", func() {
 		ctx = context.Background()
 		ctrl = gomock.NewController(GinkgoT())
 		mockClient = client.NewMockClient(ctrl)
-		micAPI = NewModuleImagesConfigAPI(mockClient, scheme)
+		micAPI = New(mockClient, scheme)
 		utilruntime.Must(v1beta1.AddToScheme(scheme))
 	})
 
@@ -44,7 +44,7 @@ var _ = Describe("ApplyMIC", func() {
 
 		mockClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil)
 
-		err := micAPI.ApplyMIC(ctx, micName, micNamespace, []v1beta1.ModuleImageSpec{}, nil, nil)
+		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, []v1beta1.ModuleImageSpec{}, nil, nil)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed to create or patch"))
@@ -80,7 +80,7 @@ var _ = Describe("ApplyMIC", func() {
 			},
 		}
 
-		err := micAPI.ApplyMIC(ctx, micName, micNamespace, images, imageRepoSecret, owner)
+		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, images, imageRepoSecret, owner)
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -126,7 +126,7 @@ var _ = Describe("ApplyMIC", func() {
 			},
 		}
 
-		err := micAPI.ApplyMIC(ctx, micName, micNamespace, images, nil, owner)
+		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, images, nil, owner)
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -138,7 +138,7 @@ var _ = Describe("GetModuleImageSpec", func() {
 	)
 
 	BeforeEach(func() {
-		micAPI = NewModuleImagesConfigAPI(nil, nil)
+		micAPI = New(nil, nil)
 	})
 
 	testMic := kmmv1beta1.ModuleImagesConfig{
@@ -173,7 +173,7 @@ var _ = Describe("SetImageStatus", func() {
 	)
 
 	BeforeEach(func() {
-		micAPI = NewModuleImagesConfigAPI(nil, nil)
+		micAPI = New(nil, nil)
 	})
 
 	testMic := kmmv1beta1.ModuleImagesConfig{
@@ -211,7 +211,7 @@ var _ = Describe("GetImageState", func() {
 	)
 
 	BeforeEach(func() {
-		micAPI = NewModuleImagesConfigAPI(nil, nil)
+		micAPI = New(nil, nil)
 	})
 
 	testMic := kmmv1beta1.ModuleImagesConfig{
