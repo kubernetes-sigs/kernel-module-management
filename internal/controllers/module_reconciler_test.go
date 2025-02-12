@@ -461,6 +461,12 @@ var _ = Describe("handleMIC", func() {
 		Expect(err.Error()).To(ContainSubstring("failed to apply"))
 	})
 
+	It("should not do anything if targetedNodes is empty", func() {
+		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
+		err := mrh.handleMIC(ctx, mod, []v1.Node{})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("should work as expected", func() {
 
 		img := "example.registry.com/org/image:tag"

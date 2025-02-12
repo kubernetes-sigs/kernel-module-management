@@ -50,9 +50,8 @@ type ModuleImageSpec struct {
 
 // ModuleImagesConfigSpec describes the images of the Module whose status needs to be verified
 // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
-// +kubebuilder:validation:Required
 type ModuleImagesConfigSpec struct {
-	Images []ModuleImageSpec `json:"images"`
+	Images []ModuleImageSpec `json:"images,omitempty"`
 
 	// ImageRepoSecret contains pull secret for the image's repo, if needed
 	// +optional
