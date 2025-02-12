@@ -56,6 +56,20 @@ func (mr *MocknmcReconcilerHelperMockRecorder) GarbageCollectInUseLabels(ctx, nm
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollectInUseLabels", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).GarbageCollectInUseLabels), ctx, nmc)
 }
 
+// GarbageCollectWorkerPods mocks base method.
+func (m *MocknmcReconcilerHelper) GarbageCollectWorkerPods(ctx context.Context, nmc *v1beta1.NodeModulesConfig) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GarbageCollectWorkerPods", ctx, nmc)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GarbageCollectWorkerPods indicates an expected call of GarbageCollectWorkerPods.
+func (mr *MocknmcReconcilerHelperMockRecorder) GarbageCollectWorkerPods(ctx, nmc any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollectWorkerPods", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).GarbageCollectWorkerPods), ctx, nmc)
+}
+
 // ProcessModuleSpec mocks base method.
 func (m *MocknmcReconcilerHelper) ProcessModuleSpec(ctx context.Context, nmc *v1beta1.NodeModulesConfig, spec *v1beta1.NodeModuleSpec, status *v1beta1.NodeModuleStatus, node *v1.Node) error {
 	m.ctrl.T.Helper()

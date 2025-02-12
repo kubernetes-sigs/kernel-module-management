@@ -303,6 +303,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec1, nil, &node),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2, &node),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc),
+			wh.EXPECT().GarbageCollectWorkerPods(ctx, nmc),
 			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(loaded, unloaded, err),
 			wh.EXPECT().RecordEvents(&node, loaded, unloaded),
 		)
@@ -330,6 +331,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			fmt.Errorf("error processing Module %s: %v", namespace+"/"+mod0Name, errorMeassge),
 			fmt.Errorf("error processing orphan status for Module %s: %v", namespace+"/"+mod2Name, errorMeassge),
 			fmt.Errorf("failed to GC in-use labels for NMC %s: %v", types.NamespacedName{Name: nmcName}, errorMeassge),
+			fmt.Errorf("failed to GC orphan worker pods for NMC %s: %v", types.NamespacedName{Name: nmcName}, errorMeassge),
 			fmt.Errorf("could not update node's labels for NMC %s: %v", types.NamespacedName{Name: nmcName}, errorMeassge),
 		}
 
@@ -381,11 +383,97 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0, &node).Return(errors.New(errorMeassge)),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2, &node).Return(errors.New(errorMeassge)),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc).Return(errors.New(errorMeassge)),
+			wh.EXPECT().GarbageCollectWorkerPods(ctx, nmc).Return(errors.New(errorMeassge)),
 			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(nil, nil, errors.New(errorMeassge)),
 		)
 
 		_, err = r.Reconcile(ctx, req)
 		Expect(err).To(Equal(errors.Join(expectedErrors...)))
+	})
+})
+
+var _ = Describe("nmcReconcilerHelperImpl_GarbageCollectWorkerPods", func() {
+	var (
+		ctx    = context.TODO()
+		client *testclient.MockClient
+		pm     *pod.MockWorkerPodManager
+		nrh    nmcReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctrl := gomock.NewController(GinkgoT())
+		client = testclient.NewMockClient(ctrl)
+		pm = pod.NewMockWorkerPodManager(ctrl)
+		nrh = newNMCReconcilerHelper(client, pm, nil, nil)
+	})
+
+	It("should delete orphaned worker pod", func() {
+		nmcSpec := kmmv1beta1.NodeModulesConfigSpec{
+			Modules: []kmmv1beta1.NodeModuleSpec{
+				{
+					ModuleItem: kmmv1beta1.ModuleItem{Name: nameSecond},
+				},
+			},
+		}
+		nmcObj := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			Spec:       nmcSpec,
+		}
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("kmm-worker-%s-%s", nmcObj.Name, nameFirst),
+				Namespace: "d",
+				Labels: map[string]string{
+					constants.ModuleNameLabel: nameFirst,
+				},
+				Finalizers: []string{pod.NodeModulesConfigFinalizer},
+			},
+		}
+
+		gomock.InOrder(
+			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{pod}, nil),
+			client.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil),
+			pm.EXPECT().DeletePod(ctx, gomock.Any()).Return(nil),
+		)
+
+		Expect(
+			nrh.GarbageCollectWorkerPods(ctx, nmcObj),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should do nothing because there are not orphaned worker pods", func() {
+		nmcSpec := kmmv1beta1.NodeModulesConfigSpec{
+			Modules: []kmmv1beta1.NodeModuleSpec{
+				{
+					ModuleItem: kmmv1beta1.ModuleItem{Name: nameFirst},
+				},
+			},
+		}
+		nmcObj := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			Spec:       nmcSpec,
+		}
+		pod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("kmm-worker-%s-%s", nmcObj.Name, nameFirst),
+				Namespace: "d",
+				Labels: map[string]string{
+					constants.ModuleNameLabel: nameFirst,
+				},
+			},
+		}
+
+		gomock.InOrder(
+			pm.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{pod}, nil),
+		)
+
+		Expect(
+			nrh.GarbageCollectWorkerPods(ctx, nmcObj),
+		).NotTo(
+			HaveOccurred(),
+		)
 	})
 })
 
