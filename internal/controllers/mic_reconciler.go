@@ -128,7 +128,7 @@ func newMICReconcilerHelper(client client.Client,
 }
 
 func (mrhi *micReconcilerHelperImpl) updateStatusByPullPods(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig, pods []v1.Pod) error {
-	logger := ctrl.LoggerFrom(ctx)
+	logger := ctrl.LoggerFrom(ctx).WithValues("mic name", micObj.Name)
 	if len(pods) == 0 {
 		return nil
 	}
@@ -139,19 +139,24 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByPullPods(ctx context.Context,
 	for _, p := range pods {
 		image := p.Labels[imageLabelKey]
 		imageSpec := mrhi.micHelper.GetModuleImageSpec(micObj, image)
+		logger := logger.WithValues("image", image)
 		if imageSpec == nil {
-			logger.Info(utils.WarnString("image not present in spec during updateStatusByPods, deleting pod"), "mic", micObj.Name, "image", image)
+			logger.Info(utils.WarnString("image not present in spec during updateStatusByPods, deleting pod"))
 			podsToDelete = append(podsToDelete, p)
 			continue
 		}
 		phase := p.Status.Phase
 		switch phase {
 		case v1.PodFailed:
-			if imageSpec.Build != nil || imageSpec.Sign != nil {
-				logger.Info("failed pod with build or sign spec, updating image status to NeedsBulding")
+			switch {
+			case imageSpec.Build != nil:
+				logger.Info("pull pod failed, build exists, setting status to kmmv1beta1.ImageNeedsBuilding")
 				mrhi.micHelper.SetImageStatus(micObj, image, kmmv1beta1.ImageNeedsBuilding)
-			} else {
-				logger.Info(utils.WarnString("failed pod without build or sign spec, shoud not have happened"), "image", image)
+			case imageSpec.Sign != nil:
+				logger.Info("pull pod failed, build does not exist, sign exists, setting status to kmmv1beta1.ImageNeedsSigning")
+				mrhi.micHelper.SetImageStatus(micObj, image, kmmv1beta1.ImageNeedsSigning)
+			default:
+				logger.Info(utils.WarnString("failed pod without build or sign spec, shoud not have happened"))
 			}
 			podsToDelete = append(podsToDelete, p)
 		case v1.PodSucceeded:
@@ -194,11 +199,18 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByMBSC(ctx context.Context, mic
 			// image not found in spec, ignore
 			continue
 		}
-		micImageStatus := kmmv1beta1.ImageExists
-		if imageState.Status == kmmv1beta1.ImageBuildFailed {
-			micImageStatus = kmmv1beta1.ImageDoesNotExist
+		switch imageState.Status {
+		case kmmv1beta1.ImageBuildFailed, kmmv1beta1.ImageSignFailed:
+			mrhi.micHelper.SetImageStatus(micObj, imageState.Image, kmmv1beta1.ImageDoesNotExist)
+		case kmmv1beta1.ImageBuildSucceeded:
+			if imageSpec.Sign != nil {
+				mrhi.micHelper.SetImageStatus(micObj, imageState.Image, kmmv1beta1.ImageNeedsSigning)
+			} else {
+				mrhi.micHelper.SetImageStatus(micObj, imageState.Image, kmmv1beta1.ImageExists)
+			}
+		case kmmv1beta1.ImageSignSucceeded:
+			mrhi.micHelper.SetImageStatus(micObj, imageState.Image, kmmv1beta1.ImageExists)
 		}
-		mrhi.micHelper.SetImageStatus(micObj, imageState.Image, micImageStatus)
 	}
 
 	return mrhi.client.Status().Patch(ctx, micObj, patchFrom)
@@ -209,13 +221,13 @@ func (mrhi *micReconcilerHelperImpl) processImagesSpecs(ctx context.Context, mic
 	for _, imageSpec := range micObj.Spec.Images {
 		imageState := mrhi.micHelper.GetImageState(micObj, imageSpec.Image)
 
+		var err error
 		switch imageState {
 		case "":
 			// image State is not set: either new image or pull pod is still running
 			if mrhi.podHelper.getPullPodForImage(pullPods, imageSpec.Image) == nil {
 				// no pull pod- create it, otherwise we wait for it to finish
-				err := mrhi.podHelper.createPullPod(ctx, &imageSpec, micObj)
-				errs = append(errs, err)
+				err = mrhi.podHelper.createPullPod(ctx, &imageSpec, micObj)
 			}
 		case kmmv1beta1.ImageDoesNotExist:
 			if imageSpec.Build == nil && imageSpec.Sign == nil {
@@ -224,9 +236,12 @@ func (mrhi *micReconcilerHelperImpl) processImagesSpecs(ctx context.Context, mic
 			fallthrough
 		case kmmv1beta1.ImageNeedsBuilding:
 			// image needs to be built - patching MBSC
-			err := mrhi.mbscHelper.CreateOrPatch(ctx, micObj.Name, micObj.Namespace, &imageSpec, micObj.Spec.ImageRepoSecret, micObj)
-			errs = append(errs, err)
+			err = mrhi.mbscHelper.CreateOrPatch(ctx, micObj, &imageSpec, kmmv1beta1.BuildImage)
+		case kmmv1beta1.ImageNeedsSigning:
+			// image needs to be signed - patching MBSC
+			err = mrhi.mbscHelper.CreateOrPatch(ctx, micObj, &imageSpec, kmmv1beta1.SignImage)
 		}
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

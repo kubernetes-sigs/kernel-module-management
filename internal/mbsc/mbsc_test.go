@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	gomock "go.uber.org/mock/gomock"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -17,45 +18,48 @@ import (
 var _ = Describe("setModuleImageSpec", func() {
 	It("MBSC does not have any images in spec", func() {
 		mbscObj := kmmv1beta1.ModuleBuildSignConfig{
-			Spec: kmmv1beta1.ModuleImagesConfigSpec{},
+			Spec: kmmv1beta1.ModuleBuildSignConfigSpec{},
 		}
 		imageSpec := kmmv1beta1.ModuleImageSpec{Image: "some image"}
 
-		setModuleImageSpec(&mbscObj, &imageSpec)
+		setModuleImageSpec(&mbscObj, &imageSpec, kmmv1beta1.SignImage)
 
 		Expect(len(mbscObj.Spec.Images)).To(Equal(1))
+		Expect(mbscObj.Spec.Images[0].Action).To(Equal(kmmv1beta1.SignImage))
 	})
 
 	It("MBSC has different images in spec", func() {
 		mbscObj := kmmv1beta1.ModuleBuildSignConfig{
-			Spec: kmmv1beta1.ModuleImagesConfigSpec{
-				Images: []kmmv1beta1.ModuleImageSpec{
-					kmmv1beta1.ModuleImageSpec{Image: "image 1"},
-					kmmv1beta1.ModuleImageSpec{Image: "image 2"},
+			Spec: kmmv1beta1.ModuleBuildSignConfigSpec{
+				Images: []kmmv1beta1.ModuleBuildSignSpec{
+					kmmv1beta1.ModuleBuildSignSpec{ModuleImageSpec: kmmv1beta1.ModuleImageSpec{Image: "image 1"}},
+					kmmv1beta1.ModuleBuildSignSpec{ModuleImageSpec: kmmv1beta1.ModuleImageSpec{Image: "image 2"}},
 				},
 			},
 		}
 		imageSpec := kmmv1beta1.ModuleImageSpec{Image: "some image"}
 
-		setModuleImageSpec(&mbscObj, &imageSpec)
+		setModuleImageSpec(&mbscObj, &imageSpec, kmmv1beta1.BuildImage)
 
 		Expect(len(mbscObj.Spec.Images)).To(Equal(3))
+		Expect(mbscObj.Spec.Images[2].Action).To(Equal(kmmv1beta1.BuildImage))
 	})
 
 	It("MBSC has the image already in spec", func() {
 		mbscObj := kmmv1beta1.ModuleBuildSignConfig{
-			Spec: kmmv1beta1.ModuleImagesConfigSpec{
-				Images: []kmmv1beta1.ModuleImageSpec{
-					kmmv1beta1.ModuleImageSpec{Image: "image 1"},
-					kmmv1beta1.ModuleImageSpec{Image: "image 2"},
+			Spec: kmmv1beta1.ModuleBuildSignConfigSpec{
+				Images: []kmmv1beta1.ModuleBuildSignSpec{
+					kmmv1beta1.ModuleBuildSignSpec{ModuleImageSpec: kmmv1beta1.ModuleImageSpec{Image: "image 1"}},
+					kmmv1beta1.ModuleBuildSignSpec{ModuleImageSpec: kmmv1beta1.ModuleImageSpec{Image: "image 2"}, Action: kmmv1beta1.SignImage},
 				},
 			},
 		}
 		imageSpec := kmmv1beta1.ModuleImageSpec{Image: "image 2"}
 
-		setModuleImageSpec(&mbscObj, &imageSpec)
+		setModuleImageSpec(&mbscObj, &imageSpec, kmmv1beta1.BuildImage)
 
 		Expect(len(mbscObj.Spec.Images)).To(Equal(2))
+		Expect(mbscObj.Spec.Images[1].Action).To(Equal(kmmv1beta1.BuildImage))
 	})
 })
 
@@ -114,48 +118,50 @@ var _ = Describe("CreateOrPatch", func() {
 	})
 
 	ctx := context.Background()
-	mbscName := "some name"
-	mbscNamespace := "some namespace"
+	objName := "some name"
+	objNamespace := "some namespace"
 	imageSpec := kmmv1beta1.ModuleImageSpec{Image: "some image"}
-	micObj := kmmv1beta1.ModuleImagesConfig{}
+	micObj := kmmv1beta1.ModuleImagesConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: objName, Namespace: objNamespace},
+	}
 
 	It("MSBC does not exists", func() {
 		gomock.InOrder(
-			mockClient.EXPECT().Get(ctx, types.NamespacedName{Name: mbscName, Namespace: mbscNamespace}, gomock.Any()).Return(
+			mockClient.EXPECT().Get(ctx, types.NamespacedName{Name: objName, Namespace: objNamespace}, gomock.Any()).Return(
 				k8serrors.NewNotFound(schema.GroupResource{}, "some name")),
 			mockClient.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 		)
 
-		err := mbsc.CreateOrPatch(ctx, mbscName, mbscNamespace, &imageSpec, nil, &micObj)
+		err := mbsc.CreateOrPatch(ctx, &micObj, &imageSpec, kmmv1beta1.BuildImage)
 		Expect(err).To(BeNil())
 	})
 
 	It("MSBC does not existsi, create fails", func() {
 		gomock.InOrder(
-			mockClient.EXPECT().Get(ctx, types.NamespacedName{Name: mbscName, Namespace: mbscNamespace}, gomock.Any()).Return(
+			mockClient.EXPECT().Get(ctx, types.NamespacedName{Name: objName, Namespace: objNamespace}, gomock.Any()).Return(
 				k8serrors.NewNotFound(schema.GroupResource{}, "some name")),
 			mockClient.EXPECT().Create(ctx, gomock.Any()).Return(fmt.Errorf("some error")),
 		)
 
-		err := mbsc.CreateOrPatch(ctx, mbscName, mbscNamespace, &imageSpec, nil, &micObj)
+		err := mbsc.CreateOrPatch(ctx, &micObj, &imageSpec, kmmv1beta1.BuildImage)
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("MSBC exists", func() {
 		gomock.InOrder(
-			mockClient.EXPECT().Get(ctx, types.NamespacedName{Name: mbscName, Namespace: mbscNamespace}, gomock.Any()).Return(nil),
+			mockClient.EXPECT().Get(ctx, types.NamespacedName{Name: objName, Namespace: objNamespace}, gomock.Any()).Return(nil),
 			mockClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil),
 		)
-		err := mbsc.CreateOrPatch(ctx, mbscName, mbscNamespace, &imageSpec, nil, &micObj)
+		err := mbsc.CreateOrPatch(ctx, &micObj, &imageSpec, kmmv1beta1.BuildImage)
 		Expect(err).To(BeNil())
 	})
 
 	It("MSBC exists. patch fails", func() {
 		gomock.InOrder(
-			mockClient.EXPECT().Get(ctx, types.NamespacedName{Name: mbscName, Namespace: mbscNamespace}, gomock.Any()).Return(nil),
+			mockClient.EXPECT().Get(ctx, types.NamespacedName{Name: objName, Namespace: objNamespace}, gomock.Any()).Return(nil),
 			mockClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error")),
 		)
-		err := mbsc.CreateOrPatch(ctx, mbscName, mbscNamespace, &imageSpec, nil, &micObj)
+		err := mbsc.CreateOrPatch(ctx, &micObj, &imageSpec, kmmv1beta1.BuildImage)
 		Expect(err).To(HaveOccurred())
 	})
 })

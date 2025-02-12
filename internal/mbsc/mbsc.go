@@ -5,7 +5,6 @@ import (
 	"fmt"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 
-	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,8 +17,8 @@ import (
 
 type MBSC interface {
 	Get(ctx context.Context, name, namespace string) (*kmmv1beta1.ModuleBuildSignConfig, error)
-	CreateOrPatch(ctx context.Context, name string, namespace string, moduleImageSpec *kmmv1beta1.ModuleImageSpec,
-		imageRepoSecret *v1.LocalObjectReference, owner metav1.Object) error
+	CreateOrPatch(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig,
+		moduleImageSpec *kmmv1beta1.ModuleImageSpec, action kmmv1beta1.BuildOrSignAction) error
 }
 
 type mbsc struct {
@@ -46,30 +45,30 @@ func (m *mbsc) Get(ctx context.Context, name, namespace string) (*kmmv1beta1.Mod
 	return &mbsc, nil
 }
 
-func (m *mbsc) CreateOrPatch(ctx context.Context,
-	name string,
-	namespace string,
-	moduleImageSpec *kmmv1beta1.ModuleImageSpec,
-	imageRepoSecret *v1.LocalObjectReference,
-	owner metav1.Object) error {
+func (m *mbsc) CreateOrPatch(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig,
+	moduleImageSpec *kmmv1beta1.ModuleImageSpec, action kmmv1beta1.BuildOrSignAction) error {
 	mbscObj := &kmmv1beta1.ModuleBuildSignConfig{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: micObj.Name, Namespace: micObj.Namespace},
 	}
 
 	_, err := controllerutil.CreateOrPatch(ctx, m.client, mbscObj, func() error {
-		setModuleImageSpec(mbscObj, moduleImageSpec)
-		mbscObj.Spec.ImageRepoSecret = imageRepoSecret
-		return controllerutil.SetOwnerReference(owner, mbscObj, m.scheme)
+		setModuleImageSpec(mbscObj, moduleImageSpec, action)
+		mbscObj.Spec.ImageRepoSecret = micObj.Spec.ImageRepoSecret
+		return controllerutil.SetOwnerReference(micObj, mbscObj, m.scheme)
 	})
 	return err
 }
 
-func setModuleImageSpec(mbscObj *kmmv1beta1.ModuleBuildSignConfig, moduleImageSpec *kmmv1beta1.ModuleImageSpec) {
+func setModuleImageSpec(mbscObj *kmmv1beta1.ModuleBuildSignConfig, moduleImageSpec *kmmv1beta1.ModuleImageSpec, action kmmv1beta1.BuildOrSignAction) {
+	specEntry := kmmv1beta1.ModuleBuildSignSpec{
+		ModuleImageSpec: *moduleImageSpec,
+		Action:          action,
+	}
 	for i, imageSpec := range mbscObj.Spec.Images {
 		if imageSpec.Image == moduleImageSpec.Image {
-			mbscObj.Spec.Images[i] = *moduleImageSpec
+			mbscObj.Spec.Images[i] = specEntry
 			return
 		}
 	}
-	mbscObj.Spec.Images = append(mbscObj.Spec.Images, *moduleImageSpec)
+	mbscObj.Spec.Images = append(mbscObj.Spec.Images, specEntry)
 }
