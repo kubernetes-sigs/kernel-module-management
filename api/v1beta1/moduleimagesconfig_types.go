@@ -28,12 +28,10 @@ const (
 	ImageExists ImageState = "Exists"
 	// ImageDoesNotExist means that image does not exist in the specified repo
 	ImageDoesNotExist ImageState = "DoesNotExist"
-	// ImageNeedsBuilding means that image does not exists, but has Build/Sign sections and can be built
+	// ImageNeedsBuilding means that image does not exists, but has Build section and can be built
 	ImageNeedsBuilding ImageState = "NeedsBuilding"
-	// ImageBuildFailed means that image does not exists and the Build/Sign failed
-	ImageBuildFailed ImageState = "BuildFailed"
-	// ImageBuildSucceeded means that image has been built and pushed succesfully
-	ImageBuildSucceeded ImageState = "BuildSucceeded"
+	// ImageNeedsSigning means that images needs signing, because it was pre-built, or in-cluster build succeeded
+	ImageNeedsSigning ImageState = "NeedsSigning"
 )
 
 // ModuleImageSpec describes the image whose state needs to be queried

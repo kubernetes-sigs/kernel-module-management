@@ -41,7 +41,7 @@ spec:
             type: object
           spec:
             description: |-
-              ModuleImagesConfigSpec describes the images of the Module whose status needs to be verified
+              ModuleBuildSignConfigSpec describes the images that need to be built/signed
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
             properties:
               imageRepoSecret:
@@ -64,6 +64,11 @@ spec:
                   description: ModuleImageSpec describes the image whose state needs
                     to be queried
                   properties:
+                    action:
+                      enum:
+                      - BuildImage
+                      - SignImage
+                      type: string
                     build:
                       description: Build contains build instructions, in case image
                         needs building
@@ -219,6 +224,7 @@ spec:
                       - keySecret
                       type: object
                   required:
+                  - action
                   - image
                   type: object
                 type: array

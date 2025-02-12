@@ -120,6 +120,11 @@ var _ = Describe("updateStatusByPullPods", func() {
 				{
 
 					Image: "image 2",
+					Sign:  &kmmv1beta1.Sign{},
+				},
+				{
+
+					Image: "image 3",
 				},
 			},
 		},
@@ -147,7 +152,7 @@ var _ = Describe("updateStatusByPullPods", func() {
 		Expect(err).To(BeNil())
 	})
 
-	It("pod failed, build or sign config present", func() {
+	It("pod failed, build config present", func() {
 		pullPod := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{imageLabelKey: "image 1"},
@@ -167,7 +172,7 @@ var _ = Describe("updateStatusByPullPods", func() {
 		Expect(err).To(BeNil())
 	})
 
-	It("pod failed, build or sign configis not present", func() {
+	It("pod failed, build config not present, sign config present", func() {
 		pullPod := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{imageLabelKey: "image 2"},
@@ -178,6 +183,26 @@ var _ = Describe("updateStatusByPullPods", func() {
 		}
 		gomock.InOrder(
 			micHelper.EXPECT().GetModuleImageSpec(&testMic, "image 2").Return(&testMic.Spec.Images[1]),
+			micHelper.EXPECT().SetImageStatus(&testMic, "image 2", kmmv1beta1.ImageNeedsSigning),
+			clnt.EXPECT().Status().Return(statusWriter),
+			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
+			mockPodHelper.EXPECT().deletePod(ctx, &pullPod).Return(nil),
+		)
+		err := mrh.updateStatusByPullPods(ctx, &testMic, []v1.Pod{pullPod})
+		Expect(err).To(BeNil())
+	})
+
+	It("pod failed, build or sign config is not present", func() {
+		pullPod := v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{imageLabelKey: "image 3"},
+			},
+			Status: v1.PodStatus{
+				Phase: v1.PodFailed,
+			},
+		}
+		gomock.InOrder(
+			micHelper.EXPECT().GetModuleImageSpec(&testMic, "image 3").Return(&testMic.Spec.Images[2]),
 			clnt.EXPECT().Status().Return(statusWriter),
 			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
 			mockPodHelper.EXPECT().deletePod(ctx, &pullPod).Return(nil),
@@ -278,33 +303,40 @@ var _ = Describe("updateStatusByMBSC", func() {
 		Expect(err).To(BeNil())
 	})
 
-	It("Images in MBSC status exist in MIC spec", func() {
-		testMBSC := kmmv1beta1.ModuleBuildSignConfig{
-			Status: kmmv1beta1.ModuleImagesConfigStatus{
-				ImagesStates: []kmmv1beta1.ModuleImageState{
-					{
-						Image:  "image 1",
-						Status: kmmv1beta1.ImageBuildFailed,
-					},
-					{
-						Image:  "image 2",
-						Status: kmmv1beta1.ImageBuildSucceeded,
+	DescribeTable("images in MBSC status exist in MIC spec",
+		func(signExists bool, mbscImageStatus kmmv1beta1.ImageState, expectedImageState kmmv1beta1.ImageState) {
+			testMBSC := kmmv1beta1.ModuleBuildSignConfig{
+				Status: kmmv1beta1.ModuleImagesConfigStatus{
+					ImagesStates: []kmmv1beta1.ModuleImageState{
+						{
+							Image:  "some image",
+							Status: mbscImageStatus,
+						},
 					},
 				},
-			},
-		}
-		gomock.InOrder(
-			mbscHelper.EXPECT().Get(ctx, testMic.Name, testMic.Namespace).Return(&testMBSC, nil),
-			micHelper.EXPECT().GetModuleImageSpec(&testMic, testMBSC.Status.ImagesStates[0].Image).Return(&testMic.Spec.Images[0]),
-			micHelper.EXPECT().SetImageStatus(&testMic, testMBSC.Status.ImagesStates[0].Image, kmmv1beta1.ImageDoesNotExist),
-			micHelper.EXPECT().GetModuleImageSpec(&testMic, testMBSC.Status.ImagesStates[1].Image).Return(&testMic.Spec.Images[1]),
-			micHelper.EXPECT().SetImageStatus(&testMic, testMBSC.Status.ImagesStates[1].Image, kmmv1beta1.ImageExists),
-			clnt.EXPECT().Status().Return(statusWriter),
-			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
-		)
-		err := mrh.updateStatusByMBSC(ctx, &testMic)
-		Expect(err).To(BeNil())
-	})
+			}
+			imageSpec := kmmv1beta1.ModuleImageSpec{}
+			if signExists {
+				imageSpec.Sign = &kmmv1beta1.Sign{}
+			}
+			gomock.InOrder(
+				mbscHelper.EXPECT().Get(ctx, testMic.Name, testMic.Namespace).Return(&testMBSC, nil),
+				micHelper.EXPECT().GetModuleImageSpec(&testMic, "some image").Return(&imageSpec),
+				micHelper.EXPECT().SetImageStatus(&testMic, "some image", expectedImageState),
+				clnt.EXPECT().Status().Return(statusWriter),
+				statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
+			)
+
+			err := mrh.updateStatusByMBSC(ctx, &testMic)
+			Expect(err).To(BeNil())
+		},
+		Entry("sign config does not exists, status is ImageBuildFailed", false, kmmv1beta1.ImageBuildFailed, kmmv1beta1.ImageDoesNotExist),
+		Entry("sign config does not exists, status is ImageBuildSucceeded", false, kmmv1beta1.ImageBuildSucceeded, kmmv1beta1.ImageExists),
+		Entry("sign config exists, status is ImageBuildFailed", true, kmmv1beta1.ImageBuildFailed, kmmv1beta1.ImageDoesNotExist),
+		Entry("sign config exists, status is ImageBuildSucceeded", true, kmmv1beta1.ImageBuildSucceeded, kmmv1beta1.ImageNeedsSigning),
+		Entry("status is ImageSignFailed", false, kmmv1beta1.ImageSignFailed, kmmv1beta1.ImageDoesNotExist),
+		Entry("status is ImageSignSucceeded", false, kmmv1beta1.ImageSignSucceeded, kmmv1beta1.ImageExists),
+	)
 })
 
 var _ = Describe("processImagesSpecs", func() {
@@ -343,8 +375,16 @@ var _ = Describe("processImagesSpecs", func() {
 	})
 
 	ctx := context.Background()
-
 	pullPods := []v1.Pod{}
+	testMic = kmmv1beta1.ModuleImagesConfig{
+		Spec: kmmv1beta1.ModuleImagesConfigSpec{
+			Images: []kmmv1beta1.ModuleImageSpec{
+				{
+					Image: "image 1",
+				},
+			},
+		},
+	}
 
 	It("image status empty, pull pod does not exists, need to create a pull pod", func() {
 		gomock.InOrder(
@@ -365,37 +405,43 @@ var _ = Describe("processImagesSpecs", func() {
 		Expect(err).To(BeNil())
 	})
 
-	It("image status is ImageExists, nothing to do", func() {
-		micHelper.EXPECT().GetImageState(&testMic, "image 1").Return(kmmv1beta1.ImageExists)
-		err := mrh.processImagesSpecs(ctx, &testMic, pullPods)
-		Expect(err).To(BeNil())
-	})
+	DescribeTable("images in MBSC status exist in MIC spec",
+		func(imageState kmmv1beta1.ImageState, buildExists, signExists, updateMSBC bool, msbcAction kmmv1beta1.BuildOrSignAction) {
+			testMic := kmmv1beta1.ModuleImagesConfig{
+				Spec: kmmv1beta1.ModuleImagesConfigSpec{
+					Images: []kmmv1beta1.ModuleImageSpec{
+						{
+							Image: "image 1",
+						},
+					},
+				},
+			}
+			if buildExists {
+				testMic.Spec.Images[0].Build = &kmmv1beta1.Build{}
+			}
+			if signExists {
+				testMic.Spec.Images[0].Sign = &kmmv1beta1.Sign{}
+			}
+			micHelper.EXPECT().GetImageState(&testMic, "image 1").Return(imageState)
 
-	It("image status is ImageDoesNotExist and spec has no Build or Sign, do nothing", func() {
-		testMic.Spec.Images[0].Build = nil
-		micHelper.EXPECT().GetImageState(&testMic, "image 1").Return(kmmv1beta1.ImageDoesNotExist)
-		err := mrh.processImagesSpecs(ctx, &testMic, pullPods)
-		Expect(err).To(BeNil())
-	})
+			if updateMSBC {
+				mbscHelper.EXPECT().CreateOrPatch(ctx, &testMic, &testMic.Spec.Images[0], msbcAction).Return(nil)
+			}
 
-	It("image status is ImageDoesNotExist and spec has Build or Sign, update MSBC", func() {
-		gomock.InOrder(
-			micHelper.EXPECT().GetImageState(&testMic, "image 1").Return(kmmv1beta1.ImageDoesNotExist),
-			mbscHelper.EXPECT().CreateOrPatch(ctx, "some name", "some namespace", &testMic.Spec.Images[0], testMic.Spec.ImageRepoSecret, &testMic).Return(nil),
-		)
-		err := mrh.processImagesSpecs(ctx, &testMic, pullPods)
-		Expect(err).To(BeNil())
-	})
-
-	It("image status is NeedsBuilding, update MSBC", func() {
-		gomock.InOrder(
-			micHelper.EXPECT().GetImageState(&testMic, "image 1").Return(kmmv1beta1.ImageNeedsBuilding),
-			mbscHelper.EXPECT().CreateOrPatch(ctx, "some name", "some namespace", &testMic.Spec.Images[0], testMic.Spec.ImageRepoSecret, &testMic).Return(nil),
-		)
-		err := mrh.processImagesSpecs(ctx, &testMic, pullPods)
-		Expect(err).To(BeNil())
-	})
-
+			err := mrh.processImagesSpecs(ctx, &testMic, pullPods)
+			Expect(err).To(BeNil())
+		},
+		Entry("image state ImageDoesNotExist, no build or sign configs, do nothing",
+			kmmv1beta1.ImageDoesNotExist, false, false, false, kmmv1beta1.SignImage),
+		Entry("image state ImageDoesNotExist, build config exists, sign does not exists, update MBSC to build action",
+			kmmv1beta1.ImageDoesNotExist, true, false, true, kmmv1beta1.BuildImage),
+		Entry("image state ImageDoesNotExist, build config does not exists, sign config exists, update MBSC to build action",
+			kmmv1beta1.ImageDoesNotExist, false, true, true, kmmv1beta1.BuildImage),
+		Entry("image state ImageNeedsBuilding, build/sign config not important, update MBSC to build action",
+			kmmv1beta1.ImageNeedsBuilding, false, false, true, kmmv1beta1.BuildImage),
+		Entry("image state ImageNeedsSigning, build/sign config not important, update MBSC to sign action",
+			kmmv1beta1.ImageNeedsSigning, false, false, true, kmmv1beta1.SignImage),
+	)
 })
 
 var _ = Describe("listImagesPullPods", func() {

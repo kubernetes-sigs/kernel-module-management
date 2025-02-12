@@ -14,8 +14,6 @@ import (
 
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	gomock "go.uber.org/mock/gomock"
-	v1 "k8s.io/api/core/v1"
-	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MockMBSC is a mock of MBSC interface.
@@ -42,17 +40,17 @@ func (m *MockMBSC) EXPECT() *MockMBSCMockRecorder {
 }
 
 // CreateOrPatch mocks base method.
-func (m *MockMBSC) CreateOrPatch(ctx context.Context, name, namespace string, moduleImageSpec *v1beta1.ModuleImageSpec, imageRepoSecret *v1.LocalObjectReference, owner v10.Object) error {
+func (m *MockMBSC) CreateOrPatch(ctx context.Context, micObj *v1beta1.ModuleImagesConfig, moduleImageSpec *v1beta1.ModuleImageSpec, action v1beta1.BuildOrSignAction) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateOrPatch", ctx, name, namespace, moduleImageSpec, imageRepoSecret, owner)
+	ret := m.ctrl.Call(m, "CreateOrPatch", ctx, micObj, moduleImageSpec, action)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateOrPatch indicates an expected call of CreateOrPatch.
-func (mr *MockMBSCMockRecorder) CreateOrPatch(ctx, name, namespace, moduleImageSpec, imageRepoSecret, owner any) *gomock.Call {
+func (mr *MockMBSCMockRecorder) CreateOrPatch(ctx, micObj, moduleImageSpec, action any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrPatch", reflect.TypeOf((*MockMBSC)(nil).CreateOrPatch), ctx, name, namespace, moduleImageSpec, imageRepoSecret, owner)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrPatch", reflect.TypeOf((*MockMBSC)(nil).CreateOrPatch), ctx, micObj, moduleImageSpec, action)
 }
 
 // Get mocks base method.
