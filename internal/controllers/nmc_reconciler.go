@@ -159,6 +159,10 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		errs = append(errs, fmt.Errorf("failed to GC in-use labels for NMC %s: %v", req.NamespacedName, err))
 	}
 
+	if err := r.helper.GarbageCollectWorkerPods(ctx, &nmcObj); err != nil {
+		errs = append(errs, fmt.Errorf("failed to GC orphan worker pods for NMC %s: %v", req.NamespacedName, err))
+	}
+
 	if loaded, unloaded, err := r.helper.UpdateNodeLabels(ctx, &nmcObj, &node); err != nil {
 		errs = append(errs, fmt.Errorf("could not update node's labels for NMC %s: %v", req.NamespacedName, err))
 	} else {
@@ -212,6 +216,7 @@ func GetContainerStatus(statuses []v1.ContainerStatus, name string) v1.Container
 
 type nmcReconcilerHelper interface {
 	GarbageCollectInUseLabels(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
+	GarbageCollectWorkerPods(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
 	ProcessModuleSpec(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, spec *kmmv1beta1.NodeModuleSpec, status *kmmv1beta1.NodeModuleStatus, node *v1.Node) error
 	ProcessUnconfiguredModuleStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, status *kmmv1beta1.NodeModuleStatus, node *v1.Node) error
 	RemovePodFinalizers(ctx context.Context, nodeName string) error
@@ -236,6 +241,41 @@ func newNMCReconcilerHelper(client client.Client, podManager pod.WorkerPodManage
 		nodeAPI:    nodeAPI,
 		lph:        newLabelPreparationHelper(),
 	}
+}
+
+func (h *nmcReconcilerHelperImpl) GarbageCollectWorkerPods(ctx context.Context, nmcObj *kmmv1beta1.NodeModulesConfig) error {
+	podsList, err := h.podManager.ListWorkerPodsOnNode(ctx, nmcObj.Name)
+	if err != nil {
+		return fmt.Errorf("could not list worker Pods: %v", err)
+	}
+
+	modulePresentInNMC := sets.New[string]()
+	for _, module := range nmcObj.Spec.Modules {
+		modulePresentInNMC.Insert(module.Name)
+	}
+	for _, module := range nmcObj.Status.Modules {
+		modulePresentInNMC.Insert(module.Name)
+	}
+
+	var errs []error
+	for _, workerPod := range podsList {
+		podModuleName := workerPod.Labels[constants.ModuleNameLabel]
+		if !modulePresentInNMC.Has(podModuleName) {
+			mergeFrom := client.MergeFrom(workerPod.DeepCopy())
+			if controllerutil.RemoveFinalizer(&workerPod, pod.NodeModulesConfigFinalizer) {
+				if err = h.client.Patch(ctx, &workerPod, mergeFrom); err != nil {
+					errs = append(
+						errs, fmt.Errorf("could not patch Pod %s/%s: %v", workerPod.Namespace, workerPod.Name, err),
+					)
+				}
+			}
+
+			if err = h.podManager.DeletePod(ctx, &workerPod); err != nil {
+				errs = append(errs, fmt.Errorf("could not delete pod %s: %v", workerPod.Name, err))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // GarbageCollectInUseLabels removes all module-in-use labels for which there is no corresponding entry either in
