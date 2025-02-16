@@ -19,6 +19,7 @@ type MBSC interface {
 	Get(ctx context.Context, name, namespace string) (*kmmv1beta1.ModuleBuildSignConfig, error)
 	CreateOrPatch(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig,
 		moduleImageSpec *kmmv1beta1.ModuleImageSpec, action kmmv1beta1.BuildOrSignAction) error
+	GetImageSpec(mbscObj *kmmv1beta1.ModuleBuildSignConfig, image string) *kmmv1beta1.ModuleBuildSignSpec
 }
 
 type mbsc struct {
@@ -57,6 +58,15 @@ func (m *mbsc) CreateOrPatch(ctx context.Context, micObj *kmmv1beta1.ModuleImage
 		return controllerutil.SetOwnerReference(micObj, mbscObj, m.scheme)
 	})
 	return err
+}
+
+func (m *mbsc) GetImageSpec(mbscObj *kmmv1beta1.ModuleBuildSignConfig, image string) *kmmv1beta1.ModuleBuildSignSpec {
+	for _, imageSpec := range mbscObj.Spec.Images {
+		if imageSpec.Image == image {
+			return &imageSpec
+		}
+	}
+	return nil
 }
 
 func setModuleImageSpec(mbscObj *kmmv1beta1.ModuleBuildSignConfig, moduleImageSpec *kmmv1beta1.ModuleImageSpec, action kmmv1beta1.BuildOrSignAction) {

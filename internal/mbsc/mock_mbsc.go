@@ -67,3 +67,17 @@ func (mr *MockMBSCMockRecorder) Get(ctx, name, namespace any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockMBSC)(nil).Get), ctx, name, namespace)
 }
+
+// GetImageSpec mocks base method.
+func (m *MockMBSC) GetImageSpec(mbscObj *v1beta1.ModuleBuildSignConfig, image string) *v1beta1.ModuleBuildSignSpec {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetImageSpec", mbscObj, image)
+	ret0, _ := ret[0].(*v1beta1.ModuleBuildSignSpec)
+	return ret0
+}
+
+// GetImageSpec indicates an expected call of GetImageSpec.
+func (mr *MockMBSCMockRecorder) GetImageSpec(mbscObj, image any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetImageSpec", reflect.TypeOf((*MockMBSC)(nil).GetImageSpec), mbscObj, image)
+}
