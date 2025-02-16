@@ -165,3 +165,29 @@ var _ = Describe("CreateOrPatch", func() {
 		Expect(err).To(HaveOccurred())
 	})
 })
+
+var _ = Describe("GetImageSpec", func() {
+	testMBSC := kmmv1beta1.ModuleBuildSignConfig{
+		Spec: kmmv1beta1.ModuleBuildSignConfigSpec{
+			Images: []kmmv1beta1.ModuleBuildSignSpec{
+				{
+					ModuleImageSpec: kmmv1beta1.ModuleImageSpec{
+						Image: "test image1",
+					},
+				},
+			},
+		},
+	}
+	mbsc := New(nil, nil)
+
+	It("image's spec exists in MBSC", func() {
+		By("image's spec exists in MBSC")
+		res := mbsc.GetImageSpec(&testMBSC, "test image1")
+		Expect(res).ToNot(BeNil())
+		Expect(res.Image).To(Equal("test image1"))
+
+		By("image's spec does not exists in MBSC")
+		res = mbsc.GetImageSpec(&testMBSC, "test image2")
+		Expect(res).To(BeNil())
+	})
+})
