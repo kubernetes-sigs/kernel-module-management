@@ -28,7 +28,7 @@ require (
 	k8s.io/kubectl v0.32.2
 	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
 	open-cluster-management.io/api v0.15.0
-	sigs.k8s.io/controller-runtime v0.20.1
+	sigs.k8s.io/controller-runtime v0.20.2
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -46,7 +46,7 @@ require (
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.8.2 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
-	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
+	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
@@ -108,8 +108,8 @@ require (
 	google.golang.org/protobuf v1.36.3 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/apiextensions-apiserver v0.32.0 // indirect
-	k8s.io/apiserver v0.32.0 // indirect
+	k8s.io/apiextensions-apiserver v0.32.1 // indirect
+	k8s.io/apiserver v0.32.1 // indirect
 	k8s.io/component-base v0.32.2 // indirect
 	k8s.io/kube-openapi v0.0.0-20241105132330-32ad38e42d3f // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.0 // indirect
