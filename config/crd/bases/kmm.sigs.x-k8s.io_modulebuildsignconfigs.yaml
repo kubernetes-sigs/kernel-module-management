@@ -61,8 +61,8 @@ spec:
                 x-kubernetes-map-type: atomic
               images:
                 items:
-                  description: ModuleImageSpec describes the image whose state needs
-                    to be queried
+                  description: ModuleBuildSignSpec describes the image whose state
+                    needs to be queried
                   properties:
                     action:
                       enum:
@@ -233,27 +233,34 @@ spec:
             type: object
           status:
             description: |-
-              ModuleImagesConfigStatus describes the status of the images that need to be verified (defined in the spec)
+              ModuleBuildSignConfigStatus describes the status of the images that needed to be built/signed
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
             properties:
-              imagesStates:
+              images:
                 items:
+                  description: BuildSignImageState contains the status of the image
+                    that was requested to be built/signed
                   properties:
+                    action:
+                      enum:
+                      - BuildImage
+                      - SignImage
+                      type: string
                     image:
-                      description: image
                       type: string
                     status:
-                      description: |-
-                        status of the image
-                        one of: Exists, notExists
+                      enum:
+                      - Success
+                      - Failure
                       type: string
                   required:
+                  - action
                   - image
                   - status
                   type: object
                 type: array
             required:
-            - imagesStates
+            - images
             type: object
         type: object
     served: true

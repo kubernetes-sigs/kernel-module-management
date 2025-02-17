@@ -22,6 +22,7 @@ import (
 )
 
 type BuildOrSignAction string
+type BuildOrSignStatus string
 
 const (
 	// BuildImage means that image needs to be built
@@ -30,20 +31,14 @@ const (
 	// SignImage means that image needs to be built
 	SignImage BuildOrSignAction = "SignImage"
 
-	// ImageBuildFailed means that image does not exists and the Build failed
-	ImageBuildFailed ImageState = "BuildFailed"
+	// ActionSuccess means that action (sign or build, depending on the action field) has succeeded
+	ActionSuccess BuildOrSignStatus = "Success"
 
-	// ImageBuildSucceeded means that image has been built and pushed succesfully
-	ImageBuildSucceeded ImageState = "BuildSucceeded"
-
-	// ImageSignFailed means that image does not exists and the Sign failed
-	ImageSignFailed ImageState = "SignFailed"
-
-	// ImageSignSucceeded means that image has been signed and pushed succesfully
-	ImageSignSucceeded ImageState = "SignSucceeded"
+	// ActionFailure means that action (sign or build, depending on the action field) has failed
+	ActionFailure BuildOrSignStatus = "Failure"
 )
 
-// ModuleImageSpec describes the image whose state needs to be queried
+// ModuleBuildSignSpec describes the image whose state needs to be queried
 type ModuleBuildSignSpec struct {
 	ModuleImageSpec `json:",inline"`
 
@@ -62,6 +57,23 @@ type ModuleBuildSignConfigSpec struct {
 	ImageRepoSecret *v1.LocalObjectReference `json:"imageRepoSecret,omitempty"`
 }
 
+// BuildSignImageState contains the status of the image that was requested to be built/signed
+type BuildSignImageState struct {
+	Image string `json:"image"`
+
+	// +kubebuilder:validation:Enum=Success;Failure
+	Status BuildOrSignStatus `json:"status"`
+
+	// +kubebuilder:validation:Enum=BuildImage;SignImage
+	Action BuildOrSignAction `json:"action"`
+}
+
+// ModuleBuildSignConfigStatus describes the status of the images that needed to be built/signed
+// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+type ModuleBuildSignConfigStatus struct {
+	Images []BuildSignImageState `json:"images"`
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
@@ -72,8 +84,8 @@ type ModuleBuildSignConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ModuleBuildSignConfigSpec `json:"spec,omitempty"`
-	Status ModuleImagesConfigStatus  `json:"status,omitempty"`
+	Spec   ModuleBuildSignConfigSpec   `json:"spec,omitempty"`
+	Status ModuleBuildSignConfigStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
