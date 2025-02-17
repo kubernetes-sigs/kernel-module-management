@@ -272,8 +272,8 @@ var _ = Describe("updateStatusByMBSC", func() {
 
 	It("Image in MBSC status does not exists in MIC spec", func() {
 		testMBSC := kmmv1beta1.ModuleBuildSignConfig{
-			Status: kmmv1beta1.ModuleImagesConfigStatus{
-				ImagesStates: []kmmv1beta1.ModuleImageState{
+			Status: kmmv1beta1.ModuleBuildSignConfigStatus{
+				Images: []kmmv1beta1.BuildSignImageState{
 					{
 						Image: "some image",
 					},
@@ -282,7 +282,7 @@ var _ = Describe("updateStatusByMBSC", func() {
 		}
 		gomock.InOrder(
 			mbscHelper.EXPECT().Get(ctx, testMic.Name, testMic.Namespace).Return(&testMBSC, nil),
-			micHelper.EXPECT().GetModuleImageSpec(&testMic, testMBSC.Status.ImagesStates[0].Image).Return(nil),
+			micHelper.EXPECT().GetModuleImageSpec(&testMic, "some image").Return(nil),
 			clnt.EXPECT().Status().Return(statusWriter),
 			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
 		)
@@ -290,14 +290,16 @@ var _ = Describe("updateStatusByMBSC", func() {
 		Expect(err).To(BeNil())
 	})
 
-	DescribeTable("images in MBSC status exist in MIC spec",
-		func(signExists bool, mbscImageStatus kmmv1beta1.ImageState, expectedImageState kmmv1beta1.ImageState) {
+	DescribeTable("image has status in MBSC and spec in MIC",
+		func(signExists bool, mbscImageAction kmmv1beta1.BuildOrSignAction, mbscImageStatus kmmv1beta1.BuildOrSignStatus,
+			expectedMICImageState kmmv1beta1.ImageState) {
 			testMBSC := kmmv1beta1.ModuleBuildSignConfig{
-				Status: kmmv1beta1.ModuleImagesConfigStatus{
-					ImagesStates: []kmmv1beta1.ModuleImageState{
+				Status: kmmv1beta1.ModuleBuildSignConfigStatus{
+					Images: []kmmv1beta1.BuildSignImageState{
 						{
 							Image:  "some image",
 							Status: mbscImageStatus,
+							Action: mbscImageAction,
 						},
 					},
 				},
@@ -309,7 +311,7 @@ var _ = Describe("updateStatusByMBSC", func() {
 			gomock.InOrder(
 				mbscHelper.EXPECT().Get(ctx, testMic.Name, testMic.Namespace).Return(&testMBSC, nil),
 				micHelper.EXPECT().GetModuleImageSpec(&testMic, "some image").Return(&imageSpec),
-				micHelper.EXPECT().SetImageStatus(&testMic, "some image", expectedImageState),
+				micHelper.EXPECT().SetImageStatus(&testMic, "some image", expectedMICImageState),
 				clnt.EXPECT().Status().Return(statusWriter),
 				statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
 			)
@@ -317,12 +319,14 @@ var _ = Describe("updateStatusByMBSC", func() {
 			err := mrh.updateStatusByMBSC(ctx, &testMic)
 			Expect(err).To(BeNil())
 		},
-		Entry("sign config does not exists, status is ImageBuildFailed", false, kmmv1beta1.ImageBuildFailed, kmmv1beta1.ImageDoesNotExist),
-		Entry("sign config does not exists, status is ImageBuildSucceeded", false, kmmv1beta1.ImageBuildSucceeded, kmmv1beta1.ImageExists),
-		Entry("sign config exists, status is ImageBuildFailed", true, kmmv1beta1.ImageBuildFailed, kmmv1beta1.ImageDoesNotExist),
-		Entry("sign config exists, status is ImageBuildSucceeded", true, kmmv1beta1.ImageBuildSucceeded, kmmv1beta1.ImageNeedsSigning),
-		Entry("status is ImageSignFailed", false, kmmv1beta1.ImageSignFailed, kmmv1beta1.ImageDoesNotExist),
-		Entry("status is ImageSignSucceeded", false, kmmv1beta1.ImageSignSucceeded, kmmv1beta1.ImageExists),
+		Entry("sign config does not exists, action Build, status Failed", false, kmmv1beta1.BuildImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageDoesNotExist),
+		Entry("sign config does not exists, action Sign, status Failed", false, kmmv1beta1.SignImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageDoesNotExist),
+		Entry("sign config does not exists, action Build, status Succeeded", false, kmmv1beta1.BuildImage, kmmv1beta1.ActionSuccess, kmmv1beta1.ImageExists),
+		Entry("sign config does not exists, action Sign, status Succeeded", false, kmmv1beta1.SignImage, kmmv1beta1.ActionSuccess, kmmv1beta1.ImageExists),
+		Entry("sign config exists, action Build, status Failed", true, kmmv1beta1.BuildImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageDoesNotExist),
+		Entry("sign config exists, action Sign, status Failed", true, kmmv1beta1.SignImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageDoesNotExist),
+		Entry("sign config exists, action Build, status Succeeded", true, kmmv1beta1.BuildImage, kmmv1beta1.ActionSuccess, kmmv1beta1.ImageNeedsSigning),
+		Entry("sign config exists, action Sign, status Succeeded", true, kmmv1beta1.SignImage, kmmv1beta1.ActionSuccess, kmmv1beta1.ImageExists),
 	)
 })
 

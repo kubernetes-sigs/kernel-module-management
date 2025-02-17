@@ -188,23 +188,29 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByMBSC(ctx context.Context, mic
 	}
 
 	patchFrom := client.MergeFrom(micObj.DeepCopy())
-	for _, imageState := range mbsc.Status.ImagesStates {
-		imageSpec := mrhi.micHelper.GetModuleImageSpec(micObj, imageState.Image)
-		if imageSpec == nil {
-			// image not found in spec, ignore
+	for _, mbscImageState := range mbsc.Status.Images {
+		micImageSpec := mrhi.micHelper.GetModuleImageSpec(micObj, mbscImageState.Image)
+		if micImageSpec == nil {
+			// spec for image does not exists in MIC, meaning it was already deleted - ignore status
 			continue
 		}
-		switch imageState.Status {
-		case kmmv1beta1.ImageBuildFailed, kmmv1beta1.ImageSignFailed:
-			mrhi.micHelper.SetImageStatus(micObj, imageState.Image, kmmv1beta1.ImageDoesNotExist)
-		case kmmv1beta1.ImageBuildSucceeded:
-			if imageSpec.Sign != nil {
-				mrhi.micHelper.SetImageStatus(micObj, imageState.Image, kmmv1beta1.ImageNeedsSigning)
-			} else {
-				mrhi.micHelper.SetImageStatus(micObj, imageState.Image, kmmv1beta1.ImageExists)
-			}
-		case kmmv1beta1.ImageSignSucceeded:
-			mrhi.micHelper.SetImageStatus(micObj, imageState.Image, kmmv1beta1.ImageExists)
+
+		mbscStatus := mbscImageState.Status
+		mbscAction := mbscImageState.Action
+
+		switch {
+		case mbscStatus == kmmv1beta1.ActionFailure:
+			// any failure (build or sign) - image does not exists
+			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageDoesNotExist)
+		case mbscStatus == kmmv1beta1.ActionSuccess && mbscAction == kmmv1beta1.SignImage:
+			// sign action succeeded - image exists, nothing more to do
+			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageExists)
+		case mbscStatus == kmmv1beta1.ActionSuccess && micImageSpec.Sign != nil:
+			// build succeeded and sign exists - image needs to be signed
+			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageNeedsSigning)
+		case mbscStatus == kmmv1beta1.ActionSuccess:
+			// build succeeded, no sign - image exists
+			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageExists)
 		}
 	}
 
