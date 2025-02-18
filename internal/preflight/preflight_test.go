@@ -12,9 +12,9 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -333,7 +333,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 		}
 
 		mockBuildAPI.EXPECT().Sync(context.Background(), &mld, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(""), fmt.Errorf("some error"))
+			Return(pod.Status(""), fmt.Errorf("some error"))
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mld)
 		Expect(res).To(BeFalse())
@@ -349,7 +349,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 		}
 
 		mockBuildAPI.EXPECT().Sync(context.Background(), &mld, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(utils.StatusCompleted), nil)
+			Return(pod.Status(pod.StatusCompleted), nil)
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mld)
 		Expect(res).To(BeTrue())
@@ -365,7 +365,7 @@ var _ = Describe("preflightHelper_verifyBuild", func() {
 		}
 
 		mockBuildAPI.EXPECT().Sync(context.Background(), &mld, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(utils.StatusInProgress), nil)
+			Return(pod.Status(pod.StatusInProgress), nil)
 
 		res, msg := ph.verifyBuild(context.Background(), pv, &mld)
 		Expect(res).To(BeFalse())
@@ -407,7 +407,7 @@ var _ = Describe("preflightHelper_verifySign", func() {
 		previousImage := ""
 
 		mockSignAPI.EXPECT().Sync(context.Background(), &mld, previousImage, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(""), fmt.Errorf("some error"))
+			Return(pod.Status(""), fmt.Errorf("some error"))
 
 		res, msg := ph.verifySign(context.Background(), pv, &mld)
 		Expect(res).To(BeFalse())
@@ -425,7 +425,7 @@ var _ = Describe("preflightHelper_verifySign", func() {
 		previousImage := ""
 
 		mockSignAPI.EXPECT().Sync(context.Background(), &mld, previousImage, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(utils.StatusCompleted), nil)
+			Return(pod.Status(pod.StatusCompleted), nil)
 
 		res, msg := ph.verifySign(context.Background(), pv, &mld)
 		Expect(res).To(BeTrue())
@@ -443,7 +443,7 @@ var _ = Describe("preflightHelper_verifySign", func() {
 		previousImage := ""
 
 		mockSignAPI.EXPECT().Sync(context.Background(), &mld, previousImage, pv.Spec.PushBuiltImage, pv).
-			Return(utils.Status(utils.StatusInProgress), nil)
+			Return(pod.Status(pod.StatusInProgress), nil)
 
 		res, msg := ph.verifySign(context.Background(), pv, &mld)
 		Expect(res).To(BeFalse())

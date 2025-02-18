@@ -20,8 +20,8 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 //go:generate mockgen -source=cluster.go -package=cluster -destination=mock_cluster.go
@@ -234,7 +234,7 @@ func (c *clusterAPI) build(
 		return false, fmt.Errorf("could not synchronize the build: %w", err)
 	}
 
-	if buildStatus == utils.StatusCompleted {
+	if buildStatus == pod.StatusCompleted {
 		return true, nil
 	}
 	return false, nil
@@ -270,7 +270,7 @@ func (c *clusterAPI) sign(
 		return false, fmt.Errorf("could not synchronize the signing: %w", err)
 	}
 
-	if signStatus == utils.StatusCompleted {
+	if signStatus == pod.StatusCompleted {
 		return true, nil
 	}
 	return false, nil

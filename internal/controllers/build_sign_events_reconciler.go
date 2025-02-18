@@ -7,7 +7,7 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"golang.org/x/exp/maps"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -168,7 +168,7 @@ func (r *JobEventReconciler) Reconcile(ctx context.Context, pod *v1.Pod) (reconc
 var jobEventPredicate = predicate.NewPredicateFuncs(func(obj client.Object) bool {
 	label := obj.GetLabels()[constants.PodType]
 
-	return (label == utils.PodTypeBuild || label == utils.PodTypeSign) &&
+	return (label == pod.PodTypeBuild || label == pod.PodTypeSign) &&
 		controllerutil.ContainsFinalizer(obj, constants.JobEventFinalizer)
 })
 

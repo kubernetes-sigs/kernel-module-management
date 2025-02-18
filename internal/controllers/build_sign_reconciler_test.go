@@ -9,8 +9,8 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -253,7 +253,7 @@ var _ = Describe("BuildSignReconciler_handleBuild", func() {
 
 		gomock.InOrder(
 			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mld.Owner).Return(utils.Status(utils.StatusCreated), nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mld.Owner).Return(pod.Status(pod.StatusCreated), nil),
 		)
 
 		completed, err := bsrh.handleBuild(context.Background(), &mld)
@@ -273,7 +273,7 @@ var _ = Describe("BuildSignReconciler_handleBuild", func() {
 		}
 		gomock.InOrder(
 			mockBM.EXPECT().ShouldSync(gomock.Any(), mld).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), mld, true, mld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
+			mockBM.EXPECT().Sync(gomock.Any(), mld, true, mld.Owner).Return(pod.Status(pod.StatusCompleted), nil),
 		)
 
 		completed, err := bsrh.handleBuild(context.Background(), mld)
@@ -329,7 +329,7 @@ var _ = Describe("BuildSignReconciler_handleSigning", func() {
 
 		gomock.InOrder(
 			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mld.Owner).Return(utils.Status(utils.StatusCreated), nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mld.Owner).Return(pod.Status(pod.StatusCreated), nil),
 		)
 
 		completed, err := bsrh.handleSigning(context.Background(), &mld)
@@ -349,7 +349,7 @@ var _ = Describe("BuildSignReconciler_handleSigning", func() {
 
 		gomock.InOrder(
 			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mld.Owner).Return(utils.Status(utils.StatusCompleted), nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mld.Owner).Return(pod.Status(pod.StatusCompleted), nil),
 		)
 
 		completed, err := bsrh.handleSigning(context.Background(), &mld)
@@ -372,7 +372,7 @@ var _ = Describe("BuildSignReconciler_handleSigning", func() {
 		gomock.InOrder(
 			mockSM.EXPECT().ShouldSync(gomock.Any(), mld).Return(true, nil),
 			mockSM.EXPECT().Sync(gomock.Any(), mld, imageName+":"+namespace+"_"+moduleName+"_kmm_unsigned", true, mld.Owner).
-				Return(utils.Status(utils.StatusCompleted), nil),
+				Return(pod.Status(pod.StatusCompleted), nil),
 		)
 
 		completed, err := bsrh.handleSigning(context.Background(), mld)

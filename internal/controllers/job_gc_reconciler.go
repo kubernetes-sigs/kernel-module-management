@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -58,7 +58,7 @@ func (r *JobGCReconciler) Reconcile(ctx context.Context, pod *v1.Pod) (reconcile
 }
 
 func (r *JobGCReconciler) SetupWithManager(mgr manager.Manager) error {
-	podTypes := sets.New(utils.PodTypeBuild, utils.PodTypeSign)
+	podTypes := sets.New(pod.PodTypeBuild, pod.PodTypeSign)
 
 	p := predicate.NewPredicateFuncs(func(object client.Object) bool {
 		return podTypes.Has(

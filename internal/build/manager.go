@@ -6,7 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 )
 
 //go:generate mockgen -source=manager.go -package=build -destination=mock_manager.go
@@ -20,5 +20,5 @@ type Manager interface {
 		ctx context.Context,
 		mld *api.ModuleLoaderData,
 		pushImage bool,
-		owner metav1.Object) (utils.Status, error)
+		owner metav1.Object) (pod.Status, error)
 }

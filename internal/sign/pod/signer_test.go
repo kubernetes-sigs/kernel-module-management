@@ -19,7 +19,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 )
 
 var _ = Describe("MakePodTemplate", func() {
@@ -52,11 +52,11 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 	)
 
 	var (
-		ctrl      *gomock.Controller
-		clnt      *client.MockClient
-		mld       api.ModuleLoaderData
-		m         Signer
-		podhelper *utils.MockPodHelper
+		ctrl                    *gomock.Controller
+		clnt                    *client.MockClient
+		mld                     api.ModuleLoaderData
+		m                       Signer
+		mockBuildSignPodManager *pod.MockBuildSignPodManager
 
 		filesToSign = []string{
 			"/modules/simple-kmod.ko",
@@ -67,8 +67,8 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		podhelper = utils.NewMockPodHelper(ctrl)
-		m = NewSigner(clnt, scheme, podhelper)
+		mockBuildSignPodManager = pod.NewMockBuildSignPodManager(ctrl)
+		m = NewSigner(clnt, scheme, mockBuildSignPodManager)
 		mld = api.ModuleLoaderData{
 			Name:      moduleName,
 			Namespace: namespace,

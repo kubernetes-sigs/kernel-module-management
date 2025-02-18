@@ -20,7 +20,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 )
 
 const (
@@ -38,10 +38,10 @@ type Maker interface {
 }
 
 type maker struct {
-	client    client.Client
-	helper    build.Helper
-	podHelper utils.PodHelper
-	scheme    *runtime.Scheme
+	client              client.Client
+	helper              build.Helper
+	buildSignPodManager pod.BuildSignPodManager
+	scheme              *runtime.Scheme
 }
 
 type hashData struct {
@@ -52,13 +52,13 @@ type hashData struct {
 func NewMaker(
 	client client.Client,
 	helper build.Helper,
-	podHelper utils.PodHelper,
+	buildSignPodManager pod.BuildSignPodManager,
 	scheme *runtime.Scheme) Maker {
 	return &maker{
-		client:    client,
-		helper:    helper,
-		podHelper: podHelper,
-		scheme:    scheme,
+		client:              client,
+		helper:              helper,
+		buildSignPodManager: buildSignPodManager,
+		scheme:              scheme,
 	}
 }
 
@@ -90,7 +90,7 @@ func (m *maker) MakePodTemplate(
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-build-",
 			Namespace:    mld.Namespace,
-			Labels:       m.podHelper.PodLabels(mld.Name, mld.KernelNormalizedVersion, utils.PodTypeBuild),
+			Labels:       m.buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, pod.PodTypeBuild),
 			Annotations:  map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash)},
 			Finalizers:   []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
 		},

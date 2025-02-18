@@ -18,8 +18,10 @@ package main
 
 import (
 	"flag"
+
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,7 +37,7 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
+	buildpod "github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -49,7 +51,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -109,20 +110,20 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	podHelperAPI := utils.NewPodHelper(client)
+	buildSignPodAPI := pod.NewBuildSignPodManager(client)
 	buildHelper := build.NewHelper()
 
-	buildAPI := pod.NewBuildManager(
+	buildAPI := buildpod.NewBuildManager(
 		client,
-		pod.NewMaker(client, buildHelper, podHelperAPI, scheme),
-		podHelperAPI,
+		buildpod.NewMaker(client, buildHelper, buildSignPodAPI, scheme),
+		buildSignPodAPI,
 		registryAPI,
 	)
 
 	signAPI := signpod.NewSignPodManager(
 		client,
-		signpod.NewSigner(client, scheme, podHelperAPI),
-		podHelperAPI,
+		signpod.NewSigner(client, scheme, buildSignPodAPI),
+		buildSignPodAPI,
 		registryAPI,
 	)
 
