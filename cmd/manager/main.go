@@ -24,11 +24,12 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
+	buildpod "github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -153,7 +154,10 @@ func main() {
 
 	eventRecorder := mgr.GetEventRecorderFor("kmm")
 
-	if err = controllers.NewNMCReconciler(client, scheme, workerImage, &cfg.Worker, eventRecorder, nodeAPI).SetupWithManager(ctx, mgr); err != nil {
+	workerPodManagerAPI := pod.NewWorkerPodManager(client, workerImage, scheme, &cfg.Worker)
+	if err = controllers.NewNMCReconciler(client, scheme, workerImage, &cfg.Worker, eventRecorder, nodeAPI,
+		workerPodManagerAPI).SetupWithManager(ctx, mgr); err != nil {
+
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeModulesConfigReconcilerName)
 	}
 
@@ -178,9 +182,9 @@ func main() {
 	} else {
 		podHelperAPI := utils.NewPodHelper(client)
 
-		buildAPI := pod.NewBuildManager(
+		buildAPI := buildpod.NewBuildManager(
 			client,
-			pod.NewMaker(client, buildHelperAPI, podHelperAPI, scheme),
+			buildpod.NewMaker(client, buildHelperAPI, podHelperAPI, scheme),
 			podHelperAPI,
 			registryAPI,
 		)
