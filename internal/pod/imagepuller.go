@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-//go:generate mockgen -source=pod.go -package=pod -destination=mock_pod.go
+//go:generate mockgen -source=imagepuller.go -package=pod -destination=mock_imagepuller.go
 
 type ImagePuller interface {
 	CreatePullPod(ctx context.Context, imageSpec *kmmv1beta1.ModuleImageSpec, micObj *kmmv1beta1.ModuleImagesConfig) error
@@ -116,20 +116,4 @@ func (ipi *imagePullerImpl) GetPullPodForImage(pods []v1.Pod, image string) *v1.
 
 func (ipi *imagePullerImpl) GetPullPodImage(pod v1.Pod) string {
 	return pod.Labels[imageLabelKey]
-}
-
-func deletePod(clnt client.Client, ctx context.Context, pod *v1.Pod) error {
-
-	logger := ctrl.LoggerFrom(ctx)
-
-	if pod.DeletionTimestamp != nil {
-		logger.Info("DeletionTimestamp set, pod is already in deletion", "pod", pod.Name)
-		return nil
-	}
-
-	if err := clnt.Delete(ctx, pod); client.IgnoreNotFound(err) != nil {
-		return fmt.Errorf("failed to delete pull pod %s/%s: %v", pod.Namespace, pod.Name, err)
-	}
-
-	return nil
 }
