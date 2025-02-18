@@ -12,32 +12,33 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 type signPodManager struct {
-	client    client.Client
-	signer    Signer
-	podHelper utils.PodHelper
-	registry  registry.Registry
+	client              client.Client
+	signer              Signer
+	buildSignPodManager pod.BuildSignPodManager
+	registry            registry.Registry
 }
 
 func NewSignPodManager(
 	client client.Client,
 	signer Signer,
-	podHelper utils.PodHelper,
+	buildSignPodManager pod.BuildSignPodManager,
 	registry registry.Registry) *signPodManager {
 	return &signPodManager{
-		client:    client,
-		signer:    signer,
-		podHelper: podHelper,
-		registry:  registry,
+		client:              client,
+		signer:              signer,
+		buildSignPodManager: buildSignPodManager,
+		registry:            registry,
 	}
 }
 
 func (spm *signPodManager) GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error) {
-	pods, err := spm.podHelper.GetModulePods(ctx, modName, namespace, utils.PodTypeSign, owner)
+	pods, err := spm.buildSignPodManager.GetModulePods(ctx, modName, namespace, pod.PodTypeSign, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sign pods for module %s: %v", modName, err)
 	}
@@ -45,7 +46,7 @@ func (spm *signPodManager) GarbageCollect(ctx context.Context, modName, namespac
 	deleteNames := make([]string, 0, len(pods))
 	for _, pod := range pods {
 		if pod.Status.Phase == v1.PodSucceeded {
-			err = spm.podHelper.DeletePod(ctx, &pod)
+			err = spm.buildSignPodManager.DeletePod(ctx, &pod)
 			if err != nil {
 				return nil, fmt.Errorf("failed to delete build pod %s: %v", pod.Name, err)
 			}
@@ -75,51 +76,52 @@ func (spm *signPodManager) Sync(
 	mld *api.ModuleLoaderData,
 	imageToSign string,
 	pushImage bool,
-	owner metav1.Object) (utils.Status, error) {
+	owner metav1.Object) (pod.Status, error) {
 
 	logger := log.FromContext(ctx)
 
 	logger.Info("Signing in-cluster")
 
-	labels := spm.podHelper.PodLabels(mld.Name, mld.KernelNormalizedVersion, "sign")
+	labels := spm.buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, "sign")
 
 	podTemplate, err := spm.signer.MakePodTemplate(ctx, mld, labels, imageToSign, pushImage, owner)
 	if err != nil {
 		return "", fmt.Errorf("could not make Pod template: %v", err)
 	}
 
-	pod, err := spm.podHelper.GetModulePodByKernel(ctx, mld.Name, mld.Namespace, mld.KernelNormalizedVersion, utils.PodTypeSign, owner)
+	p, err := spm.buildSignPodManager.GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
+		mld.KernelNormalizedVersion, pod.PodTypeSign, owner)
 	if err != nil {
-		if !errors.Is(err, utils.ErrNoMatchingPod) {
+		if !errors.Is(err, pod.ErrNoMatchingPod) {
 			return "", fmt.Errorf("error getting the signing pod: %v", err)
 		}
 
 		logger.Info("Creating pod")
-		err = spm.podHelper.CreatePod(ctx, podTemplate)
+		err = spm.buildSignPodManager.CreatePod(ctx, podTemplate)
 		if err != nil {
 			return "", fmt.Errorf("could not create Signing Pod: %v", err)
 		}
 
-		return utils.StatusCreated, nil
+		return pod.StatusCreated, nil
 	}
 	// default, there are no errors, and there is a pod, check if it has changed
-	changed, err := spm.podHelper.IsPodChanged(pod, podTemplate)
+	changed, err := spm.buildSignPodManager.IsPodChanged(p, podTemplate)
 	if err != nil {
 		return "", fmt.Errorf("could not determine if pod has changed: %v", err)
 	}
 
 	if changed {
-		logger.Info("The module's sign spec has been changed, deleting the current pod so a new one can be created", "name", pod.Name)
-		err = spm.podHelper.DeletePod(ctx, pod)
+		logger.Info("The module's sign spec has been changed, deleting the current pod so a new one can be created", "name", p.Name)
+		err = spm.buildSignPodManager.DeletePod(ctx, p)
 		if err != nil {
-			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete signing pod %s: %v", pod.Name, err)))
+			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete signing pod %s: %v", p.Name, err)))
 		}
-		return utils.StatusInProgress, nil
+		return pod.StatusInProgress, nil
 	}
 
-	logger.Info("Returning pod status", "name", pod.Name, "namespace", pod.Namespace)
+	logger.Info("Returning pod status", "name", p.Name, "namespace", p.Namespace)
 
-	statusmsg, err := spm.podHelper.GetPodStatus(pod)
+	statusmsg, err := spm.buildSignPodManager.GetPodStatus(p)
 	if err != nil {
 		return "", err
 	}

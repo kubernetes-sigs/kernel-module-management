@@ -1,4 +1,4 @@
-package utils
+package pod
 
 import (
 	"context"
@@ -33,7 +33,7 @@ var _ = Describe("PodLabels", func() {
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName"},
 		}
-		mgr := NewPodHelper(clnt)
+		mgr := NewBuildSignPodManager(clnt)
 		labels := mgr.PodLabels(mod.Name, "targetKernel", "podType")
 
 		expected := map[string]string{
@@ -53,13 +53,13 @@ var _ = Describe("GetModulePodByKernel", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		ph   PodHelper
+		bspm BuildSignPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		ph = NewPodHelper(clnt)
+		bspm = NewBuildSignPodManager(clnt)
 	})
 
 	It("should return only one pod", func() {
@@ -93,7 +93,7 @@ var _ = Describe("GetModulePodByKernel", func() {
 			},
 		)
 
-		pod, err := ph.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
+		pod, err := bspm.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
 
 		Expect(pod).To(Equal(&j))
 		Expect(err).NotTo(HaveOccurred())
@@ -119,7 +119,7 @@ var _ = Describe("GetModulePodByKernel", func() {
 
 		clnt.EXPECT().List(ctx, &podList, opts).Return(errors.New("random error"))
 
-		_, err := ph.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
+		_, err := bspm.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -161,7 +161,7 @@ var _ = Describe("GetModulePodByKernel", func() {
 			},
 		)
 
-		_, err = ph.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
+		_, err = bspm.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -208,7 +208,7 @@ var _ = Describe("GetModulePodByKernel", func() {
 			},
 		)
 
-		pod, err := ph.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
+		pod, err := bspm.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(pod).To(Equal(&j1))
@@ -219,13 +219,13 @@ var _ = Describe("GetModulePods", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		ph   PodHelper
+		bspm BuildSignPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		ph = NewPodHelper(clnt)
+		bspm = NewBuildSignPodManager(clnt)
 	})
 
 	It("return all found pods", func() {
@@ -263,7 +263,7 @@ var _ = Describe("GetModulePods", func() {
 			},
 		)
 
-		pods, err := ph.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
+		pods, err := bspm.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(pods)).To(Equal(2))
@@ -288,7 +288,7 @@ var _ = Describe("GetModulePods", func() {
 
 		clnt.EXPECT().List(ctx, gomock.Any(), opts).Return(fmt.Errorf("some error"))
 
-		_, err := ph.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
+		_, err := bspm.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
 
 		Expect(err).To(HaveOccurred())
 	})
@@ -317,7 +317,7 @@ var _ = Describe("GetModulePods", func() {
 			},
 		)
 
-		pods, err := ph.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
+		pods, err := bspm.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(pods)).To(Equal(0))
@@ -328,13 +328,13 @@ var _ = Describe("DeletePod", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		ph   PodHelper
+		bspm BuildSignPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		ph = NewPodHelper(clnt)
+		bspm = NewBuildSignPodManager(clnt)
 	})
 
 	It("good flow", func() {
@@ -346,7 +346,7 @@ var _ = Describe("DeletePod", func() {
 		}
 		clnt.EXPECT().Delete(ctx, &pod, opts).Return(nil)
 
-		err := ph.DeletePod(ctx, &pod)
+		err := bspm.DeletePod(ctx, &pod)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -361,7 +361,7 @@ var _ = Describe("DeletePod", func() {
 		}
 		clnt.EXPECT().Delete(ctx, &pod, opts).Return(errors.New("random error"))
 
-		err := ph.DeletePod(ctx, &pod)
+		err := bspm.DeletePod(ctx, &pod)
 
 		Expect(err).To(HaveOccurred())
 
@@ -372,13 +372,13 @@ var _ = Describe("CreatePod", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		ph   PodHelper
+		bspm BuildSignPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		ph = NewPodHelper(clnt)
+		bspm = NewBuildSignPodManager(clnt)
 	})
 
 	It("good flow", func() {
@@ -387,7 +387,7 @@ var _ = Describe("CreatePod", func() {
 		pod := v1.Pod{}
 		clnt.EXPECT().Create(ctx, &pod).Return(nil)
 
-		err := ph.CreatePod(ctx, &pod)
+		err := bspm.CreatePod(ctx, &pod)
 
 		Expect(err).NotTo(HaveOccurred())
 
@@ -399,7 +399,7 @@ var _ = Describe("CreatePod", func() {
 		pod := v1.Pod{}
 		clnt.EXPECT().Create(ctx, &pod).Return(errors.New("random error"))
 
-		err := ph.CreatePod(ctx, &pod)
+		err := bspm.CreatePod(ctx, &pod)
 
 		Expect(err).To(HaveOccurred())
 
@@ -410,19 +410,19 @@ var _ = Describe("PodStatus", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		ph   PodHelper
+		bspm BuildSignPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		ph = NewPodHelper(clnt)
+		bspm = NewBuildSignPodManager(clnt)
 	})
 
 	DescribeTable("should return the correct status depending on the pod status",
 		func(s *v1.Pod, podStatus string, expectsErr bool) {
 
-			res, err := ph.GetPodStatus(s)
+			res, err := bspm.GetPodStatus(s)
 			if expectsErr {
 				Expect(err).To(HaveOccurred())
 				return
@@ -442,13 +442,13 @@ var _ = Describe("IsPodChnaged", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		ph   PodHelper
+		bspm BuildSignPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		ph = NewPodHelper(clnt)
+		bspm = NewBuildSignPodManager(clnt)
 	})
 
 	DescribeTable("should detect if a pod has changed",
@@ -465,7 +465,7 @@ var _ = Describe("IsPodChnaged", func() {
 			}
 			fmt.Println(existingPod.GetAnnotations())
 
-			changed, err := ph.IsPodChanged(&existingPod, &newPod)
+			changed, err := bspm.IsPodChanged(&existingPod, &newPod)
 
 			if expectsErr {
 				Expect(err).To(HaveOccurred())

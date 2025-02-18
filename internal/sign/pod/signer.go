@@ -18,6 +18,7 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
@@ -55,19 +56,19 @@ type hashData struct {
 }
 
 type signer struct {
-	client    client.Client
-	scheme    *runtime.Scheme
-	podHelper utils.PodHelper
+	client              client.Client
+	scheme              *runtime.Scheme
+	buildSignPodManager pod.BuildSignPodManager
 }
 
 func NewSigner(
 	client client.Client,
 	scheme *runtime.Scheme,
-	podHelper utils.PodHelper) Signer {
+	buildSignPodManager pod.BuildSignPodManager) Signer {
 	return &signer{
-		client:    client,
-		scheme:    scheme,
-		podHelper: podHelper,
+		client:              client,
+		scheme:              scheme,
+		buildSignPodManager: buildSignPodManager,
 	}
 }
 

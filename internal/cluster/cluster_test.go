@@ -18,7 +18,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 )
 
 const (
@@ -305,7 +305,7 @@ var _ = Describe("BuildAndSign", func() {
 		gomock.InOrder(
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
 			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(pod.Status(pod.StatusCompleted), nil),
 			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
 		)
 
@@ -319,7 +319,7 @@ var _ = Describe("BuildAndSign", func() {
 		gomock.InOrder(
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
 			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(""), errors.New("test-error")),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(pod.Status(""), errors.New("test-error")),
 		)
 
 		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
@@ -333,7 +333,7 @@ var _ = Describe("BuildAndSign", func() {
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
 			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
 			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(pod.Status(pod.StatusInProgress), nil),
 		)
 
 		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
@@ -347,7 +347,7 @@ var _ = Describe("BuildAndSign", func() {
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
 			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(false, nil),
 			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(""), errors.New("test-error")),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(pod.Status(""), errors.New("test-error")),
 		)
 
 		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
@@ -360,7 +360,7 @@ var _ = Describe("BuildAndSign", func() {
 		gomock.InOrder(
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
 			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusInProgress), nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(pod.Status(pod.StatusInProgress), nil),
 		)
 
 		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])
@@ -373,9 +373,9 @@ var _ = Describe("BuildAndSign", func() {
 		gomock.InOrder(
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(&mod, kernelVersion).Return(&mld, nil),
 			mockBM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
+			mockBM.EXPECT().Sync(gomock.Any(), &mld, true, mcm).Return(pod.Status(pod.StatusCompleted), nil),
 			mockSM.EXPECT().ShouldSync(gomock.Any(), &mld).Return(true, nil),
-			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(utils.Status(utils.StatusCompleted), nil),
+			mockSM.EXPECT().Sync(gomock.Any(), &mld, "", true, mcm).Return(pod.Status(pod.StatusCompleted), nil),
 		)
 
 		completed, err := c.BuildAndSign(ctx, *mcm, clusterList.Items[0])

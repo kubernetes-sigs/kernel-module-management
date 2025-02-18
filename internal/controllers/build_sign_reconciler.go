@@ -19,12 +19,15 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
@@ -34,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"strings"
 )
 
 const BuildSignReconcilerName = "BuildSignReconciler"
@@ -204,9 +206,9 @@ func (bsrh *buildSignReconcilerHelper) handleBuild(ctx context.Context, mld *api
 
 	completedSuccessfully := false
 	switch buildStatus {
-	case utils.StatusCompleted:
+	case pod.StatusCompleted:
 		completedSuccessfully = true
-	case utils.StatusFailed:
+	case pod.StatusFailed:
 		logger.Info(utils.WarnString("Build pod has failed. If the fix is not in Module CR, then delete pod after the fix in order to restart the pod"))
 	}
 
@@ -239,9 +241,9 @@ func (bsrh *buildSignReconcilerHelper) handleSigning(ctx context.Context, mld *a
 
 	completedSuccessfully := false
 	switch signStatus {
-	case utils.StatusCompleted:
+	case pod.StatusCompleted:
 		completedSuccessfully = true
-	case utils.StatusFailed:
+	case pod.StatusFailed:
 		logger.Info(utils.WarnString("Sign pod has failed. If the fix is not in Module CR, then delete pod after the fix in order to restart the pod"))
 	}
 

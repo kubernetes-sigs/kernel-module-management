@@ -13,7 +13,7 @@ import (
 	reflect "reflect"
 
 	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	utils "github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	pod "github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -72,10 +72,10 @@ func (mr *MockSignManagerMockRecorder) ShouldSync(ctx, mld any) *gomock.Call {
 }
 
 // Sync mocks base method.
-func (m *MockSignManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, imageToSign string, pushImage bool, owner v1.Object) (utils.Status, error) {
+func (m *MockSignManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, imageToSign string, pushImage bool, owner v1.Object) (pod.Status, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", ctx, mld, imageToSign, pushImage, owner)
-	ret0, _ := ret[0].(utils.Status)
+	ret0, _ := ret[0].(pod.Status)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

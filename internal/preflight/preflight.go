@@ -11,6 +11,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/auth"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -159,7 +160,7 @@ func (p *preflightHelper) verifyBuild(ctx context.Context, pv *v1beta2.Preflight
 		return false, fmt.Sprintf("Failed to verify build for module %s, kernel version %s, error %s", mld.Name, pv.Spec.KernelVersion, err)
 	}
 
-	if buildStatus == utils.StatusCompleted {
+	if buildStatus == pod.StatusCompleted {
 		msg := "build compiles"
 		if pv.Spec.PushBuiltImage {
 			msg += " and image pushed"
@@ -184,7 +185,7 @@ func (p *preflightHelper) verifySign(ctx context.Context, pv *v1beta2.PreflightV
 		return false, fmt.Sprintf("Failed to verify signing for module %s, kernel version %s, error %s", mld.Name, pv.Spec.KernelVersion, err)
 	}
 
-	if signStatus == utils.StatusCompleted {
+	if signStatus == pod.StatusCompleted {
 		msg := "sign completes"
 		if pv.Spec.PushBuiltImage {
 			msg += " and image pushed"

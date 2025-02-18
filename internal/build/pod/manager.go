@@ -12,32 +12,33 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 type podManager struct {
-	client    client.Client
-	maker     Maker
-	podHelper utils.PodHelper
-	registry  registry.Registry
+	client              client.Client
+	maker               Maker
+	buildSignPodManager pod.BuildSignPodManager
+	registry            registry.Registry
 }
 
 func NewBuildManager(
 	client client.Client,
 	maker Maker,
-	podHelper utils.PodHelper,
+	buildSignPodManager pod.BuildSignPodManager,
 	registry registry.Registry) *podManager {
 	return &podManager{
-		client:    client,
-		maker:     maker,
-		podHelper: podHelper,
-		registry:  registry,
+		client:              client,
+		maker:               maker,
+		buildSignPodManager: buildSignPodManager,
+		registry:            registry,
 	}
 }
 
 func (pm *podManager) GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error) {
-	pods, err := pm.podHelper.GetModulePods(ctx, modName, namespace, utils.PodTypeBuild, owner)
+	pods, err := pm.buildSignPodManager.GetModulePods(ctx, modName, namespace, pod.PodTypeBuild, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get build pods for module %s: %v", modName, err)
 	}
@@ -45,7 +46,7 @@ func (pm *podManager) GarbageCollect(ctx context.Context, modName, namespace str
 	deleteNames := make([]string, 0, len(pods))
 	for _, pod := range pods {
 		if pod.Status.Phase == v1.PodSucceeded {
-			err = pm.podHelper.DeletePod(ctx, &pod)
+			err = pm.buildSignPodManager.DeletePod(ctx, &pod)
 			if err != nil {
 				return nil, fmt.Errorf("failed to delete build pod %s: %v", pod.Name, err)
 			}
@@ -85,7 +86,7 @@ func (pm *podManager) Sync(
 	ctx context.Context,
 	mld *api.ModuleLoaderData,
 	pushImage bool,
-	owner metav1.Object) (utils.Status, error) {
+	owner metav1.Object) (pod.Status, error) {
 
 	logger := log.FromContext(ctx)
 
@@ -96,38 +97,40 @@ func (pm *podManager) Sync(
 		return "", fmt.Errorf("could not make Pod template: %v", err)
 	}
 
-	pod, err := pm.podHelper.GetModulePodByKernel(ctx, mld.Name, mld.Namespace, mld.KernelNormalizedVersion, utils.PodTypeBuild, owner)
+	p, err := pm.buildSignPodManager.GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
+		mld.KernelNormalizedVersion, pod.PodTypeBuild, owner)
+
 	if err != nil {
-		if !errors.Is(err, utils.ErrNoMatchingPod) {
+		if !errors.Is(err, pod.ErrNoMatchingPod) {
 			return "", fmt.Errorf("error getting the build: %v", err)
 		}
 
 		logger.Info("Creating pod")
-		err = pm.podHelper.CreatePod(ctx, podTemplate)
+		err = pm.buildSignPodManager.CreatePod(ctx, podTemplate)
 		if err != nil {
 			return "", fmt.Errorf("could not create Pod: %v", err)
 		}
 
-		return utils.StatusCreated, nil
+		return pod.StatusCreated, nil
 	}
 
-	changed, err := pm.podHelper.IsPodChanged(pod, podTemplate)
+	changed, err := pm.buildSignPodManager.IsPodChanged(p, podTemplate)
 	if err != nil {
 		return "", fmt.Errorf("could not determine if pod has changed: %v", err)
 	}
 
 	if changed {
-		logger.Info("The module's build spec has been changed, deleting the current pod so a new one can be created", "name", pod.Name)
-		err = pm.podHelper.DeletePod(ctx, pod)
+		logger.Info("The module's build spec has been changed, deleting the current pod so a new one can be created", "name", p.Name)
+		err = pm.buildSignPodManager.DeletePod(ctx, p)
 		if err != nil {
-			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete build pod %s: %v", pod.Name, err)))
+			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete build pod %s: %v", p.Name, err)))
 		}
-		return utils.StatusInProgress, nil
+		return pod.StatusInProgress, nil
 	}
 
-	logger.Info("Returning pod status", "name", pod.Name, "namespace", pod.Namespace)
+	logger.Info("Returning pod status", "name", p.Name, "namespace", p.Namespace)
 
-	statusmsg, err := pm.podHelper.GetPodStatus(pod)
+	statusmsg, err := pm.buildSignPodManager.GetPodStatus(p)
 	if err != nil {
 		return "", err
 	}

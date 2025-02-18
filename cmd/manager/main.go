@@ -42,7 +42,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -180,19 +179,19 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeKernelClusterClaimReconcilerName)
 		}
 	} else {
-		podHelperAPI := utils.NewPodHelper(client)
+		buildSignPodAPI := pod.NewBuildSignPodManager(client)
 
 		buildAPI := buildpod.NewBuildManager(
 			client,
-			buildpod.NewMaker(client, buildHelperAPI, podHelperAPI, scheme),
-			podHelperAPI,
+			buildpod.NewMaker(client, buildHelperAPI, buildSignPodAPI, scheme),
+			buildSignPodAPI,
 			registryAPI,
 		)
 
 		signAPI := signpod.NewSignPodManager(
 			client,
-			signpod.NewSigner(client, scheme, podHelperAPI),
-			podHelperAPI,
+			signpod.NewSigner(client, scheme, buildSignPodAPI),
+			buildSignPodAPI,
 			registryAPI,
 		)
 		bsc := controllers.NewBuildSignReconciler(

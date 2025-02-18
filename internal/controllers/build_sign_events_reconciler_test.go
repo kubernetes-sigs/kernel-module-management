@@ -9,7 +9,7 @@ import (
 	testclient "github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -161,7 +161,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
-					constants.PodType:            utils.PodTypeBuild,
+					constants.PodType:            pod.PodTypeBuild,
 					constants.TargetKernelTarget: kernelVersion,
 				},
 				OwnerReferences: []metav1.OwnerReference{or},
@@ -194,7 +194,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations:     map[string]string{createdAnnotationKey: ""},
-				Labels:          map[string]string{constants.PodType: utils.PodTypeBuild},
+				Labels:          map[string]string{constants.PodType: pod.PodTypeBuild},
 				Namespace:       namespace,
 				OwnerReferences: []metav1.OwnerReference{or},
 			},
@@ -219,7 +219,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels:          map[string]string{constants.PodType: utils.PodTypeBuild},
+				Labels:          map[string]string{constants.PodType: pod.PodTypeBuild},
 				Finalizers:      []string{constants.JobEventFinalizer},
 				Namespace:       namespace,
 				OwnerReferences: []metav1.OwnerReference{or},
@@ -425,11 +425,11 @@ var _ = Describe("jobEventPredicate", func() {
 				Equal(expectedResult),
 			)
 		},
-		Entry(nil, utils.PodTypeBuild, true, true),
-		Entry(nil, utils.PodTypeSign, true, true),
+		Entry(nil, pod.PodTypeBuild, true, true),
+		Entry(nil, pod.PodTypeSign, true, true),
 		Entry(nil, "random", true, false),
 		Entry(nil, "", true, false),
-		Entry("finalizer", utils.PodTypeBuild, true, true),
-		Entry("no finalizer", utils.PodTypeBuild, false, false),
+		Entry("finalizer", pod.PodTypeBuild, true, true),
+		Entry("no finalizer", pod.PodTypeBuild, false, false),
 	)
 })

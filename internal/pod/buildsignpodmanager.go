@@ -1,4 +1,4 @@
-package utils
+package pod
 
 import (
 	"context"
@@ -26,9 +26,9 @@ const (
 
 var ErrNoMatchingPod = errors.New("no matching pod")
 
-//go:generate mockgen -source=podhelper.go -package=utils -destination=mock_podhelper.go
+//go:generate mockgen -source=buildsignpodmanager.go -package=pod -destination=mock_buildsignpodmanager.go
 
-type PodHelper interface {
+type BuildSignPodManager interface {
 	IsPodChanged(existingPod *v1.Pod, newPod *v1.Pod) (bool, error)
 	PodLabels(modName string, targetKernel string, podType string) map[string]string
 	GetModulePodByKernel(ctx context.Context, modName, namespace, targetKernel, podType string, owner metav1.Object) (*v1.Pod, error)
@@ -38,17 +38,17 @@ type PodHelper interface {
 	GetPodStatus(pod *v1.Pod) (Status, error)
 }
 
-type podHelper struct {
+type buildSignPodManager struct {
 	client client.Client
 }
 
-func NewPodHelper(client client.Client) PodHelper {
-	return &podHelper{
+func NewBuildSignPodManager(client client.Client) BuildSignPodManager {
+	return &buildSignPodManager{
 		client: client,
 	}
 }
 
-func (ph *podHelper) IsPodChanged(existingPod *v1.Pod, newPod *v1.Pod) (bool, error) {
+func (mp *buildSignPodManager) IsPodChanged(existingPod *v1.Pod, newPod *v1.Pod) (bool, error) {
 	existingAnnotations := existingPod.GetAnnotations()
 	newAnnotations := newPod.GetAnnotations()
 	if existingAnnotations == nil {
@@ -60,7 +60,7 @@ func (ph *podHelper) IsPodChanged(existingPod *v1.Pod, newPod *v1.Pod) (bool, er
 	return true, nil
 }
 
-func (ph *podHelper) PodLabels(modName string, targetKernel string, podType string) map[string]string {
+func (mp *buildSignPodManager) PodLabels(modName string, targetKernel string, podType string) map[string]string {
 	labels := moduleKernelLabels(modName, targetKernel, podType)
 
 	labels["app.kubernetes.io/name"] = "kmm"
@@ -70,9 +70,9 @@ func (ph *podHelper) PodLabels(modName string, targetKernel string, podType stri
 	return labels
 }
 
-func (ph *podHelper) GetModulePodByKernel(ctx context.Context, modName, namespace, targetKernel, podType string, owner metav1.Object) (*v1.Pod, error) {
+func (mp *buildSignPodManager) GetModulePodByKernel(ctx context.Context, modName, namespace, targetKernel, podType string, owner metav1.Object) (*v1.Pod, error) {
 	matchLabels := moduleKernelLabels(modName, targetKernel, podType)
-	pods, err := ph.getPods(ctx, namespace, matchLabels)
+	pods, err := mp.getPods(ctx, namespace, matchLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get module %s, pods by kernel %s: %v", modName, targetKernel, err)
 	}
@@ -90,9 +90,9 @@ func (ph *podHelper) GetModulePodByKernel(ctx context.Context, modName, namespac
 	return &moduleOwnedPods[0], nil
 }
 
-func (ph *podHelper) GetModulePods(ctx context.Context, modName, namespace, podType string, owner metav1.Object) ([]v1.Pod, error) {
+func (mp *buildSignPodManager) GetModulePods(ctx context.Context, modName, namespace, podType string, owner metav1.Object) ([]v1.Pod, error) {
 	matchLabels := moduleLabels(modName, podType)
-	pods, err := ph.getPods(ctx, namespace, matchLabels)
+	pods, err := mp.getPods(ctx, namespace, matchLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pods for module %s, namespace %s: %v", modName, namespace, err)
 	}
@@ -103,19 +103,19 @@ func (ph *podHelper) GetModulePods(ctx context.Context, modName, namespace, podT
 	return moduleOwnedPods, nil
 }
 
-func (ph *podHelper) DeletePod(ctx context.Context, pod *v1.Pod) error {
+func (mp *buildSignPodManager) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	opts := []client.DeleteOption{
 		client.PropagationPolicy(metav1.DeletePropagationBackground),
 	}
-	err := ph.client.Delete(ctx, pod, opts...)
+	err := mp.client.Delete(ctx, pod, opts...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (ph *podHelper) CreatePod(ctx context.Context, pod *v1.Pod) error {
-	err := ph.client.Create(ctx, pod)
+func (mp *buildSignPodManager) CreatePod(ctx context.Context, pod *v1.Pod) error {
+	err := mp.client.Create(ctx, pod)
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func (ph *podHelper) CreatePod(ctx context.Context, pod *v1.Pod) error {
 
 // GetPodStatus returns the status of a Pod, whether the latter is in progress or not and
 // whether there was an error or not
-func (ph *podHelper) GetPodStatus(pod *v1.Pod) (Status, error) {
+func (mp *buildSignPodManager) GetPodStatus(pod *v1.Pod) (Status, error) {
 	switch pod.Status.Phase {
 	case v1.PodSucceeded:
 		return StatusCompleted, nil
@@ -137,13 +137,13 @@ func (ph *podHelper) GetPodStatus(pod *v1.Pod) (Status, error) {
 	}
 }
 
-func (ph *podHelper) getPods(ctx context.Context, namespace string, labels map[string]string) ([]v1.Pod, error) {
+func (mp *buildSignPodManager) getPods(ctx context.Context, namespace string, labels map[string]string) ([]v1.Pod, error) {
 	podList := v1.PodList{}
 	opts := []client.ListOption{
 		client.MatchingLabels(labels),
 		client.InNamespace(namespace),
 	}
-	if err := ph.client.List(ctx, &podList, opts...); err != nil {
+	if err := mp.client.List(ctx, &podList, opts...); err != nil {
 		return nil, fmt.Errorf("could not list pods: %v", err)
 	}
 

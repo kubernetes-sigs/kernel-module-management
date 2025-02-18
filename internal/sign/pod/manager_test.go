@@ -9,8 +9,8 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -116,10 +116,10 @@ var _ = Describe("ShouldSync", func() {
 
 var _ = Describe("Sync", func() {
 	var (
-		ctrl      *gomock.Controller
-		maker     *MockSigner
-		podhelper *utils.MockPodHelper
-		mgr       *signPodManager
+		ctrl                    *gomock.Controller
+		maker                   *MockSigner
+		mockBuildSignPodManager *pod.MockBuildSignPodManager
+		mgr                     *signPodManager
 	)
 
 	const (
@@ -136,8 +136,8 @@ var _ = Describe("Sync", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		maker = NewMockSigner(ctrl)
-		podhelper = utils.NewMockPodHelper(ctrl)
-		mgr = NewSignPodManager(nil, maker, podhelper, nil)
+		mockBuildSignPodManager = pod.NewMockBuildSignPodManager(ctrl)
+		mgr = NewSignPodManager(nil, maker, mockBuildSignPodManager, nil)
 	})
 
 	labels := map[string]string{"kmm.node.kubernetes.io/pod-type": "sign",
@@ -155,7 +155,7 @@ var _ = Describe("Sync", func() {
 	}
 
 	DescribeTable("should return the correct status depending on the pod status",
-		func(s v1.PodStatus, podStatus utils.Status, expectsErr bool) {
+		func(s v1.PodStatus, podStatus pod.Status, expectsErr bool) {
 			j := v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"kmm.node.kubernetes.io/pod-type": "sign",
@@ -186,11 +186,12 @@ var _ = Describe("Sync", func() {
 			}
 
 			gomock.InOrder(
-				podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
+				mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 				maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-				podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(&newPod, nil),
-				podhelper.EXPECT().IsPodChanged(&j, &newPod).Return(false, nil),
-				podhelper.EXPECT().GetPodStatus(&newPod).Return(podStatus, poderr),
+				mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
+					kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(&newPod, nil),
+				mockBuildSignPodManager.EXPECT().IsPodChanged(&j, &newPod).Return(false, nil),
+				mockBuildSignPodManager.EXPECT().GetPodStatus(&newPod).Return(podStatus, poderr),
 			)
 
 			res, err := mgr.Sync(ctx, mld, previousImageName, true, mld.Owner)
@@ -202,17 +203,17 @@ var _ = Describe("Sync", func() {
 
 			Expect(res).To(Equal(podStatus))
 		},
-		Entry("active", v1.PodStatus{Phase: v1.PodRunning}, utils.Status(utils.StatusInProgress), false),
-		Entry("active", v1.PodStatus{Phase: v1.PodRunning}, utils.Status(utils.StatusInProgress), false),
-		Entry("succeeded", v1.PodStatus{Phase: v1.PodSucceeded}, utils.Status(utils.StatusCompleted), false),
-		Entry("failed", v1.PodStatus{Phase: v1.PodFailed}, utils.Status(""), true),
+		Entry("active", v1.PodStatus{Phase: v1.PodRunning}, pod.Status(pod.StatusInProgress), false),
+		Entry("active", v1.PodStatus{Phase: v1.PodRunning}, pod.Status(pod.StatusInProgress), false),
+		Entry("succeeded", v1.PodStatus{Phase: v1.PodSucceeded}, pod.Status(pod.StatusCompleted), false),
+		Entry("failed", v1.PodStatus{Phase: v1.PodFailed}, pod.Status(""), true),
 	)
 
 	It("should return an error if there was an error creating the pod template", func() {
 		ctx := context.Background()
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).
 				Return(nil, errors.New("random error")),
 		)
@@ -238,9 +239,10 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(nil, errors.New("random error")),
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
+				kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(nil, errors.New("random error")),
 		)
 
 		Expect(
@@ -264,10 +266,11 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
-			podhelper.EXPECT().CreatePod(ctx, &j).Return(errors.New("unable to create pod")),
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
+				kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(nil, pod.ErrNoMatchingPod),
+			mockBuildSignPodManager.EXPECT().CreatePod(ctx, &j).Return(errors.New("unable to create pod")),
 		)
 
 		Expect(
@@ -292,16 +295,17 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(nil, utils.ErrNoMatchingPod),
-			podhelper.EXPECT().CreatePod(ctx, &j).Return(nil),
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
+				kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(nil, pod.ErrNoMatchingPod),
+			mockBuildSignPodManager.EXPECT().CreatePod(ctx, &j).Return(nil),
 		)
 
 		Expect(
 			mgr.Sync(ctx, mld, previousImageName, true, mld.Owner),
 		).To(
-			Equal(utils.Status(utils.StatusCreated)),
+			Equal(pod.Status(pod.StatusCreated)),
 		)
 	})
 
@@ -321,34 +325,35 @@ var _ = Describe("Sync", func() {
 		}
 
 		gomock.InOrder(
-			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&newPod, nil),
-			podhelper.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace, kernelNormalizedVersion, utils.PodTypeSign, mld.Owner).Return(&newPod, nil),
-			podhelper.EXPECT().IsPodChanged(&newPod, &newPod).Return(true, nil),
-			podhelper.EXPECT().DeletePod(ctx, &newPod).Return(nil),
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
+				kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(&newPod, nil),
+			mockBuildSignPodManager.EXPECT().IsPodChanged(&newPod, &newPod).Return(true, nil),
+			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &newPod).Return(nil),
 		)
 
 		Expect(
 			mgr.Sync(ctx, mld, previousImageName, true, mld.Owner),
 		).To(
-			Equal(utils.Status(utils.StatusInProgress)),
+			Equal(pod.Status(pod.StatusInProgress)),
 		)
 	})
 })
 
 var _ = Describe("GarbageCollect", func() {
 	var (
-		ctrl      *gomock.Controller
-		clnt      *client.MockClient
-		podhelper *utils.MockPodHelper
-		mgr       *signPodManager
+		ctrl                    *gomock.Controller
+		clnt                    *client.MockClient
+		mockBuildSignPodManager *pod.MockBuildSignPodManager
+		mgr                     *signPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		podhelper = utils.NewMockPodHelper(ctrl)
-		mgr = NewSignPodManager(clnt, nil, podhelper, nil)
+		mockBuildSignPodManager = pod.NewMockBuildSignPodManager(ctrl)
+		mgr = NewSignPodManager(clnt, nil, mockBuildSignPodManager, nil)
 	})
 
 	mld := api.ModuleLoaderData{
@@ -384,13 +389,14 @@ var _ = Describe("GarbageCollect", func() {
 				returnedError = nil
 			}
 
-			podhelper.EXPECT().GetModulePods(context.Background(), mld.Name, mld.Namespace, utils.PodTypeSign, mld.Owner).Return([]v1.Pod{pod1, pod2}, returnedError)
+			mockBuildSignPodManager.EXPECT().GetModulePods(context.Background(), mld.Name, mld.Namespace,
+				pod.PodTypeSign, mld.Owner).Return([]v1.Pod{pod1, pod2}, returnedError)
 			if !expectsErr {
 				if pod1.Status.Phase == v1.PodSucceeded {
-					podhelper.EXPECT().DeletePod(context.Background(), &pod1).Return(nil)
+					mockBuildSignPodManager.EXPECT().DeletePod(context.Background(), &pod1).Return(nil)
 				}
 				if pod2.Status.Phase == v1.PodSucceeded {
-					podhelper.EXPECT().DeletePod(context.Background(), &pod2).Return(nil)
+					mockBuildSignPodManager.EXPECT().DeletePod(context.Background(), &pod2).Return(nil)
 				}
 			}
 

@@ -21,7 +21,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 )
 
 var _ = Describe("MakePodTemplate", func() {
@@ -37,19 +37,19 @@ var _ = Describe("MakePodTemplate", func() {
 	)
 
 	var (
-		ctrl      *gomock.Controller
-		clnt      *client.MockClient
-		m         Maker
-		mh        *build.MockHelper
-		podhelper *utils.MockPodHelper
+		ctrl                    *gomock.Controller
+		clnt                    *client.MockClient
+		m                       Maker
+		mh                      *build.MockHelper
+		mockBuildSignPodManager *pod.MockBuildSignPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mh = build.NewMockHelper(ctrl)
-		podhelper = utils.NewMockPodHelper(ctrl)
-		m = NewMaker(clnt, mh, podhelper, scheme)
+		mockBuildSignPodManager = pod.NewMockBuildSignPodManager(ctrl)
+		m = NewMaker(clnt, mh, mockBuildSignPodManager, scheme)
 	})
 
 	AfterEach(func() {
@@ -240,7 +240,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, utils.PodTypeBuild).Return(labels),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, pod.PodTypeBuild).Return(labels),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, true)
@@ -306,7 +306,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			podhelper.EXPECT().PodLabels(mod.Name, kernelNormalizedVersion, utils.PodTypeBuild).Return(map[string]string{}),
+			mockBuildSignPodManager.EXPECT().PodLabels(mod.Name, kernelNormalizedVersion, pod.PodTypeBuild).Return(map[string]string{}),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, pushImage)
@@ -385,7 +385,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, utils.PodTypeBuild).Return(map[string]string{}),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, pod.PodTypeBuild).Return(map[string]string{}),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, false)
@@ -422,7 +422,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			podhelper.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, utils.PodTypeBuild).Return(map[string]string{}),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, pod.PodTypeBuild).Return(map[string]string{}),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, true)
