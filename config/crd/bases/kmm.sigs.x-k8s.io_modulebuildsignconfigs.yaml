@@ -164,6 +164,11 @@ spec:
                     kernelVersion:
                       description: kernel version for which this image is targeted
                       type: string
+                    selector:
+                      additionalProperties:
+                        type: string
+                      description: selector for pod that should run builds
+                      type: object
                     sign:
                       description: Sign contains sign instructions, in case image
                         needs signing

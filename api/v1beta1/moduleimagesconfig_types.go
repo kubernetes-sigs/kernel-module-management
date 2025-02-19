@@ -42,6 +42,9 @@ type ModuleImageSpec struct {
 	// kernel version for which this image is targeted
 	KernelVersion string `json:"kernelVersion"`
 
+	// selector for pod that should run builds
+	Selector map[string]string `json:"selector,omitempty"`
+
 	// Build contains build instructions, in case image needs building
 	// +optional
 	Build *Build `json:"build,omitempty"`

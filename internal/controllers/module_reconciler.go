@@ -351,6 +351,7 @@ func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta
 		mis := kmmv1beta1.ModuleImageSpec{
 			Image:         mld.ContainerImage,
 			KernelVersion: mld.KernelVersion,
+			Selector:      mld.Selector,
 			Build:         mld.Build,
 			Sign:          mld.Sign,
 		}
