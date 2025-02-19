@@ -39,6 +39,9 @@ type ModuleImageSpec struct {
 	// image
 	Image string `json:"image"`
 
+	// kernel version for which this image is targeted
+	KernelVersion string `json:"kernelVersion"`
+
 	// Build contains build instructions, in case image needs building
 	// +optional
 	Build *Build `json:"build,omitempty"`
