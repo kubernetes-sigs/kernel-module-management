@@ -349,9 +349,10 @@ func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta
 			continue
 		}
 		mis := kmmv1beta1.ModuleImageSpec{
-			Image: mld.ContainerImage,
-			Build: mld.Build,
-			Sign:  mld.Sign,
+			Image:         mld.ContainerImage,
+			KernelVersion: mld.KernelVersion,
+			Build:         mld.Build,
+			Sign:          mld.Sign,
 		}
 		images = append(images, mis)
 	}

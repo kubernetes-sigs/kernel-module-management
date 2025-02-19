@@ -470,9 +470,20 @@ var _ = Describe("handleMIC", func() {
 	It("should work as expected", func() {
 
 		img := "example.registry.com/org/image:tag"
-		mld := &api.ModuleLoaderData{ContainerImage: img}
+		mld := &api.ModuleLoaderData{
+			ContainerImage: img,
+			Build:          &kmmv1beta1.Build{},
+			Sign:           &kmmv1beta1.Sign{},
+			KernelVersion:  "some version",
+		}
+		expectedSpec := kmmv1beta1.ModuleImageSpec{
+			Image:         img,
+			KernelVersion: "some version",
+			Build:         mld.Build,
+			Sign:          mld.Sign,
+		}
 		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(mld, nil)
-		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
+		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, []kmmv1beta1.ModuleImageSpec{expectedSpec}, mod.Spec.ImageRepoSecret, mod).Return(nil)
 
 		err := mrh.handleMIC(ctx, mod, targetedNodes)
 		Expect(err).NotTo(HaveOccurred())
