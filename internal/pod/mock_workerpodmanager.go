@@ -83,6 +83,20 @@ func (mr *MockWorkerPodManagerMockRecorder) DeletePod(ctx, pod any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePod", reflect.TypeOf((*MockWorkerPodManager)(nil).DeletePod), ctx, pod)
 }
 
+// GetConfigAnnotation mocks base method.
+func (m *MockWorkerPodManager) GetConfigAnnotation(p *v1.Pod) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetConfigAnnotation", p)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetConfigAnnotation indicates an expected call of GetConfigAnnotation.
+func (mr *MockWorkerPodManagerMockRecorder) GetConfigAnnotation(p any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfigAnnotation", reflect.TypeOf((*MockWorkerPodManager)(nil).GetConfigAnnotation), p)
+}
+
 // GetWorkerPod mocks base method.
 func (m *MockWorkerPodManager) GetWorkerPod(ctx context.Context, podName, namespace string) (*v1.Pod, error) {
 	m.ctrl.T.Helper()
@@ -96,6 +110,48 @@ func (m *MockWorkerPodManager) GetWorkerPod(ctx context.Context, podName, namesp
 func (mr *MockWorkerPodManagerMockRecorder) GetWorkerPod(ctx, podName, namespace any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerPod", reflect.TypeOf((*MockWorkerPodManager)(nil).GetWorkerPod), ctx, podName, namespace)
+}
+
+// HashAnnotationDiffer mocks base method.
+func (m *MockWorkerPodManager) HashAnnotationDiffer(p1, p2 *v1.Pod) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HashAnnotationDiffer", p1, p2)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HashAnnotationDiffer indicates an expected call of HashAnnotationDiffer.
+func (mr *MockWorkerPodManagerMockRecorder) HashAnnotationDiffer(p1, p2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HashAnnotationDiffer", reflect.TypeOf((*MockWorkerPodManager)(nil).HashAnnotationDiffer), p1, p2)
+}
+
+// IsLoaderPod mocks base method.
+func (m *MockWorkerPodManager) IsLoaderPod(p *v1.Pod) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsLoaderPod", p)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsLoaderPod indicates an expected call of IsLoaderPod.
+func (mr *MockWorkerPodManagerMockRecorder) IsLoaderPod(p any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsLoaderPod", reflect.TypeOf((*MockWorkerPodManager)(nil).IsLoaderPod), p)
+}
+
+// IsUnloaderPod mocks base method.
+func (m *MockWorkerPodManager) IsUnloaderPod(p *v1.Pod) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsUnloaderPod", p)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsUnloaderPod indicates an expected call of IsUnloaderPod.
+func (mr *MockWorkerPodManagerMockRecorder) IsUnloaderPod(p any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsUnloaderPod", reflect.TypeOf((*MockWorkerPodManager)(nil).IsUnloaderPod), p)
 }
 
 // ListWorkerPodsOnNode mocks base method.

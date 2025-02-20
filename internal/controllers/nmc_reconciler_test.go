@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -682,10 +681,11 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 	)
 
 	It("should do nothing if the pod is not loading a kmod", func() {
-		mockWorkerPodManager.
-			EXPECT().
-			GetWorkerPod(ctx, podName, namespace).
-			Return(&v1.Pod{}, nil)
+
+		gomock.InOrder(
+			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&v1.Pod{}, nil),
+			mockWorkerPodManager.EXPECT().IsLoaderPod(gomock.Any()).Return(true),
+		)
 
 		Expect(
 			wh.ProcessModuleSpec(ctx, nmc, spec, status, nil),
@@ -695,16 +695,11 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 	})
 
 	It("should do nothing if the worker container has not restarted", func() {
-		pod := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{pod.ActionLabelKey: pod.WorkerActionLoad},
-			},
-		}
 
-		mockWorkerPodManager.
-			EXPECT().
-			GetWorkerPod(ctx, podName, namespace).
-			Return(&pod, nil)
+		gomock.InOrder(
+			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&v1.Pod{}, nil),
+			mockWorkerPodManager.EXPECT().IsLoaderPod(gomock.Any()).Return(true),
+		)
 
 		Expect(
 			wh.ProcessModuleSpec(ctx, nmc, spec, status, nil),
@@ -715,9 +710,6 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 
 	It("should return an error if there was an error making the Pod template", func() {
 		pod := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{pod.ActionLabelKey: pod.WorkerActionLoad},
-			},
 			Status: v1.PodStatus{
 				ContainerStatuses: []v1.ContainerStatus{
 					{
@@ -729,14 +721,9 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		}
 
 		gomock.InOrder(
-			mockWorkerPodManager.
-				EXPECT().
-				GetWorkerPod(ctx, podName, namespace).
-				Return(&pod, nil),
-			mockWorkerPodManager.
-				EXPECT().
-				LoaderPodTemplate(ctx, nmc, spec).
-				Return(nil, errors.New("random error")),
+			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
+			mockWorkerPodManager.EXPECT().IsLoaderPod(&pod).Return(true),
+			mockWorkerPodManager.EXPECT().LoaderPodTemplate(ctx, nmc, spec).Return(nil, errors.New("random error")),
 		)
 
 		Expect(
@@ -748,10 +735,6 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 
 	It("should delete the existing pod if its hash annotation is outdated", func() {
 		p := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels:      map[string]string{pod.ActionLabelKey: pod.WorkerActionLoad},
-				Annotations: map[string]string{pod.HashAnnotationKey: "123"},
-			},
 			Status: v1.PodStatus{
 				ContainerStatuses: []v1.ContainerStatus{
 					{
@@ -763,20 +746,13 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 		}
 
 		podTemplate := p.DeepCopy()
-		podTemplate.Annotations[pod.HashAnnotationKey] = "456"
 
 		gomock.InOrder(
-			mockWorkerPodManager.
-				EXPECT().
-				GetWorkerPod(ctx, podName, namespace).
-				Return(&p, nil),
-			mockWorkerPodManager.
-				EXPECT().
-				LoaderPodTemplate(ctx, nmc, spec).
-				Return(podTemplate, nil),
-			mockWorkerPodManager.
-				EXPECT().
-				DeletePod(ctx, &p),
+			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&p, nil),
+			mockWorkerPodManager.EXPECT().IsLoaderPod(&p).Return(true),
+			mockWorkerPodManager.EXPECT().LoaderPodTemplate(ctx, nmc, spec).Return(podTemplate, nil),
+			mockWorkerPodManager.EXPECT().HashAnnotationDiffer(gomock.Any(), gomock.Any()).Return(true),
+			mockWorkerPodManager.EXPECT().DeletePod(ctx, &p),
 		)
 
 		Expect(
@@ -857,13 +833,13 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      podName,
 				Namespace: namespace,
-				Labels:    map[string]string{pod.ActionLabelKey: pod.WorkerActionLoad},
 			},
 		}
 
 		gomock.InOrder(
 			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(false),
 			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
+			mockWorkerPodManager.EXPECT().IsLoaderPod(&pod).Return(true),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &pod),
 		)
 
@@ -885,6 +861,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		gomock.InOrder(
 			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(false),
 			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
+			mockWorkerPodManager.EXPECT().IsLoaderPod(&pod).Return(false),
 		)
 
 		Expect(
@@ -913,6 +890,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		gomock.InOrder(
 			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(false),
 			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
+			mockWorkerPodManager.EXPECT().IsLoaderPod(&pod).Return(false),
 			mockWorkerPodManager.EXPECT().UnloaderPodTemplate(ctx, nmc, status).Return(nil, errors.New("random error")),
 		)
 
@@ -926,9 +904,8 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 	It("should delete the existing pod if its hash annotation is outdated", func() {
 		p := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:        podName,
-				Namespace:   namespace,
-				Annotations: map[string]string{pod.HashAnnotationKey: "123"},
+				Name:      podName,
+				Namespace: namespace,
 			},
 			Status: v1.PodStatus{
 				ContainerStatuses: []v1.ContainerStatus{
@@ -941,12 +918,13 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		}
 
 		podTemplate := p.DeepCopy()
-		podTemplate.Annotations[pod.HashAnnotationKey] = "456"
 
 		gomock.InOrder(
 			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(false),
 			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&p, nil),
+			mockWorkerPodManager.EXPECT().IsLoaderPod(&p).Return(false),
 			mockWorkerPodManager.EXPECT().UnloaderPodTemplate(ctx, nmc, status).Return(podTemplate, nil),
+			mockWorkerPodManager.EXPECT().HashAnnotationDiffer(gomock.Any(), gomock.Any()).Return(true),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &p),
 		)
 
@@ -1078,7 +1056,6 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: modNamespace,
 				Labels: map[string]string{
-					pod.ActionLabelKey:        pod.WorkerActionUnload,
 					constants.ModuleNameLabel: modName,
 				},
 			},
@@ -1087,6 +1064,7 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 
 		gomock.InOrder(
 			mockWorkerPodManager.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{pod}, nil),
+			mockWorkerPodManager.EXPECT().IsUnloaderPod(&pod).Return(true),
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &pod),
@@ -1143,7 +1121,6 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: modNamespace,
 				Labels: map[string]string{
-					pod.ActionLabelKey:        pod.WorkerActionLoad,
 					constants.ModuleNameLabel: modName,
 				},
 			},
@@ -1167,10 +1144,11 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 
 		b, err := yaml.Marshal(cfg)
 		Expect(err).NotTo(HaveOccurred())
-		meta.SetAnnotation(&p, pod.ConfigAnnotationKey, string(b))
 
 		gomock.InOrder(
 			mockWorkerPodManager.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{p}, nil),
+			mockWorkerPodManager.EXPECT().IsUnloaderPod(&p).Return(false),
+			mockWorkerPodManager.EXPECT().GetConfigAnnotation(&p).Return(string(b)),
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &p),
@@ -1223,7 +1201,6 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: modNamespace,
 				Labels: map[string]string{
-					pod.ActionLabelKey:        pod.WorkerActionUnload,
 					constants.ModuleNameLabel: modName,
 				},
 			},
@@ -1232,6 +1209,7 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 
 		gomock.InOrder(
 			mockWorkerPodManager.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{pod}, nil),
+			mockWorkerPodManager.EXPECT().IsUnloaderPod(&pod).Return(true),
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()).Return(errors.New("some error")),
 		)
