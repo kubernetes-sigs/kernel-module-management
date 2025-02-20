@@ -36,16 +36,15 @@ type WorkerPodManager interface {
 	ListWorkerPodsOnNode(ctx context.Context, nodeName string) ([]v1.Pod, error)
 	LoaderPodTemplate(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleSpec) (*v1.Pod, error)
 	UnloaderPodTemplate(ctx context.Context, nmc client.Object, nms *kmmv1beta1.NodeModuleStatus) (*v1.Pod, error)
+	IsLoaderPod(p *v1.Pod) bool
+	IsUnloaderPod(p *v1.Pod) bool
+	GetConfigAnnotation(p *v1.Pod) string
+	HashAnnotationDiffer(p1, p2 *v1.Pod) bool
 }
 
 const (
-	WorkerActionLoad           = "Load"
-	WorkerActionUnload         = "Unload"
 	NodeModulesConfigFinalizer = "kmm.node.kubernetes.io/nodemodulesconfig-reconciler"
-	ActionLabelKey             = "kmm.node.kubernetes.io/worker-action"
-	ConfigAnnotationKey        = "kmm.node.kubernetes.io/worker-config"
 	WorkerContainerName        = "worker"
-	HashAnnotationKey          = "kmm.node.kubernetes.io/worker-hash"
 
 	volMountPointConfig = "/etc/kmm-worker"
 	configFileName      = "config.yaml"
@@ -56,6 +55,11 @@ const (
 	volumeNameConfig    = "config"
 	initContainerName   = "image-extractor"
 	modulesOrderKey     = "kmm.node.kubernetes.io/modules-order"
+	workerActionLoad    = "Load"
+	workerActionUnload  = "Unload"
+	actionLabelKey      = "kmm.node.kubernetes.io/worker-action"
+	configAnnotationKey = "kmm.node.kubernetes.io/worker-config"
+	hashAnnotationKey   = "kmm.node.kubernetes.io/worker-hash"
 )
 
 var (
@@ -139,7 +143,7 @@ func (wpmi *workerPodManagerImpl) ListWorkerPodsOnNode(ctx context.Context, node
 
 	pl := v1.PodList{}
 
-	hl := client.HasLabels{ActionLabelKey}
+	hl := client.HasLabels{actionLabelKey}
 	mf := client.MatchingFields{".spec.nodeName": nodeName}
 
 	logger.V(1).Info("Listing worker Pods")
@@ -200,7 +204,7 @@ func (wpmi *workerPodManagerImpl) LoaderPodTemplate(ctx context.Context, nmc cli
 		return nil, fmt.Errorf("could not set worker container args: %v", err)
 	}
 
-	meta.SetLabel(pod, ActionLabelKey, WorkerActionLoad)
+	meta.SetLabel(pod, actionLabelKey, workerActionLoad)
 
 	return pod, setHashAnnotation(pod)
 }
@@ -249,9 +253,49 @@ func (wpmi *workerPodManagerImpl) UnloaderPodTemplate(ctx context.Context, nmc c
 		return nil, fmt.Errorf("could not set worker container args: %v", err)
 	}
 
-	meta.SetLabel(pod, ActionLabelKey, WorkerActionUnload)
+	meta.SetLabel(pod, actionLabelKey, workerActionUnload)
 
 	return pod, setHashAnnotation(pod)
+}
+
+func (wpmi *workerPodManagerImpl) IsLoaderPod(p *v1.Pod) bool {
+
+	if p == nil {
+		return false
+	}
+
+	return p.Labels[actionLabelKey] == workerActionLoad
+}
+
+func (wpmi *workerPodManagerImpl) IsUnloaderPod(p *v1.Pod) bool {
+
+	if p == nil {
+		return false
+	}
+
+	return p.Labels[actionLabelKey] == workerActionUnload
+}
+
+func (wpmi *workerPodManagerImpl) GetConfigAnnotation(p *v1.Pod) string {
+
+	if p == nil {
+		return ""
+	}
+
+	return p.Annotations[configAnnotationKey]
+}
+
+func (wpmi *workerPodManagerImpl) HashAnnotationDiffer(p1, p2 *v1.Pod) bool {
+
+	if p1 == nil && p2 == nil {
+		return true
+	}
+
+	if (p1 == nil && p2 != nil) || (p1 != nil) && (p2 == nil) {
+		return false
+	}
+
+	return p1.Annotations[hashAnnotationKey] != p2.Annotations[hashAnnotationKey]
 }
 
 func (wpmi *workerPodManagerImpl) baseWorkerPod(ctx context.Context, nmc client.Object, item *kmmv1beta1.ModuleItem,
@@ -273,7 +317,7 @@ func (wpmi *workerPodManagerImpl) baseWorkerPod(ctx context.Context, nmc client.
 						{
 							Path: configFileName,
 							FieldRef: &v1.ObjectFieldSelector{
-								FieldPath: fmt.Sprintf("metadata.annotations['%s']", ConfigAnnotationKey),
+								FieldPath: fmt.Sprintf("metadata.annotations['%s']", configAnnotationKey),
 							},
 						},
 					},
@@ -406,7 +450,7 @@ func setWorkerConfigAnnotation(pod *v1.Pod, cfg kmmv1beta1.ModuleConfig) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal the ModuleConfig to YAML: %v", err)
 	}
-	meta.SetAnnotation(pod, ConfigAnnotationKey, string(b))
+	meta.SetAnnotation(pod, configAnnotationKey, string(b))
 
 	return nil
 }
@@ -533,7 +577,7 @@ func setHashAnnotation(pod *v1.Pod) error {
 		return fmt.Errorf("could not hash the pod template: %v", err)
 	}
 
-	pod.Annotations[HashAnnotationKey] = fmt.Sprintf("%d", hash)
+	pod.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
 
 	return nil
 }

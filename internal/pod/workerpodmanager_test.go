@@ -150,7 +150,7 @@ var _ = Describe("CreateLoaderPod", func() {
 		hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		expected.Annotations[HashAnnotationKey] = fmt.Sprintf("%d", hash)
+		expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
 
 		gomock.InOrder(
 			client.EXPECT().Create(ctx, cmpmock.DiffEq(expected)),
@@ -215,7 +215,7 @@ var _ = Describe("CreateLoaderPod", func() {
 			hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
 			Expect(err).NotTo(HaveOccurred())
 
-			expected.Annotations[HashAnnotationKey] = fmt.Sprintf("%d", hash)
+			expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
 
 			gomock.InOrder(
 				client.EXPECT().Create(ctx, cmpmock.DiffEq(expected)),
@@ -320,7 +320,7 @@ var _ = Describe("CreateUnloaderPod", func() {
 		hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		expected.Annotations[HashAnnotationKey] = fmt.Sprintf("%d", hash)
+		expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
 
 		client.EXPECT().Create(ctx, cmpmock.DiffEq(expected))
 
@@ -391,7 +391,7 @@ var _ = Describe("ListWorkerPodsOnNode", func() {
 	})
 
 	opts := []interface{}{
-		ctrlclient.HasLabels{ActionLabelKey},
+		ctrlclient.HasLabels{actionLabelKey},
 		ctrlclient.MatchingFields{".spec.nodeName": nodeName},
 	}
 
@@ -437,9 +437,9 @@ func getBaseWorkerPod(subcommand string, owner ctrlclient.Object, firmwareHostPa
 		volNameVarLibFirmware = "lib-firmware"
 	)
 
-	action := WorkerActionLoad
+	action := workerActionLoad
 	if !isLoaderPod {
-		action = WorkerActionUnload
+		action = workerActionUnload
 	}
 
 	hostPathDirectory := v1.HostPathDirectory
@@ -493,11 +493,11 @@ cp -R /firmware-path/* /tmp/firmware-path;
 				"app.kubernetes.io/component": "worker",
 				"app.kubernetes.io/name":      "kmm",
 				"app.kubernetes.io/part-of":   "kmm",
-				ActionLabelKey:                string(action),
+				actionLabelKey:                string(action),
 				constants.ModuleNameLabel:     moduleName,
 			},
 			Annotations: map[string]string{
-				ConfigAnnotationKey: configAnnotationValue,
+				configAnnotationKey: configAnnotationValue,
 				modulesOrderKey:     modulesOrderValue,
 			},
 		},
@@ -579,7 +579,7 @@ cp -R /firmware-path/* /tmp/firmware-path;
 								{
 									Path: "config.yaml",
 									FieldRef: &v1.ObjectFieldSelector{
-										FieldPath: fmt.Sprintf("metadata.annotations['%s']", ConfigAnnotationKey),
+										FieldPath: fmt.Sprintf("metadata.annotations['%s']", configAnnotationKey),
 									},
 								},
 							},

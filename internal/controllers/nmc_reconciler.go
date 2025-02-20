@@ -342,7 +342,7 @@ func (h *nmcReconcilerHelperImpl) ProcessModuleSpec(
 		return nil
 	}
 
-	if p.Labels[pod.ActionLabelKey] != pod.WorkerActionLoad {
+	if !h.podManager.IsLoaderPod(p) {
 		logger.Info("Worker Pod is not loading the kmod; doing nothing")
 		return nil
 	}
@@ -357,7 +357,7 @@ func (h *nmcReconcilerHelperImpl) ProcessModuleSpec(
 		return fmt.Errorf("could not create the Pod template for %s: %v", podName, err)
 	}
 
-	if podTemplate.Annotations[pod.HashAnnotationKey] != p.Annotations[pod.HashAnnotationKey] {
+	if h.podManager.HashAnnotationDiffer(podTemplate, p) {
 		logger.Info("Hash differs, deleting pod")
 		return h.podManager.DeletePod(ctx, p)
 	}
@@ -402,7 +402,7 @@ func (h *nmcReconcilerHelperImpl) ProcessUnconfiguredModuleStatus(
 		return h.podManager.CreateUnloaderPod(ctx, nmcObj, status)
 	}
 
-	if p.Labels[pod.ActionLabelKey] == pod.WorkerActionLoad {
+	if h.podManager.IsLoaderPod(p) {
 		logger.Info("Worker Pod is loading the kmod; deleting it")
 		return h.podManager.DeletePod(ctx, p)
 	}
@@ -417,7 +417,7 @@ func (h *nmcReconcilerHelperImpl) ProcessUnconfiguredModuleStatus(
 		return fmt.Errorf("could not create the Pod template for %s: %v", podName, err)
 	}
 
-	if podTemplate.Annotations[pod.HashAnnotationKey] != p.Annotations[pod.HashAnnotationKey] {
+	if h.podManager.HashAnnotationDiffer(podTemplate, p) {
 		logger.Info("Hash differs, deleting pod")
 		return h.podManager.DeletePod(ctx, p)
 	}
@@ -502,7 +502,7 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 		case v1.PodFailed:
 			podsToDelete = append(podsToDelete, p)
 		case v1.PodSucceeded:
-			if p.Labels[pod.ActionLabelKey] == pod.WorkerActionUnload {
+			if h.podManager.IsUnloaderPod(&p) {
 				podsToDelete = append(podsToDelete, p)
 				nmc.RemoveModuleStatus(&nmcObj.Status.Modules, modNamespace, modName)
 				break
@@ -517,7 +517,8 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 				}
 			}
 
-			if err = yaml.UnmarshalStrict([]byte(p.Annotations[pod.ConfigAnnotationKey]), &status.Config); err != nil {
+			configAnnotation := h.podManager.GetConfigAnnotation(&p)
+			if err = yaml.UnmarshalStrict([]byte(configAnnotation), &status.Config); err != nil {
 				errs = append(
 					errs,
 					fmt.Errorf("%s: could not unmarshal the ModuleConfig from YAML: %v", podNSN, err),
