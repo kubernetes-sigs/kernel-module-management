@@ -49,6 +49,10 @@ type ModuleImageSpec struct {
 	// Sign contains sign instructions, in case image needs signing
 	// +optional
 	Sign *Sign `json:"sign,omitempty"`
+
+	// +optional
+	// RegistryTLS set the TLS configs for accessing the registry of the image.
+	RegistryTLS *TLSOptions `json:"registryTLS,omitempty"`
 }
 
 // ModuleImagesConfigSpec describes the images of the Module whose status needs to be verified
