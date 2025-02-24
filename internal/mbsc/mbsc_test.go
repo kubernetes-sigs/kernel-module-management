@@ -191,3 +191,38 @@ var _ = Describe("GetImageSpec", func() {
 		Expect(res).To(BeNil())
 	})
 })
+
+var _ = Describe("SetImageSpec", func() {
+	testMBSC := kmmv1beta1.ModuleBuildSignConfig{
+		Status: kmmv1beta1.ModuleBuildSignConfigStatus{
+			Images: []kmmv1beta1.BuildSignImageState{
+				{
+					Image:  "image1",
+					Status: kmmv1beta1.ActionSuccess,
+					Action: kmmv1beta1.BuildImage,
+				},
+				{
+					Image:  "image2",
+					Status: kmmv1beta1.ActionFailure,
+					Action: kmmv1beta1.SignImage,
+				},
+			},
+		},
+	}
+
+	mbscAPI := New(nil, nil)
+
+	It("set images status for both present and not present statuses", func() {
+		By("image status is present")
+		mbscAPI.SetImageStatus(&testMBSC, "image1", kmmv1beta1.SignImage, kmmv1beta1.ActionFailure)
+		Expect(testMBSC.Status.Images[0].Image).To(Equal("image1"))
+		Expect(testMBSC.Status.Images[0].Status).To(Equal(kmmv1beta1.ActionFailure))
+		Expect(testMBSC.Status.Images[0].Action).To(Equal(kmmv1beta1.SignImage))
+
+		By("image status is not present")
+		mbscAPI.SetImageStatus(&testMBSC, "image3", kmmv1beta1.BuildImage, kmmv1beta1.ActionSuccess)
+		Expect(testMBSC.Status.Images[2].Image).To(Equal("image3"))
+		Expect(testMBSC.Status.Images[2].Status).To(Equal(kmmv1beta1.ActionSuccess))
+		Expect(testMBSC.Status.Images[2].Action).To(Equal(kmmv1beta1.BuildImage))
+	})
+})
