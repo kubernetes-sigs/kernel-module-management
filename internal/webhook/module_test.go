@@ -553,24 +553,23 @@ var _ = Describe("ValidateDelete", func() {
 	})
 })
 
-var _ = Describe("validateModuleTolerarations", func() {
+var _ = Describe("validateTolerations", func() {
 	It("should fail when Module has an invalid toleration effect", func() {
-		mod := validModule
-		mod.Spec.Tolerations = []v1.Toleration{
+		tolerations := []v1.Toleration{
 			{
 				Key: "Test-Key1", Operator: v1.TolerationOpEqual, Value: "Test-Value1", Effect: v1.TaintEffectPreferNoSchedule,
 			},
 			{
-				Key: "Test-Key2", Operator: v1.TolerationOpExists, Value: "Test-Value2", Effect: "Invalid-Effect",
+				Key: "Test-Key2", Operator: v1.TolerationOpExists, Effect: "Invalid-Effect",
 			},
 		}
 
-		err := validateModuleTolerations(&mod)
+		err := validateTolerations(tolerations)
 		Expect(err).To(HaveOccurred())
 	})
+
 	It("should fail when Module has an invalid toleration operator", func() {
-		mod := validModule
-		mod.Spec.Tolerations = []v1.Toleration{
+		tolerations := []v1.Toleration{
 			{
 				Key: "Test-Key1", Operator: v1.TolerationOpEqual, Value: "Test-Value1", Effect: v1.TaintEffectPreferNoSchedule,
 			},
@@ -579,14 +578,28 @@ var _ = Describe("validateModuleTolerarations", func() {
 			},
 		}
 
-		err := validateModuleTolerations(&mod)
+		err := validateTolerations(tolerations)
 		Expect(err).To(HaveOccurred())
 	})
-	It("should work when all tolerations have valid effects ", func() {
-		mod := validModule
-		mod.Spec.Tolerations = []v1.Toleration{
+
+	It("should fail when toleration has non empty value and Exists operator", func() {
+		tolerations := []v1.Toleration{
 			{
-				Key: "Test-Key1", Operator: v1.TolerationOpExists, Value: "Test-Value", Effect: v1.TaintEffectPreferNoSchedule,
+				Key: "Test-Key1", Operator: v1.TolerationOpEqual, Value: "Test-Value1", Effect: v1.TaintEffectPreferNoSchedule,
+			},
+			{
+				Key: "Test-Key2", Operator: v1.TolerationOpExists, Value: "Test-Value2", Effect: v1.TaintEffectNoExecute,
+			},
+		}
+
+		err := validateTolerations(tolerations)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should work when all tolerations have valid effects", func() {
+		tolerations := []v1.Toleration{
+			{
+				Key: "Test-Key1", Operator: v1.TolerationOpExists, Effect: v1.TaintEffectPreferNoSchedule,
 			},
 			{
 				Key: "Test-Key2", Operator: v1.TolerationOpEqual, Value: "Test-Value", Effect: v1.TaintEffectNoSchedule,
@@ -596,8 +609,82 @@ var _ = Describe("validateModuleTolerarations", func() {
 			},
 		}
 
-		err := validateModuleTolerations(&mod)
-		Expect(err).ToNot(HaveOccurred())
+		err := validateTolerations(tolerations)
+		Expect(err).To(Not(HaveOccurred()))
 	})
 
+	It("should fail when toleration has an invalid key format", func() {
+		tolerations := []v1.Toleration{
+			{
+				Key: "Invalid Key!", Operator: v1.TolerationOpEqual, Value: "Test-Value",
+			},
+		}
+
+		err := validateTolerations(tolerations)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should fail when toleration has empty key with an invalid operator", func() {
+		tolerations := []v1.Toleration{
+			{
+				Key: "", Operator: v1.TolerationOpEqual, Value: "Test-Value",
+			},
+		}
+
+		err := validateTolerations(tolerations)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should fail when TolerationSeconds is set but Effect is not NoExecute", func() {
+		tolSecs := int64(30)
+		tolerations := []v1.Toleration{
+			{
+				Key: "Test-Key", Operator: v1.TolerationOpEqual, Value: "Test-Value", Effect: v1.TaintEffectNoSchedule, TolerationSeconds: &tolSecs,
+			},
+		}
+
+		err := validateTolerations(tolerations)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should pass when TolerationSeconds is set with NoExecute effect", func() {
+		tolSecs := int64(60)
+		tolerations := []v1.Toleration{
+			{
+				Key: "Test-Key", Operator: v1.TolerationOpEqual, Value: "Test-Value", Effect: v1.TaintEffectNoExecute, TolerationSeconds: &tolSecs,
+			},
+		}
+
+		err := validateTolerations(tolerations)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	It("should fail when an invalid effect is provided", func() {
+		tolerations := []v1.Toleration{
+			{
+				Key: "Test-Key", Operator: v1.TolerationOpExists, Effect: "Invalid-Effect",
+			},
+		}
+
+		err := validateTolerations(tolerations)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should fail when operator is not Equal or Exists", func() {
+		tolerations := []v1.Toleration{
+			{
+				Key: "Test-Key", Operator: "InvalidOperator", Value: "Test-Value",
+			},
+		}
+
+		err := validateTolerations(tolerations)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should pass with an empty toleration list", func() {
+		var tolerations []v1.Toleration
+
+		err := validateTolerations(tolerations)
+		Expect(err).To(Not(HaveOccurred()))
+	})
 })

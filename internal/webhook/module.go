@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"regexp"
 	"strings"
 
@@ -110,7 +111,7 @@ func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
 		return nil, fmt.Errorf("failed to validate kernel mappings: %v", err)
 	}
 
-	if err := validateModuleTolerations(mod); err != nil {
+	if err := validateTolerations(mod.Spec.Tolerations); err != nil {
 		return nil, fmt.Errorf("failed to validate Module's tolerations: %v", err)
 	}
 
@@ -212,17 +213,51 @@ func validateModprobe(modprobe kmmv1beta1.ModprobeSpec) error {
 
 	return nil
 }
-func validateModuleTolerations(mod *kmmv1beta1.Module) error {
-	for _, toleration := range mod.Spec.Tolerations {
 
-		if toleration.Operator != corev1.TolerationOpExists && toleration.Operator != corev1.TolerationOpEqual {
-			return fmt.Errorf("toleration operator can be only {Exists, Equal} but got %s", toleration.Operator)
+func validateTolerations(tolerations []corev1.Toleration) error {
+
+	for i, toleration := range tolerations {
+		tolIndex := fmt.Sprintf("Toleration[%d]", i)
+
+		if len(toleration.Key) > 0 {
+			if errs := validation.IsQualifiedName(toleration.Key); len(errs) > 0 {
+				return fmt.Errorf("%s invalid key '%s': %s", tolIndex, toleration.Key, strings.Join(errs, "; "))
+			}
 		}
 
-		if toleration.Effect != corev1.TaintEffectNoSchedule &&
-			toleration.Effect != corev1.TaintEffectNoExecute &&
-			toleration.Effect != corev1.TaintEffectPreferNoSchedule {
-			return fmt.Errorf("toleration effect can be only {NoSchedule, NoExecute, PreferNoSchedule} but got %s", toleration.Effect)
+		if len(toleration.Key) == 0 && toleration.Operator != corev1.TolerationOpExists {
+			return fmt.Errorf("%s operator must be 'Exists' when key is empty", tolIndex)
+		}
+
+		if toleration.TolerationSeconds != nil && toleration.Effect != corev1.TaintEffectNoExecute {
+			return fmt.Errorf("%s effect must be 'NoExecute' when tolerationSeconds is set", tolIndex)
+		}
+
+		switch toleration.Operator {
+		case corev1.TolerationOpEqual, "":
+			if errs := validation.IsValidLabelValue(toleration.Value); len(errs) > 0 {
+				return fmt.Errorf("%s invalid value '%s' for Equal operator %s", tolIndex, toleration.Value, strings.Join(errs, "; "))
+			}
+		case corev1.TolerationOpExists:
+			if len(toleration.Value) > 0 {
+				return fmt.Errorf("%s value must be empty when operator is 'Exists'", tolIndex)
+			}
+		default:
+			return fmt.Errorf("%s invalid operator '%s', allowed values are ['Equal', 'Exists']", tolIndex, toleration.Operator)
+		}
+
+		if len(toleration.Effect) > 0 {
+			validEffects := []corev1.TaintEffect{corev1.TaintEffectNoSchedule, corev1.TaintEffectPreferNoSchedule, corev1.TaintEffectNoExecute}
+			valid := false
+			for _, v := range validEffects {
+				if toleration.Effect == v {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				return fmt.Errorf("%s invalid effect '%s', allowed values are ['NoSchedule', 'PreferNoSchedule', 'NoExecute']", tolIndex, toleration.Effect)
+			}
 		}
 	}
 	return nil
