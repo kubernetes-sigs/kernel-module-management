@@ -475,12 +475,14 @@ var _ = Describe("handleMIC", func() {
 			Build:          &kmmv1beta1.Build{},
 			Sign:           &kmmv1beta1.Sign{},
 			KernelVersion:  "some version",
+			RegistryTLS:    &kmmv1beta1.TLSOptions{},
 		}
 		expectedSpec := kmmv1beta1.ModuleImageSpec{
 			Image:         img,
 			KernelVersion: "some version",
 			Build:         mld.Build,
 			Sign:          mld.Sign,
+			RegistryTLS:   mld.RegistryTLS,
 		}
 		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(mld, nil)
 		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, []kmmv1beta1.ModuleImageSpec{expectedSpec}, mod.Spec.ImageRepoSecret, mod).Return(nil)

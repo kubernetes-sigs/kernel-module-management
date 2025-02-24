@@ -164,6 +164,19 @@ spec:
                     kernelVersion:
                       description: kernel version for which this image is targeted
                       type: string
+                    registryTLS:
+                      description: RegistryTLS set the TLS configs for accessing the
+                        registry of the image.
+                      properties:
+                        insecure:
+                          description: If Insecure is true, the operator will be able
+                            to access a registry in an insecure (plain HTTP) protocol.
+                          type: boolean
+                        insecureSkipTLSVerify:
+                          description: If InsecureSkipTLSVerify, the operator will
+                            accept any certificate provided by the registry.
+                          type: boolean
+                      type: object
                     sign:
                       description: Sign contains sign instructions, in case image
                         needs signing
