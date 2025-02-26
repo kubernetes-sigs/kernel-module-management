@@ -28,8 +28,8 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	buildpod "github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -40,7 +40,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -120,9 +119,9 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	buildHelperAPI := build.NewHelper()
+	buildSignHelperAPI := buildsign.NewHelper()
 	nodeAPI := node.NewNode(client)
-	kernelAPI := module.NewKernelMapper(buildHelperAPI, sign.NewSignerHelper())
+	kernelAPI := module.NewKernelMapper(buildSignHelperAPI)
 	micAPI := mic.New(client, scheme)
 
 	dpc := controllers.NewDevicePluginReconciler(
@@ -183,7 +182,7 @@ func main() {
 
 		buildAPI := buildpod.NewBuildManager(
 			client,
-			buildpod.NewMaker(client, buildHelperAPI, buildSignPodAPI, scheme),
+			buildpod.NewMaker(client, buildSignHelperAPI, buildSignPodAPI, scheme),
 			buildSignPodAPI,
 			registryAPI,
 		)
