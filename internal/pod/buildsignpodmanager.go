@@ -18,10 +18,10 @@ const (
 	PodTypeBuild = "build"
 	PodTypeSign  = "sign"
 
-	StatusCompleted  = "completed"
-	StatusCreated    = "created"
-	StatusInProgress = "in progress"
-	StatusFailed     = "failed"
+	StatusCompleted  Status = "completed"
+	StatusCreated    Status = "created"
+	StatusInProgress Status = "in progress"
+	StatusFailed     Status = "failed"
 )
 
 var ErrNoMatchingPod = errors.New("no matching pod")
