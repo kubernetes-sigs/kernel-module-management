@@ -36,8 +36,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
 	buildpod "github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -48,7 +48,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
 	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	//+kubebuilder:scaffold:imports
@@ -111,11 +110,11 @@ func main() {
 
 	registryAPI := registry.NewRegistry()
 	buildSignPodAPI := pod.NewBuildSignPodManager(client)
-	buildHelper := build.NewHelper()
+	buildSignHelper := buildsign.NewHelper()
 
 	buildAPI := buildpod.NewBuildManager(
 		client,
-		buildpod.NewMaker(client, buildHelper, buildSignPodAPI, scheme),
+		buildpod.NewMaker(client, buildSignHelper, buildSignPodAPI, scheme),
 		buildSignPodAPI,
 		registryAPI,
 	)
@@ -127,7 +126,7 @@ func main() {
 		registryAPI,
 	)
 
-	kernelAPI := module.NewKernelMapper(buildHelper, sign.NewSignerHelper())
+	kernelAPI := module.NewKernelMapper(buildSignHelper)
 
 	ctrlLogger := setupLogger.WithValues("name", hub.ManagedClusterModuleReconcilerName)
 	ctrlLogger.Info("Adding controller")

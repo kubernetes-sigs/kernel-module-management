@@ -6,8 +6,7 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/build"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/sign"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -96,7 +95,7 @@ var _ = Describe("findKernelMapping", func() {
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		kh = newKernelMapperHelper(nil, nil)
+		kh = newKernelMapperHelper(nil)
 	})
 
 	AfterEach(func() {
@@ -156,19 +155,17 @@ var _ = Describe("prepareModuleLoaderData", func() {
 	)
 
 	var (
-		ctrl        *gomock.Controller
-		buildHelper *build.MockHelper
-		signHelper  *sign.MockHelper
-		kh          kernelMapperHelperAPI
-		mod         kmmv1beta1.Module
-		mapping     kmmv1beta1.KernelMapping
+		ctrl            *gomock.Controller
+		buildSignHelper *buildsign.MockHelper
+		kh              kernelMapperHelperAPI
+		mod             kmmv1beta1.Module
+		mapping         kmmv1beta1.KernelMapping
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		buildHelper = build.NewMockHelper(ctrl)
-		signHelper = sign.NewMockHelper(ctrl)
-		kh = newKernelMapperHelper(buildHelper, signHelper)
+		buildSignHelper = buildsign.NewMockHelper(ctrl)
+		kh = newKernelMapperHelper(buildSignHelper)
 		mod = kmmv1beta1.Module{}
 		mod.Spec.ModuleLoader.Container.ContainerImage = "spec container image"
 		mod.Spec.ModuleLoader.Container.ImagePullPolicy = "Always"
@@ -231,11 +228,11 @@ var _ = Describe("prepareModuleLoaderData", func() {
 
 		if buildExistsInMapping || buildExistsInModuleSpec {
 			mld.Build = build
-			buildHelper.EXPECT().GetRelevantBuild(mod.Spec.ModuleLoader.Container.Build, mapping.Build).Return(build)
+			buildSignHelper.EXPECT().GetRelevantBuild(mod.Spec.ModuleLoader.Container.Build, mapping.Build).Return(build)
 		}
 		if signExistsInMapping || SignExistsInModuleSpec {
 			mld.Sign = sign
-			signHelper.EXPECT().GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(sign, nil)
+			buildSignHelper.EXPECT().GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(sign, nil)
 		}
 		if inTreeModulesToRemoveExistsInMapping {
 			mld.InTreeModulesToRemove = []string{"inTreeModule1", "inTreeModule2"}
@@ -296,7 +293,7 @@ var _ = Describe("prepareModuleLoaderData", func() {
 var _ = Describe("replaceTemplates", func() {
 	const kernelVersion = "5.8.18-100.fc31.x86_64"
 
-	kh := newKernelMapperHelper(nil, nil)
+	kh := newKernelMapperHelper(nil)
 
 	It("error input", func() {
 		mld := api.ModuleLoaderData{
