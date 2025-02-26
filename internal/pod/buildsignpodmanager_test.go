@@ -420,7 +420,7 @@ var _ = Describe("PodStatus", func() {
 	})
 
 	DescribeTable("should return the correct status depending on the pod status",
-		func(s *v1.Pod, podStatus string, expectsErr bool) {
+		func(s *v1.Pod, podStatus Status, expectsErr bool) {
 
 			res, err := bspm.GetPodStatus(s)
 			if expectsErr {
@@ -428,13 +428,13 @@ var _ = Describe("PodStatus", func() {
 				return
 			}
 
-			Expect(string(res)).To(Equal(podStatus))
+			Expect(res).To(Equal(podStatus))
 		},
 		Entry("succeeded", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodSucceeded}}, StatusCompleted, false),
 		Entry("in progress", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodRunning}}, StatusInProgress, false),
 		Entry("pending", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodPending}}, StatusInProgress, false),
 		Entry("Failed", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodFailed}}, StatusFailed, false),
-		Entry("Unknown", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodUnknown}}, "", true),
+		Entry("Unknown", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodUnknown}}, Status(""), true),
 	)
 })
 
