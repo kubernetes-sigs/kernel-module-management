@@ -79,7 +79,7 @@ Determines the value of the `seLinuxOptions.type` field of the worker container'
 [SecurityContext](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/).  
 Recommended value: `spc_t`.
 
-#### `worker.setFirmwareClassPath`
+#### `worker.firmwareHostPath`
 
 If set, the value of this field will be written by the worker into the `/sys/module/firmware_class/parameters/path` file
 on the node.
