@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"

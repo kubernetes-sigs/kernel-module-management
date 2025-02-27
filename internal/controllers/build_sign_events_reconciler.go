@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"golang.org/x/exp/maps"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"

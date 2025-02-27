@@ -13,7 +13,7 @@ import (
 	reflect "reflect"
 
 	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	pod "github.com/kubernetes-sigs/kernel-module-management/internal/pod"
+	pod "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

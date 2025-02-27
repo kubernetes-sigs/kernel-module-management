@@ -17,8 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 

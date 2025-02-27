@@ -21,7 +21,6 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -38,6 +37,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	buildpod "github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
+	buildsignpod "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -109,7 +109,7 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	buildSignPodAPI := pod.NewBuildSignPodManager(client)
+	buildSignPodAPI := buildsignpod.NewBuildSignPodManager(client)
 	buildSignHelper := buildsign.NewHelper()
 
 	buildAPI := buildpod.NewBuildManager(
