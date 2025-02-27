@@ -30,6 +30,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	buildpod "github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
+	buildsignpod "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -178,7 +179,7 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeKernelClusterClaimReconcilerName)
 		}
 	} else {
-		buildSignPodAPI := pod.NewBuildSignPodManager(client)
+		buildSignPodAPI := buildsignpod.NewBuildSignPodManager(client)
 
 		buildAPI := buildpod.NewBuildManager(
 			client,

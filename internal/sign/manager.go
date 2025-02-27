@@ -6,7 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 )
 
 //go:generate mockgen -source=manager.go -package=sign -destination=mock_manager.go
