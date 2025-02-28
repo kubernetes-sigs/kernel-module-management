@@ -82,7 +82,7 @@ steps:
       - gcr.io/$PROJECT_ID/kernel-module-management-worker
     waitFor: [build-worker]
   - id: build-bundles
-    name: golang:1.22-alpine3.19
+    name: golang:1.23-alpine3.21
     env:
       - '_GIT_TAG=$_GIT_TAG'
     entrypoint: sh
