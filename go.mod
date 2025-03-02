@@ -1,11 +1,10 @@
 module github.com/kubernetes-sigs/kernel-module-management
 
 go 1.23.0
-
-toolchain go1.23.4
+toolchain go1.24.0
 
 require (
-	github.com/a8m/envsubst v1.4.2
+	github.com/a8m/envsubst v1.4.3
 	github.com/budougumi0617/cmpmock v0.1.1
 	github.com/go-logr/logr v1.4.2
 	github.com/google/go-cmp v0.7.0
