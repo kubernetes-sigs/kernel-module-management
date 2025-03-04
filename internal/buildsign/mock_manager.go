@@ -42,18 +42,18 @@ func (m *MockManager) EXPECT() *MockManagerMockRecorder {
 }
 
 // GarbageCollect mocks base method.
-func (m *MockManager) GarbageCollect(ctx context.Context, name, namespace, podType string, owner v1.Object) ([]string, error) {
+func (m *MockManager) GarbageCollect(ctx context.Context, name, namespace string, action v1beta1.BuildOrSignAction, owner v1.Object) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GarbageCollect", ctx, name, namespace, podType, owner)
+	ret := m.ctrl.Call(m, "GarbageCollect", ctx, name, namespace, action, owner)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GarbageCollect indicates an expected call of GarbageCollect.
-func (mr *MockManagerMockRecorder) GarbageCollect(ctx, name, namespace, podType, owner any) *gomock.Call {
+func (mr *MockManagerMockRecorder) GarbageCollect(ctx, name, namespace, action, owner any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockManager)(nil).GarbageCollect), ctx, name, namespace, podType, owner)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollect", reflect.TypeOf((*MockManager)(nil).GarbageCollect), ctx, name, namespace, action, owner)
 }
 
 // GetStatus mocks base method.

@@ -120,7 +120,11 @@ func (pm *podManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushI
 	return nil
 }
 
-func (pm *podManager) GarbageCollect(ctx context.Context, name, namespace, podType string, owner metav1.Object) ([]string, error) {
+func (pm *podManager) GarbageCollect(ctx context.Context, name, namespace string, action kmmv1beta1.BuildOrSignAction, owner metav1.Object) ([]string, error) {
+	podType := PodTypeBuild
+	if action == kmmv1beta1.SignImage {
+		podType = PodTypeSign
+	}
 	pods, err := pm.buildSignPodManager.GetModulePods(ctx, name, namespace, podType, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %s pods for mbsc %s/%s: %v", podType, namespace, name, err)

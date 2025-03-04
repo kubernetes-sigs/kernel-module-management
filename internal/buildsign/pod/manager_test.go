@@ -265,7 +265,7 @@ var _ = Describe("GarbageCollect", func() {
 	It("failed to get module pods", func() {
 		mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, PodTypeBuild, &testMBSC).Return(nil, fmt.Errorf("some error"))
 
-		_, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, PodTypeBuild, &testMBSC)
+		_, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -276,12 +276,12 @@ var _ = Describe("GarbageCollect", func() {
 			},
 		}
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, PodTypeBuild, &testMBSC).
+			mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, PodTypeSign, &testMBSC).
 				Return([]v1.Pod{testPod}, nil),
 			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &testPod).Return(fmt.Errorf("some error")),
 		)
 
-		_, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, PodTypeBuild, &testMBSC)
+		_, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, kmmv1beta1.SignImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -313,7 +313,7 @@ var _ = Describe("GarbageCollect", func() {
 			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &testPodSuccess).Return(nil),
 		)
 
-		res, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, PodTypeBuild, &testMBSC)
+		res, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(BeNil())
 		Expect(res).To(Equal([]string{"podSuccess"}))
 	})
