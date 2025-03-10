@@ -74,8 +74,9 @@ type ModuleBuildSignConfigStatus struct {
 	Images []BuildSignImageState `json:"images"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+//+kubebuilder:resource:scope=Namespaced
 
 // ModuleBuildSignConfig keeps the request for images' build/sign for a KMM Module.
 // +kubebuilder:resource:path=modulebuildsignconfigs,scope=Namespaced,shortName=mbsc
@@ -88,7 +89,7 @@ type ModuleBuildSignConfig struct {
 	Status ModuleBuildSignConfigStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
 
 // ModuleBuildSignConfigList is a list of ModuleBuildSignConfig objects.
 type ModuleBuildSignConfigList struct {

@@ -80,8 +80,9 @@ type ModuleImagesConfigStatus struct {
 	ImagesStates []ModuleImageState `json:"imagesStates"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+//+kubebuilder:resource:scope=Namespaced
 
 // ModuleImagesConfig keeps the request for images' state for a KMM Module.
 // +kubebuilder:resource:path=moduleimagesconfigs,scope=Namespaced,shortName=mic
