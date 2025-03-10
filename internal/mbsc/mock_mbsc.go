@@ -82,6 +82,20 @@ func (mr *MockMBSCMockRecorder) GetImageSpec(mbscObj, image any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetImageSpec", reflect.TypeOf((*MockMBSC)(nil).GetImageSpec), mbscObj, image)
 }
 
+// GetImageStatus mocks base method.
+func (m *MockMBSC) GetImageStatus(mbscObj *v1beta1.ModuleBuildSignConfig, image string, action v1beta1.BuildOrSignAction) v1beta1.BuildOrSignStatus {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetImageStatus", mbscObj, image, action)
+	ret0, _ := ret[0].(v1beta1.BuildOrSignStatus)
+	return ret0
+}
+
+// GetImageStatus indicates an expected call of GetImageStatus.
+func (mr *MockMBSCMockRecorder) GetImageStatus(mbscObj, image, action any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetImageStatus", reflect.TypeOf((*MockMBSC)(nil).GetImageStatus), mbscObj, image, action)
+}
+
 // SetImageStatus mocks base method.
 func (m *MockMBSC) SetImageStatus(mbscObj *v1beta1.ModuleBuildSignConfig, image string, action v1beta1.BuildOrSignAction, status v1beta1.BuildOrSignStatus) {
 	m.ctrl.T.Helper()
