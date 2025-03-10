@@ -21,6 +21,7 @@ type MBSC interface {
 		moduleImageSpec *kmmv1beta1.ModuleImageSpec, action kmmv1beta1.BuildOrSignAction) error
 	GetImageSpec(mbscObj *kmmv1beta1.ModuleBuildSignConfig, image string) *kmmv1beta1.ModuleBuildSignSpec
 	SetImageStatus(mbscObj *kmmv1beta1.ModuleBuildSignConfig, image string, action kmmv1beta1.BuildOrSignAction, status kmmv1beta1.BuildOrSignStatus)
+	GetImageStatus(mbscObj *kmmv1beta1.ModuleBuildSignConfig, image string, action kmmv1beta1.BuildOrSignAction) kmmv1beta1.BuildOrSignStatus
 }
 
 type mbsc struct {
@@ -83,6 +84,15 @@ func (m *mbsc) SetImageStatus(mbscObj *kmmv1beta1.ModuleBuildSignConfig, image s
 		}
 	}
 	mbscObj.Status.Images = append(mbscObj.Status.Images, imageState)
+}
+
+func (m *mbsc) GetImageStatus(mbscObj *kmmv1beta1.ModuleBuildSignConfig, image string, action kmmv1beta1.BuildOrSignAction) kmmv1beta1.BuildOrSignStatus {
+	for _, imageState := range mbscObj.Status.Images {
+		if imageState.Image == image && imageState.Action == action {
+			return imageState.Status
+		}
+	}
+	return kmmv1beta1.BuildOrSignStatus("")
 }
 
 func setModuleImageSpec(mbscObj *kmmv1beta1.ModuleBuildSignConfig, moduleImageSpec *kmmv1beta1.ModuleImageSpec, action kmmv1beta1.BuildOrSignAction) {
