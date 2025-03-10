@@ -57,7 +57,7 @@ func (m *mbsc) CreateOrPatch(ctx context.Context, micObj *kmmv1beta1.ModuleImage
 	_, err := controllerutil.CreateOrPatch(ctx, m.client, mbscObj, func() error {
 		setModuleImageSpec(mbscObj, moduleImageSpec, action)
 		mbscObj.Spec.ImageRepoSecret = micObj.Spec.ImageRepoSecret
-		return controllerutil.SetOwnerReference(micObj, mbscObj, m.scheme)
+		return controllerutil.SetControllerReference(micObj, mbscObj, m.scheme)
 	})
 	return err
 }
