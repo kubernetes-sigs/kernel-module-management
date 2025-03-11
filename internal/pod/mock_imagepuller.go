@@ -96,6 +96,20 @@ func (mr *MockImagePullerMockRecorder) GetPullPodImage(pod any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPullPodImage", reflect.TypeOf((*MockImagePuller)(nil).GetPullPodImage), pod)
 }
 
+// GetPullPodStatus mocks base method.
+func (m *MockImagePuller) GetPullPodStatus(pod *v1.Pod) PullPodStatus {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPullPodStatus", pod)
+	ret0, _ := ret[0].(PullPodStatus)
+	return ret0
+}
+
+// GetPullPodStatus indicates an expected call of GetPullPodStatus.
+func (mr *MockImagePullerMockRecorder) GetPullPodStatus(pod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPullPodStatus", reflect.TypeOf((*MockImagePuller)(nil).GetPullPodStatus), pod)
+}
+
 // ListPullPods mocks base method.
 func (m *MockImagePuller) ListPullPods(ctx context.Context, micObj *v1beta1.ModuleImagesConfig) ([]v1.Pod, error) {
 	m.ctrl.T.Helper()

@@ -38,7 +38,7 @@ var _ = Describe("ListPullPods", func() {
 	}
 
 	It("list succeeded", func() {
-		hl := ctrlclient.HasLabels{imageLabelKey}
+		hl := ctrlclient.HasLabels{pullPodTypeLabelKey}
 		ml := ctrlclient.MatchingLabels{moduleImageLabelKey: testMic.Name}
 
 		clnt.EXPECT().List(context.Background(), gomock.Any(), ctrlclient.InNamespace(testMic.Namespace), hl, ml).DoAndReturn(
@@ -54,7 +54,7 @@ var _ = Describe("ListPullPods", func() {
 	})
 
 	It("list failed", func() {
-		hl := ctrlclient.HasLabels{imageLabelKey}
+		hl := ctrlclient.HasLabels{pullPodTypeLabelKey}
 		ml := ctrlclient.MatchingLabels{moduleImageLabelKey: testMic.Name}
 
 		clnt.EXPECT().List(context.Background(), gomock.Any(), ctrlclient.InNamespace(testMic.Namespace), hl, ml).Return(fmt.Errorf("some error"))
@@ -116,13 +116,21 @@ var _ = Describe("GetPullPodForImage", func() {
 
 	pullPods := []v1.Pod{
 		{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{imageLabelKey: "image 1"},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "image 1",
+					},
+				},
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{imageLabelKey: "image 2"},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Image: "image 2",
+					},
+				},
 			},
 		},
 	}
@@ -130,7 +138,7 @@ var _ = Describe("GetPullPodForImage", func() {
 	It("there is a pull pod for that image", func() {
 		res := ip.GetPullPodForImage(pullPods, "image 2")
 		Expect(res).ToNot(BeNil())
-		Expect(res.Labels[imageLabelKey]).To(Equal("image 2"))
+		Expect(res.Spec.Containers[0].Image).To(Equal("image 2"))
 	})
 
 	It("there is no pull pod for that image", func() {
@@ -170,7 +178,7 @@ var _ = Describe("CreatePullPod", func() {
 				Namespace:    testMic.Namespace,
 				Labels: map[string]string{
 					moduleImageLabelKey: "some name",
-					imageLabelKey:       "some image",
+					pullPodTypeLabelKey: pullPodUntilSuccess,
 				},
 			},
 			Spec: v1.PodSpec{
@@ -181,7 +189,7 @@ var _ = Describe("CreatePullPod", func() {
 						Command: []string{"/bin/sh", "-c", "exit 0"},
 					},
 				},
-				RestartPolicy:    v1.RestartPolicyOnFailure,
+				RestartPolicy:    v1.RestartPolicyNever,
 				ImagePullSecrets: []v1.LocalObjectReference{},
 			},
 		}
@@ -200,5 +208,84 @@ var _ = Describe("CreatePullPod", func() {
 			})
 		err := ip.CreatePullPod(ctx, &testImageSpec, &testMic)
 		Expect(err).To(BeNil())
+	})
+})
+
+var _ = Describe("GetPullPodStatus", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		ip   ImagePuller
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		ip = NewImagePuller(clnt, scheme)
+	})
+
+	testPod := v1.Pod{
+		Status: v1.PodStatus{
+			Phase: v1.PodSucceeded,
+		},
+	}
+
+	It("check different phases except for PodPending", func() {
+		By("phase Succeeded")
+
+		res := ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageSuccess))
+
+		By("phase PodFailed")
+		testPod.Status.Phase = v1.PodFailed
+		res = ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageUnexpectedErr))
+
+		By("phase PodUnknown")
+		testPod.Status.Phase = v1.PodUnknown
+		res = ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageUnexpectedErr))
+
+		By("phase PodRunning")
+		testPod.Status.Phase = v1.PodRunning
+		res = ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageInProcess))
+	})
+
+	It("check container statuses for PodPending", func() {
+		testPod.Status.Phase = v1.PodPending
+		By("container statuses missing")
+		testPod.Status.ContainerStatuses = nil
+		res := ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageInProcess))
+
+		By("container statuses waiting is nil")
+		testPod.Status.ContainerStatuses = []v1.ContainerStatus{v1.ContainerStatus{}}
+		res = ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageInProcess))
+
+		By("container statuses waiting is not nil and pod is not one time pull pod")
+		testPod.SetLabels(map[string]string{pullPodTypeLabelKey: pullPodUntilSuccess})
+		testPod.Status.ContainerStatuses[0].State = v1.ContainerState{
+			Waiting: &v1.ContainerStateWaiting{},
+		}
+		res = ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageInProcess))
+
+		By("container statuses waiting is not nil and pod is one time pull pod and reason is not image pull error")
+		testPod.SetLabels(map[string]string{pullPodTypeLabelKey: pullPodTypeOneTime})
+		testPod.Status.ContainerStatuses[0].State.Waiting.Reason = "some reason"
+		res = ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageUnexpectedErr))
+
+		By("container statuses waiting is not nil and pod is one time pull pod and reason is ImagePullBackOff")
+		testPod.Status.ContainerStatuses[0].State.Waiting.Reason = imagePullBackOffReason
+		res = ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageFailed))
+
+		By("container statuses waiting is not nil and pod is one time pull pod and reason is errImagePullReason")
+		testPod.Status.ContainerStatuses[0].State.Waiting.Reason = errImagePullReason
+		res = ip.GetPullPodStatus(&testPod)
+		Expect(res).To(Equal(PullImageFailed))
 	})
 })
