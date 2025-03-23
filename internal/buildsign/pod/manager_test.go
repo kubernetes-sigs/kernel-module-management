@@ -12,7 +12,6 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	buildsign "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/kernel"
 )
@@ -24,7 +23,7 @@ var _ = Describe("GetStatus", func() {
 		mockMaker               *MockMaker
 		mockSigner              *MockSigner
 		mockBuildSignPodManager *MockBuildSignPodManager
-		mgr                     buildsign.Manager
+		mgr                     *podManager
 	)
 	const (
 		mbscName      = "some-name"
@@ -39,7 +38,12 @@ var _ = Describe("GetStatus", func() {
 		mockMaker = NewMockMaker(ctrl)
 		mockSigner = NewMockSigner(ctrl)
 		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
-		mgr = NewManager(clnt, mockMaker, mockSigner, mockBuildSignPodManager)
+		mgr = &podManager{
+			client:              clnt,
+			maker:               mockMaker,
+			signer:              mockSigner,
+			buildSignPodManager: mockBuildSignPodManager,
+		}
 	})
 
 	ctx := context.Background()
@@ -105,7 +109,7 @@ var _ = Describe("Sync", func() {
 		mockMaker               *MockMaker
 		mockSigner              *MockSigner
 		mockBuildSignPodManager *MockBuildSignPodManager
-		mgr                     buildsign.Manager
+		mgr                     *podManager
 	)
 	const (
 		mbscName      = "some-name"
@@ -120,7 +124,12 @@ var _ = Describe("Sync", func() {
 		mockMaker = NewMockMaker(ctrl)
 		mockSigner = NewMockSigner(ctrl)
 		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
-		mgr = NewManager(clnt, mockMaker, mockSigner, mockBuildSignPodManager)
+		mgr = &podManager{
+			client:              clnt,
+			maker:               mockMaker,
+			signer:              mockSigner,
+			buildSignPodManager: mockBuildSignPodManager,
+		}
 	})
 
 	ctx := context.Background()
@@ -241,7 +250,7 @@ var _ = Describe("GarbageCollect", func() {
 		mockMaker               *MockMaker
 		mockSigner              *MockSigner
 		mockBuildSignPodManager *MockBuildSignPodManager
-		mgr                     buildsign.Manager
+		mgr                     *podManager
 	)
 	const (
 		mbscName      = "some-name"
@@ -256,7 +265,12 @@ var _ = Describe("GarbageCollect", func() {
 		mockMaker = NewMockMaker(ctrl)
 		mockSigner = NewMockSigner(ctrl)
 		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
-		mgr = NewManager(clnt, mockMaker, mockSigner, mockBuildSignPodManager)
+		mgr = &podManager{
+			client:              clnt,
+			maker:               mockMaker,
+			signer:              mockSigner,
+			buildSignPodManager: mockBuildSignPodManager,
+		}
 	})
 
 	ctx := context.Background()

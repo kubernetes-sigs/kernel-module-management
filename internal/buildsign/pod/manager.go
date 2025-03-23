@@ -7,6 +7,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -24,7 +25,10 @@ type podManager struct {
 	buildSignPodManager BuildSignPodManager
 }
 
-func NewManager(client client.Client, maker Maker, signer Signer, buildSignPodManager BuildSignPodManager) buildsign.Manager {
+func NewManager(client client.Client, helper buildsign.Helper, scheme *runtime.Scheme) buildsign.Manager {
+	buildSignPodManager := NewBuildSignPodManager(client)
+	maker := NewMaker(client, helper, buildSignPodManager, scheme)
+	signer := NewSigner(client, scheme, buildSignPodManager)
 	return &podManager{
 		client:              client,
 		maker:               maker,
