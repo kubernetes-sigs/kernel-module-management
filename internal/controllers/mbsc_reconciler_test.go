@@ -203,9 +203,9 @@ var _ = Describe("processImagesSpecs", func() {
 		gomock.InOrder(
 			mockMBSC.EXPECT().GetImageStatus(&testMBSC, "image 1", kmmv1beta1.BuildImage).Return(kmmv1beta1.ActionSuccess),
 			mockMBSC.EXPECT().GetImageStatus(&testMBSC, "image 2", kmmv1beta1.SignImage).Return(kmmv1beta1.ActionFailure),
-			mockManager.EXPECT().Sync(ctx, gomock.Any(), true, &testMBSC.ObjectMeta, kmmv1beta1.SignImage).Return(nil),
+			mockManager.EXPECT().Sync(ctx, gomock.Any(), true, kmmv1beta1.SignImage, &testMBSC.ObjectMeta).Return(nil),
 			mockMBSC.EXPECT().GetImageStatus(&testMBSC, "image 3", kmmv1beta1.BuildImage).Return(kmmv1beta1.BuildOrSignStatus("")),
-			mockManager.EXPECT().Sync(ctx, gomock.Any(), true, &testMBSC.ObjectMeta, kmmv1beta1.BuildImage).Return(fmt.Errorf("some error")),
+			mockManager.EXPECT().Sync(ctx, gomock.Any(), true, kmmv1beta1.BuildImage, &testMBSC.ObjectMeta).Return(fmt.Errorf("some error")),
 		)
 
 		err := mrh.processImagesSpecs(ctx, &testMBSC)

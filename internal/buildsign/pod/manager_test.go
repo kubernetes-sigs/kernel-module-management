@@ -134,12 +134,12 @@ var _ = Describe("Sync", func() {
 	It("MakePodTemplate failed", func() {
 		By("test build action")
 		mockMaker.EXPECT().MakePodTemplate(ctx, testMLD, &testMBSC, true).Return(nil, fmt.Errorf("some error"))
-		err := mgr.Sync(ctx, testMLD, true, &testMBSC, kmmv1beta1.BuildImage)
+		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 
 		By("test sign action")
 		mockSigner.EXPECT().MakePodTemplate(ctx, testMLD, &testMBSC, true).Return(nil, fmt.Errorf("some error"))
-		err = mgr.Sync(ctx, testMLD, true, &testMBSC, kmmv1beta1.SignImage)
+		err = mgr.Sync(ctx, testMLD, true, kmmv1beta1.SignImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -149,7 +149,7 @@ var _ = Describe("Sync", func() {
 			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion, PodTypeBuild, &testMBSC).
 				Return(nil, fmt.Errorf("some error")),
 		)
-		err := mgr.Sync(ctx, testMLD, true, &testMBSC, kmmv1beta1.BuildImage)
+		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -161,7 +161,7 @@ var _ = Describe("Sync", func() {
 				Return(nil, ErrNoMatchingPod),
 			mockBuildSignPodManager.EXPECT().CreatePod(ctx, &testTemplate).Return(fmt.Errorf("some error")),
 		)
-		err := mgr.Sync(ctx, testMLD, true, &testMBSC, kmmv1beta1.BuildImage)
+		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -174,7 +174,7 @@ var _ = Describe("Sync", func() {
 				Return(&testPod, nil),
 			mockBuildSignPodManager.EXPECT().IsPodChanged(&testPod, &testTemplate).Return(false, fmt.Errorf("some error")),
 		)
-		err := mgr.Sync(ctx, testMLD, true, &testMBSC, kmmv1beta1.BuildImage)
+		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -188,7 +188,7 @@ var _ = Describe("Sync", func() {
 			mockBuildSignPodManager.EXPECT().IsPodChanged(&testPod, &testTemplate).Return(true, nil),
 			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &testPod).Return(fmt.Errorf("some error")),
 		)
-		err := mgr.Sync(ctx, testMLD, true, &testMBSC, kmmv1beta1.BuildImage)
+		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(BeNil())
 	})
 
@@ -222,7 +222,7 @@ var _ = Describe("Sync", func() {
 		}
 
 	executeTestFunction:
-		err := mgr.Sync(ctx, testMLD, pushImage, &testMBSC, testAction)
+		err := mgr.Sync(ctx, testMLD, pushImage, testAction, &testMBSC)
 		Expect(err).To(BeNil())
 	},
 		Entry("action build, build pod does not exists", true, false, false, true),

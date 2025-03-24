@@ -72,15 +72,15 @@ func (mr *MockManagerMockRecorder) GetStatus(ctx, name, namespace, kernelVersion
 }
 
 // Sync mocks base method.
-func (m *MockManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushImage bool, owner v1.Object, action v1beta1.BuildOrSignAction) error {
+func (m *MockManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushImage bool, action v1beta1.BuildOrSignAction, owner v1.Object) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Sync", ctx, mld, pushImage, owner, action)
+	ret := m.ctrl.Call(m, "Sync", ctx, mld, pushImage, action, owner)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Sync indicates an expected call of Sync.
-func (mr *MockManagerMockRecorder) Sync(ctx, mld, pushImage, owner, action any) *gomock.Call {
+func (mr *MockManagerMockRecorder) Sync(ctx, mld, pushImage, action, owner any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManager)(nil).Sync), ctx, mld, pushImage, owner, action)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManager)(nil).Sync), ctx, mld, pushImage, action, owner)
 }

@@ -63,7 +63,7 @@ func (pm *podManager) GetStatus(ctx context.Context, name, namespace, kernelVers
 	return kmmv1beta1.BuildOrSignStatus(""), nil
 }
 
-func (pm *podManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushImage bool, owner metav1.Object, action kmmv1beta1.BuildOrSignAction) error {
+func (pm *podManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushImage bool, action kmmv1beta1.BuildOrSignAction, owner metav1.Object) error {
 	logger := log.FromContext(ctx)
 	var (
 		podType     string
