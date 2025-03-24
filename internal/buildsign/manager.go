@@ -14,6 +14,6 @@ import (
 type Manager interface {
 	GetStatus(ctx context.Context, name, namespace, kernelVersion string,
 		action kmmv1beta1.BuildOrSignAction, owner metav1.Object) (kmmv1beta1.BuildOrSignStatus, error)
-	Sync(ctx context.Context, mld *api.ModuleLoaderData, pushImage bool, owner metav1.Object, action kmmv1beta1.BuildOrSignAction) error
+	Sync(ctx context.Context, mld *api.ModuleLoaderData, pushImage bool, action kmmv1beta1.BuildOrSignAction, owner metav1.Object) error
 	GarbageCollect(ctx context.Context, name, namespace string, action kmmv1beta1.BuildOrSignAction, owner metav1.Object) ([]string, error)
 }
