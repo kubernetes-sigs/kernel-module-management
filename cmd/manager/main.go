@@ -22,26 +22,23 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/mbsc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
-	buildpod "github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	buildsignpod "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -124,6 +121,8 @@ func main() {
 	nodeAPI := node.NewNode(client)
 	kernelAPI := module.NewKernelMapper(buildSignHelperAPI)
 	micAPI := mic.New(client, scheme)
+	mbscAPI := mbsc.New(client, scheme)
+	imagePullerAPI := pod.NewImagePuller(client, scheme)
 
 	dpc := controllers.NewDevicePluginReconciler(
 		client,
@@ -168,6 +167,10 @@ func main() {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeLabelModuleVersionReconcilerName)
 	}
 
+	if err = controllers.NewMICReconciler(client, micAPI, mbscAPI, imagePullerAPI, scheme).SetupWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.MICReconcilerName)
+	}
+
 	if managed {
 		setupLogger.Info("Starting as managed")
 
@@ -179,30 +182,11 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeKernelClusterClaimReconcilerName)
 		}
 	} else {
-		buildSignPodAPI := buildsignpod.NewBuildSignPodManager(client)
+		builSignAPI := buildsignpod.NewManager(client, buildSignHelperAPI, scheme)
 
-		buildAPI := buildpod.NewBuildManager(
-			client,
-			buildpod.NewMaker(client, buildSignHelperAPI, buildSignPodAPI, scheme),
-			buildSignPodAPI,
-			registryAPI,
-		)
-
-		signAPI := signpod.NewSignPodManager(
-			client,
-			signpod.NewSigner(client, scheme, buildSignPodAPI),
-			buildSignPodAPI,
-			registryAPI,
-		)
-		bsc := controllers.NewBuildSignReconciler(
-			client,
-			buildAPI,
-			signAPI,
-			kernelAPI,
-			filterAPI,
-			nodeAPI)
-		if err = bsc.SetupWithManager(mgr, constants.KernelLabel); err != nil {
-			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.BuildSignReconcilerName)
+		mbscr := controllers.NewMBSCReconciler(client, builSignAPI, mbscAPI)
+		if err = mbscr.SetupWithManager(mgr); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.MBSCReconcilerName)
 		}
 
 		helper := controllers.NewJobEventReconcilerHelper(client)
@@ -215,12 +199,15 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.JobGCReconcilerName)
 		}
 
-		preflightStatusUpdaterAPI := preflight.NewStatusUpdater(client)
-		preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
+		//[TODO] - update the preflight flow with the MIC/MBSC implementation and then uncomment the preflight conroller
+		/*
+			preflightStatusUpdaterAPI := preflight.NewStatusUpdater(client)
+			preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
 
-		if err = controllers.NewPreflightValidationReconciler(client, filterAPI, metricsAPI, preflightStatusUpdaterAPI, preflightAPI).SetupWithManager(mgr); err != nil {
-			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PreflightValidationReconcilerName)
-		}
+			if err = controllers.NewPreflightValidationReconciler(client, filterAPI, metricsAPI, preflightStatusUpdaterAPI, preflightAPI).SetupWithManager(mgr); err != nil {
+				cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PreflightValidationReconcilerName)
+			}
+		*/
 	}
 
 	//+kubebuilder:scaffold:builder

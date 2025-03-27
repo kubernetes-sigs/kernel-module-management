@@ -80,6 +80,7 @@ rules:
   - kmm.sigs.x-k8s.io
   resources:
   - modulebuildsignconfigs/status
+  - moduleimagesconfigs/status
   - modules/status
   - preflightvalidations/status
   verbs:

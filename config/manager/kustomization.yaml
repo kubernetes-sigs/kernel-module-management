@@ -9,8 +9,8 @@ patches:
 
 images:
 - name: controller
-  newName: gcr.io/k8s-staging-kmm/kernel-module-management-operator
-  newTag: latest
+  newName: quay.io/yshnaidm/kmmo
+  newTag: metrics
 - name: worker
   newName: gcr.io/k8s-staging-kmm/kernel-module-management-worker
   newTag: latest
