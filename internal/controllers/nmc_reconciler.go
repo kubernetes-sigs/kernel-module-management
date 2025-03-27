@@ -374,7 +374,12 @@ func (h *nmcReconcilerHelperImpl) ProcessModuleSpec(
 			return h.podManager.CreateLoaderPod(ctx, nmcObj, spec)
 		}
 
-		if h.nodeAPI.NodeBecomeReadyAfter(node, status.LastTransitionTime) {
+		currentBootId := node.Status.NodeInfo.BootID
+		bootIdChanged := status.BootId != currentBootId
+		if bootIdChanged {
+			logger.Info("Detected BootId change")
+		}
+		if bootIdChanged || h.nodeAPI.NodeBecomeReadyAfter(node, status.LastTransitionTime) {
 			logger.Info("node has been rebooted and become ready after kernel module was loaded; creating loader Pod")
 			return h.podManager.CreateLoaderPod(ctx, nmcObj, spec)
 		}
@@ -578,6 +583,12 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 				Terminated.
 				FinishedAt
 
+			node := &v1.Node{}
+			if err := h.client.Get(ctx, types.NamespacedName{Name: nmcObj.Name}, node); err != nil {
+				logger.Error(err, "Failed to get node object", "node", nmcObj.Name)
+			} else {
+				status.BootId = node.Status.NodeInfo.BootID
+			}
 			status.LastTransitionTime = podLTT
 
 			nmc.SetModuleStatus(&nmcObj.Status.Modules, *status)
