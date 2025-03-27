@@ -88,7 +88,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 		nmc := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
 		}
-
+		node := v1.Node{}
 		gomock.InOrder(
 			kubeClient.
 				EXPECT().
@@ -96,7 +96,8 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				Do(func(_ context.Context, _ types.NamespacedName, kubeNmc ctrlclient.Object, _ ...ctrlclient.Options) {
 					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
 				}),
-			wh.EXPECT().SyncStatus(ctx, nmc).Return(errors.New("random error")),
+			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &node).Return(nil),
+			wh.EXPECT().SyncStatus(ctx, nmc, &node).Return(errors.New("random error")),
 		)
 
 		_, err := r.Reconcile(ctx, req)
@@ -115,7 +116,6 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				Do(func(_ context.Context, _ types.NamespacedName, kubeNmc ctrlclient.Object, _ ...ctrlclient.Options) {
 					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
 				}),
-			wh.EXPECT().SyncStatus(ctx, nmc),
 			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &node).Return(fmt.Errorf("some error")),
 		)
 
@@ -158,13 +158,13 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				Do(func(_ context.Context, _ types.NamespacedName, kubeNmc ctrlclient.Object, _ ...ctrlclient.Options) {
 					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
 				}),
-			wh.EXPECT().SyncStatus(ctx, nmc),
 			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &v1.Node{}).DoAndReturn(
 				func(_ context.Context, _ types.NamespacedName, fetchedNode *v1.Node, _ ...ctrlclient.Options) error {
 					*fetchedNode = node
 					return nil
 				},
 			),
+			wh.EXPECT().SyncStatus(ctx, nmc, &node),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
 			nm.EXPECT().UpdateLabels(ctx, &node, nil, []string{kmodName}).DoAndReturn(
 				func(_ context.Context, obj ctrlclient.Object, _, _ []string) error {
@@ -214,13 +214,13 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				Do(func(_ context.Context, _ types.NamespacedName, kubeNmc ctrlclient.Object, _ ...ctrlclient.Options) {
 					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
 				}),
-			wh.EXPECT().SyncStatus(ctx, nmc),
 			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &v1.Node{}).DoAndReturn(
 				func(_ context.Context, _ types.NamespacedName, fetchedNode *v1.Node, _ ...ctrlclient.Options) error {
 					*fetchedNode = node
 					return nil
 				},
 			),
+			wh.EXPECT().SyncStatus(ctx, nmc, &node),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
 			nm.EXPECT().UpdateLabels(ctx, &node, nil, []string{kmodName}).DoAndReturn(
 				func(_ context.Context, obj ctrlclient.Object, _, _ []string) error {
@@ -295,8 +295,8 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				Do(func(_ context.Context, _ types.NamespacedName, kubeNmc ctrlclient.Object, _ ...ctrlclient.Options) {
 					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
 				}),
-			wh.EXPECT().SyncStatus(ctx, nmc),
 			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &node).Return(nil),
+			wh.EXPECT().SyncStatus(ctx, nmc, &node),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0, &node),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
@@ -377,8 +377,8 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 				Do(func(_ context.Context, _ types.NamespacedName, kubeNmc ctrlclient.Object, _ ...ctrlclient.Options) {
 					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
 				}),
-			wh.EXPECT().SyncStatus(ctx, nmc).Return(nil),
 			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &node).Return(nil),
+			wh.EXPECT().SyncStatus(ctx, nmc, &node).Return(nil),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0, &node).Return(errors.New(errorMeassge)),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2, &node).Return(errors.New(errorMeassge)),
@@ -751,7 +751,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessModuleSpec", func() {
 
 			gomock.InOrder(
 				mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace),
-				nm.EXPECT().NodeBecomeReadyAfter(node, status.LastTransitionTime).Return(returnValue),
+				nm.EXPECT().IsNodeRebooted(node, status.BootId).Return(returnValue),
 			)
 
 			if shouldCreate {
@@ -890,7 +890,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 
 	It("should do nothing , if the node has been rebooted/ready lately", func() {
 		gomock.InOrder(
-			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(true),
+			nm.EXPECT().IsNodeRebooted(&node, status.BootId).Return(true),
 			client.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
 		)
@@ -904,7 +904,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 
 	It("should create an unloader Pod if no worker Pod exists", func() {
 		gomock.InOrder(
-			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(false),
+			nm.EXPECT().IsNodeRebooted(&node, status.BootId).Return(false),
 			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace),
 			mockWorkerPodManager.EXPECT().CreateUnloaderPod(ctx, nmc, status),
 		)
@@ -925,7 +925,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		}
 
 		gomock.InOrder(
-			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(false),
+			nm.EXPECT().IsNodeRebooted(&node, status.BootId).Return(false),
 			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
 			mockWorkerPodManager.EXPECT().IsLoaderPod(&pod).Return(true),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &pod),
@@ -947,7 +947,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		}
 
 		gomock.InOrder(
-			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(false),
+			nm.EXPECT().IsNodeRebooted(&node, status.BootId).Return(false),
 			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
 			mockWorkerPodManager.EXPECT().IsLoaderPod(&pod).Return(false),
 		)
@@ -976,7 +976,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		}
 
 		gomock.InOrder(
-			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(false),
+			nm.EXPECT().IsNodeRebooted(&node, status.BootId).Return(false),
 			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&pod, nil),
 			mockWorkerPodManager.EXPECT().IsLoaderPod(&pod).Return(false),
 			mockWorkerPodManager.EXPECT().UnloaderPodTemplate(ctx, nmc, status).Return(nil, errors.New("random error")),
@@ -1008,7 +1008,7 @@ var _ = Describe("nmcReconcilerHelperImpl_ProcessUnconfiguredModuleStatus", func
 		podTemplate := p.DeepCopy()
 
 		gomock.InOrder(
-			nm.EXPECT().NodeBecomeReadyAfter(&node, status.LastTransitionTime).Return(false),
+			nm.EXPECT().IsNodeRebooted(&node, status.BootId).Return(false),
 			mockWorkerPodManager.EXPECT().GetWorkerPod(ctx, podName, namespace).Return(&p, nil),
 			mockWorkerPodManager.EXPECT().IsLoaderPod(&p).Return(false),
 			mockWorkerPodManager.EXPECT().UnloaderPodTemplate(ctx, nmc, status).Return(podTemplate, nil),
@@ -1055,9 +1055,9 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 		nmc := &kmmv1beta1.NodeModulesConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
 		}
-
+		node := v1.Node{}
 		Expect(
-			wh.SyncStatus(ctx, nmc),
+			wh.SyncStatus(ctx, nmc, &node),
 		).NotTo(
 			HaveOccurred(),
 		)
@@ -1110,9 +1110,9 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &podWithStatus),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &podWithoutStatus),
 		)
-
+		node := v1.Node{}
 		Expect(
-			wh.SyncStatus(ctx, nmc),
+			wh.SyncStatus(ctx, nmc, &node),
 		).NotTo(
 			HaveOccurred(),
 		)
@@ -1157,9 +1157,9 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &pod),
 		)
-
+		node := v1.Node{}
 		Expect(
-			wh.SyncStatus(ctx, nmc),
+			wh.SyncStatus(ctx, nmc, &node),
 		).NotTo(
 			HaveOccurred(),
 		)
@@ -1241,9 +1241,9 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &p),
 		)
-
+		node := v1.Node{}
 		Expect(
-			wh.SyncStatus(ctx, nmc),
+			wh.SyncStatus(ctx, nmc, &node),
 		).NotTo(
 			HaveOccurred(),
 		)
@@ -1301,9 +1301,9 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()).Return(errors.New("some error")),
 		)
-
+		node := v1.Node{}
 		Expect(
-			wh.SyncStatus(ctx, nmc),
+			wh.SyncStatus(ctx, nmc, &node),
 		).To(
 			HaveOccurred(),
 		)

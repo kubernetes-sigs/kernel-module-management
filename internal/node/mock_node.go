@@ -14,7 +14,6 @@ import (
 
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
-	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MockNode is a mock of Node interface.
@@ -70,6 +69,20 @@ func (mr *MockNodeMockRecorder) GetNumTargetedNodes(ctx, selector, tolerations a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNumTargetedNodes", reflect.TypeOf((*MockNode)(nil).GetNumTargetedNodes), ctx, selector, tolerations)
 }
 
+// IsNodeRebooted mocks base method.
+func (m *MockNode) IsNodeRebooted(node *v1.Node, statusBootId string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsNodeRebooted", node, statusBootId)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsNodeRebooted indicates an expected call of IsNodeRebooted.
+func (mr *MockNodeMockRecorder) IsNodeRebooted(node, statusBootId any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNodeRebooted", reflect.TypeOf((*MockNode)(nil).IsNodeRebooted), node, statusBootId)
+}
+
 // IsNodeSchedulable mocks base method.
 func (m *MockNode) IsNodeSchedulable(node *v1.Node, tolerations []v1.Toleration) bool {
 	m.ctrl.T.Helper()
@@ -82,20 +95,6 @@ func (m *MockNode) IsNodeSchedulable(node *v1.Node, tolerations []v1.Toleration)
 func (mr *MockNodeMockRecorder) IsNodeSchedulable(node, tolerations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNodeSchedulable", reflect.TypeOf((*MockNode)(nil).IsNodeSchedulable), node, tolerations)
-}
-
-// NodeBecomeReadyAfter mocks base method.
-func (m *MockNode) NodeBecomeReadyAfter(node *v1.Node, checkTime v10.Time) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NodeBecomeReadyAfter", node, checkTime)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// NodeBecomeReadyAfter indicates an expected call of NodeBecomeReadyAfter.
-func (mr *MockNodeMockRecorder) NodeBecomeReadyAfter(node, checkTime any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NodeBecomeReadyAfter", reflect.TypeOf((*MockNode)(nil).NodeBecomeReadyAfter), node, checkTime)
 }
 
 // UpdateLabels mocks base method.

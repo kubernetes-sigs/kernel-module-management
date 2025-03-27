@@ -125,17 +125,17 @@ func (mr *MocknmcReconcilerHelperMockRecorder) RemovePodFinalizers(ctx, nodeName
 }
 
 // SyncStatus mocks base method.
-func (m *MocknmcReconcilerHelper) SyncStatus(ctx context.Context, nmc *v1beta1.NodeModulesConfig) error {
+func (m *MocknmcReconcilerHelper) SyncStatus(ctx context.Context, nmc *v1beta1.NodeModulesConfig, node *v1.Node) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncStatus", ctx, nmc)
+	ret := m.ctrl.Call(m, "SyncStatus", ctx, nmc, node)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SyncStatus indicates an expected call of SyncStatus.
-func (mr *MocknmcReconcilerHelperMockRecorder) SyncStatus(ctx, nmc any) *gomock.Call {
+func (mr *MocknmcReconcilerHelperMockRecorder) SyncStatus(ctx, nmc, node any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncStatus", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).SyncStatus), ctx, nmc)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncStatus", reflect.TypeOf((*MocknmcReconcilerHelper)(nil).SyncStatus), ctx, nmc, node)
 }
 
 // UpdateNodeLabels mocks base method.

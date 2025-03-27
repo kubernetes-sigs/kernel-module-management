@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -17,7 +16,7 @@ type Node interface {
 	GetNodesListBySelector(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) ([]v1.Node, error)
 	GetNumTargetedNodes(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) (int, error)
 	UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error
-	NodeBecomeReadyAfter(node *v1.Node, checkTime metav1.Time) bool
+	IsNodeRebooted(node *v1.Node, statusBootId string) bool
 }
 
 type node struct {
@@ -85,11 +84,11 @@ func (n *node) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeR
 	return nil
 }
 
-func (n *node) NodeBecomeReadyAfter(node *v1.Node, timestamp metav1.Time) bool {
+func (n *node) IsNodeRebooted(node *v1.Node, statusBootId string) bool {
 	conds := node.Status.Conditions
 	for i := 0; i < len(conds); i++ {
 		c := conds[i]
-		if c.Type == v1.NodeReady && c.Status == v1.ConditionTrue && timestamp.Before(&c.LastTransitionTime) {
+		if c.Type == v1.NodeReady && c.Status == v1.ConditionTrue && (statusBootId != node.Status.NodeInfo.BootID) {
 			return true
 		}
 	}
