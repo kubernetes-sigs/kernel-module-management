@@ -63,6 +63,9 @@ func (r *micReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)
 }
 
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=moduleimagesconfigs,verbs=get;list;watch;patch;create;delete
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=moduleimagesconfigs/status,verbs=get;update;patch
+
 func (r *micReconciler) Reconcile(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig) (ctrl.Result, error) {
 	res := ctrl.Result{}
 	if micObj.GetDeletionTimestamp() != nil {

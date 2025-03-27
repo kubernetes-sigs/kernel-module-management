@@ -53,7 +53,7 @@ func NewMBSCReconciler(
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *mbscReconciler) SetupWithManager(mgr ctrl.Manager, kernelLabel string) error {
+func (r *mbscReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kmmv1beta1.ModuleBuildSignConfig{}).
 		Owns(&v1.Pod{}).
