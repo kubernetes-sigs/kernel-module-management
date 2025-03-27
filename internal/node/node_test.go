@@ -9,7 +9,6 @@ import (
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"time"
 )
 
 var _ = Describe("IsNodeSchedulable", func() {
@@ -270,16 +269,14 @@ var _ = Describe("GetNumTargetedNodes", func() {
 	})
 })
 
-var _ = Describe("NodeBecomeReadyAfter", func() {
+var _ = Describe("IsNodeRebooted", func() {
 	var (
-		n         Node
-		testNode  v1.Node
-		timestamp time.Time
+		n        Node
+		testNode v1.Node
 	)
 
 	BeforeEach(func() {
 		n = NewNode(nil)
-		timestamp = time.Now()
 		testNode = v1.Node{
 			Status: v1.NodeStatus{
 				Conditions: []v1.NodeCondition{
@@ -300,21 +297,20 @@ var _ = Describe("NodeBecomeReadyAfter", func() {
 		}
 	})
 
-	It("ready condition is true, its timestamp is after the test timestamp", func() {
-		testTimestamp := metav1.NewTime(timestamp)
+	It("ready condition is true, boot id changed", func() {
+		statusBootId := "1"
 		testNode.Status.Conditions[2].Status = v1.ConditionTrue
-		testNode.Status.Conditions[2].LastTransitionTime = metav1.NewTime(timestamp.Add(2 * time.Minute))
-
-		res := n.NodeBecomeReadyAfter(&testNode, testTimestamp)
+		testNode.Status.NodeInfo.BootID = "2"
+		res := n.IsNodeRebooted(&testNode, statusBootId)
 		Expect(res).To(BeTrue())
 	})
 
-	It("ready condition is true, its timestamp is before the test timestamp", func() {
-		testTimestamp := metav1.NewTime(timestamp.Add(2 * time.Minute))
+	It("ready condition is true, boot id did not change", func() {
+		statusBootId := "1"
 		testNode.Status.Conditions[2].Status = v1.ConditionTrue
-		testNode.Status.Conditions[2].LastTransitionTime = metav1.NewTime(timestamp)
+		testNode.Status.NodeInfo.BootID = "1"
 
-		res := n.NodeBecomeReadyAfter(&testNode, testTimestamp)
+		res := n.IsNodeRebooted(&testNode, statusBootId)
 		Expect(res).To(BeFalse())
 	})
 })

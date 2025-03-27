@@ -90,7 +90,12 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		return reconcile.Result{}, fmt.Errorf("could not get NodeModuleState %s: %v", req.NamespacedName, err)
 	}
 
-	if err := r.helper.SyncStatus(ctx, &nmcObj); err != nil {
+	node := v1.Node{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: nmcObj.Name}, &node); err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not get node %s: %v", nmcObj.Name, err)
+	}
+
+	if err := r.helper.SyncStatus(ctx, &nmcObj, &node); err != nil {
 		return reconcile.Result{}, fmt.Errorf("could not reconcile status for NodeModulesConfig %s: %v", nmcObj.Name, err)
 	}
 
@@ -101,11 +106,6 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 	for i := 0; i < len(nmcObj.Status.Modules); i++ {
 		status := nmcObj.Status.Modules[i]
 		statusMap[status.Namespace+"/"+status.Name] = &nmcObj.Status.Modules[i]
-	}
-
-	node := v1.Node{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: nmcObj.Name}, &node); err != nil {
-		return ctrl.Result{}, fmt.Errorf("could not get node %s: %v", nmcObj.Name, err)
 	}
 
 	errs := make([]error, 0, len(nmcObj.Spec.Modules)+len(nmcObj.Status.Modules))
@@ -220,7 +220,7 @@ type nmcReconcilerHelper interface {
 	ProcessModuleSpec(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, spec *kmmv1beta1.NodeModuleSpec, status *kmmv1beta1.NodeModuleStatus, node *v1.Node) error
 	ProcessUnconfiguredModuleStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, status *kmmv1beta1.NodeModuleStatus, node *v1.Node) error
 	RemovePodFinalizers(ctx context.Context, nodeName string) error
-	SyncStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig) error
+	SyncStatus(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, node *v1.Node) error
 	UpdateNodeLabels(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, node *v1.Node) ([]types.NamespacedName, []types.NamespacedName, error)
 	RecordEvents(node *v1.Node, loadedModules, unloadedModules []types.NamespacedName)
 }
@@ -374,7 +374,7 @@ func (h *nmcReconcilerHelperImpl) ProcessModuleSpec(
 			return h.podManager.CreateLoaderPod(ctx, nmcObj, spec)
 		}
 
-		if h.nodeAPI.NodeBecomeReadyAfter(node, status.LastTransitionTime) {
+		if h.nodeAPI.IsNodeRebooted(node, status.BootId) {
 			logger.Info("node has been rebooted and become ready after kernel module was loaded; creating loader Pod")
 			return h.podManager.CreateLoaderPod(ctx, nmcObj, spec)
 		}
@@ -425,7 +425,7 @@ func (h *nmcReconcilerHelperImpl) ProcessUnconfiguredModuleStatus(
 	/* node was rebooted, spec not set so no kernel module is loaded, no need to unload.
 	   it also fixes the scenario when node's kernel was upgraded, so unload pod will fail anyway
 	*/
-	if h.nodeAPI.NodeBecomeReadyAfter(node, status.LastTransitionTime) {
+	if h.nodeAPI.IsNodeRebooted(node, status.BootId) {
 		logger.Info("node was rebooted and spec is missing: delete the status to allow Module CR unload, if needed")
 		patchFrom := client.MergeFrom(nmcObj.DeepCopy())
 		nmc.RemoveModuleStatus(&nmcObj.Status.Modules, status.Namespace, status.Name)
@@ -493,7 +493,7 @@ func (h *nmcReconcilerHelperImpl) RemovePodFinalizers(ctx context.Context, nodeN
 	return errors.Join(errs...)
 }
 
-func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.NodeModulesConfig) error {
+func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1beta1.NodeModulesConfig, node *v1.Node) error {
 	logger := ctrl.LoggerFrom(ctx)
 
 	logger.Info("Syncing status")
@@ -579,6 +579,7 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 				FinishedAt
 
 			status.LastTransitionTime = podLTT
+			status.BootId = node.Status.NodeInfo.BootID
 
 			nmc.SetModuleStatus(&nmcObj.Status.Modules, *status)
 
