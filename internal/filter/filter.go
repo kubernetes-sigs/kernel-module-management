@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubectl/pkg/util/podutils"
@@ -146,6 +147,56 @@ func ListModulesForNMC(_ context.Context, obj client.Object) []reconcile.Request
 	}
 
 	return modules.UnsortedList()
+}
+
+func skipNodeHeartbeat() predicate.Predicate {
+
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+
+			oldNode, okOld := e.ObjectOld.(*v1.Node)
+			newNode, okNew := e.ObjectNew.(*v1.Node)
+			if !okOld || !okNew {
+				return false
+			}
+
+			oldNodeCopy := oldNode.DeepCopy()
+			newNodeCopy := newNode.DeepCopy()
+
+			// clear heartbeat timestamp for each condition
+			for i, _ := range oldNodeCopy.Status.Conditions {
+				oldNodeCopy.Status.Conditions[i].LastHeartbeatTime = metav1.Time{}
+			}
+			for i, _ := range newNodeCopy.Status.Conditions {
+				newNodeCopy.Status.Conditions[i].LastHeartbeatTime = metav1.Time{}
+			}
+
+			// clear the resource version as it gets updated with every heartbeat
+			oldNodeCopy.ResourceVersion = ""
+			newNodeCopy.ResourceVersion = ""
+
+			// clear kubelet update managedfields timestamp
+			for i, mf := range oldNodeCopy.ManagedFields {
+				if mf.Manager == "kubelet" {
+					oldNodeCopy.ManagedFields[i].Time = nil
+				}
+			}
+			for i, mf := range newNodeCopy.ManagedFields {
+				if mf.Manager == "kubelet" {
+					newNodeCopy.ManagedFields[i].Time = nil
+				}
+			}
+
+			return !reflect.DeepEqual(oldNodeCopy, newNodeCopy)
+		},
+	}
+}
+
+func NMCReconcilerNodePredicate() predicate.Predicate {
+	return predicate.And(
+		skipDeletions,
+		skipNodeHeartbeat(),
+	)
 }
 
 func ModuleReconcilerNodePredicate() predicate.Predicate {

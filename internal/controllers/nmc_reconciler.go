@@ -197,7 +197,7 @@ func (r *NMCReconciler) SetupWithManager(ctx context.Context, mgr manager.Manage
 		Watches(
 			&v1.Node{},
 			handler.EnqueueRequestsFromMapFunc(nodeToNMCMapFunc),
-			builder.WithPredicates(filter.SkipDeletions()),
+			builder.WithPredicates(filter.NMCReconcilerNodePredicate()),
 		).
 		Complete(r)
 }

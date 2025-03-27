@@ -2,6 +2,7 @@ package filter
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
@@ -110,6 +111,59 @@ var _ = Describe("nodeBecomesSchedulable", func() {
 		Entry("old non-schedulable, new non-schedulable", false, false, false),
 		Entry("old non-schedulable, new schedulable", false, true, true),
 	)
+})
+
+var _ = Describe("skipNodeHeartbeat", func() {
+
+	It("should return false if the only diff is the heartbeat", func() {
+
+		oldNode := v1.Node{
+			Status: v1.NodeStatus{
+				Conditions: []v1.NodeCondition{
+					{
+						LastHeartbeatTime: metav1.NewTime(time.Unix(1, 0)),
+					},
+				},
+			},
+		}
+
+		newNode := v1.Node{
+			Status: v1.NodeStatus{
+				Conditions: []v1.NodeCondition{
+					{
+						LastHeartbeatTime: metav1.NewTime(time.Unix(2, 0)),
+					},
+				},
+			},
+		}
+
+		res := skipNodeHeartbeat().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
+		Expect(res).To(BeFalse())
+
+	})
+
+	It("should return true if there is a non heartbeat diff", func() {
+
+		oldNode := v1.Node{
+			Status: v1.NodeStatus{
+				NodeInfo: v1.NodeSystemInfo{
+					KernelVersion: "v1",
+				},
+			},
+		}
+
+		newNode := v1.Node{
+			Status: v1.NodeStatus{
+				NodeInfo: v1.NodeSystemInfo{
+					KernelVersion: "v2",
+				},
+			},
+		}
+
+		res := skipNodeHeartbeat().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
+		Expect(res).To(BeTrue())
+
+	})
 })
 
 var _ = Describe("modulePodSuccess", func() {
