@@ -125,7 +125,7 @@ func (mrh *mbscReconcilerHelper) updateStatus(ctx context.Context, mbscObj *kmmv
 	patchFrom := client.MergeFrom(mbscObj.DeepCopy())
 	for _, imageSpec := range mbscObj.Spec.Images {
 		status, err := mrh.buildSignAPI.GetStatus(ctx, mbscObj.Name, mbscObj.Namespace, imageSpec.ModuleImageSpec.KernelVersion,
-			imageSpec.Action, &mbscObj.ObjectMeta)
+			imageSpec.Action, mbscObj)
 		if err != nil || status == kmmv1beta1.BuildOrSignStatus("") {
 			// either we could not get the status or the status is empty
 			errs = append(errs, err)
@@ -150,7 +150,7 @@ func (mrh *mbscReconcilerHelper) processImagesSpecs(ctx context.Context, mbscObj
 			continue
 		}
 		mld := createMLD(mbscObj, &imageSpec.ModuleImageSpec)
-		err := mrh.buildSignAPI.Sync(ctx, mld, true, imageSpec.Action, &mbscObj.ObjectMeta)
+		err := mrh.buildSignAPI.Sync(ctx, mld, true, imageSpec.Action, mbscObj)
 		if err != nil {
 			errs = append(errs, err)
 			logger.Info(utils.WarnString("sync for image %s, action %s failed: %v"), imageSpec.Image, imageSpec.Action, err)
@@ -163,7 +163,7 @@ func (mrh *mbscReconcilerHelper) garbageCollect(ctx context.Context, mbscObj *km
 	logger := log.FromContext(ctx)
 
 	// Garbage collect for successfully finished build pods
-	deleted, err := mrh.buildSignAPI.GarbageCollect(ctx, mbscObj.Name, mbscObj.Namespace, kmmv1beta1.BuildImage, &mbscObj.ObjectMeta)
+	deleted, err := mrh.buildSignAPI.GarbageCollect(ctx, mbscObj.Name, mbscObj.Namespace, kmmv1beta1.BuildImage, mbscObj)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect build objects: %v", err)
 	}
@@ -171,7 +171,7 @@ func (mrh *mbscReconcilerHelper) garbageCollect(ctx context.Context, mbscObj *km
 	logger.Info("Garbage-collected Build objects", "names", deleted)
 
 	// Garbage collect for successfully finished sign pods
-	deleted, err = mrh.buildSignAPI.GarbageCollect(ctx, mbscObj.Name, mbscObj.Namespace, kmmv1beta1.SignImage, &mbscObj.ObjectMeta)
+	deleted, err = mrh.buildSignAPI.GarbageCollect(ctx, mbscObj.Name, mbscObj.Namespace, kmmv1beta1.SignImage, mbscObj)
 	if err != nil {
 		return fmt.Errorf("could not garbage collect sign objects: %v", err)
 	}
