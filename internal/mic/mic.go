@@ -54,7 +54,7 @@ func (mici *micImpl) CreateOrPatch(ctx context.Context, name, ns string, images 
 			ImageRepoSecret: imageRepoSecret,
 		}
 
-		return controllerutil.SetOwnerReference(owner, mic, mici.scheme)
+		return controllerutil.SetControllerReference(owner, mic, mici.scheme)
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create or patch %s/%s: %v", ns, name, err)

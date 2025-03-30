@@ -2,6 +2,7 @@ package mic
 
 import (
 	"context"
+	"fmt"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -42,13 +43,13 @@ var _ = Describe("ApplyMIC", func() {
 
 	It("should fail if we failed to create or patch", func() {
 
-		mockClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil)
+		mockClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
 
-		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, []v1beta1.ModuleImageSpec{}, nil, nil)
+		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, []v1beta1.ModuleImageSpec{}, nil, &kmmv1beta1.Module{})
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed to create or patch"))
-		Expect(err.Error()).To(ContainSubstring("cannot call SetOwnerReference"))
+		Expect(err.Error()).To(ContainSubstring("some error"))
 	})
 
 	It("should create the MIC if it doesn't exist", func() {
