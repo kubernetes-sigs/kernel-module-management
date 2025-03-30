@@ -140,9 +140,9 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByPullPods(ctx context.Context,
 			podsToDelete = append(podsToDelete, p)
 			continue
 		}
-		phase := p.Status.Phase
-		switch phase {
-		case v1.PodFailed:
+		podStatus := mrhi.imagePullerAPI.GetPullPodStatus(&p)
+		switch podStatus {
+		case pod.PullImageFailed:
 			switch {
 			case imageSpec.Build != nil:
 				logger.Info("pull pod failed, build exists, setting status to kmmv1beta1.ImageNeedsBuilding")
@@ -154,7 +154,8 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByPullPods(ctx context.Context,
 				logger.Info(utils.WarnString("failed pod without build or sign spec, shoud not have happened"))
 			}
 			podsToDelete = append(podsToDelete, p)
-		case v1.PodSucceeded:
+
+		case pod.PullImageSuccess:
 			logger.Info("successful pod, updating image status to ImageExists")
 			mrhi.micHelper.SetImageStatus(micObj, image, kmmv1beta1.ImageExists)
 			podsToDelete = append(podsToDelete, p)
@@ -178,6 +179,7 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByPullPods(ctx context.Context,
 }
 
 func (mrhi *micReconcilerHelperImpl) updateStatusByMBSC(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig) error {
+	logger := ctrl.LoggerFrom(ctx).WithValues("mic name", micObj.Name)
 	mbsc, err := mrhi.mbscHelper.Get(ctx, micObj.Name, micObj.Namespace)
 	if err != nil {
 		return fmt.Errorf("failed to get ModuleBuildSignConfig object %s/%s: %v", micObj.Namespace, micObj.Name, err)
@@ -201,15 +203,19 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByMBSC(ctx context.Context, mic
 		switch {
 		case mbscStatus == kmmv1beta1.ActionFailure:
 			// any failure (build or sign) - image does not exists
+			logger.Info("mbsc status failed, updating mic image to DoesNotExist")
 			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageDoesNotExist)
 		case mbscStatus == kmmv1beta1.ActionSuccess && mbscAction == kmmv1beta1.SignImage:
 			// sign action succeeded - image exists, nothing more to do
+			logger.Info("mbsc status success and action as sign, updating mic image to Exists")
 			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageExists)
 		case mbscStatus == kmmv1beta1.ActionSuccess && micImageSpec.Sign != nil:
 			// build succeeded and sign exists - image needs to be signed
+			logger.Info("mbsc status success and sign section exists, updating mic image to NeedsSigning")
 			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageNeedsSigning)
 		case mbscStatus == kmmv1beta1.ActionSuccess:
 			// build succeeded, no sign - image exists
+			logger.Info("mbsc status success and no sign section exists, updating mic image to Exists")
 			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageExists)
 		}
 	}
