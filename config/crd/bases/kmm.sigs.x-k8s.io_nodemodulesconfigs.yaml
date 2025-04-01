@@ -369,9 +369,6 @@ spec:
                           type: string
                       type: object
                       x-kubernetes-map-type: atomic
-                    lastTransitionTime:
-                      format: date-time
-                      type: string
                     name:
                       type: string
                     namespace:
