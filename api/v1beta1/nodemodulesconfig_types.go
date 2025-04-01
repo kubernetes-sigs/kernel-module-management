@@ -67,8 +67,6 @@ type NodeModuleStatus struct {
 	//+optional
 	Config ModuleConfig `json:"config,omitempty"`
 	//+optional
-	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
-	//+optional
 	BootId string `json:"bootId,omitempty"`
 }
 

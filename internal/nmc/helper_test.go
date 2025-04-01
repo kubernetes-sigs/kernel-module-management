@@ -405,7 +405,6 @@ var _ = Describe("SetModuleStatus", func() {
 			InsecurePull:          true,
 			InTreeModulesToRemove: []string{"intree"},
 		},
-		LastTransitionTime: metav1.Now(),
 	}
 
 	It("should do nothing if the slice is nil", func() {
