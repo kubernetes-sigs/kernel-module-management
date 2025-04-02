@@ -19,7 +19,7 @@ import (
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("ApplyMIC", func() {
+var _ = Describe("CreateOrPatch", func() {
 
 	const (
 		micName      = "my-name"
@@ -131,6 +131,49 @@ var _ = Describe("ApplyMIC", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 	})
+})
+
+var _ = Describe("Get", func() {
+
+	const (
+		micName      = "my-name"
+		micNamespace = "my-namespace"
+	)
+
+	var (
+		ctx        context.Context
+		ctrl       *gomock.Controller
+		mockClient *client.MockClient
+		micAPI     MIC
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ctrl = gomock.NewController(GinkgoT())
+		mockClient = client.NewMockClient(ctrl)
+		micAPI = New(mockClient, scheme)
+		utilruntime.Must(v1beta1.AddToScheme(scheme))
+	})
+
+	It("should fail if we failed to get the MIC", func() {
+
+		mockClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		_, err := micAPI.Get(ctx, micName, micNamespace)
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("could not get ModuleImagesConfig"))
+	})
+
+	It("should work as expected", func() {
+
+		mockClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(nil)
+
+		_, err := micAPI.Get(ctx, micName, micNamespace)
+
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 })
 
 var _ = Describe("GetModuleImageSpec", func() {

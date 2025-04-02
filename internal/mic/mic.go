@@ -8,6 +8,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -18,6 +19,7 @@ import (
 type MIC interface {
 	CreateOrPatch(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
 		imageRepoSecret *v1.LocalObjectReference, owner metav1.Object) error
+	Get(ctx context.Context, name, ns string) (*kmmv1beta1.ModuleImagesConfig, error)
 	GetModuleImageSpec(micObj *kmmv1beta1.ModuleImagesConfig, image string) *kmmv1beta1.ModuleImageSpec
 	SetImageStatus(micObj *kmmv1beta1.ModuleImagesConfig, image string, status kmmv1beta1.ImageState)
 	GetImageState(micObj *kmmv1beta1.ModuleImagesConfig, image string) kmmv1beta1.ImageState
@@ -63,6 +65,16 @@ func (mici *micImpl) CreateOrPatch(ctx context.Context, name, ns string, images 
 	logger.Info("Applied MIC", "name", name, "namespace", ns, "result", opRes)
 
 	return nil
+}
+
+func (mici *micImpl) Get(ctx context.Context, name, ns string) (*kmmv1beta1.ModuleImagesConfig, error) {
+
+	var micObj kmmv1beta1.ModuleImagesConfig
+	if err := mici.client.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, &micObj); err != nil {
+		return nil, fmt.Errorf("could not get ModuleImagesConfig %s: %v", name, err)
+	}
+
+	return &micObj, nil
 }
 
 func (mici *micImpl) GetModuleImageSpec(micObj *kmmv1beta1.ModuleImagesConfig, image string) *kmmv1beta1.ModuleImageSpec {
