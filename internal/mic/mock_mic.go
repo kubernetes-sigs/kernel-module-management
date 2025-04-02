@@ -55,6 +55,21 @@ func (mr *MockMICMockRecorder) CreateOrPatch(ctx, name, ns, images, imageRepoSec
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrPatch", reflect.TypeOf((*MockMIC)(nil).CreateOrPatch), ctx, name, ns, images, imageRepoSecret, owner)
 }
 
+// Get mocks base method.
+func (m *MockMIC) Get(ctx context.Context, name, ns string) (*v1beta1.ModuleImagesConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, name, ns)
+	ret0, _ := ret[0].(*v1beta1.ModuleImagesConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockMICMockRecorder) Get(ctx, name, ns any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockMIC)(nil).Get), ctx, name, ns)
+}
+
 // GetImageState mocks base method.
 func (m *MockMIC) GetImageState(micObj *v1beta1.ModuleImagesConfig, image string) v1beta1.ImageState {
 	m.ctrl.T.Helper()

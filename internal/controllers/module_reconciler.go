@@ -365,18 +365,19 @@ func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta
 }
 
 func (mrh *moduleReconcilerHelper) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error {
+
 	logger := log.FromContext(ctx)
 
-	if module.ShouldBeBuilt(mld) || module.ShouldBeSigned(mld) {
-		exists, err := module.ImageExists(ctx, mrh.client, mrh.registryAPI, mld, mld.Namespace, mld.ContainerImage)
-		if err != nil {
-			return fmt.Errorf("failed to verify that image %s exists: %v", mld.ContainerImage, err)
-		}
-		if !exists {
-			// skip updating NMC, reconciliation will kick in once the build pod is completed
-			logger.V(1).Info("Image does not exist, not adding to NMC", "nmc name", node.Name, "container image", mld.ContainerImage)
-			return nil
-		}
+	micObj, err := mrh.micAPI.Get(ctx, mld.Name, mld.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get moduleImagesConfig %s: %v", mld.Name, err)
+	}
+
+	imageStatus := mrh.micAPI.GetImageState(micObj, mld.ContainerImage)
+	if imageStatus != kmmv1beta1.ImageExists {
+		// skip updating NMC, reconciliation will kick in once the build pod is completed
+		logger.V(1).Info("Image does not exist, not adding to NMC", "nmc name", node.Name, "container image", mld.ContainerImage)
+		return nil
 	}
 
 	moduleConfig := kmmv1beta1.ModuleConfig{
