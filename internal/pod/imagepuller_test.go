@@ -30,36 +30,32 @@ var _ = Describe("ListPullPods", func() {
 	})
 
 	ctx := context.Background()
-	testMic := kmmv1beta1.ModuleImagesConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some name",
-			Namespace: "some namespace",
-		},
-	}
+	testName := "some name"
+	testNamespace := "some namespace"
 
 	It("list succeeded", func() {
 		hl := ctrlclient.HasLabels{pullPodTypeLabelKey}
-		ml := ctrlclient.MatchingLabels{moduleImageLabelKey: testMic.Name}
+		ml := ctrlclient.MatchingLabels{imageOwnerLabelKey: testName}
 
-		clnt.EXPECT().List(context.Background(), gomock.Any(), ctrlclient.InNamespace(testMic.Namespace), hl, ml).DoAndReturn(
+		clnt.EXPECT().List(context.Background(), gomock.Any(), ctrlclient.InNamespace(testNamespace), hl, ml).DoAndReturn(
 			func(_ interface{}, podList *v1.PodList, _ ...interface{}) error {
 				podList.Items = []v1.Pod{v1.Pod{}, v1.Pod{}}
 				return nil
 			},
 		)
 
-		pullPods, err := ip.ListPullPods(ctx, &testMic)
+		pullPods, err := ip.ListPullPods(ctx, testName, testNamespace)
 		Expect(err).To(BeNil())
 		Expect(pullPods).ToNot(BeNil())
 	})
 
 	It("list failed", func() {
 		hl := ctrlclient.HasLabels{pullPodTypeLabelKey}
-		ml := ctrlclient.MatchingLabels{moduleImageLabelKey: testMic.Name}
+		ml := ctrlclient.MatchingLabels{imageOwnerLabelKey: testName}
 
-		clnt.EXPECT().List(context.Background(), gomock.Any(), ctrlclient.InNamespace(testMic.Namespace), hl, ml).Return(fmt.Errorf("some error"))
+		clnt.EXPECT().List(context.Background(), gomock.Any(), ctrlclient.InNamespace(testNamespace), hl, ml).Return(fmt.Errorf("some error"))
 
-		pullPods, err := ip.ListPullPods(ctx, &testMic)
+		pullPods, err := ip.ListPullPods(ctx, testName, testNamespace)
 		Expect(err).To(HaveOccurred())
 		Expect(pullPods).To(BeNil())
 	})
@@ -161,23 +157,19 @@ var _ = Describe("CreatePullPod", func() {
 	})
 
 	ctx := context.Background()
-	testMic := kmmv1beta1.ModuleImagesConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some name",
-			Namespace: "some namespace",
-		},
-	}
-	testImageSpec := kmmv1beta1.ModuleImageSpec{
-		Image: "some image",
-	}
+	testName := "some name"
+	testNamespace := "some namespace"
+	testImage := "some image"
+	testMic := kmmv1beta1.ModuleImagesConfig{}
+	testRepoSecret := v1.LocalObjectReference{}
 
 	It("check the pod fields", func() {
 		expectedPod := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: testMic.Name + "-pull-pod-",
-				Namespace:    testMic.Namespace,
+				GenerateName: testName + "-pull-pod-",
+				Namespace:    testNamespace,
 				Labels: map[string]string{
-					moduleImageLabelKey: "some name",
+					imageOwnerLabelKey:  testName,
 					pullPodTypeLabelKey: pullPodUntilSuccess,
 				},
 			},
@@ -185,12 +177,12 @@ var _ = Describe("CreatePullPod", func() {
 				Containers: []v1.Container{
 					{
 						Name:    pullerContainerName,
-						Image:   "some image",
+						Image:   testImage,
 						Command: []string{"/bin/sh", "-c", "exit 0"},
 					},
 				},
 				RestartPolicy:    v1.RestartPolicyNever,
-				ImagePullSecrets: []v1.LocalObjectReference{},
+				ImagePullSecrets: []v1.LocalObjectReference{testRepoSecret},
 			},
 		}
 
@@ -206,7 +198,7 @@ var _ = Describe("CreatePullPod", func() {
 				}
 				return nil
 			})
-		err := ip.CreatePullPod(ctx, &testImageSpec, &testMic)
+		err := ip.CreatePullPod(ctx, testName, testNamespace, testImage, false, &testRepoSecret, &testMic)
 		Expect(err).To(BeNil())
 	})
 })

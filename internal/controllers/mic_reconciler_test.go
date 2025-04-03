@@ -38,7 +38,9 @@ var _ = Describe("MicReconciler_Reconcile", func() {
 	})
 
 	ctx := context.Background()
-	testMic := kmmv1beta1.ModuleImagesConfig{}
+	testMic := kmmv1beta1.ModuleImagesConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "some name", Namespace: "some namespace"},
+	}
 
 	DescribeTable("check good and error flows", func(listPullPodsError,
 		updateStatusByPodsError,
@@ -49,10 +51,10 @@ var _ = Describe("MicReconciler_Reconcile", func() {
 		expectedErr := returnedError
 		pullPods := []v1.Pod{}
 		if listPullPodsError {
-			mockImagePuller.EXPECT().ListPullPods(ctx, &testMic).Return(nil, returnedError)
+			mockImagePuller.EXPECT().ListPullPods(ctx, "some name", "some namespace").Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mockImagePuller.EXPECT().ListPullPods(ctx, &testMic).Return(pullPods, nil)
+		mockImagePuller.EXPECT().ListPullPods(ctx, "some name", "some namespace").Return(pullPods, nil)
 		if updateStatusByPodsError {
 			mockMicReconHelper.EXPECT().updateStatusByPullPods(ctx, &testMic, pullPods).Return(returnedError)
 			goto executeTestFunction
@@ -360,6 +362,10 @@ var _ = Describe("processImagesSpecs", func() {
 	ctx := context.Background()
 	pullPods := []v1.Pod{}
 	testMic = kmmv1beta1.ModuleImagesConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "some name",
+			Namespace: "some namespace",
+		},
 		Spec: kmmv1beta1.ModuleImagesConfigSpec{
 			Images: []kmmv1beta1.ModuleImageSpec{
 				{
@@ -373,7 +379,7 @@ var _ = Describe("processImagesSpecs", func() {
 		gomock.InOrder(
 			micHelper.EXPECT().GetImageState(&testMic, "image 1").Return(kmmv1beta1.ImageState("")),
 			mockImagePuller.EXPECT().GetPullPodForImage(pullPods, "image 1").Return(nil),
-			mockImagePuller.EXPECT().CreatePullPod(ctx, &testMic.Spec.Images[0], &testMic).Return(nil),
+			mockImagePuller.EXPECT().CreatePullPod(ctx, "some name", "some namespace", "image 1", true, nil, &testMic).Return(nil),
 		)
 		err := mrh.processImagesSpecs(ctx, &testMic, pullPods)
 		Expect(err).To(BeNil())

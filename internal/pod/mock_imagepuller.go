@@ -12,9 +12,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
+	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MockImagePuller is a mock of ImagePuller interface.
@@ -41,17 +41,17 @@ func (m *MockImagePuller) EXPECT() *MockImagePullerMockRecorder {
 }
 
 // CreatePullPod mocks base method.
-func (m *MockImagePuller) CreatePullPod(ctx context.Context, imageSpec *v1beta1.ModuleImageSpec, micObj *v1beta1.ModuleImagesConfig) error {
+func (m *MockImagePuller) CreatePullPod(ctx context.Context, name, namespace, imageToPull string, oneTimePod bool, imageRepoSecret *v1.LocalObjectReference, owner v10.Object) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreatePullPod", ctx, imageSpec, micObj)
+	ret := m.ctrl.Call(m, "CreatePullPod", ctx, name, namespace, imageToPull, oneTimePod, imageRepoSecret, owner)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreatePullPod indicates an expected call of CreatePullPod.
-func (mr *MockImagePullerMockRecorder) CreatePullPod(ctx, imageSpec, micObj any) *gomock.Call {
+func (mr *MockImagePullerMockRecorder) CreatePullPod(ctx, name, namespace, imageToPull, oneTimePod, imageRepoSecret, owner any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePullPod", reflect.TypeOf((*MockImagePuller)(nil).CreatePullPod), ctx, imageSpec, micObj)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePullPod", reflect.TypeOf((*MockImagePuller)(nil).CreatePullPod), ctx, name, namespace, imageToPull, oneTimePod, imageRepoSecret, owner)
 }
 
 // DeletePod mocks base method.
@@ -111,16 +111,16 @@ func (mr *MockImagePullerMockRecorder) GetPullPodStatus(pod any) *gomock.Call {
 }
 
 // ListPullPods mocks base method.
-func (m *MockImagePuller) ListPullPods(ctx context.Context, micObj *v1beta1.ModuleImagesConfig) ([]v1.Pod, error) {
+func (m *MockImagePuller) ListPullPods(ctx context.Context, name, namespace string) ([]v1.Pod, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListPullPods", ctx, micObj)
+	ret := m.ctrl.Call(m, "ListPullPods", ctx, name, namespace)
 	ret0, _ := ret[0].([]v1.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListPullPods indicates an expected call of ListPullPods.
-func (mr *MockImagePullerMockRecorder) ListPullPods(ctx, micObj any) *gomock.Call {
+func (mr *MockImagePullerMockRecorder) ListPullPods(ctx, name, namespace any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPullPods", reflect.TypeOf((*MockImagePuller)(nil).ListPullPods), ctx, micObj)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPullPods", reflect.TypeOf((*MockImagePuller)(nil).ListPullPods), ctx, name, namespace)
 }

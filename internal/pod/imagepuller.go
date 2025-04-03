@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,7 +22,7 @@ const (
 	imagePullBackOffReason = "ImagePullBackOff"
 	errImagePullReason     = "ErrImagePull"
 
-	moduleImageLabelKey = "kmm.node.kubernetes.io/module-image-config"
+	imageOwnerLabelKey  = "kmm.node.kubernetes.io/image-owner"
 	pullPodTypeLabelKey = "kmm.node.kubernetes.io/pull-pod-type"
 
 	pullerContainerName = "puller"
@@ -35,9 +34,10 @@ const (
 //go:generate mockgen -source=imagepuller.go -package=pod -destination=mock_imagepuller.go
 
 type ImagePuller interface {
-	CreatePullPod(ctx context.Context, imageSpec *kmmv1beta1.ModuleImageSpec, micObj *kmmv1beta1.ModuleImagesConfig) error
+	CreatePullPod(ctx context.Context, name, namespace, imageToPull string, oneTimePod bool,
+		imageRepoSecret *v1.LocalObjectReference, owner metav1.Object) error
 	DeletePod(ctx context.Context, pod *v1.Pod) error
-	ListPullPods(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig) ([]v1.Pod, error)
+	ListPullPods(ctx context.Context, name, namespace string) ([]v1.Pod, error)
 	GetPullPodForImage(pods []v1.Pod, image string) *v1.Pod
 	GetPullPodImage(pod v1.Pod) string
 	GetPullPodStatus(pod *v1.Pod) PullPodStatus
@@ -55,33 +55,33 @@ func NewImagePuller(client client.Client, scheme *runtime.Scheme) ImagePuller {
 	}
 }
 
-func (ipi *imagePullerImpl) CreatePullPod(ctx context.Context, imageSpec *kmmv1beta1.ModuleImageSpec,
-	micObj *kmmv1beta1.ModuleImagesConfig) error {
+func (ipi *imagePullerImpl) CreatePullPod(ctx context.Context, name, namespace, imageToPull string, oneTimePod bool,
+	imageRepoSecret *v1.LocalObjectReference, owner metav1.Object) error {
 
-	pullPodTypeLabeValue := pullPodUntilSuccess
-	if imageSpec.Build != nil || imageSpec.Sign != nil {
-		pullPodTypeLabeValue = pullPodTypeOneTime
+	pullPodTypeLabelValue := pullPodUntilSuccess
+	if oneTimePod {
+		pullPodTypeLabelValue = pullPodTypeOneTime
 	}
 
 	imagePullSecrets := []v1.LocalObjectReference{}
-	if micObj.Spec.ImageRepoSecret != nil {
-		imagePullSecrets = []v1.LocalObjectReference{*micObj.Spec.ImageRepoSecret}
+	if imageRepoSecret != nil {
+		imagePullSecrets = []v1.LocalObjectReference{*imageRepoSecret}
 	}
 
 	pullPod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: micObj.Name + "-pull-pod-",
-			Namespace:    micObj.Namespace,
+			GenerateName: name + "-pull-pod-",
+			Namespace:    namespace,
 			Labels: map[string]string{
-				moduleImageLabelKey: micObj.Name,
-				pullPodTypeLabelKey: pullPodTypeLabeValue,
+				imageOwnerLabelKey:  name,
+				pullPodTypeLabelKey: pullPodTypeLabelValue,
 			},
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
 					Name:    pullerContainerName,
-					Image:   imageSpec.Image,
+					Image:   imageToPull,
 					Command: []string{"/bin/sh", "-c", "exit 0"},
 				},
 			},
@@ -90,9 +90,9 @@ func (ipi *imagePullerImpl) CreatePullPod(ctx context.Context, imageSpec *kmmv1b
 		},
 	}
 
-	err := ctrl.SetControllerReference(micObj, &pullPod, ipi.scheme)
+	err := ctrl.SetControllerReference(owner, &pullPod, ipi.scheme)
 	if err != nil {
-		return fmt.Errorf("failed to set MIC object %s as owner on pullPod for image %s: %v", micObj.Name, imageSpec.Image, err)
+		return fmt.Errorf("failed to set owner for pullPod for image %s: %v", imageToPull, err)
 	}
 
 	return ipi.client.Create(ctx, &pullPod)
@@ -103,17 +103,17 @@ func (ipi *imagePullerImpl) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	return deletePod(ipi.client, ctx, pod)
 }
 
-func (ipi *imagePullerImpl) ListPullPods(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig) ([]v1.Pod, error) {
+func (ipi *imagePullerImpl) ListPullPods(ctx context.Context, name, namespace string) ([]v1.Pod, error) {
 
 	pl := v1.PodList{}
 
 	hl := client.HasLabels{pullPodTypeLabelKey}
-	ml := client.MatchingLabels{moduleImageLabelKey: micObj.Name}
+	ml := client.MatchingLabels{imageOwnerLabelKey: name}
 
-	ctrl.LoggerFrom(ctx).WithValues("mic name", micObj.Name).V(1).Info("Listing mic image Pods")
+	ctrl.LoggerFrom(ctx).WithValues("module name", name).V(1).Info("Listing module image Pods")
 
-	if err := ipi.client.List(ctx, &pl, client.InNamespace(micObj.Namespace), hl, ml); err != nil {
-		return nil, fmt.Errorf("could not list mic image pods for mic %s: %v", micObj.Name, err)
+	if err := ipi.client.List(ctx, &pl, client.InNamespace(namespace), hl, ml); err != nil {
+		return nil, fmt.Errorf("could not list module image pods for module %s: %v", name, err)
 	}
 
 	return pl.Items, nil
