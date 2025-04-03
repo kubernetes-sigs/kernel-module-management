@@ -73,7 +73,7 @@ func (r *micReconciler) Reconcile(ctx context.Context, micObj *kmmv1beta1.Module
 		return res, nil
 	}
 
-	pods, err := r.imagePullerAPI.ListPullPods(ctx, micObj)
+	pods, err := r.imagePullerAPI.ListPullPods(ctx, micObj.Name, micObj.Namespace)
 	if err != nil {
 		return res, fmt.Errorf("failed to get the image pods for mic %s: %v", micObj.Name, err)
 	}
@@ -237,7 +237,13 @@ func (mrhi *micReconcilerHelperImpl) processImagesSpecs(ctx context.Context, mic
 			// image State is not set: either new image or pull pod is still running
 			if mrhi.imagePullerAPI.GetPullPodForImage(pullPods, imageSpec.Image) == nil {
 				// no pull pod- create it, otherwise we wait for it to finish
-				err := mrhi.imagePullerAPI.CreatePullPod(ctx, &imageSpec, micObj)
+				err := mrhi.imagePullerAPI.CreatePullPod(ctx,
+					micObj.Name,
+					micObj.Namespace,
+					imageSpec.Image,
+					(imageSpec.Build != nil || imageSpec.Sign != nil),
+					micObj.Spec.ImageRepoSecret,
+					micObj)
 				errs = append(errs, err)
 			}
 		case kmmv1beta1.ImageDoesNotExist:
