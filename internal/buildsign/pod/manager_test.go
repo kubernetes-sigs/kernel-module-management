@@ -20,7 +20,6 @@ var _ = Describe("GetStatus", func() {
 	var (
 		ctrl                    *gomock.Controller
 		clnt                    *client.MockClient
-		mockSigner              *MockSigner
 		mockBuildSignPodManager *MockBuildSignPodManager
 		mgr                     *podManager
 	)
@@ -34,11 +33,9 @@ var _ = Describe("GetStatus", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockSigner = NewMockSigner(ctrl)
 		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
 		mgr = &podManager{
 			client:              clnt,
-			signer:              mockSigner,
 			buildSignPodManager: mockBuildSignPodManager,
 		}
 	})
@@ -103,7 +100,6 @@ var _ = Describe("Sync", func() {
 	var (
 		ctrl                    *gomock.Controller
 		clnt                    *client.MockClient
-		mockSigner              *MockSigner
 		mockBuildSignPodManager *MockBuildSignPodManager
 		mgr                     *podManager
 	)
@@ -117,11 +113,9 @@ var _ = Describe("Sync", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockSigner = NewMockSigner(ctrl)
 		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
 		mgr = &podManager{
 			client:              clnt,
-			signer:              mockSigner,
 			buildSignPodManager: mockBuildSignPodManager,
 		}
 	})
@@ -141,7 +135,7 @@ var _ = Describe("Sync", func() {
 		Expect(err).To(HaveOccurred())
 
 		By("test sign action")
-		mockSigner.EXPECT().MakePodTemplate(ctx, testMLD, &testMBSC, true).Return(nil, fmt.Errorf("some error"))
+		mockBuildSignPodManager.EXPECT().MakeSignResourceTemplate(ctx, testMLD, &testMBSC, true).Return(nil, fmt.Errorf("some error"))
 		err = mgr.Sync(ctx, testMLD, true, kmmv1beta1.SignImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
@@ -208,7 +202,7 @@ var _ = Describe("Sync", func() {
 		if buildAction {
 			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, pushImage).Return(&testPodTemplate, nil)
 		} else {
-			mockSigner.EXPECT().MakePodTemplate(ctx, testMLD, &testMBSC, pushImage).Return(&testPodTemplate, nil)
+			mockBuildSignPodManager.EXPECT().MakeSignResourceTemplate(ctx, testMLD, &testMBSC, pushImage).Return(&testPodTemplate, nil)
 		}
 		var getPodError error
 		if !podExists {
@@ -241,7 +235,6 @@ var _ = Describe("GarbageCollect", func() {
 	var (
 		ctrl                    *gomock.Controller
 		clnt                    *client.MockClient
-		mockSigner              *MockSigner
 		mockBuildSignPodManager *MockBuildSignPodManager
 		mgr                     *podManager
 	)
@@ -255,11 +248,9 @@ var _ = Describe("GarbageCollect", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockSigner = NewMockSigner(ctrl)
 		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
 		mgr = &podManager{
 			client:              clnt,
-			signer:              mockSigner,
 			buildSignPodManager: mockBuildSignPodManager,
 		}
 	})
