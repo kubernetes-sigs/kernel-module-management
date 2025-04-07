@@ -7,9 +7,13 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 )
 
 type Status string
@@ -36,15 +40,20 @@ type BuildSignPodManager interface {
 	DeletePod(ctx context.Context, pod *v1.Pod) error
 	CreatePod(ctx context.Context, podSpec *v1.Pod) error
 	GetPodStatus(pod *v1.Pod) (Status, error)
+	MakeBuildResourceTemplate(ctx context.Context, mld *api.ModuleLoaderData, owner metav1.Object, pushImage bool) (*v1.Pod, error)
 }
 
 type buildSignPodManager struct {
-	client client.Client
+	client   client.Client
+	combiner module.Combiner
+	scheme   *runtime.Scheme
 }
 
-func NewBuildSignPodManager(client client.Client) BuildSignPodManager {
+func NewBuildSignPodManager(client client.Client, combiner module.Combiner, scheme *runtime.Scheme) BuildSignPodManager {
 	return &buildSignPodManager{
-		client: client,
+		client:   client,
+		combiner: combiner,
+		scheme:   scheme,
 	}
 }
 
@@ -171,4 +180,43 @@ func filterPodsByOwner(pods []v1.Pod, owner metav1.Object) []v1.Pod {
 		}
 	}
 	return ownedPods
+}
+
+func (mp *buildSignPodManager) MakeBuildResourceTemplate(ctx context.Context, mld *api.ModuleLoaderData, owner metav1.Object,
+	pushImage bool) (*v1.Pod, error) {
+
+	// if build AND sign are specified, then we will build an intermediate image
+	// and let sign produce the one specified in its targetImage
+	containerImage := mld.ContainerImage
+	if module.ShouldBeSigned(mld) {
+		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
+	}
+
+	podSpec := mp.podSpec(mld, containerImage, pushImage)
+	podSpecHash, err := mp.getHashAnnotationValue(
+		ctx,
+		mld.Build.DockerfileConfigMap.Name,
+		mld.Namespace,
+		&podSpec,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("could not hash pod's definitions: %v", err)
+	}
+
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: mld.Name + "-build-",
+			Namespace:    mld.Namespace,
+			Labels:       mp.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeBuild),
+			Annotations:  map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash)},
+			Finalizers:   []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
+		},
+		Spec: podSpec,
+	}
+
+	if err := controllerutil.SetControllerReference(owner, pod, mp.scheme); err != nil {
+		return nil, fmt.Errorf("could not set the owner reference: %v", err)
+	}
+
+	return pod, nil
 }

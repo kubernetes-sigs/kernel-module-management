@@ -108,8 +108,8 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	buildSignPodAPI := buildsignpod.NewBuildSignPodManager(client)
 	buildSignCombiner := module.NewCombiner()
+	buildSignPodAPI := buildsignpod.NewBuildSignPodManager(client, buildSignCombiner, scheme)
 
 	buildAPI := buildpod.NewBuildManager(
 		client,

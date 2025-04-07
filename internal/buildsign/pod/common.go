@@ -6,103 +6,18 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mitchellh/hashstructure/v2"
-	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/mitchellh/hashstructure/v2"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
-const (
-	dockerfileVolumeName = "dockerfile"
-)
+const dockerfileVolumeName = "dockerfile"
 
-//go:generate mockgen -source=maker.go -package=pod -destination=mock_maker.go
-
-type Maker interface {
-	MakePodTemplate(
-		ctx context.Context,
-		mld *api.ModuleLoaderData,
-		owner metav1.Object,
-		pushImage bool) (*v1.Pod, error)
-}
-
-type maker struct {
-	client              client.Client
-	combiner            module.Combiner
-	buildSignPodManager BuildSignPodManager
-	scheme              *runtime.Scheme
-}
-
-type buildHashData struct {
-	Dockerfile string
-	PodSpec    *v1.PodSpec
-}
-
-func NewMaker(
-	client client.Client,
-	combiner module.Combiner,
-	buildSignPodManager BuildSignPodManager,
-	scheme *runtime.Scheme) Maker {
-	return &maker{
-		client:              client,
-		combiner:            combiner,
-		buildSignPodManager: buildSignPodManager,
-		scheme:              scheme,
-	}
-}
-
-func (m *maker) MakePodTemplate(
-	ctx context.Context,
-	mld *api.ModuleLoaderData,
-	owner metav1.Object,
-	pushImage bool) (*v1.Pod, error) {
-
-	// if build AND sign are specified, then we will build an intermediate image
-	// and let sign produce the one specified in its targetImage
-	containerImage := mld.ContainerImage
-	if module.ShouldBeSigned(mld) {
-		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
-	}
-
-	podSpec := m.podSpec(mld, containerImage, pushImage)
-	podSpecHash, err := m.getHashAnnotationValue(
-		ctx,
-		mld.Build.DockerfileConfigMap.Name,
-		mld.Namespace,
-		&podSpec,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("could not hash pod's definitions: %v", err)
-	}
-
-	pod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: mld.Name + "-build-",
-			Namespace:    mld.Namespace,
-			Labels:       m.buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeBuild),
-			Annotations:  map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash)},
-			Finalizers:   []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
-		},
-		Spec: podSpec,
-	}
-
-	if err := controllerutil.SetControllerReference(owner, pod, m.scheme); err != nil {
-		return nil, fmt.Errorf("could not set the owner reference: %v", err)
-	}
-
-	return pod, nil
-}
-
-func (m *maker) podSpec(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodSpec {
+func (pm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodSpec {
 
 	buildConfig := mld.Build
 	kanikoImage := os.Getenv("RELATED_IMAGE_BUILD")
@@ -123,7 +38,7 @@ func (m *maker) podSpec(mld *api.ModuleLoaderData, containerImage string, pushIm
 	return v1.PodSpec{
 		Containers: []v1.Container{
 			{
-				Args:         m.containerArgs(buildConfig, mld, containerImage, pushImage),
+				Args:         pm.containerArgs(buildConfig, mld, containerImage, pushImage),
 				Name:         "kaniko",
 				Image:        kanikoImage,
 				VolumeMounts: volumeMounts(mld.ImageRepoSecret, buildConfig),
@@ -136,7 +51,7 @@ func (m *maker) podSpec(mld *api.ModuleLoaderData, containerImage string, pushIm
 	}
 }
 
-func (m *maker) containerArgs(
+func (pm *buildSignPodManager) containerArgs(
 	buildConfig *kmmv1beta1.Build,
 	mld *api.ModuleLoaderData,
 	containerImage string,
@@ -155,7 +70,7 @@ func (m *maker) containerArgs(
 		{Name: "MOD_NAME", Value: mld.Name},
 		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
 	}
-	buildArgs := m.combiner.ApplyBuildArgOverrides(
+	buildArgs := pm.combiner.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
 		overrides...,
 	)
@@ -185,10 +100,12 @@ func (m *maker) containerArgs(
 	return args
 }
 
-func (m *maker) getHashAnnotationValue(ctx context.Context, configMapName, namespace string, podSpec *v1.PodSpec) (uint64, error) {
+func (pm *buildSignPodManager) getHashAnnotationValue(ctx context.Context, configMapName, namespace string,
+	podSpec *v1.PodSpec) (uint64, error) {
+
 	dockerfileCM := &corev1.ConfigMap{}
 	namespacedName := types.NamespacedName{Name: configMapName, Namespace: namespace}
-	if err := m.client.Get(ctx, namespacedName, dockerfileCM); err != nil {
+	if err := pm.client.Get(ctx, namespacedName, dockerfileCM); err != nil {
 		return 0, fmt.Errorf("failed to get dockerfile ConfigMap %s: %v", namespacedName, err)
 	}
 	data, ok := dockerfileCM.Data[constants.DockerfileCMKey]
@@ -243,7 +160,10 @@ func dockerfileVolumeMount(name string) v1.VolumeMount {
 }
 
 func getBuildHashValue(podSpec *v1.PodSpec, dockerfile string) (uint64, error) {
-	dataToHash := buildHashData{
+	dataToHash := struct {
+		Dockerfile string
+		PodSpec    *v1.PodSpec
+	}{
 		Dockerfile: dockerfile,
 		PodSpec:    podSpec,
 	}
