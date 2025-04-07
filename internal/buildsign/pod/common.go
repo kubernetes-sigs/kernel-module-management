@@ -2,9 +2,11 @@ package pod
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"os"
 	"strings"
+	"text/template"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
@@ -16,6 +18,19 @@ import (
 )
 
 const dockerfileVolumeName = "dockerfile"
+
+type TemplateData struct {
+	FilesToSign   []string
+	SignImage     string
+	UnsignedImage string
+}
+
+//go:embed templates
+var templateFS embed.FS
+
+var tmpl = template.Must(
+	template.ParseFS(templateFS, "templates/Dockerfile.gotmpl"),
+)
 
 func (pm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodSpec {
 
@@ -100,7 +115,8 @@ func (pm *buildSignPodManager) containerArgs(
 	return args
 }
 
-func (pm *buildSignPodManager) getHashAnnotationValue(ctx context.Context, configMapName, namespace string,
+// builder
+func (pm *buildSignPodManager) getBuildHashAnnotationValue(ctx context.Context, configMapName, namespace string,
 	podSpec *v1.PodSpec) (uint64, error) {
 
 	dockerfileCM := &corev1.ConfigMap{}
@@ -114,6 +130,55 @@ func (pm *buildSignPodManager) getHashAnnotationValue(ctx context.Context, confi
 	}
 
 	return getBuildHashValue(podSpec, data)
+}
+
+// signer
+func (pm *buildSignPodManager) getSignHashAnnotationValue(ctx context.Context, privateSecret, publicSecret, namespace string,
+	signConfig []byte, podSpec *v1.PodSpec) (uint64, error) {
+
+	privateKeyData, err := pm.getSecretData(ctx, privateSecret, constants.PrivateSignDataKey, namespace)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get private secret %s for signing: %v", privateSecret, err)
+	}
+	publicKeyData, err := pm.getSecretData(ctx, publicSecret, constants.PublicSignDataKey, namespace)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get public secret %s for signing: %v", publicSecret, err)
+	}
+
+	return getSignHashValue(podSpec, publicKeyData, privateKeyData, signConfig)
+}
+
+func (pm *buildSignPodManager) getSecretData(ctx context.Context, secretName, secretDataKey, namespace string) ([]byte, error) {
+	secret := v1.Secret{}
+	namespacedName := types.NamespacedName{Name: secretName, Namespace: namespace}
+	err := pm.client.Get(ctx, namespacedName, &secret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Secret %s: %v", namespacedName, err)
+	}
+	data, ok := secret.Data[secretDataKey]
+	if !ok {
+		return nil, fmt.Errorf("invalid Secret %s format, %s key is missing", namespacedName, secretDataKey)
+	}
+	return data, nil
+}
+
+func getSignHashValue(podSpec *v1.PodSpec, publicKeyData, privateKeyData, signConfig []byte) (uint64, error) {
+	dataToHash := struct {
+		PrivateKeyData []byte
+		PublicKeyData  []byte
+		SignConfig     []byte
+		PodSpec        *v1.PodSpec
+	}{
+		PrivateKeyData: privateKeyData,
+		PublicKeyData:  publicKeyData,
+		SignConfig:     signConfig,
+		PodSpec:        podSpec,
+	}
+	hashValue, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
+	if err != nil {
+		return 0, fmt.Errorf("could not hash pod's spec template and dockefile: %v", err)
+	}
+	return hashValue, nil
 }
 
 func volumes(imageRepoSecret *v1.LocalObjectReference, buildConfig *kmmv1beta1.Build) []v1.Volume {

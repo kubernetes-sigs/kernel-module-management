@@ -144,6 +144,21 @@ func (mr *MockBuildSignPodManagerMockRecorder) MakeBuildResourceTemplate(ctx, ml
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeBuildResourceTemplate", reflect.TypeOf((*MockBuildSignPodManager)(nil).MakeBuildResourceTemplate), ctx, mld, owner, pushImage)
 }
 
+// MakeSignResourceTemplate mocks base method.
+func (m *MockBuildSignPodManager) MakeSignResourceTemplate(ctx context.Context, mld *api.ModuleLoaderData, owner v10.Object, pushImage bool) (*v1.Pod, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MakeSignResourceTemplate", ctx, mld, owner, pushImage)
+	ret0, _ := ret[0].(*v1.Pod)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MakeSignResourceTemplate indicates an expected call of MakeSignResourceTemplate.
+func (mr *MockBuildSignPodManagerMockRecorder) MakeSignResourceTemplate(ctx, mld, owner, pushImage any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeSignResourceTemplate", reflect.TypeOf((*MockBuildSignPodManager)(nil).MakeSignResourceTemplate), ctx, mld, owner, pushImage)
+}
+
 // PodLabels mocks base method.
 func (m *MockBuildSignPodManager) PodLabels(modName, targetKernel, podType string) map[string]string {
 	m.ctrl.T.Helper()
