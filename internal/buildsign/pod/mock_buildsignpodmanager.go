@@ -12,6 +12,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -126,6 +127,21 @@ func (m *MockBuildSignPodManager) IsPodChanged(existingPod, newPod *v1.Pod) (boo
 func (mr *MockBuildSignPodManagerMockRecorder) IsPodChanged(existingPod, newPod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsPodChanged", reflect.TypeOf((*MockBuildSignPodManager)(nil).IsPodChanged), existingPod, newPod)
+}
+
+// MakeBuildResourceTemplate mocks base method.
+func (m *MockBuildSignPodManager) MakeBuildResourceTemplate(ctx context.Context, mld *api.ModuleLoaderData, owner v10.Object, pushImage bool) (*v1.Pod, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MakeBuildResourceTemplate", ctx, mld, owner, pushImage)
+	ret0, _ := ret[0].(*v1.Pod)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MakeBuildResourceTemplate indicates an expected call of MakeBuildResourceTemplate.
+func (mr *MockBuildSignPodManagerMockRecorder) MakeBuildResourceTemplate(ctx, mld, owner, pushImage any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakeBuildResourceTemplate", reflect.TypeOf((*MockBuildSignPodManager)(nil).MakeBuildResourceTemplate), ctx, mld, owner, pushImage)
 }
 
 // PodLabels mocks base method.
