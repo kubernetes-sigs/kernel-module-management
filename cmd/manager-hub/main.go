@@ -36,7 +36,6 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	buildpod "github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	buildsignpod "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
@@ -110,11 +109,11 @@ func main() {
 
 	registryAPI := registry.NewRegistry()
 	buildSignPodAPI := buildsignpod.NewBuildSignPodManager(client)
-	buildSignHelper := buildsign.NewHelper()
+	buildSignCombiner := module.NewCombiner()
 
 	buildAPI := buildpod.NewBuildManager(
 		client,
-		buildpod.NewMaker(client, buildSignHelper, buildSignPodAPI, scheme),
+		buildpod.NewMaker(client, buildSignCombiner, buildSignPodAPI, scheme),
 		buildSignPodAPI,
 		registryAPI,
 	)
@@ -126,7 +125,7 @@ func main() {
 		registryAPI,
 	)
 
-	kernelAPI := module.NewKernelMapper(buildSignHelper)
+	kernelAPI := module.NewKernelMapper(buildSignCombiner)
 
 	ctrlLogger := setupLogger.WithValues("name", hub.ManagedClusterModuleReconcilerName)
 	ctrlLogger.Info("Adding controller")

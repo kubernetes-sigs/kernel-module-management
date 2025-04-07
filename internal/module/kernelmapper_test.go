@@ -6,7 +6,6 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -155,17 +154,17 @@ var _ = Describe("prepareModuleLoaderData", func() {
 	)
 
 	var (
-		ctrl            *gomock.Controller
-		buildSignHelper *buildsign.MockHelper
-		kh              kernelMapperHelperAPI
-		mod             kmmv1beta1.Module
-		mapping         kmmv1beta1.KernelMapping
+		ctrl         *gomock.Controller
+		mockCombiner *MockCombiner
+		kh           kernelMapperHelperAPI
+		mod          kmmv1beta1.Module
+		mapping      kmmv1beta1.KernelMapping
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		buildSignHelper = buildsign.NewMockHelper(ctrl)
-		kh = newKernelMapperHelper(buildSignHelper)
+		mockCombiner = NewMockCombiner(ctrl)
+		kh = newKernelMapperHelper(mockCombiner)
 		mod = kmmv1beta1.Module{}
 		mod.Spec.ModuleLoader.Container.ContainerImage = "spec container image"
 		mod.Spec.ModuleLoader.Container.ImagePullPolicy = "Always"
@@ -228,11 +227,11 @@ var _ = Describe("prepareModuleLoaderData", func() {
 
 		if buildExistsInMapping || buildExistsInModuleSpec {
 			mld.Build = build
-			buildSignHelper.EXPECT().GetRelevantBuild(mod.Spec.ModuleLoader.Container.Build, mapping.Build).Return(build)
+			mockCombiner.EXPECT().GetRelevantBuild(mod.Spec.ModuleLoader.Container.Build, mapping.Build).Return(build)
 		}
 		if signExistsInMapping || SignExistsInModuleSpec {
 			mld.Sign = sign
-			buildSignHelper.EXPECT().GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(sign, nil)
+			mockCombiner.EXPECT().GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(sign, nil)
 		}
 		if inTreeModulesToRemoveExistsInMapping {
 			mld.InTreeModulesToRemove = []string{"inTreeModule1", "inTreeModule2"}

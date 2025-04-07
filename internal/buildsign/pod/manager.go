@@ -15,6 +15,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/kernel"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
@@ -25,9 +26,9 @@ type podManager struct {
 	buildSignPodManager BuildSignPodManager
 }
 
-func NewManager(client client.Client, helper buildsign.Helper, scheme *runtime.Scheme) buildsign.Manager {
+func NewManager(client client.Client, combiner module.Combiner, scheme *runtime.Scheme) buildsign.Manager {
 	buildSignPodManager := NewBuildSignPodManager(client)
-	maker := NewMaker(client, helper, buildSignPodManager, scheme)
+	maker := NewMaker(client, combiner, buildSignPodManager, scheme)
 	signer := NewSigner(client, scheme, buildSignPodManager)
 	return &podManager{
 		client:              client,
