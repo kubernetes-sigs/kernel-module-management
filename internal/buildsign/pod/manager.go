@@ -21,16 +21,13 @@ import (
 
 type podManager struct {
 	client              client.Client
-	signer              Signer
 	buildSignPodManager BuildSignPodManager
 }
 
 func NewManager(client client.Client, combiner module.Combiner, scheme *runtime.Scheme) buildsign.Manager {
 	buildSignPodManager := NewBuildSignPodManager(client, combiner, scheme)
-	signer := NewSigner(client, scheme, buildSignPodManager)
 	return &podManager{
 		client:              client,
-		signer:              signer,
 		buildSignPodManager: buildSignPodManager,
 	}
 }
@@ -80,7 +77,7 @@ func (pm *podManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushI
 	case kmmv1beta1.SignImage:
 		logger.Info("Signing in-cluster")
 		podType = PodTypeSign
-		podTemplate, err = pm.signer.MakePodTemplate(ctx, mld, owner, pushImage)
+		podTemplate, err = pm.buildSignPodManager.MakeSignResourceTemplate(ctx, mld, owner, pushImage)
 	default:
 		return fmt.Errorf("invalid action %s", action)
 	}
