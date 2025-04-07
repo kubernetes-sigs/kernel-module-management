@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/mitchellh/hashstructure/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -691,7 +692,14 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 					},
 				)
 		}
-		hash, err := getBuildHashValue(&expected.Spec, dockerfile)
+		dataToHash := struct {
+			PodSpec    *v1.PodSpec
+			Dockerfile string
+		}{
+			PodSpec:    &expected.Spec,
+			Dockerfile: dockerfile,
+		}
+		hash, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
 		Expect(err).NotTo(HaveOccurred())
 		annotations := map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", hash)}
 		expected.SetAnnotations(annotations)
@@ -1095,7 +1103,18 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 				)
 		}
 
-		hash, err := getSignHashValue(&expected.Spec, []byte(publicKey), []byte(privateKey), []byte(dockerfile))
+		dataToHash := struct {
+			PodSpec        *v1.PodSpec
+			PrivateKeyData []byte
+			PublicKeyData  []byte
+			SignConfig     []byte
+		}{
+			PodSpec:        &expected.Spec,
+			PrivateKeyData: []byte(privateKey),
+			PublicKeyData:  []byte(publicKey),
+			SignConfig:     []byte(dockerfile),
+		}
+		hash, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
 		Expect(err).NotTo(HaveOccurred())
 		annotations := map[string]string{
 			constants.PodHashAnnotation: fmt.Sprintf("%d", hash),

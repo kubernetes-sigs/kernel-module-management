@@ -115,7 +115,6 @@ func (pm *buildSignPodManager) containerArgs(
 	return args
 }
 
-// builder
 func (pm *buildSignPodManager) getBuildHashAnnotationValue(ctx context.Context, configMapName, namespace string,
 	podSpec *v1.PodSpec) (uint64, error) {
 
@@ -124,15 +123,26 @@ func (pm *buildSignPodManager) getBuildHashAnnotationValue(ctx context.Context, 
 	if err := pm.client.Get(ctx, namespacedName, dockerfileCM); err != nil {
 		return 0, fmt.Errorf("failed to get dockerfile ConfigMap %s: %v", namespacedName, err)
 	}
-	data, ok := dockerfileCM.Data[constants.DockerfileCMKey]
+	dockerfile, ok := dockerfileCM.Data[constants.DockerfileCMKey]
 	if !ok {
 		return 0, fmt.Errorf("invalid Dockerfile ConfigMap %s format, %s key is missing", namespacedName, constants.DockerfileCMKey)
 	}
 
-	return getBuildHashValue(podSpec, data)
+	dataToHash := struct {
+		PodSpec    *v1.PodSpec
+		Dockerfile string
+	}{
+		PodSpec:    podSpec,
+		Dockerfile: dockerfile,
+	}
+	hashValue, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
+	if err != nil {
+		return 0, fmt.Errorf("could not hash pod's spec template and dockefile: %v", err)
+	}
+
+	return hashValue, nil
 }
 
-// signer
 func (pm *buildSignPodManager) getSignHashAnnotationValue(ctx context.Context, privateSecret, publicSecret, namespace string,
 	signConfig []byte, podSpec *v1.PodSpec) (uint64, error) {
 
@@ -145,7 +155,23 @@ func (pm *buildSignPodManager) getSignHashAnnotationValue(ctx context.Context, p
 		return 0, fmt.Errorf("failed to get public secret %s for signing: %v", publicSecret, err)
 	}
 
-	return getSignHashValue(podSpec, publicKeyData, privateKeyData, signConfig)
+	dataToHash := struct {
+		PodSpec        *v1.PodSpec
+		PrivateKeyData []byte
+		PublicKeyData  []byte
+		SignConfig     []byte
+	}{
+		PodSpec:        podSpec,
+		PrivateKeyData: privateKeyData,
+		PublicKeyData:  publicKeyData,
+		SignConfig:     signConfig,
+	}
+	hashValue, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
+	if err != nil {
+		return 0, fmt.Errorf("could not hash pod's spec template and signing keys: %v", err)
+	}
+
+	return hashValue, nil
 }
 
 func (pm *buildSignPodManager) getSecretData(ctx context.Context, secretName, secretDataKey, namespace string) ([]byte, error) {
@@ -160,25 +186,6 @@ func (pm *buildSignPodManager) getSecretData(ctx context.Context, secretName, se
 		return nil, fmt.Errorf("invalid Secret %s format, %s key is missing", namespacedName, secretDataKey)
 	}
 	return data, nil
-}
-
-func getSignHashValue(podSpec *v1.PodSpec, publicKeyData, privateKeyData, signConfig []byte) (uint64, error) {
-	dataToHash := struct {
-		PrivateKeyData []byte
-		PublicKeyData  []byte
-		SignConfig     []byte
-		PodSpec        *v1.PodSpec
-	}{
-		PrivateKeyData: privateKeyData,
-		PublicKeyData:  publicKeyData,
-		SignConfig:     signConfig,
-		PodSpec:        podSpec,
-	}
-	hashValue, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
-	if err != nil {
-		return 0, fmt.Errorf("could not hash pod's spec template and dockefile: %v", err)
-	}
-	return hashValue, nil
 }
 
 func volumes(imageRepoSecret *v1.LocalObjectReference, buildConfig *kmmv1beta1.Build) []v1.Volume {
@@ -222,21 +229,6 @@ func dockerfileVolumeMount(name string) v1.VolumeMount {
 		ReadOnly:  true,
 		MountPath: "/workspace",
 	}
-}
-
-func getBuildHashValue(podSpec *v1.PodSpec, dockerfile string) (uint64, error) {
-	dataToHash := struct {
-		Dockerfile string
-		PodSpec    *v1.PodSpec
-	}{
-		Dockerfile: dockerfile,
-		PodSpec:    podSpec,
-	}
-	hashValue, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
-	if err != nil {
-		return 0, fmt.Errorf("could not hash pod's spec template and dockefile: %v", err)
-	}
-	return hashValue, nil
 }
 
 func makeImagePullSecretVolume(secretRef *v1.LocalObjectReference) v1.Volume {
