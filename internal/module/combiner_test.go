@@ -1,4 +1,4 @@
-package buildsign
+package module
 
 import (
 	"strings"
@@ -12,10 +12,10 @@ import (
 
 var _ = Describe("GetRelevantBuild", func() {
 
-	var nh Helper
+	var c Combiner
 
 	BeforeEach(func() {
-		nh = NewHelper()
+		c = NewCombiner()
 	})
 
 	It("kernel mapping build present, module loader build absent", func() {
@@ -23,7 +23,7 @@ var _ = Describe("GetRelevantBuild", func() {
 			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some kernel mapping build name"},
 		}
 
-		res := nh.GetRelevantBuild(nil, mappingBuild)
+		res := c.GetRelevantBuild(nil, mappingBuild)
 		Expect(res).To(Equal(mappingBuild))
 	})
 
@@ -32,7 +32,7 @@ var _ = Describe("GetRelevantBuild", func() {
 			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some load module build name"},
 		}
 
-		res := nh.GetRelevantBuild(moduleBuild, nil)
+		res := c.GetRelevantBuild(moduleBuild, nil)
 
 		Expect(res).To(Equal(moduleBuild))
 	})
@@ -49,7 +49,7 @@ var _ = Describe("GetRelevantBuild", func() {
 			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some kernel mapping build name"},
 		}
 
-		res := nh.GetRelevantBuild(moduleBuild, mappingBuild)
+		res := c.GetRelevantBuild(moduleBuild, mappingBuild)
 		Expect(res.DockerfileConfigMap).To(Equal(mappingBuild.DockerfileConfigMap))
 		Expect(res.BaseImageRegistryTLS).To(Equal(moduleBuild.BaseImageRegistryTLS))
 	})
@@ -57,10 +57,10 @@ var _ = Describe("GetRelevantBuild", func() {
 
 var _ = Describe("ApplyBuildArgOverrides", func() {
 
-	var nh Helper
+	var c Combiner
 
 	BeforeEach(func() {
-		nh = NewHelper()
+		c = NewCombiner()
 	})
 
 	It("apply overrides", func() {
@@ -100,7 +100,7 @@ var _ = Describe("ApplyBuildArgOverrides", func() {
 			},
 		}
 
-		res := nh.ApplyBuildArgOverrides(args, overrides...)
+		res := c.ApplyBuildArgOverrides(args, overrides...)
 		Expect(res).To(Equal(expected))
 	})
 })
@@ -116,11 +116,11 @@ var _ = Describe("GetRelevantSign", func() {
 	)
 
 	var (
-		h Helper
+		h Combiner
 	)
 
 	BeforeEach(func() {
-		h = NewHelper()
+		h = NewCombiner()
 	})
 
 	expected := &kmmv1beta1.Sign{

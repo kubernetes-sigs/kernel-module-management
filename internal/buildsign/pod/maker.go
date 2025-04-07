@@ -17,7 +17,6 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 )
@@ -38,7 +37,7 @@ type Maker interface {
 
 type maker struct {
 	client              client.Client
-	helper              buildsign.Helper
+	combiner            module.Combiner
 	buildSignPodManager BuildSignPodManager
 	scheme              *runtime.Scheme
 }
@@ -50,12 +49,12 @@ type buildHashData struct {
 
 func NewMaker(
 	client client.Client,
-	helper buildsign.Helper,
+	combiner module.Combiner,
 	buildSignPodManager BuildSignPodManager,
 	scheme *runtime.Scheme) Maker {
 	return &maker{
 		client:              client,
-		helper:              helper,
+		combiner:            combiner,
 		buildSignPodManager: buildSignPodManager,
 		scheme:              scheme,
 	}
@@ -156,7 +155,7 @@ func (m *maker) containerArgs(
 		{Name: "MOD_NAME", Value: mld.Name},
 		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
 	}
-	buildArgs := m.helper.ApplyBuildArgOverrides(
+	buildArgs := m.combiner.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
 		overrides...,
 	)

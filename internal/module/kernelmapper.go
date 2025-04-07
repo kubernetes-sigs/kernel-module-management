@@ -7,7 +7,6 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/kernel"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
@@ -24,9 +23,9 @@ type kernelMapper struct {
 	helper kernelMapperHelperAPI
 }
 
-func NewKernelMapper(buildSignHelper buildsign.Helper) KernelMapper {
+func NewKernelMapper(buildSignCombiner Combiner) KernelMapper {
 	return &kernelMapper{
-		helper: newKernelMapperHelper(buildSignHelper),
+		helper: newKernelMapperHelper(buildSignCombiner),
 	}
 }
 
@@ -55,12 +54,12 @@ type kernelMapperHelperAPI interface {
 }
 
 type kernelMapperHelper struct {
-	buildSignHelper buildsign.Helper
+	buildSignCombiner Combiner
 }
 
-func newKernelMapperHelper(buildSignHelper buildsign.Helper) kernelMapperHelperAPI {
+func newKernelMapperHelper(buildSignCombiner Combiner) kernelMapperHelperAPI {
 	return &kernelMapperHelper{
-		buildSignHelper: buildSignHelper,
+		buildSignCombiner: buildSignCombiner,
 	}
 }
 
@@ -90,12 +89,12 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 	mld := &api.ModuleLoaderData{}
 	// prepare the build
 	if mapping.Build != nil || mod.Spec.ModuleLoader.Container.Build != nil {
-		mld.Build = kh.buildSignHelper.GetRelevantBuild(mod.Spec.ModuleLoader.Container.Build, mapping.Build)
+		mld.Build = kh.buildSignCombiner.GetRelevantBuild(mod.Spec.ModuleLoader.Container.Build, mapping.Build)
 	}
 
 	// prepare the sign
 	if mapping.Sign != nil || mod.Spec.ModuleLoader.Container.Sign != nil {
-		mld.Sign, err = kh.buildSignHelper.GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion)
+		mld.Sign, err = kh.buildSignCombiner.GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get the relevant Sign configuration for kernel %s: %v", kernelVersion, err)
 		}

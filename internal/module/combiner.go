@@ -1,4 +1,4 @@
-package buildsign
+package module
 
 import (
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -8,21 +8,21 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
-//go:generate mockgen -source=helper.go -package=buildsign -destination=mock_helper.go
+//go:generate mockgen -source=combiner.go -package=module -destination=mock_combiner.go
 
-type Helper interface {
+type Combiner interface {
 	ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, overrides ...kmmv1beta1.BuildArg) []kmmv1beta1.BuildArg
 	GetRelevantBuild(moduleBuild *kmmv1beta1.Build, mappingBuild *kmmv1beta1.Build) *kmmv1beta1.Build
 	GetRelevantSign(moduleSign *kmmv1beta1.Sign, mappingSign *kmmv1beta1.Sign, kernel string) (*kmmv1beta1.Sign, error)
 }
 
-type helper struct{}
+type combiner struct{}
 
-func NewHelper() Helper {
-	return &helper{}
+func NewCombiner() Combiner {
+	return &combiner{}
 }
 
-func (m *helper) ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, overrides ...kmmv1beta1.BuildArg) []kmmv1beta1.BuildArg {
+func (c *combiner) ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, overrides ...kmmv1beta1.BuildArg) []kmmv1beta1.BuildArg {
 	overridesMap := make(map[string]kmmv1beta1.BuildArg, len(overrides))
 
 	for _, o := range overrides {
@@ -47,7 +47,7 @@ func (m *helper) ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, overrides ..
 	return args
 }
 
-func (m *helper) GetRelevantBuild(moduleBuild *kmmv1beta1.Build, mappingBuild *kmmv1beta1.Build) *kmmv1beta1.Build {
+func (c *combiner) GetRelevantBuild(moduleBuild *kmmv1beta1.Build, mappingBuild *kmmv1beta1.Build) *kmmv1beta1.Build {
 	if moduleBuild == nil {
 		return mappingBuild.DeepCopy()
 	}
@@ -61,13 +61,13 @@ func (m *helper) GetRelevantBuild(moduleBuild *kmmv1beta1.Build, mappingBuild *k
 		buildConfig.DockerfileConfigMap = mappingBuild.DockerfileConfigMap
 	}
 
-	buildConfig.BuildArgs = m.ApplyBuildArgOverrides(buildConfig.BuildArgs, mappingBuild.BuildArgs...)
+	buildConfig.BuildArgs = c.ApplyBuildArgOverrides(buildConfig.BuildArgs, mappingBuild.BuildArgs...)
 
 	buildConfig.Secrets = append(buildConfig.Secrets, mappingBuild.Secrets...)
 	return buildConfig
 }
 
-func (m *helper) GetRelevantSign(moduleSign *kmmv1beta1.Sign, mappingSign *kmmv1beta1.Sign, kernelVersion string) (*kmmv1beta1.Sign, error) {
+func (c *combiner) GetRelevantSign(moduleSign *kmmv1beta1.Sign, mappingSign *kmmv1beta1.Sign, kernelVersion string) (*kmmv1beta1.Sign, error) {
 	var signConfig *kmmv1beta1.Sign
 	if moduleSign == nil {
 		// km.Sign cannot be nil in case mod.Sign is nil, checked above

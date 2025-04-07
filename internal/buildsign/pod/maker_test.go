@@ -18,9 +18,9 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 )
 
 var _ = Describe("MakePodTemplate", func() {
@@ -39,16 +39,16 @@ var _ = Describe("MakePodTemplate", func() {
 		ctrl                    *gomock.Controller
 		clnt                    *client.MockClient
 		m                       Maker
-		mh                      *buildsign.MockHelper
+		mc                      *module.MockCombiner
 		mockBuildSignPodManager *MockBuildSignPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mh = buildsign.NewMockHelper(ctrl)
+		mc = module.NewMockCombiner(ctrl)
 		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
-		m = NewMaker(clnt, mh, mockBuildSignPodManager, scheme)
+		m = NewMaker(clnt, mc, mockBuildSignPodManager, scheme)
 	})
 
 	AfterEach(func() {
@@ -232,7 +232,7 @@ var _ = Describe("MakePodTemplate", func() {
 		expected.SetAnnotations(annotations)
 
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs).Return(append(slices.Clone(buildArgs), defaultBuildArgs...)),
+			mc.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs).Return(append(slices.Clone(buildArgs), defaultBuildArgs...)),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -298,7 +298,7 @@ var _ = Describe("MakePodTemplate", func() {
 		}
 
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(nil, defaultBuildArgs),
+			mc.EXPECT().ApplyBuildArgOverrides(nil, defaultBuildArgs),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -377,7 +377,7 @@ var _ = Describe("MakePodTemplate", func() {
 		}
 
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
+			mc.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -414,7 +414,7 @@ var _ = Describe("MakePodTemplate", func() {
 		expectedImageName := mld.ContainerImage + ":" + mld.Namespace + "_" + mld.Name + "_kmm_unsigned"
 
 		gomock.InOrder(
-			mh.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
+			mc.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData

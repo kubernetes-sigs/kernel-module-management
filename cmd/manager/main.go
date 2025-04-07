@@ -29,7 +29,6 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
 	buildsignpod "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
@@ -117,9 +116,9 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	buildSignHelperAPI := buildsign.NewHelper()
+	buildSignCombinerAPI := module.NewCombiner()
 	nodeAPI := node.NewNode(client)
-	kernelAPI := module.NewKernelMapper(buildSignHelperAPI)
+	kernelAPI := module.NewKernelMapper(buildSignCombinerAPI)
 	micAPI := mic.New(client, scheme)
 	mbscAPI := mbsc.New(client, scheme)
 	imagePullerAPI := pod.NewImagePuller(client, scheme)
@@ -182,7 +181,7 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeKernelClusterClaimReconcilerName)
 		}
 	} else {
-		builSignAPI := buildsignpod.NewManager(client, buildSignHelperAPI, scheme)
+		builSignAPI := buildsignpod.NewManager(client, buildSignCombinerAPI, scheme)
 
 		mbscr := controllers.NewMBSCReconciler(client, builSignAPI, mbscAPI)
 		if err = mbscr.SetupWithManager(mgr); err != nil {
