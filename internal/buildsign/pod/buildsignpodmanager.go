@@ -242,20 +242,7 @@ func (mp *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, mld
 		imageToSign = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
 	}
 
-	args := make([]string, 0)
-
-	if pushImage {
-		args = append(args, "--destination", mld.ContainerImage)
-
-		if mld.RegistryTLS.Insecure {
-			args = append(args, "--insecure")
-		}
-		if mld.RegistryTLS.InsecureSkipTLSVerify {
-			args = append(args, "--skip-tls-verify")
-		}
-	} else {
-		args = append(args, "-no-push")
-	}
+	args := mp.containerArgs(mld, mld.ContainerImage, signConfig.UnsignedImageRegistryTLS, pushImage)
 
 	if imageToSign != "" {
 		td.UnsignedImage = imageToSign
@@ -263,14 +250,6 @@ func (mp *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, mld
 		td.UnsignedImage = signConfig.UnsignedImage
 	} else {
 		return nil, fmt.Errorf("no image to sign given")
-	}
-
-	if signConfig.UnsignedImageRegistryTLS.Insecure {
-		args = append(args, "--insecure-pull")
-	}
-
-	if signConfig.UnsignedImageRegistryTLS.InsecureSkipTLSVerify {
-		args = append(args, "--skip-tls-verify-pull")
 	}
 
 	volumes := []v1.Volume{

@@ -1191,7 +1191,7 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		if pushImage {
 			Expect(actual.Spec.Containers[0].Args).To(ContainElement("--destination"))
 		} else {
-			Expect(actual.Spec.Containers[0].Args).To(ContainElement("-no-push"))
+			Expect(actual.Spec.Containers[0].Args).To(ContainElement("--no-push"))
 		}
 
 	},

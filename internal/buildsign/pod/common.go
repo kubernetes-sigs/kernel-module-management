@@ -35,6 +35,22 @@ var tmpl = template.Must(
 func (pm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodSpec {
 
 	buildConfig := mld.Build
+
+	args := pm.containerArgs(mld, containerImage, mld.Build.BaseImageRegistryTLS, pushImage)
+	overrides := []kmmv1beta1.BuildArg{
+		{Name: "KERNEL_VERSION", Value: mld.KernelVersion},
+		{Name: "KERNEL_FULL_VERSION", Value: mld.KernelVersion},
+		{Name: "MOD_NAME", Value: mld.Name},
+		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
+	}
+	buildArgs := pm.combiner.ApplyBuildArgOverrides(
+		buildConfig.BuildArgs,
+		overrides...,
+	)
+	for _, ba := range buildArgs {
+		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", ba.Name, ba.Value))
+	}
+
 	kanikoImage := os.Getenv("RELATED_IMAGE_BUILD")
 
 	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
@@ -53,7 +69,7 @@ func (pm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerImage
 	return v1.PodSpec{
 		Containers: []v1.Container{
 			{
-				Args:         pm.containerArgs(buildConfig, mld, containerImage, pushImage),
+				Args:         args,
 				Name:         "kaniko",
 				Image:        kanikoImage,
 				VolumeMounts: volumeMounts(mld.ImageRepoSecret, buildConfig),
@@ -66,53 +82,33 @@ func (pm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerImage
 	}
 }
 
-func (pm *buildSignPodManager) containerArgs(
-	buildConfig *kmmv1beta1.Build,
-	mld *api.ModuleLoaderData,
-	containerImage string,
-	pushImage bool) []string {
+func (pm *buildSignPodManager) containerArgs(mld *api.ModuleLoaderData, destinationImg string,
+	tlsOptions kmmv1beta1.TLSOptions, pushImage bool) []string {
 
 	args := []string{}
+
 	if pushImage {
-		args = append(args, "--destination", containerImage)
+		args = append(args, "--destination", destinationImg)
+		if mld.RegistryTLS.Insecure {
+			args = append(args, "--insecure")
+		}
+		if mld.RegistryTLS.InsecureSkipTLSVerify {
+			args = append(args, "--skip-tls-verify")
+		}
 	} else {
 		args = append(args, "--no-push")
 	}
 
-	overrides := []kmmv1beta1.BuildArg{
-		{Name: "KERNEL_VERSION", Value: mld.KernelVersion},
-		{Name: "KERNEL_FULL_VERSION", Value: mld.KernelVersion},
-		{Name: "MOD_NAME", Value: mld.Name},
-		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
-	}
-	buildArgs := pm.combiner.ApplyBuildArgOverrides(
-		buildConfig.BuildArgs,
-		overrides...,
-	)
-
-	for _, ba := range buildArgs {
-		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", ba.Name, ba.Value))
-	}
-
-	if buildConfig.BaseImageRegistryTLS.Insecure {
+	if tlsOptions.Insecure {
 		args = append(args, "--insecure-pull")
 	}
 
-	if buildConfig.BaseImageRegistryTLS.InsecureSkipTLSVerify {
+	if tlsOptions.InsecureSkipTLSVerify {
 		args = append(args, "--skip-tls-verify-pull")
 	}
 
-	if pushImage {
-		if mld.RegistryTLS.Insecure {
-			args = append(args, "--insecure")
-		}
-
-		if mld.RegistryTLS.InsecureSkipTLSVerify {
-			args = append(args, "--skip-tls-verify")
-		}
-	}
-
 	return args
+
 }
 
 func (pm *buildSignPodManager) getBuildHashAnnotationValue(ctx context.Context, configMapName, namespace string,
