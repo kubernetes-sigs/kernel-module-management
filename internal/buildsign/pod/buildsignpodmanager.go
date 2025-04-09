@@ -16,7 +16,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 type Status string
@@ -29,6 +28,9 @@ const (
 	StatusCreated    Status = "created"
 	StatusInProgress Status = "in progress"
 	StatusFailed     Status = "failed"
+
+	dockerfileAnnotationKey = "dockerfile"
+	dockerfileVolumeName    = "dockerfile"
 )
 
 var ErrNoMatchingPod = errors.New("no matching pod")
@@ -252,59 +254,7 @@ func (bspm *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, m
 		return nil, fmt.Errorf("no image to sign given")
 	}
 
-	volumes := []v1.Volume{
-		utils.MakeSecretVolume(signConfig.KeySecret, "key", "key.pem"),
-		utils.MakeSecretVolume(signConfig.CertSecret, "cert", "cert.pem"),
-	}
-
-	volumeMounts := []v1.VolumeMount{
-		utils.MakeSecretVolumeMount(signConfig.CertSecret, "/run/secrets/cert", true),
-		utils.MakeSecretVolumeMount(signConfig.KeySecret, "/run/secrets/key", true),
-	}
-
-	const (
-		dockerfileAnnotationKey = "dockerfile"
-		dockerfileVolumeName    = "dockerfile"
-	)
-
-	dockerfileVolume := v1.Volume{
-		Name: dockerfileVolumeName,
-		VolumeSource: v1.VolumeSource{
-			DownwardAPI: &v1.DownwardAPIVolumeSource{
-				Items: []v1.DownwardAPIVolumeFile{
-					{
-						Path: "Dockerfile",
-						FieldRef: &v1.ObjectFieldSelector{
-							FieldPath: fmt.Sprintf("metadata.annotations['%s']", dockerfileAnnotationKey),
-						},
-					},
-				},
-			},
-		},
-	}
-
-	volumes = append(volumes, dockerfileVolume)
-
-	volumeMounts = append(
-		volumeMounts,
-		v1.VolumeMount{
-			Name:      dockerfileVolumeName,
-			ReadOnly:  true,
-			MountPath: "/workspace",
-		},
-	)
-
-	if secretRef := mld.ImageRepoSecret; secretRef != nil {
-		volumes = append(
-			volumes,
-			utils.MakeSecretVolume(secretRef, ".dockerconfigjson", "config.json"),
-		)
-
-		volumeMounts = append(
-			volumeMounts,
-			utils.MakeSecretVolumeMount(secretRef, "/kaniko/.docker", true),
-		)
-	}
+	volumes, volumeMounts := makeSignResourceVolumesAndVolumeMounts(signConfig, mld.ImageRepoSecret)
 
 	if err := tmpl.Execute(&buf, td); err != nil {
 		return nil, fmt.Errorf("could not execute template: %v", err)
