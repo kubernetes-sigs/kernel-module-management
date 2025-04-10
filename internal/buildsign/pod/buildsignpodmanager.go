@@ -61,7 +61,7 @@ func NewBuildSignPodManager(client client.Client, combiner module.Combiner, sche
 	}
 }
 
-func (mp *buildSignPodManager) IsPodChanged(existingPod *v1.Pod, newPod *v1.Pod) (bool, error) {
+func (bspm *buildSignPodManager) IsPodChanged(existingPod *v1.Pod, newPod *v1.Pod) (bool, error) {
 	existingAnnotations := existingPod.GetAnnotations()
 	newAnnotations := newPod.GetAnnotations()
 	if existingAnnotations == nil {
@@ -73,7 +73,7 @@ func (mp *buildSignPodManager) IsPodChanged(existingPod *v1.Pod, newPod *v1.Pod)
 	return true, nil
 }
 
-func (mp *buildSignPodManager) PodLabels(modName string, targetKernel string, podType string) map[string]string {
+func (bspm *buildSignPodManager) PodLabels(modName string, targetKernel string, podType string) map[string]string {
 	labels := moduleKernelLabels(modName, targetKernel, podType)
 
 	labels["app.kubernetes.io/name"] = "kmm"
@@ -83,9 +83,9 @@ func (mp *buildSignPodManager) PodLabels(modName string, targetKernel string, po
 	return labels
 }
 
-func (mp *buildSignPodManager) GetModulePodByKernel(ctx context.Context, modName, namespace, targetKernel, podType string, owner metav1.Object) (*v1.Pod, error) {
+func (bspm *buildSignPodManager) GetModulePodByKernel(ctx context.Context, modName, namespace, targetKernel, podType string, owner metav1.Object) (*v1.Pod, error) {
 	matchLabels := moduleKernelLabels(modName, targetKernel, podType)
-	pods, err := mp.getPods(ctx, namespace, matchLabels)
+	pods, err := bspm.getPods(ctx, namespace, matchLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get module %s, pods by kernel %s: %v", modName, targetKernel, err)
 	}
@@ -103,9 +103,9 @@ func (mp *buildSignPodManager) GetModulePodByKernel(ctx context.Context, modName
 	return &moduleOwnedPods[0], nil
 }
 
-func (mp *buildSignPodManager) GetModulePods(ctx context.Context, modName, namespace, podType string, owner metav1.Object) ([]v1.Pod, error) {
+func (bspm *buildSignPodManager) GetModulePods(ctx context.Context, modName, namespace, podType string, owner metav1.Object) ([]v1.Pod, error) {
 	matchLabels := moduleLabels(modName, podType)
-	pods, err := mp.getPods(ctx, namespace, matchLabels)
+	pods, err := bspm.getPods(ctx, namespace, matchLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pods for module %s, namespace %s: %v", modName, namespace, err)
 	}
@@ -116,19 +116,19 @@ func (mp *buildSignPodManager) GetModulePods(ctx context.Context, modName, names
 	return moduleOwnedPods, nil
 }
 
-func (mp *buildSignPodManager) DeletePod(ctx context.Context, pod *v1.Pod) error {
+func (bspm *buildSignPodManager) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	opts := []client.DeleteOption{
 		client.PropagationPolicy(metav1.DeletePropagationBackground),
 	}
-	err := mp.client.Delete(ctx, pod, opts...)
+	err := bspm.client.Delete(ctx, pod, opts...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (mp *buildSignPodManager) CreatePod(ctx context.Context, pod *v1.Pod) error {
-	err := mp.client.Create(ctx, pod)
+func (bspm *buildSignPodManager) CreatePod(ctx context.Context, pod *v1.Pod) error {
+	err := bspm.client.Create(ctx, pod)
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func (mp *buildSignPodManager) CreatePod(ctx context.Context, pod *v1.Pod) error
 
 // GetPodStatus returns the status of a Pod, whether the latter is in progress or not and
 // whether there was an error or not
-func (mp *buildSignPodManager) GetPodStatus(pod *v1.Pod) (Status, error) {
+func (bspm *buildSignPodManager) GetPodStatus(pod *v1.Pod) (Status, error) {
 	switch pod.Status.Phase {
 	case v1.PodSucceeded:
 		return StatusCompleted, nil
@@ -150,13 +150,13 @@ func (mp *buildSignPodManager) GetPodStatus(pod *v1.Pod) (Status, error) {
 	}
 }
 
-func (mp *buildSignPodManager) getPods(ctx context.Context, namespace string, labels map[string]string) ([]v1.Pod, error) {
+func (bspm *buildSignPodManager) getPods(ctx context.Context, namespace string, labels map[string]string) ([]v1.Pod, error) {
 	podList := v1.PodList{}
 	opts := []client.ListOption{
 		client.MatchingLabels(labels),
 		client.InNamespace(namespace),
 	}
-	if err := mp.client.List(ctx, &podList, opts...); err != nil {
+	if err := bspm.client.List(ctx, &podList, opts...); err != nil {
 		return nil, fmt.Errorf("could not list pods: %v", err)
 	}
 
@@ -186,7 +186,7 @@ func filterPodsByOwner(pods []v1.Pod, owner metav1.Object) []v1.Pod {
 	return ownedPods
 }
 
-func (mp *buildSignPodManager) MakeBuildResourceTemplate(ctx context.Context, mld *api.ModuleLoaderData, owner metav1.Object,
+func (bspm *buildSignPodManager) MakeBuildResourceTemplate(ctx context.Context, mld *api.ModuleLoaderData, owner metav1.Object,
 	pushImage bool) (*v1.Pod, error) {
 
 	// if build AND sign are specified, then we will build an intermediate image
@@ -196,8 +196,8 @@ func (mp *buildSignPodManager) MakeBuildResourceTemplate(ctx context.Context, ml
 		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
 	}
 
-	podSpec := mp.podSpec(mld, containerImage, pushImage)
-	podSpecHash, err := mp.getBuildHashAnnotationValue(
+	podSpec := bspm.podSpec(mld, containerImage, pushImage)
+	podSpecHash, err := bspm.getBuildHashAnnotationValue(
 		ctx,
 		mld.Build.DockerfileConfigMap.Name,
 		mld.Namespace,
@@ -211,21 +211,21 @@ func (mp *buildSignPodManager) MakeBuildResourceTemplate(ctx context.Context, ml
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-build-",
 			Namespace:    mld.Namespace,
-			Labels:       mp.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeBuild),
+			Labels:       bspm.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeBuild),
 			Annotations:  map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash)},
 			Finalizers:   []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
 		},
 		Spec: podSpec,
 	}
 
-	if err := controllerutil.SetControllerReference(owner, pod, mp.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(owner, pod, bspm.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner reference: %v", err)
 	}
 
 	return pod, nil
 }
 
-func (mp *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, mld *api.ModuleLoaderData, owner metav1.Object,
+func (bspm *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, mld *api.ModuleLoaderData, owner metav1.Object,
 	pushImage bool) (*v1.Pod, error) {
 
 	signConfig := mld.Sign
@@ -242,7 +242,7 @@ func (mp *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, mld
 		imageToSign = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
 	}
 
-	args := mp.containerArgs(mld, mld.ContainerImage, signConfig.UnsignedImageRegistryTLS, pushImage)
+	args := bspm.containerArgs(mld, mld.ContainerImage, signConfig.UnsignedImageRegistryTLS, pushImage)
 
 	if imageToSign != "" {
 		td.UnsignedImage = imageToSign
@@ -325,7 +325,7 @@ func (mp *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, mld
 		Tolerations:   mld.Tolerations,
 	}
 
-	podSpecHash, err := mp.getSignHashAnnotationValue(ctx, signConfig.KeySecret.Name,
+	podSpecHash, err := bspm.getSignHashAnnotationValue(ctx, signConfig.KeySecret.Name,
 		signConfig.CertSecret.Name, mld.Namespace, buf.Bytes(), &podSpec)
 	if err != nil {
 		return nil, fmt.Errorf("could not hash pod's definitions: %v", err)
@@ -335,7 +335,7 @@ func (mp *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, mld
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-sign-",
 			Namespace:    mld.Namespace,
-			Labels:       mp.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeSign),
+			Labels:       bspm.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeSign),
 			Annotations: map[string]string{
 				constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash),
 				dockerfileAnnotationKey:     buf.String(),
@@ -345,7 +345,7 @@ func (mp *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, mld
 		Spec: podSpec,
 	}
 
-	if err = controllerutil.SetControllerReference(owner, pod, mp.scheme); err != nil {
+	if err = controllerutil.SetControllerReference(owner, pod, bspm.scheme); err != nil {
 		return nil, fmt.Errorf("could not set the owner reference: %v", err)
 	}
 

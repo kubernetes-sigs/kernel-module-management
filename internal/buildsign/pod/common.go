@@ -32,18 +32,18 @@ var tmpl = template.Must(
 	template.ParseFS(templateFS, "templates/Dockerfile.gotmpl"),
 )
 
-func (pm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodSpec {
+func (bspm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodSpec {
 
 	buildConfig := mld.Build
 
-	args := pm.containerArgs(mld, containerImage, mld.Build.BaseImageRegistryTLS, pushImage)
+	args := bspm.containerArgs(mld, containerImage, mld.Build.BaseImageRegistryTLS, pushImage)
 	overrides := []kmmv1beta1.BuildArg{
 		{Name: "KERNEL_VERSION", Value: mld.KernelVersion},
 		{Name: "KERNEL_FULL_VERSION", Value: mld.KernelVersion},
 		{Name: "MOD_NAME", Value: mld.Name},
 		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
 	}
-	buildArgs := pm.combiner.ApplyBuildArgOverrides(
+	buildArgs := bspm.combiner.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
 		overrides...,
 	)
@@ -82,7 +82,7 @@ func (pm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerImage
 	}
 }
 
-func (pm *buildSignPodManager) containerArgs(mld *api.ModuleLoaderData, destinationImg string,
+func (bspm *buildSignPodManager) containerArgs(mld *api.ModuleLoaderData, destinationImg string,
 	tlsOptions kmmv1beta1.TLSOptions, pushImage bool) []string {
 
 	args := []string{}
@@ -111,12 +111,12 @@ func (pm *buildSignPodManager) containerArgs(mld *api.ModuleLoaderData, destinat
 
 }
 
-func (pm *buildSignPodManager) getBuildHashAnnotationValue(ctx context.Context, configMapName, namespace string,
+func (bspm *buildSignPodManager) getBuildHashAnnotationValue(ctx context.Context, configMapName, namespace string,
 	podSpec *v1.PodSpec) (uint64, error) {
 
 	dockerfileCM := &corev1.ConfigMap{}
 	namespacedName := types.NamespacedName{Name: configMapName, Namespace: namespace}
-	if err := pm.client.Get(ctx, namespacedName, dockerfileCM); err != nil {
+	if err := bspm.client.Get(ctx, namespacedName, dockerfileCM); err != nil {
 		return 0, fmt.Errorf("failed to get dockerfile ConfigMap %s: %v", namespacedName, err)
 	}
 	dockerfile, ok := dockerfileCM.Data[constants.DockerfileCMKey]
@@ -139,14 +139,14 @@ func (pm *buildSignPodManager) getBuildHashAnnotationValue(ctx context.Context, 
 	return hashValue, nil
 }
 
-func (pm *buildSignPodManager) getSignHashAnnotationValue(ctx context.Context, privateSecret, publicSecret, namespace string,
+func (bspm *buildSignPodManager) getSignHashAnnotationValue(ctx context.Context, privateSecret, publicSecret, namespace string,
 	signConfig []byte, podSpec *v1.PodSpec) (uint64, error) {
 
-	privateKeyData, err := pm.getSecretData(ctx, privateSecret, constants.PrivateSignDataKey, namespace)
+	privateKeyData, err := bspm.getSecretData(ctx, privateSecret, constants.PrivateSignDataKey, namespace)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get private secret %s for signing: %v", privateSecret, err)
 	}
-	publicKeyData, err := pm.getSecretData(ctx, publicSecret, constants.PublicSignDataKey, namespace)
+	publicKeyData, err := bspm.getSecretData(ctx, publicSecret, constants.PublicSignDataKey, namespace)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get public secret %s for signing: %v", publicSecret, err)
 	}
@@ -170,10 +170,10 @@ func (pm *buildSignPodManager) getSignHashAnnotationValue(ctx context.Context, p
 	return hashValue, nil
 }
 
-func (pm *buildSignPodManager) getSecretData(ctx context.Context, secretName, secretDataKey, namespace string) ([]byte, error) {
+func (bspm *buildSignPodManager) getSecretData(ctx context.Context, secretName, secretDataKey, namespace string) ([]byte, error) {
 	secret := v1.Secret{}
 	namespacedName := types.NamespacedName{Name: secretName, Namespace: namespace}
-	err := pm.client.Get(ctx, namespacedName, &secret)
+	err := bspm.client.Get(ctx, namespacedName, &secret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Secret %s: %v", namespacedName, err)
 	}
