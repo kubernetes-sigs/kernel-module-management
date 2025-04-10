@@ -636,6 +636,32 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 			},
 		}
 
+		if len(buildSecrets) > 0 {
+
+			mld.Build.Secrets = buildSecrets
+
+			expected.Spec.Containers[0].VolumeMounts =
+				append(expected.Spec.Containers[0].VolumeMounts,
+					v1.VolumeMount{
+						Name:      "secret-s1",
+						ReadOnly:  true,
+						MountPath: "/run/secrets/s1",
+					},
+				)
+
+			expected.Spec.Volumes =
+				append(expected.Spec.Volumes,
+					v1.Volume{
+						Name: "secret-s1",
+						VolumeSource: v1.VolumeSource{
+							Secret: &v1.SecretVolumeSource{
+								SecretName: "s1",
+							},
+						},
+					},
+				)
+		}
+
 		if imagePullSecret != nil {
 			mld.ImageRepoSecret = imagePullSecret
 
@@ -661,32 +687,6 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 										Path: "config.json",
 									},
 								},
-							},
-						},
-					},
-				)
-		}
-
-		if len(buildSecrets) > 0 {
-
-			mld.Build.Secrets = buildSecrets
-
-			expected.Spec.Containers[0].VolumeMounts =
-				append(expected.Spec.Containers[0].VolumeMounts,
-					v1.VolumeMount{
-						Name:      "secret-s1",
-						ReadOnly:  true,
-						MountPath: "/run/secrets/s1",
-					},
-				)
-
-			expected.Spec.Volumes =
-				append(expected.Spec.Volumes,
-					v1.Volume{
-						Name: "secret-s1",
-						VolumeSource: v1.VolumeSource{
-							Secret: &v1.SecretVolumeSource{
-								SecretName: "s1",
 							},
 						},
 					},
@@ -981,12 +981,12 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		mld.ContainerImage = signedImage
 		mld.RegistryTLS = &kmmv1beta1.TLSOptions{}
 
-		secretMount := v1.VolumeMount{
+		certMount := v1.VolumeMount{
 			Name:      "secret-securebootcert",
 			ReadOnly:  true,
 			MountPath: "/run/secrets/cert",
 		}
-		certMount := v1.VolumeMount{
+		secretMount := v1.VolumeMount{
 			Name:      "secret-securebootkey",
 			ReadOnly:  true,
 			MountPath: "/run/secrets/key",
@@ -1043,8 +1043,8 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 						Image: buildImage,
 						Args:  []string{"--destination", signedImage},
 						VolumeMounts: []v1.VolumeMount{
-							secretMount,
 							certMount,
+							secretMount,
 							{
 								Name:      "dockerfile",
 								ReadOnly:  true,
@@ -1056,8 +1056,8 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 				NodeSelector:  nodeSelector,
 				RestartPolicy: v1.RestartPolicyNever,
 				Volumes: []v1.Volume{
-					keysecret,
 					certsecret,
+					keysecret,
 					{
 						Name: "dockerfile",
 						VolumeSource: v1.VolumeSource{
