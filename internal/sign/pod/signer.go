@@ -19,7 +19,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
 type TemplateData struct {
@@ -121,13 +120,13 @@ func (s *signer) MakePodTemplate(
 	}
 
 	volumes := []v1.Volume{
-		utils.MakeSecretVolume(signConfig.KeySecret, "key", "key.pem"),
-		utils.MakeSecretVolume(signConfig.CertSecret, "cert", "cert.pem"),
+		makeSecretVolume(signConfig.KeySecret, "key", "key.pem"),
+		makeSecretVolume(signConfig.CertSecret, "cert", "cert.pem"),
 	}
 
 	volumeMounts := []v1.VolumeMount{
-		utils.MakeSecretVolumeMount(signConfig.CertSecret, "/run/secrets/cert", true),
-		utils.MakeSecretVolumeMount(signConfig.KeySecret, "/run/secrets/key", true),
+		makeSecretVolumeMount(signConfig.CertSecret, "/run/secrets/cert", true),
+		makeSecretVolumeMount(signConfig.KeySecret, "/run/secrets/key", true),
 	}
 
 	const (
@@ -165,12 +164,12 @@ func (s *signer) MakePodTemplate(
 	if secretRef := mld.ImageRepoSecret; secretRef != nil {
 		volumes = append(
 			volumes,
-			utils.MakeSecretVolume(secretRef, ".dockerconfigjson", "config.json"),
+			makeSecretVolume(secretRef, ".dockerconfigjson", "config.json"),
 		)
 
 		volumeMounts = append(
 			volumeMounts,
-			utils.MakeSecretVolumeMount(secretRef, "/kaniko/.docker", true),
+			makeSecretVolumeMount(secretRef, "/kaniko/.docker", true),
 		)
 	}
 
@@ -261,4 +260,46 @@ func getHashValue(podSpec *v1.PodSpec, publicKeyData, privateKeyData, signConfig
 		return 0, fmt.Errorf("could not hash pod's spec template and dockefile: %v", err)
 	}
 	return hashValue, nil
+}
+
+func makeSecretVolume(secretRef *v1.LocalObjectReference, key string, path string) v1.Volume {
+	if secretRef == nil {
+		return v1.Volume{}
+	}
+
+	vol := v1.Volume{
+		Name: volumeNameFromSecretRef(*secretRef),
+		VolumeSource: v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: secretRef.Name,
+			},
+		},
+	}
+
+	if key != "" {
+		vol.VolumeSource.Secret.Items = []v1.KeyToPath{
+			{
+				Key:  key,
+				Path: path,
+			},
+		}
+	}
+
+	return vol
+}
+
+func makeSecretVolumeMount(secretRef *v1.LocalObjectReference, mountPath string, readOnly bool) v1.VolumeMount {
+	if secretRef == nil {
+		return v1.VolumeMount{}
+	}
+
+	return v1.VolumeMount{
+		Name:      volumeNameFromSecretRef(*secretRef),
+		ReadOnly:  readOnly,
+		MountPath: mountPath,
+	}
+}
+
+func volumeNameFromSecretRef(ref v1.LocalObjectReference) string {
+	return "secret-" + ref.Name
 }

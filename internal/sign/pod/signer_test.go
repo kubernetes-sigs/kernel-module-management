@@ -400,3 +400,27 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		),
 	)
 })
+
+var _ = Describe("makeSecretVolumeMount", func() {
+	It("should return a valid volumeMount", func() {
+		signConfig := &kmmv1beta1.Sign{
+			CertSecret: &v1.LocalObjectReference{Name: "securebootcert"},
+		}
+		secretMount := v1.VolumeMount{
+			Name:      "secret-securebootcert",
+			ReadOnly:  true,
+			MountPath: "/signingcert",
+		}
+
+		volMount := makeSecretVolumeMount(signConfig.CertSecret, "/signingcert", true)
+		Expect(volMount).To(Equal(secretMount))
+	})
+
+	It("should return an empty volumeMount if signConfig is empty", func() {
+		Expect(
+			makeSecretVolumeMount(nil, "/signingcert", true),
+		).To(
+			Equal(v1.VolumeMount{}),
+		)
+	})
+})
