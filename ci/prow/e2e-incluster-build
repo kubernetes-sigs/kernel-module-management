@@ -25,7 +25,7 @@ echo "Verify that dummy is loaded"
 minikube ssh -- lsmod | grep dummy
 
 echo "Create a build secret..."
-oc create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
+kubectl create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
 
 echo "Add a configmap that contain the kernel module build dockerfile..."
 kubectl apply -f ci/kmm-kmod-dockerfile.yaml

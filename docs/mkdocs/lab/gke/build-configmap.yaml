@@ -4,7 +4,7 @@ metadata:
   name: build-module
 data:
   dockerfile: |
-    FROM ubuntu:20.04 as builder
+    FROM ubuntu:24.04 as builder
     ARG KERNEL_VERSION=''
     RUN apt-get update && \ 
     apt-get -y upgrade && \
@@ -23,7 +23,7 @@ data:
     WORKDIR kernel-module-management/ci/kmm-kmod 
     RUN make 
     
-    FROM ubuntu:20.04 
+    FROM ubuntu:24.04 
     ARG KERNEL_VERSION
     RUN apt-get -y update && apt-get -y install kmod && \
     rm -rf /var/lib/apt/lists/*

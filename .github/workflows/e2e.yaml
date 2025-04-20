@@ -8,7 +8,7 @@ env:
 jobs:
 
   build-operator-image:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     name: Build the KMMO container image
 
@@ -31,7 +31,7 @@ jobs:
           retention-days: 1
 
   build-operator-hub-image:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     name: Build the KMMO-hub container image
 
@@ -54,7 +54,7 @@ jobs:
           retention-days: 1
 
   build-signing-image:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     name: Build the signing image
 
@@ -77,7 +77,7 @@ jobs:
           retention-days: 1
 
   build-worker-image:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     name: Build the worker image
 
@@ -100,7 +100,7 @@ jobs:
           retention-days: 1
 
   build-webhook-image:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     name: Build the webhook server image
 
@@ -137,7 +137,7 @@ jobs:
             import_hub_image: true
             script: ./ci/prow/e2e-hub-spoke-incluster-build
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     name: ${{ matrix.name }}
     needs: [build-operator-image, build-operator-hub-image, build-signing-image, build-webhook-image, build-worker-image]
 
@@ -206,7 +206,7 @@ jobs:
 
   operator-upgrade:
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     name: operator-upgrade
     needs: [build-operator-image, build-signing-image, build-webhook-image, build-worker-image]
 
