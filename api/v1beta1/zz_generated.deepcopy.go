@@ -730,7 +730,11 @@ func (in *ModuleSpec) DeepCopyInto(out *ModuleSpec) {
 		*out = new(DevicePluginSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	in.ModuleLoader.DeepCopyInto(&out.ModuleLoader)
+	if in.ModuleLoader != nil {
+		in, out := &in.ModuleLoader, &out.ModuleLoader
+		*out = new(ModuleLoaderSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.ImageRepoSecret != nil {
 		in, out := &in.ImageRepoSecret, &out.ImageRepoSecret
 		*out = new(v1.LocalObjectReference)

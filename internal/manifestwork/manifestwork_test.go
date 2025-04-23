@@ -184,7 +184,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			Spec: hubv1beta1.ManagedClusterModuleSpec{
 				SpokeNamespace: spokeNamespace,
 				ModuleSpec: kmmv1beta1.ModuleSpec{
-					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 						Container: kmmv1beta1.ModuleLoaderContainerSpec{
 							Build: &kmmv1beta1.Build{},
 							Sign:  &kmmv1beta1.Sign{},
@@ -247,7 +247,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 		}
 
 		expectedModuleSpec := kmmv1beta1.ModuleSpec{
-			ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+			ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 				Container: kmmv1beta1.ModuleLoaderContainerSpec{
 					Build: nil,
 					Sign:  nil,

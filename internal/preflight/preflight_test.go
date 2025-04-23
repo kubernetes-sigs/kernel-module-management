@@ -51,7 +51,7 @@ func TestPreflight(t *testing.T) {
 				Name: moduleName,
 			},
 			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						Modprobe: kmmv1beta1.ModprobeSpec{
 							ModuleName: "simple-kmod",

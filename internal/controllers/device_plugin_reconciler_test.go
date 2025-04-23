@@ -240,7 +240,7 @@ var _ = Describe("DevicePluginReconciler_garbageCollect", func() {
 			Namespace: "namespace",
 		},
 		Spec: kmmv1beta1.ModuleSpec{
-			ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+			ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 				Container: kmmv1beta1.ModuleLoaderContainerSpec{
 					Version: currentModuleVersion,
 				},
@@ -297,6 +297,23 @@ var _ = Describe("DevicePluginReconciler_garbageCollect", func() {
 
 		err := dprh.garbageCollect(context.Background(), mod, existingDS)
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("should pass if moduleLoader is not defined", func() {
+		modWithoutModuleLoader := mod
+		modWithoutModuleLoader.Spec.ModuleLoader = nil
+		deleteDS := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "devicePlugin",
+				Namespace: "namespace",
+				Labels:    map[string]string{constants.ModuleNameLabel: mod.Name, devicePluginVersionLabel: "formerVersion"},
+			},
+		}
+
+		existingDS := []appsv1.DaemonSet{deleteDS}
+
+		err := dprh.garbageCollect(context.Background(), modWithoutModuleLoader, existingDS)
+		Expect(err).ToNot(HaveOccurred())
 	})
 })
 
@@ -365,9 +382,20 @@ var _ = Describe("DevicePluginReconciler_setKMMOMetrics", func() {
 				Name:      "moduleName",
 				Namespace: "namespace",
 			},
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
 		}
-		mod2 := kmmv1beta1.Module{}
-		mod3 := kmmv1beta1.Module{}
+		mod2 := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
+		}
+		mod3 := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
+		}
 		numBuild := 0
 		numSign := 0
 		numDevicePlugin := 0
@@ -453,7 +481,11 @@ var _ = Describe("DevicePluginReconciler_moduleUpdateDevicePluginStatus", func()
 	ctx := context.Background()
 
 	It("device plugin not defined in the module", func() {
-		mod := kmmv1beta1.Module{}
+		mod := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
+		}
 		err := dprh.moduleUpdateDevicePluginStatus(ctx, &mod, nil)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -527,8 +559,13 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 
 	It("should return an error if DevicePlugin not set in the Spec", func() {
 		ds := appsv1.DaemonSet{}
+		mod := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
+		}
 		Expect(
-			dsc.setDevicePluginAsDesired(context.Background(), &ds, &kmmv1beta1.Module{}),
+			dsc.setDevicePluginAsDesired(context.Background(), &ds, &mod),
 		).To(
 			HaveOccurred(),
 		)
@@ -563,7 +600,7 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 				Namespace: namespace,
 			},
 			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						Version: "some version",
 					},
@@ -589,7 +626,7 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 		Expect(ds.GetLabels()).Should(HaveKeyWithValue(versionLabel, "some version"))
 	})
 
-	It("should work as expected", func() {
+	DescribeTable("should work as expected", func(moduleLoader *kmmv1beta1.ModuleLoaderSpec, expectedNodeSelector map[string]string) {
 		const (
 			dsName             = "ds-name"
 			serviceAccountName = "some-service-account"
@@ -646,6 +683,7 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 				Namespace: namespace,
 			},
 			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: moduleLoader,
 				DevicePlugin: &kmmv1beta1.DevicePluginSpec{
 					Container: kmmv1beta1.DevicePluginContainerSpec{
 						Args:            args,
@@ -722,10 +760,8 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 								},
 							},
 						},
-						ImagePullSecrets: []v1.LocalObjectReference{repoSecret},
-						NodeSelector: map[string]string{
-							utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name): "",
-						},
+						ImagePullSecrets:   []v1.LocalObjectReference{repoSecret},
+						NodeSelector:       expectedNodeSelector,
 						PriorityClassName:  "system-node-critical",
 						ServiceAccountName: serviceAccountName,
 						Volumes: []v1.Volume{
@@ -750,10 +786,19 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 		).To(
 			BeTrue(), cmp.Diff(expected, ds),
 		)
-	})
+	},
+		Entry("moduleLoader is nil",
+			nil,
+			map[string]string{"has-feature-x": "true"},
+		),
+		Entry("moduleLoader is defined",
+			&kmmv1beta1.ModuleLoaderSpec{},
+			map[string]string{utils.GetKernelModuleReadyNodeLabel(namespace, moduleName): ""},
+		),
+	)
 })
 
-var _ = Describe("DevicePluginReconciler_getExistingDS", func() {
+var _ = Describe("DevicePluginReconciler_getExistingDSFromVersion", func() {
 	const (
 		moduleName      = "moduleName"
 		moduleNamespace = "moduleNamespace"
@@ -771,22 +816,26 @@ var _ = Describe("DevicePluginReconciler_getExistingDS", func() {
 
 	It("various scenarios", func() {
 		By("empty daemonset list")
-		res := getExistingDS(nil, moduleNamespace, moduleName, moduleVersion)
+		res, version := getExistingDSFromVersion(nil, moduleNamespace, moduleName, &kmmv1beta1.ModuleLoaderSpec{Container: kmmv1beta1.ModuleLoaderContainerSpec{Version: moduleVersion}})
 		Expect(res).To(BeNil())
+		Expect(version).To(Equal(moduleVersion))
 
 		By("device plugin, module version equal")
 		ds.SetLabels(devicePluginLabels)
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, moduleVersion)
+		res, version = getExistingDSFromVersion([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, &kmmv1beta1.ModuleLoaderSpec{Container: kmmv1beta1.ModuleLoaderContainerSpec{Version: moduleVersion}})
 		Expect(res).To(Equal(&ds))
+		Expect(version).To(Equal(moduleVersion))
 
 		By("device plugin, module version not equal")
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "some version")
+		res, version = getExistingDSFromVersion([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, &kmmv1beta1.ModuleLoaderSpec{Container: kmmv1beta1.ModuleLoaderContainerSpec{Version: "some-version"}})
 		Expect(res).To(BeNil())
+		Expect(version).To(Equal("some-version"))
 
 		By("device plugin, module version label missing, and module version parameter is empty")
 		ds.SetLabels(map[string]string{})
-		res = getExistingDS([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, "")
+		res, version = getExistingDSFromVersion([]appsv1.DaemonSet{ds}, moduleNamespace, moduleName, &kmmv1beta1.ModuleLoaderSpec{Container: kmmv1beta1.ModuleLoaderContainerSpec{Version: ""}})
 		Expect(res).To(Equal(&ds))
+		Expect(version).To(Equal(""))
 	})
 })
 
