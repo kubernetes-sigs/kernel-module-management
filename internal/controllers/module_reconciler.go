@@ -100,6 +100,11 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 		return ctrl.Result{}, fmt.Errorf("failed to set finalizer on Module %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
 
+	if mod.Spec.ModuleLoader == nil {
+		logger.Info("ModuleLoader is not defined, skipping loading kernel module")
+		return ctrl.Result{}, nil
+	}
+
 	// get nodes targeted by selector
 	targetedNodes, err := mr.nodeAPI.GetNodesListBySelector(ctx, mod.Spec.Selector, mod.Spec.Tolerations)
 	if err != nil {

@@ -51,6 +51,9 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		mod = &kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: moduleName, Namespace: namespace},
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
 		}
 
 		mr = &ModuleReconciler{
@@ -208,6 +211,20 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		)
 
 		res, err := mr.Reconcile(ctx, mod)
+
+		Expect(res).To(Equal(reconcile.Result{}))
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("Good flow, should not load kernel module when moduleLoader is missing", func() {
+		modWithoutModuleLoader := mod
+		modWithoutModuleLoader.Spec.ModuleLoader = nil
+		gomock.InOrder(
+			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
+			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
+		)
+
+		res, err := mr.Reconcile(ctx, modWithoutModuleLoader)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())

@@ -81,7 +81,7 @@ func (m *ModuleValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 
 	m.logger.Info("Validating Module update", "name", oldMod.Name, "namespace", oldMod.Namespace)
 
-	if oldObj != nil {
+	if oldObj != nil && oldMod.Spec.ModuleLoader != nil && newMod.Spec.ModuleLoader != nil {
 		if (oldMod.Spec.ModuleLoader.Container.Version == "" && newMod.Spec.ModuleLoader.Container.Version != "") ||
 			(oldMod.Spec.ModuleLoader.Container.Version != "" && newMod.Spec.ModuleLoader.Container.Version == "") {
 			return nil, errors.New("cannot update to or from an empty version; please delete the Module and create it again")
@@ -107,12 +107,17 @@ func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
 		)
 	}
 
-	if err := validateModuleLoaderContainerSpec(mod.Spec.ModuleLoader.Container); err != nil {
-		return nil, fmt.Errorf("failed to validate kernel mappings: %v", err)
-	}
-
 	if err := validateTolerations(mod.Spec.Tolerations); err != nil {
 		return nil, fmt.Errorf("failed to validate Module's tolerations: %v", err)
+	}
+
+	if mod.Spec.ModuleLoader == nil {
+		// If ModuleLoader is nil, there is no need to validate related fields
+		return nil, nil
+	}
+
+	if err := validateModuleLoaderContainerSpec(mod.Spec.ModuleLoader.Container); err != nil {
+		return nil, fmt.Errorf("failed to validate kernel mappings: %v", err)
 	}
 
 	return nil, validateModprobe(mod.Spec.ModuleLoader.Container.Modprobe)

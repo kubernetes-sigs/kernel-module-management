@@ -2704,7 +2704,6 @@ spec:
                   type: object
                 type: array
             required:
-            - moduleLoader
             - selector
             type: object
           status:
@@ -2745,8 +2744,6 @@ spec:
                     format: int32
                     type: integer
                 type: object
-            required:
-            - moduleLoader
             type: object
         type: object
     served: true

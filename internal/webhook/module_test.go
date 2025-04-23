@@ -40,7 +40,7 @@ func getLengthAfterSlash(s string) int {
 var (
 	validModule = kmmv1beta1.Module{
 		Spec: kmmv1beta1.ModuleSpec{
-			ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+			ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 				Container: kmmv1beta1.ModuleLoaderContainerSpec{
 					Modprobe: kmmv1beta1.ModprobeSpec{
 						ModuleName: "mod-name",
@@ -423,6 +423,12 @@ var _ = Describe("validateModule", func() {
 		Entry("not too long", "name", "ns", false),
 		Entry("too long", chars21, chars21, true),
 	)
+	It("should pass when moduleLoader is not defined", func() {
+		mod := validModule
+		mod.Spec.ModuleLoader = nil
+		_, err := validateModule(&mod)
+		Expect(err).NotTo(HaveOccurred())
+	})
 })
 
 var _ = Describe("ValidateCreate", func() {
@@ -438,7 +444,7 @@ var _ = Describe("ValidateCreate", func() {
 	It("should fail when validating kernel mappings regexps", func() {
 		mod := &kmmv1beta1.Module{
 			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						KernelMappings: []kmmv1beta1.KernelMapping{
 							{Regexp: "*-invalid-regexp"},
@@ -463,7 +469,7 @@ var _ = Describe("ValidateUpdate", func() {
 	It("should pass when all conditions are met", func() {
 		mod1 := &kmmv1beta1.Module{
 			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						Modprobe: kmmv1beta1.ModprobeSpec{
 							ModuleName: "module-name",
@@ -479,7 +485,7 @@ var _ = Describe("ValidateUpdate", func() {
 
 		mod2 := &kmmv1beta1.Module{
 			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						Modprobe: kmmv1beta1.ModprobeSpec{
 							RawArgs: &kmmv1beta1.ModprobeArgs{
@@ -502,7 +508,7 @@ var _ = Describe("ValidateUpdate", func() {
 	It("should fail when validating kernel mappings regexps", func() {
 		mod := &kmmv1beta1.Module{
 			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 					Container: kmmv1beta1.ModuleLoaderContainerSpec{
 						KernelMappings: []kmmv1beta1.KernelMapping{
 							{Regexp: "*-invalid-regexp"},
@@ -525,9 +531,13 @@ var _ = Describe("ValidateUpdate", func() {
 		"version updates",
 		func(oldVersion, newVersion string, errorExpected bool) {
 			old := validModule
+			oldModuleLoader := *old.Spec.ModuleLoader
+			old.Spec.ModuleLoader = &oldModuleLoader
 			old.Spec.ModuleLoader.Container.Version = oldVersion
 
 			new := validModule
+			newModuleLoader := *new.Spec.ModuleLoader
+			new.Spec.ModuleLoader = &newModuleLoader
 			new.Spec.ModuleLoader.Container.Version = newVersion
 
 			_, err := moduleWebhook.ValidateUpdate(ctx, &old, &new)

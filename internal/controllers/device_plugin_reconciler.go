@@ -182,9 +182,10 @@ func (dprh *devicePluginReconcilerHelper) handleDevicePlugin(ctx context.Context
 	}
 
 	logger := log.FromContext(ctx)
-	ds := getExistingDS(existingDevicePluginDS, mod.Namespace, mod.Name, mod.Spec.ModuleLoader.Container.Version)
+
+	ds, version := getExistingDSFromVersion(existingDevicePluginDS, mod.Namespace, mod.Name, mod.Spec.ModuleLoader)
 	if ds == nil {
-		logger.Info("creating new device plugin DS", "version", mod.Spec.ModuleLoader.Container.Version)
+		logger.Info("creating new device plugin DS", "version", version)
 		ds = &appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, GenerateName: mod.Name + "-device-plugin-"},
 		}
@@ -203,6 +204,11 @@ func (dprh *devicePluginReconcilerHelper) handleDevicePlugin(ctx context.Context
 func (dprh *devicePluginReconcilerHelper) garbageCollect(ctx context.Context,
 	mod *kmmv1beta1.Module,
 	existingDS []appsv1.DaemonSet) error {
+	if mod.Spec.ModuleLoader == nil {
+		// If ModuleLoader is not exist, Ordered Upgrade is not relevant
+		// so there is no need to delete older-versioned Deamonsets
+		return nil
+	}
 
 	logger := log.FromContext(ctx)
 	deleted := make([]string, 0)
@@ -248,21 +254,22 @@ func (dprh *devicePluginReconcilerHelper) setKMMOMetrics(ctx context.Context) {
 		if mod.Spec.DevicePlugin != nil {
 			numModulesWithDevicePlugin += 1
 		}
-		buildCapable, signCapable := isModuleBuildAndSignCapable(&mod)
-		if buildCapable {
-			numModulesWithBuild += 1
-		}
-		if signCapable {
-			numModulesWithSign += 1
-		}
-
-		if mod.Spec.ModuleLoader.Container.Modprobe.Args != nil {
-			modprobeArgs := strings.Join(mod.Spec.ModuleLoader.Container.Modprobe.Args.Load, ",")
-			dprh.metricsAPI.SetKMMModprobeArgs(mod.Name, mod.Namespace, modprobeArgs)
-		}
-		if mod.Spec.ModuleLoader.Container.Modprobe.RawArgs != nil {
-			modprobeRawArgs := strings.Join(mod.Spec.ModuleLoader.Container.Modprobe.RawArgs.Load, ",")
-			dprh.metricsAPI.SetKMMModprobeRawArgs(mod.Name, mod.Namespace, modprobeRawArgs)
+		if mod.Spec.ModuleLoader != nil {
+			buildCapable, signCapable := isModuleBuildAndSignCapable(&mod)
+			if buildCapable {
+				numModulesWithBuild += 1
+			}
+			if signCapable {
+				numModulesWithSign += 1
+			}
+			if mod.Spec.ModuleLoader.Container.Modprobe.Args != nil {
+				modprobeArgs := strings.Join(mod.Spec.ModuleLoader.Container.Modprobe.Args.Load, ",")
+				dprh.metricsAPI.SetKMMModprobeArgs(mod.Name, mod.Namespace, modprobeArgs)
+			}
+			if mod.Spec.ModuleLoader.Container.Modprobe.RawArgs != nil {
+				modprobeRawArgs := strings.Join(mod.Spec.ModuleLoader.Container.Modprobe.RawArgs.Load, ",")
+				dprh.metricsAPI.SetKMMModprobeRawArgs(mod.Name, mod.Namespace, modprobeRawArgs)
+			}
 		}
 	}
 	dprh.metricsAPI.SetKMMModulesNum(numModules)
@@ -348,14 +355,8 @@ func (dsci *daemonSetCreatorImpl) setDevicePluginAsDesired(
 			},
 		},
 	}
-	standardLabels := map[string]string{constants.ModuleNameLabel: mod.Name}
-	nodeSelector := map[string]string{utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name): ""}
 
-	if mod.Spec.ModuleLoader.Container.Version != "" {
-		versionLabel := utils.GetDevicePluginVersionLabelName(mod.Namespace, mod.Name)
-		standardLabels[versionLabel] = mod.Spec.ModuleLoader.Container.Version
-		nodeSelector[versionLabel] = mod.Spec.ModuleLoader.Container.Version
-	}
+	standardLabels, nodeSelector := generateDevicePluginLabelsAndSelector(mod)
 
 	ds.SetLabels(
 		overrideLabels(ds.GetLabels(), standardLabels),
@@ -395,6 +396,21 @@ func (dsci *daemonSetCreatorImpl) setDevicePluginAsDesired(
 	return controllerutil.SetControllerReference(mod, ds, dsci.scheme)
 }
 
+func generateDevicePluginLabelsAndSelector(mod *kmmv1beta1.Module) (map[string]string, map[string]string) {
+	labels := map[string]string{constants.ModuleNameLabel: mod.Name}
+	nodeSelector := map[string]string{utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name): ""}
+
+	if mod.Spec.ModuleLoader != nil && mod.Spec.ModuleLoader.Container.Version != "" {
+		versionLabel := utils.GetDevicePluginVersionLabelName(mod.Namespace, mod.Name)
+		labels[versionLabel] = mod.Spec.ModuleLoader.Container.Version
+		nodeSelector[versionLabel] = mod.Spec.ModuleLoader.Container.Version
+	} else if mod.Spec.ModuleLoader == nil {
+		nodeSelector = mod.Spec.Selector
+	}
+
+	return labels, nodeSelector
+}
+
 func isModuleBuildAndSignCapable(mod *kmmv1beta1.Module) (bool, bool) {
 	buildCapable := mod.Spec.ModuleLoader.Container.Build != nil
 	signCapable := mod.Spec.ModuleLoader.Container.Sign != nil
@@ -412,19 +428,23 @@ func isModuleBuildAndSignCapable(mod *kmmv1beta1.Module) (bool, bool) {
 	return buildCapable, signCapable
 }
 
-func getExistingDS(existingDS []appsv1.DaemonSet,
+func getExistingDSFromVersion(existingDS []appsv1.DaemonSet,
 	moduleNamespace string,
 	moduleName string,
-	moduleVersion string) *appsv1.DaemonSet {
+	moduleLoader *kmmv1beta1.ModuleLoaderSpec) (*appsv1.DaemonSet, string) {
+	version := ""
+	if moduleLoader != nil {
+		version = moduleLoader.Container.Version
+	}
 
 	versionLabel := utils.GetDevicePluginVersionLabelName(moduleNamespace, moduleName)
 	for _, ds := range existingDS {
 		dsModuleVersion := ds.GetLabels()[versionLabel]
-		if dsModuleVersion == moduleVersion {
-			return &ds
+		if dsModuleVersion == version {
+			return &ds, version
 		}
 	}
-	return nil
+	return nil, version
 }
 
 func isOlderVersionUnusedDevicePluginDaemonset(ds *appsv1.DaemonSet, moduleVersion string) bool {

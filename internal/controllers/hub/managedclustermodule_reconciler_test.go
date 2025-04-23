@@ -272,7 +272,7 @@ var _ = Describe("ManagedClusterModuleReconciler_Reconcile", func() {
 			},
 			Spec: v1beta1.ManagedClusterModuleSpec{
 				ModuleSpec: kmmv1beta1.ModuleSpec{
-					ModuleLoader: kmmv1beta1.ModuleLoaderSpec{
+					ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
 						Container: kmmv1beta1.ModuleLoaderContainerSpec{
 							Build: &kmmv1beta1.Build{},
 						},
