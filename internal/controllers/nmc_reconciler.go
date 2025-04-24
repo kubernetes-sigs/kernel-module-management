@@ -563,7 +563,14 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 					errs,
 					fmt.Errorf("%s: could not unmarshal the ModuleConfig from YAML: %v", podNSN, err),
 				)
-
+				continue
+			}
+			tolerationsAnnotation := h.podManager.GetTolerationsAnnotation(&p)
+			if err = yaml.UnmarshalStrict([]byte(tolerationsAnnotation), &status.Tolerations); err != nil {
+				errs = append(
+					errs,
+					fmt.Errorf("%s: could not unmarshal the ModuleConfig from YAML: %v", podNSN, err),
+				)
 				continue
 			}
 
@@ -571,7 +578,6 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 				status.ImageRepoSecret = &p.Spec.ImagePullSecrets[0]
 			}
 			status.ServiceAccountName = p.Spec.ServiceAccountName
-			status.Tolerations = p.Spec.Tolerations
 
 			status.BootId = node.Status.NodeInfo.BootID
 
