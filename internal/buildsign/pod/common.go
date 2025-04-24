@@ -29,11 +29,11 @@ var tmpl = template.Must(
 	template.ParseFS(templateFS, "templates/Dockerfile.gotmpl"),
 )
 
-func (bspm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerImage string, pushImage bool) v1.PodSpec {
+func (bspm *buildSignPodManager) buildPodSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) v1.PodSpec {
 
 	buildConfig := mld.Build
 
-	args := bspm.containerArgs(mld, containerImage, mld.Build.BaseImageRegistryTLS, pushImage)
+	args := bspm.containerArgs(mld, destinationImg, mld.Build.BaseImageRegistryTLS, pushImage)
 	overrides := []kmmv1beta1.BuildArg{
 		{Name: "KERNEL_VERSION", Value: mld.KernelVersion},
 		{Name: "KERNEL_FULL_VERSION", Value: mld.KernelVersion},
@@ -77,6 +77,28 @@ func (bspm *buildSignPodManager) podSpec(mld *api.ModuleLoaderData, containerIma
 		RestartPolicy: v1.RestartPolicyNever,
 		Volumes:       volumes,
 		NodeSelector:  selector,
+		Tolerations:   mld.Tolerations,
+	}
+}
+
+func (bspm *buildSignPodManager) signPodSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) v1.PodSpec {
+
+	signConfig := mld.Sign
+	args := bspm.containerArgs(mld, destinationImg, signConfig.UnsignedImageRegistryTLS, pushImage)
+	volumes, volumeMounts := makeSignResourceVolumesAndVolumeMounts(signConfig, mld.ImageRepoSecret)
+
+	return v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Args:         args,
+				Name:         "kaniko",
+				Image:        os.Getenv("RELATED_IMAGE_BUILD"),
+				VolumeMounts: volumeMounts,
+			},
+		},
+		RestartPolicy: v1.RestartPolicyNever,
+		Volumes:       volumes,
+		NodeSelector:  mld.Selector,
 		Tolerations:   mld.Tolerations,
 	}
 }
