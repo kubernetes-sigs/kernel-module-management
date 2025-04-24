@@ -1229,10 +1229,14 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 		b, err := yaml.Marshal(cfg)
 		Expect(err).NotTo(HaveOccurred())
 
+		tolerations, err := yaml.Marshal(p.Spec.Tolerations)
+		Expect(err).NotTo(HaveOccurred())
+
 		gomock.InOrder(
 			mockWorkerPodManager.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{p}, nil),
 			mockWorkerPodManager.EXPECT().IsUnloaderPod(&p).Return(false),
 			mockWorkerPodManager.EXPECT().GetConfigAnnotation(&p).Return(string(b)),
+			mockWorkerPodManager.EXPECT().GetTolerationsAnnotation(&p).Return(string(tolerations)),
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &p),

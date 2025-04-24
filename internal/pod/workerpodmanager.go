@@ -40,26 +40,28 @@ type WorkerPodManager interface {
 	IsUnloaderPod(p *v1.Pod) bool
 	GetConfigAnnotation(p *v1.Pod) string
 	HashAnnotationDiffer(p1, p2 *v1.Pod) bool
+	GetTolerationsAnnotation(p *v1.Pod) string
 }
 
 const (
 	NodeModulesConfigFinalizer = "kmm.node.kubernetes.io/nodemodulesconfig-reconciler"
 	WorkerContainerName        = "worker"
 
-	volMountPointConfig = "/etc/kmm-worker"
-	configFileName      = "config.yaml"
-	configFullPath      = volMountPointConfig + "/" + configFileName
-	volNameConfig       = "config"
-	sharedFilesDir      = "/tmp"
-	volNameTmp          = "tmp"
-	volumeNameConfig    = "config"
-	initContainerName   = "image-extractor"
-	modulesOrderKey     = "kmm.node.kubernetes.io/modules-order"
-	workerActionLoad    = "Load"
-	workerActionUnload  = "Unload"
-	actionLabelKey      = "kmm.node.kubernetes.io/worker-action"
-	configAnnotationKey = "kmm.node.kubernetes.io/worker-config"
-	hashAnnotationKey   = "kmm.node.kubernetes.io/worker-hash"
+	volMountPointConfig      = "/etc/kmm-worker"
+	configFileName           = "config.yaml"
+	configFullPath           = volMountPointConfig + "/" + configFileName
+	volNameConfig            = "config"
+	sharedFilesDir           = "/tmp"
+	volNameTmp               = "tmp"
+	volumeNameConfig         = "config"
+	initContainerName        = "image-extractor"
+	modulesOrderKey          = "kmm.node.kubernetes.io/modules-order"
+	workerActionLoad         = "Load"
+	workerActionUnload       = "Unload"
+	actionLabelKey           = "kmm.node.kubernetes.io/worker-action"
+	configAnnotationKey      = "kmm.node.kubernetes.io/worker-config"
+	hashAnnotationKey        = "kmm.node.kubernetes.io/worker-hash"
+	tolerationsAnnotationKey = "kmm.node.kubernetes.io/worker-tolerations"
 )
 
 var (
@@ -195,6 +197,9 @@ func (wpmi *workerPodManagerImpl) LoaderPodTemplate(ctx context.Context, nmc cli
 	if err = setWorkerConfigAnnotation(pod, nms.Config); err != nil {
 		return nil, fmt.Errorf("could not set worker config: %v", err)
 	}
+	if err = setWorkerTolerationsAnnotation(pod, nms.Tolerations); err != nil {
+		return nil, fmt.Errorf("could not set worker tolerations: %v", err)
+	}
 
 	if err = setWorkerSecurityContext(pod, wpmi.workerCfg, privileged); err != nil {
 		return nil, fmt.Errorf("could not set the worker Pod as privileged: %v", err)
@@ -219,6 +224,9 @@ func (wpmi *workerPodManagerImpl) UnloaderPodTemplate(ctx context.Context, nmc c
 
 	if err = setWorkerConfigAnnotation(pod, nms.Config); err != nil {
 		return nil, fmt.Errorf("could not set worker config: %v", err)
+	}
+	if err = setWorkerTolerationsAnnotation(pod, nms.Tolerations); err != nil {
+		return nil, fmt.Errorf("could not set worker tolerations: %v", err)
 	}
 
 	if err = setWorkerSecurityContext(pod, wpmi.workerCfg, false); err != nil {
@@ -283,6 +291,14 @@ func (wpmi *workerPodManagerImpl) GetConfigAnnotation(p *v1.Pod) string {
 	}
 
 	return p.Annotations[configAnnotationKey]
+}
+func (wpmi *workerPodManagerImpl) GetTolerationsAnnotation(p *v1.Pod) string {
+
+	if p == nil {
+		return ""
+	}
+
+	return p.Annotations[tolerationsAnnotationKey]
 }
 
 func (wpmi *workerPodManagerImpl) HashAnnotationDiffer(p1, p2 *v1.Pod) bool {
@@ -451,6 +467,18 @@ func setWorkerConfigAnnotation(pod *v1.Pod, cfg kmmv1beta1.ModuleConfig) error {
 		return fmt.Errorf("could not marshal the ModuleConfig to YAML: %v", err)
 	}
 	meta.SetAnnotation(pod, configAnnotationKey, string(b))
+
+	return nil
+}
+
+func setWorkerTolerationsAnnotation(pod *v1.Pod, tolerations []v1.Toleration) error {
+	if len(tolerations) != 0 {
+		b, err := yaml.Marshal(tolerations)
+		if err != nil {
+			return fmt.Errorf("could not marshal the Tolerations to YAML: %v", err)
+		}
+		meta.SetAnnotation(pod, tolerationsAnnotationKey, string(b))
+	}
 
 	return nil
 }

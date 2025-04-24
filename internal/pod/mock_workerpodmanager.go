@@ -97,6 +97,20 @@ func (mr *MockWorkerPodManagerMockRecorder) GetConfigAnnotation(p any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfigAnnotation", reflect.TypeOf((*MockWorkerPodManager)(nil).GetConfigAnnotation), p)
 }
 
+// GetTolerationsAnnotation mocks base method.
+func (m *MockWorkerPodManager) GetTolerationsAnnotation(p *v1.Pod) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTolerationsAnnotation", p)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetTolerationsAnnotation indicates an expected call of GetTolerationsAnnotation.
+func (mr *MockWorkerPodManagerMockRecorder) GetTolerationsAnnotation(p any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTolerationsAnnotation", reflect.TypeOf((*MockWorkerPodManager)(nil).GetTolerationsAnnotation), p)
+}
+
 // GetWorkerPod mocks base method.
 func (m *MockWorkerPodManager) GetWorkerPod(ctx context.Context, podName, namespace string) (*v1.Pod, error) {
 	m.ctrl.T.Helper()

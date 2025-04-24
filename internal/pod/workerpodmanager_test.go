@@ -485,6 +485,7 @@ cp -R /firmware-path/* /tmp/firmware-path;
 	} else {
 		configAnnotationValue = strings.ReplaceAll(configAnnotationValue, "firmwarePath: /firmware-path\n  ", "")
 	}
+	tolerationAnotationValue := "- effect: NoExecute\n  key: test-key\n  value: test-value\n"
 	pod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      WorkerPodName(nmcName, moduleName),
@@ -497,8 +498,9 @@ cp -R /firmware-path/* /tmp/firmware-path;
 				constants.ModuleNameLabel:     moduleName,
 			},
 			Annotations: map[string]string{
-				configAnnotationKey: configAnnotationValue,
-				modulesOrderKey:     modulesOrderValue,
+				configAnnotationKey:      configAnnotationValue,
+				modulesOrderKey:          modulesOrderValue,
+				tolerationsAnnotationKey: tolerationAnotationValue,
 			},
 		},
 		Spec: v1.PodSpec{
