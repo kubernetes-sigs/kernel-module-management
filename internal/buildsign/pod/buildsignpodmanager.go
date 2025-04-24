@@ -198,7 +198,7 @@ func (bspm *buildSignPodManager) MakeBuildResourceTemplate(ctx context.Context, 
 		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
 	}
 
-	podSpec := bspm.podSpec(mld, containerImage, pushImage)
+	podSpec := bspm.buildPodSpec(mld, containerImage, pushImage)
 	podSpecHash, err := bspm.getBuildHashAnnotationValue(
 		ctx,
 		mld.Build.DockerfileConfigMap.Name,
@@ -244,8 +244,6 @@ func (bspm *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, m
 		imageToSign = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
 	}
 
-	args := bspm.containerArgs(mld, mld.ContainerImage, signConfig.UnsignedImageRegistryTLS, pushImage)
-
 	if imageToSign != "" {
 		td.UnsignedImage = imageToSign
 	} else if signConfig.UnsignedImage != "" {
@@ -254,27 +252,11 @@ func (bspm *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, m
 		return nil, fmt.Errorf("no image to sign given")
 	}
 
-	volumes, volumeMounts := makeSignResourceVolumesAndVolumeMounts(signConfig, mld.ImageRepoSecret)
-
 	if err := tmpl.Execute(&buf, td); err != nil {
 		return nil, fmt.Errorf("could not execute template: %v", err)
 	}
 
-	podSpec := v1.PodSpec{
-		Containers: []v1.Container{
-			{
-				Name:         "kaniko",
-				Image:        os.Getenv("RELATED_IMAGE_BUILD"),
-				Args:         args,
-				VolumeMounts: volumeMounts,
-			},
-		},
-		RestartPolicy: v1.RestartPolicyNever,
-		Volumes:       volumes,
-		NodeSelector:  mld.Selector,
-		Tolerations:   mld.Tolerations,
-	}
-
+	podSpec := bspm.signPodSpec(mld, mld.ContainerImage, pushImage)
 	podSpecHash, err := bspm.getSignHashAnnotationValue(ctx, signConfig.KeySecret.Name,
 		signConfig.CertSecret.Name, mld.Namespace, buf.Bytes(), &podSpec)
 	if err != nil {
