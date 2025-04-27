@@ -90,7 +90,7 @@ func (m *maker) MakePodTemplate(
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-build-",
 			Namespace:    mld.Namespace,
-			Labels:       m.buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, pod.PodTypeBuild),
+			Labels:       m.buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeBuild),
 			Annotations:  map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash)},
 			Finalizers:   []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
 		},

@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
@@ -21,9 +22,6 @@ import (
 type Status string
 
 const (
-	PodTypeBuild = "build"
-	PodTypeSign  = "sign"
-
 	StatusCompleted  Status = "completed"
 	StatusCreated    Status = "created"
 	StatusInProgress Status = "in progress"
@@ -213,7 +211,7 @@ func (bspm *buildSignPodManager) MakeBuildResourceTemplate(ctx context.Context, 
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-build-",
 			Namespace:    mld.Namespace,
-			Labels:       bspm.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeBuild),
+			Labels:       bspm.PodLabels(mld.Name, mld.KernelNormalizedVersion, string(kmmv1beta1.BuildImage)),
 			Annotations:  map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash)},
 			Finalizers:   []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
 		},
@@ -267,7 +265,7 @@ func (bspm *buildSignPodManager) MakeSignResourceTemplate(ctx context.Context, m
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: mld.Name + "-sign-",
 			Namespace:    mld.Namespace,
-			Labels:       bspm.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeSign),
+			Labels:       bspm.PodLabels(mld.Name, mld.KernelNormalizedVersion, string(kmmv1beta1.SignImage)),
 			Annotations: map[string]string{
 				constants.PodHashAnnotation: fmt.Sprintf("%d", podSpecHash),
 				dockerfileAnnotationKey:     buf.String(),

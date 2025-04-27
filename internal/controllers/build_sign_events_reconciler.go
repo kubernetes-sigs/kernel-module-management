@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	"golang.org/x/exp/maps"
@@ -168,7 +168,7 @@ func (r *JobEventReconciler) Reconcile(ctx context.Context, pod *v1.Pod) (reconc
 var jobEventPredicate = predicate.NewPredicateFuncs(func(obj client.Object) bool {
 	label := obj.GetLabels()[constants.PodType]
 
-	return (label == pod.PodTypeBuild || label == pod.PodTypeSign) &&
+	return (label == string(kmmv1beta1.BuildImage) || label == string(kmmv1beta1.SignImage)) &&
 		controllerutil.ContainsFinalizer(obj, constants.JobEventFinalizer)
 })
 

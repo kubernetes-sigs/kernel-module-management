@@ -581,7 +581,7 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: mld.Name + "-build-",
 				Namespace:    namespace,
-				Labels:       buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeBuild),
+				Labels:       buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, string(kmmv1beta1.BuildImage)),
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						APIVersion:         "kmm.sigs.x-k8s.io/v1beta1",
@@ -1024,7 +1024,7 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: mld.Name + "-sign-",
 				Namespace:    namespace,
-				Labels:       buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, PodTypeSign),
+				Labels:       buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, string(kmmv1beta1.SignImage)),
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						APIVersion:         "kmm.sigs.x-k8s.io/v1beta1",
