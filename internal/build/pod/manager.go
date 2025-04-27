@@ -17,6 +17,11 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 )
 
+const (
+	PodTypeBuild = "build"
+	PodTypeSign  = "sign"
+)
+
 type podManager struct {
 	client              client.Client
 	maker               Maker
@@ -38,7 +43,7 @@ func NewBuildManager(
 }
 
 func (pm *podManager) GarbageCollect(ctx context.Context, modName, namespace string, owner metav1.Object) ([]string, error) {
-	pods, err := pm.buildSignPodManager.GetModulePods(ctx, modName, namespace, pod.PodTypeBuild, owner)
+	pods, err := pm.buildSignPodManager.GetModulePods(ctx, modName, namespace, PodTypeBuild, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get build pods for module %s: %v", modName, err)
 	}
@@ -98,7 +103,7 @@ func (pm *podManager) Sync(
 	}
 
 	p, err := pm.buildSignPodManager.GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
-		mld.KernelNormalizedVersion, pod.PodTypeBuild, owner)
+		mld.KernelNormalizedVersion, PodTypeBuild, owner)
 
 	if err != nil {
 		if !errors.Is(err, pod.ErrNoMatchingPod) {

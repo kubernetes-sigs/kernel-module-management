@@ -34,12 +34,9 @@ func NewManager(client client.Client, combiner module.Combiner, scheme *runtime.
 
 func (pm *podManager) GetStatus(ctx context.Context, name, namespace, kernelVersion string,
 	action kmmv1beta1.BuildOrSignAction, owner metav1.Object) (kmmv1beta1.BuildOrSignStatus, error) {
-	podType := PodTypeBuild
-	if action == kmmv1beta1.SignImage {
-		podType = PodTypeSign
-	}
+
 	normalizedKernel := kernel.NormalizeVersion(kernelVersion)
-	foundPod, err := pm.buildSignPodManager.GetModulePodByKernel(ctx, name, namespace, normalizedKernel, podType, owner)
+	foundPod, err := pm.buildSignPodManager.GetModulePodByKernel(ctx, name, namespace, normalizedKernel, string(action), owner)
 	if err != nil {
 		if !errors.Is(err, ErrNoMatchingPod) {
 			return kmmv1beta1.BuildOrSignStatus(""), fmt.Errorf("failed to get pod %s/%s, action %s: %v", namespace, name, action, err)
@@ -63,20 +60,18 @@ func (pm *podManager) GetStatus(ctx context.Context, name, namespace, kernelVers
 }
 
 func (pm *podManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushImage bool, action kmmv1beta1.BuildOrSignAction, owner metav1.Object) error {
+
 	logger := log.FromContext(ctx)
 	var (
-		podType     string
 		podTemplate *v1.Pod
 		err         error
 	)
 	switch action {
 	case kmmv1beta1.BuildImage:
 		logger.Info("Building in-cluster")
-		podType = PodTypeBuild
 		podTemplate, err = pm.buildSignPodManager.MakeBuildResourceTemplate(ctx, mld, owner, pushImage)
 	case kmmv1beta1.SignImage:
 		logger.Info("Signing in-cluster")
-		podType = PodTypeSign
 		podTemplate, err = pm.buildSignPodManager.MakeSignResourceTemplate(ctx, mld, owner, pushImage)
 	default:
 		return fmt.Errorf("invalid action %s", action)
@@ -87,11 +82,11 @@ func (pm *podManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushI
 	}
 
 	p, err := pm.buildSignPodManager.GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
-		mld.KernelNormalizedVersion, podType, owner)
+		mld.KernelNormalizedVersion, string(action), owner)
 
 	if err != nil {
 		if !errors.Is(err, ErrNoMatchingPod) {
-			return fmt.Errorf("error getting the %s pod: %v", podType, err)
+			return fmt.Errorf("error getting the %s pod: %v", action, err)
 		}
 
 		logger.Info("Creating pod")
@@ -112,7 +107,7 @@ func (pm *podManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushI
 		logger.Info("The module's spec has been changed, deleting the current pod so a new one can be created", "name", p.Name, "action", action)
 		err = pm.buildSignPodManager.DeletePod(ctx, p)
 		if err != nil {
-			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete %s pod %s: %v", podType, p.Name, err)))
+			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete %s pod %s: %v", action, p.Name, err)))
 		}
 	}
 
@@ -120,13 +115,10 @@ func (pm *podManager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushI
 }
 
 func (pm *podManager) GarbageCollect(ctx context.Context, name, namespace string, action kmmv1beta1.BuildOrSignAction, owner metav1.Object) ([]string, error) {
-	podType := PodTypeBuild
-	if action == kmmv1beta1.SignImage {
-		podType = PodTypeSign
-	}
-	pods, err := pm.buildSignPodManager.GetModulePods(ctx, name, namespace, podType, owner)
+
+	pods, err := pm.buildSignPodManager.GetModulePods(ctx, name, namespace, string(action), owner)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get %s pods for mbsc %s/%s: %v", podType, namespace, name, err)
+		return nil, fmt.Errorf("failed to get %s pods for mbsc %s/%s: %v", action, namespace, name, err)
 	}
 
 	logger := log.FromContext(ctx)
@@ -137,7 +129,7 @@ func (pm *podManager) GarbageCollect(ctx context.Context, name, namespace string
 			err = pm.buildSignPodManager.DeletePod(ctx, &pod)
 			errs = append(errs, err)
 			if err != nil {
-				logger.Info(utils.WarnString("failed to delete %s pod %s in garbage collection: %v"), podType, pod.Name, err)
+				logger.Info(utils.WarnString("failed to delete %s pod %s in garbage collection: %v"), action, pod.Name, err)
 				continue
 			}
 			deletePodsNames = append(deletePodsNames, pod.Name)

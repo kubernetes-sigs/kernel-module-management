@@ -189,7 +189,7 @@ var _ = Describe("Sync", func() {
 				mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 				maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
 				mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
-					kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(&newPod, nil),
+					kernelNormalizedVersion, PodTypeSign, mld.Owner).Return(&newPod, nil),
 				mockBuildSignPodManager.EXPECT().IsPodChanged(&j, &newPod).Return(false, nil),
 				mockBuildSignPodManager.EXPECT().GetPodStatus(&newPod).Return(podStatus, poderr),
 			)
@@ -242,7 +242,7 @@ var _ = Describe("Sync", func() {
 			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
 			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
-				kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(nil, errors.New("random error")),
+				kernelNormalizedVersion, PodTypeSign, mld.Owner).Return(nil, errors.New("random error")),
 		)
 
 		Expect(
@@ -269,7 +269,7 @@ var _ = Describe("Sync", func() {
 			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
 			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
-				kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(nil, pod.ErrNoMatchingPod),
+				kernelNormalizedVersion, PodTypeSign, mld.Owner).Return(nil, pod.ErrNoMatchingPod),
 			mockBuildSignPodManager.EXPECT().CreatePod(ctx, &j).Return(errors.New("unable to create pod")),
 		)
 
@@ -298,7 +298,7 @@ var _ = Describe("Sync", func() {
 			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&j, nil),
 			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
-				kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(nil, pod.ErrNoMatchingPod),
+				kernelNormalizedVersion, PodTypeSign, mld.Owner).Return(nil, pod.ErrNoMatchingPod),
 			mockBuildSignPodManager.EXPECT().CreatePod(ctx, &j).Return(nil),
 		)
 
@@ -328,7 +328,7 @@ var _ = Describe("Sync", func() {
 			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, "sign").Return(labels),
 			maker.EXPECT().MakePodTemplate(ctx, mld, labels, previousImageName, true, mld.Owner).Return(&newPod, nil),
 			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mld.Name, mld.Namespace,
-				kernelNormalizedVersion, pod.PodTypeSign, mld.Owner).Return(&newPod, nil),
+				kernelNormalizedVersion, PodTypeSign, mld.Owner).Return(&newPod, nil),
 			mockBuildSignPodManager.EXPECT().IsPodChanged(&newPod, &newPod).Return(true, nil),
 			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &newPod).Return(nil),
 		)
@@ -390,7 +390,7 @@ var _ = Describe("GarbageCollect", func() {
 			}
 
 			mockBuildSignPodManager.EXPECT().GetModulePods(context.Background(), mld.Name, mld.Namespace,
-				pod.PodTypeSign, mld.Owner).Return([]v1.Pod{pod1, pod2}, returnedError)
+				PodTypeSign, mld.Owner).Return([]v1.Pod{pod1, pod2}, returnedError)
 			if !expectsErr {
 				if pod1.Status.Phase == v1.PodSucceeded {
 					mockBuildSignPodManager.EXPECT().DeletePod(context.Background(), &pod1).Return(nil)

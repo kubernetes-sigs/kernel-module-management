@@ -45,7 +45,8 @@ var _ = Describe("GetStatus", func() {
 
 	It("failed flow, GetModulePodByKernel fails", func() {
 		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
-		mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel, PodTypeBuild, &testMBSC).
+		mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
+			string(kmmv1beta1.BuildImage), &testMBSC).
 			Return(nil, fmt.Errorf("some error"))
 
 		status, err := mgr.GetStatus(ctx, mbscName, mbscNamespace, kernelVersion, kmmv1beta1.BuildImage, &testMBSC)
@@ -55,7 +56,8 @@ var _ = Describe("GetStatus", func() {
 
 	It("GetModulePodByKernel returns pod does not exists", func() {
 		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
-		mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel, PodTypeBuild, &testMBSC).
+		mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
+			string(kmmv1beta1.BuildImage), &testMBSC).
 			Return(nil, ErrNoMatchingPod)
 
 		status, err := mgr.GetStatus(ctx, mbscName, mbscNamespace, kernelVersion, kmmv1beta1.BuildImage, &testMBSC)
@@ -67,7 +69,8 @@ var _ = Describe("GetStatus", func() {
 		foundPod := v1.Pod{}
 		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel, PodTypeBuild, &testMBSC).
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
+				string(kmmv1beta1.BuildImage), &testMBSC).
 				Return(&foundPod, nil),
 			mockBuildSignPodManager.EXPECT().GetPodStatus(&foundPod).Return(Status(""), fmt.Errorf("some error")),
 		)
@@ -81,7 +84,8 @@ var _ = Describe("GetStatus", func() {
 		foundPod := v1.Pod{}
 		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel, PodTypeBuild, &testMBSC).
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
+				string(kmmv1beta1.BuildImage), &testMBSC).
 				Return(&foundPod, nil),
 			mockBuildSignPodManager.EXPECT().GetPodStatus(&foundPod).Return(podStatus, nil),
 		)
@@ -143,7 +147,8 @@ var _ = Describe("Sync", func() {
 	It("GetModulePodByKernel failed", func() {
 		gomock.InOrder(
 			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, true).Return(nil, nil),
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion, PodTypeBuild, &testMBSC).
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				string(kmmv1beta1.BuildImage), &testMBSC).
 				Return(nil, fmt.Errorf("some error")),
 		)
 		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
@@ -154,7 +159,8 @@ var _ = Describe("Sync", func() {
 		testTemplate := v1.Pod{}
 		gomock.InOrder(
 			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, true).Return(&testTemplate, nil),
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion, PodTypeBuild, &testMBSC).
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				string(kmmv1beta1.BuildImage), &testMBSC).
 				Return(nil, ErrNoMatchingPod),
 			mockBuildSignPodManager.EXPECT().CreatePod(ctx, &testTemplate).Return(fmt.Errorf("some error")),
 		)
@@ -167,7 +173,8 @@ var _ = Describe("Sync", func() {
 		testPod := v1.Pod{}
 		gomock.InOrder(
 			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, true).Return(&testTemplate, nil),
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion, PodTypeBuild, &testMBSC).
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				string(kmmv1beta1.BuildImage), &testMBSC).
 				Return(&testPod, nil),
 			mockBuildSignPodManager.EXPECT().IsPodChanged(&testPod, &testTemplate).Return(false, fmt.Errorf("some error")),
 		)
@@ -180,7 +187,8 @@ var _ = Describe("Sync", func() {
 		testPod := v1.Pod{}
 		gomock.InOrder(
 			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, true).Return(&testTemplate, nil),
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion, PodTypeBuild, &testMBSC).
+			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				string(kmmv1beta1.BuildImage), &testMBSC).
 				Return(&testPod, nil),
 			mockBuildSignPodManager.EXPECT().IsPodChanged(&testPod, &testTemplate).Return(true, nil),
 			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &testPod).Return(fmt.Errorf("some error")),
@@ -190,12 +198,10 @@ var _ = Describe("Sync", func() {
 	})
 
 	DescribeTable("check good flow", func(buildAction, podExists, podChanged, pushImage bool) {
-		testAction := kmmv1beta1.BuildImage
 		testPodTemplate := v1.Pod{}
 		existingTestPod := v1.Pod{}
-		podType := PodTypeBuild
+		testAction := kmmv1beta1.BuildImage
 		if !buildAction {
-			podType = PodTypeSign
 			testAction = kmmv1beta1.SignImage
 		}
 
@@ -208,7 +214,8 @@ var _ = Describe("Sync", func() {
 		if !podExists {
 			getPodError = ErrNoMatchingPod
 		}
-		mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion, podType, &testMBSC).Return(&existingTestPod, getPodError)
+		mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+			string(testAction), &testMBSC).Return(&existingTestPod, getPodError)
 		if !podExists {
 			mockBuildSignPodManager.EXPECT().CreatePod(ctx, &testPodTemplate).Return(nil)
 			goto executeTestFunction
@@ -259,7 +266,8 @@ var _ = Describe("GarbageCollect", func() {
 	testMBSC := kmmv1beta1.ModuleBuildSignConfig{}
 
 	It("failed to get module pods", func() {
-		mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, PodTypeBuild, &testMBSC).Return(nil, fmt.Errorf("some error"))
+		mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace,
+			string(kmmv1beta1.BuildImage), &testMBSC).Return(nil, fmt.Errorf("some error"))
 
 		_, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
@@ -272,7 +280,7 @@ var _ = Describe("GarbageCollect", func() {
 			},
 		}
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, PodTypeSign, &testMBSC).
+			mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, string(kmmv1beta1.SignImage), &testMBSC).
 				Return([]v1.Pod{testPod}, nil),
 			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &testPod).Return(fmt.Errorf("some error")),
 		)
@@ -304,7 +312,7 @@ var _ = Describe("GarbageCollect", func() {
 		}
 		returnedPods := []v1.Pod{testPodSuccess, testPodFailure, testPodRunning, testPodUnknown, testPodPending}
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, PodTypeBuild, &testMBSC).
+			mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, string(kmmv1beta1.BuildImage), &testMBSC).
 				Return(returnedPods, nil),
 			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &testPodSuccess).Return(nil),
 		)

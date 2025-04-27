@@ -240,7 +240,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, pod.PodTypeBuild).Return(labels),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, PodTypeBuild).Return(labels),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, true)
@@ -306,7 +306,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			mockBuildSignPodManager.EXPECT().PodLabels(mod.Name, kernelNormalizedVersion, pod.PodTypeBuild).Return(map[string]string{}),
+			mockBuildSignPodManager.EXPECT().PodLabels(mod.Name, kernelNormalizedVersion, PodTypeBuild).Return(map[string]string{}),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, pushImage)
@@ -385,7 +385,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, pod.PodTypeBuild).Return(map[string]string{}),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, PodTypeBuild).Return(map[string]string{}),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, false)
@@ -422,7 +422,7 @@ var _ = Describe("MakePodTemplate", func() {
 					return nil
 				},
 			),
-			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, pod.PodTypeBuild).Return(map[string]string{}),
+			mockBuildSignPodManager.EXPECT().PodLabels(mld.Name, kernelNormalizedVersion, PodTypeBuild).Return(map[string]string{}),
 		)
 
 		actual, err := m.MakePodTemplate(ctx, &mld, mld.Owner, true)

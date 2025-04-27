@@ -6,7 +6,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	kmmv1beta2 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	testclient "github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
@@ -161,7 +160,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
-					constants.PodType:            pod.PodTypeBuild,
+					constants.PodType:            string(kmmv1beta1.BuildImage),
 					constants.TargetKernelTarget: kernelVersion,
 				},
 				OwnerReferences: []metav1.OwnerReference{or},
@@ -185,7 +184,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 
 		events := closeAndGetAllEvents(fakeRecorder.Events)
 		Expect(events).To(HaveLen(1))
-		Expect(events[0]).To(ContainSubstring("Normal BuildCreated Build created for kernel " + kernelVersion))
+		Expect(events[0]).To(ContainSubstring("Normal BuildimageCreated Buildimage created for kernel " + kernelVersion))
 	})
 
 	It("should do nothing if the annotation is already there and the pod is still running", func() {
@@ -194,7 +193,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations:     map[string]string{createdAnnotationKey: ""},
-				Labels:          map[string]string{constants.PodType: pod.PodTypeBuild},
+				Labels:          map[string]string{constants.PodType: string(kmmv1beta1.BuildImage)},
 				Namespace:       namespace,
 				OwnerReferences: []metav1.OwnerReference{or},
 			},
@@ -219,7 +218,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels:          map[string]string{constants.PodType: pod.PodTypeBuild},
+				Labels:          map[string]string{constants.PodType: string(kmmv1beta1.BuildImage)},
 				Finalizers:      []string{constants.JobEventFinalizer},
 				Namespace:       namespace,
 				OwnerReferences: []metav1.OwnerReference{or},
@@ -425,11 +424,11 @@ var _ = Describe("jobEventPredicate", func() {
 				Equal(expectedResult),
 			)
 		},
-		Entry(nil, pod.PodTypeBuild, true, true),
-		Entry(nil, pod.PodTypeSign, true, true),
+		Entry(nil, string(kmmv1beta1.BuildImage), true, true),
+		Entry(nil, string(kmmv1beta1.SignImage), true, true),
 		Entry(nil, "random", true, false),
 		Entry(nil, "", true, false),
-		Entry("finalizer", pod.PodTypeBuild, true, true),
-		Entry("no finalizer", pod.PodTypeBuild, false, false),
+		Entry("finalizer", string(kmmv1beta1.BuildImage), true, true),
+		Entry("no finalizer", string(kmmv1beta1.SignImage), false, false),
 	)
 })
