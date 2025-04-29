@@ -23,6 +23,7 @@ type MIC interface {
 	GetModuleImageSpec(micObj *kmmv1beta1.ModuleImagesConfig, image string) *kmmv1beta1.ModuleImageSpec
 	SetImageStatus(micObj *kmmv1beta1.ModuleImagesConfig, image string, status kmmv1beta1.ImageState)
 	GetImageState(micObj *kmmv1beta1.ModuleImagesConfig, image string) kmmv1beta1.ImageState
+	DoAllImagesExist(micObj *kmmv1beta1.ModuleImagesConfig) bool
 }
 
 type micImpl struct {
@@ -107,4 +108,15 @@ func (mici *micImpl) GetImageState(micObj *kmmv1beta1.ModuleImagesConfig, image 
 		}
 	}
 	return ""
+}
+
+func (mici *micImpl) DoAllImagesExist(micObj *kmmv1beta1.ModuleImagesConfig) bool {
+
+	for _, img := range micObj.Status.ImagesStates {
+		if img.Status != kmmv1beta1.ImageExists {
+			return false
+		}
+	}
+
+	return true
 }
