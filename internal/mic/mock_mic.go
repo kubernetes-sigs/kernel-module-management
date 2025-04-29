@@ -55,6 +55,20 @@ func (mr *MockMICMockRecorder) CreateOrPatch(ctx, name, ns, images, imageRepoSec
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrPatch", reflect.TypeOf((*MockMIC)(nil).CreateOrPatch), ctx, name, ns, images, imageRepoSecret, owner)
 }
 
+// DoAllImagesExist mocks base method.
+func (m *MockMIC) DoAllImagesExist(micObj *v1beta1.ModuleImagesConfig) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DoAllImagesExist", micObj)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// DoAllImagesExist indicates an expected call of DoAllImagesExist.
+func (mr *MockMICMockRecorder) DoAllImagesExist(micObj any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DoAllImagesExist", reflect.TypeOf((*MockMIC)(nil).DoAllImagesExist), micObj)
+}
+
 // Get mocks base method.
 func (m *MockMIC) Get(ctx context.Context, name, ns string) (*v1beta1.ModuleImagesConfig, error) {
 	m.ctrl.T.Helper()

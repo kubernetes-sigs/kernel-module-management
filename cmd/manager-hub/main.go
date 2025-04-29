@@ -21,6 +21,9 @@ import (
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/mbsc"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -34,8 +37,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
-	buildpod "github.com/kubernetes-sigs/kernel-module-management/internal/build/pod"
+	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	buildsignpod "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
@@ -47,7 +50,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-	signpod "github.com/kubernetes-sigs/kernel-module-management/internal/sign/pod"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	//+kubebuilder:scaffold:imports
 )
@@ -56,7 +58,8 @@ var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(v1beta1.AddToScheme(scheme))
+	utilruntime.Must(hubv1beta1.AddToScheme(scheme))
+	utilruntime.Must(kmmv1beta1.AddToScheme(scheme))
 	utilruntime.Must(clusterv1.Install(scheme))
 	utilruntime.Must(workv1.Install(scheme))
 	//+kubebuilder:scaffold:scheme
@@ -109,21 +112,11 @@ func main() {
 
 	registryAPI := registry.NewRegistry()
 	buildSignCombiner := module.NewCombiner()
-	buildSignPodAPI := buildsignpod.NewBuildSignPodManager(client, buildSignCombiner, scheme)
 
-	buildAPI := buildpod.NewBuildManager(
-		client,
-		buildpod.NewMaker(client, buildSignCombiner, buildSignPodAPI, scheme),
-		buildSignPodAPI,
-		registryAPI,
-	)
-
-	signAPI := signpod.NewSignPodManager(
-		client,
-		signpod.NewSigner(client, scheme, buildSignPodAPI),
-		buildSignPodAPI,
-		registryAPI,
-	)
+	micAPI := mic.New(client, scheme)
+	mbscAPI := mbsc.New(client, scheme)
+	imagePullerAPI := pod.NewImagePuller(client, scheme)
+	builSignAPI := buildsignpod.NewManager(client, buildSignCombiner, scheme)
 
 	kernelAPI := module.NewKernelMapper(buildSignCombiner)
 
@@ -135,10 +128,19 @@ func main() {
 	mcmr := hub.NewManagedClusterModuleReconciler(
 		client,
 		manifestwork.NewCreator(client, scheme, kernelAPI, registryAPI, operatorNamespace),
-		cluster.NewClusterAPI(client, kernelAPI, buildAPI, signAPI, operatorNamespace),
+		cluster.NewClusterAPI(client, kernelAPI, operatorNamespace),
 		statusupdater.NewManagedClusterModuleStatusUpdater(client),
 		filterAPI,
+		micAPI,
 	)
+
+	if err = controllers.NewMICReconciler(client, micAPI, mbscAPI, imagePullerAPI, scheme).SetupWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.MICReconcilerName)
+	}
+
+	if err = controllers.NewMBSCReconciler(client, builSignAPI, mbscAPI).SetupWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.MBSCReconcilerName)
+	}
 
 	if err = mcmr.SetupWithManager(mgr); err != nil {
 		cmd.FatalError(ctrlLogger, err, "unable to create controller")
