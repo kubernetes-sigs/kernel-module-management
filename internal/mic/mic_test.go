@@ -284,3 +284,87 @@ var _ = Describe("GetImageState", func() {
 		Expect(res).To(BeEmpty())
 	})
 })
+
+var _ = Describe("DoAllImagesExist", func() {
+
+	var micAPI MIC
+
+	BeforeEach(func() {
+		micAPI = New(nil, nil)
+	})
+
+	It("should return false if one or more images doesn't have a status", func() {
+
+		micObj := &kmmv1beta1.ModuleImagesConfig{
+			Spec: kmmv1beta1.ModuleImagesConfigSpec{
+				Images: []kmmv1beta1.ModuleImageSpec{
+					{
+						Image: "image-1",
+					},
+				},
+			},
+		}
+
+		Expect(micAPI.DoAllImagesExist(micObj)).To(BeFalse())
+	})
+
+	It("should return false if one or more images doesn't exists", func() {
+
+		micObj := &kmmv1beta1.ModuleImagesConfig{
+			Spec: kmmv1beta1.ModuleImagesConfigSpec{
+				Images: []kmmv1beta1.ModuleImageSpec{
+					{
+						Image: "image-1",
+					},
+					{
+						Image: "image-2",
+					},
+				},
+			},
+			Status: kmmv1beta1.ModuleImagesConfigStatus{
+				ImagesStates: []kmmv1beta1.ModuleImageState{
+					{
+						Image:  "image-1",
+						Status: kmmv1beta1.ImageExists,
+					},
+					{
+						Image:  "image-2",
+						Status: kmmv1beta1.ImageDoesNotExist,
+					},
+				},
+			},
+		}
+
+		Expect(micAPI.DoAllImagesExist(micObj)).To(BeFalse())
+	})
+
+	It("should return true if all images exists", func() {
+
+		micObj := &kmmv1beta1.ModuleImagesConfig{
+			Spec: kmmv1beta1.ModuleImagesConfigSpec{
+				Images: []kmmv1beta1.ModuleImageSpec{
+					{
+						Image: "image-1",
+					},
+					{
+						Image: "image-2",
+					},
+				},
+			},
+			Status: kmmv1beta1.ModuleImagesConfigStatus{
+				ImagesStates: []kmmv1beta1.ModuleImageState{
+					{
+						Image:  "image-1",
+						Status: kmmv1beta1.ImageExists,
+					},
+					{
+						Image:  "image-2",
+						Status: kmmv1beta1.ImageExists,
+					},
+				},
+			},
+		}
+
+		Expect(micAPI.DoAllImagesExist(micObj)).To(BeTrue())
+	})
+})

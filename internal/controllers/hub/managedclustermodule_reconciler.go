@@ -18,15 +18,19 @@ package hub
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/manifestwork"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
-	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
@@ -36,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const ManagedClusterModuleReconcilerName = "ManagedClusterModule"
@@ -48,12 +53,18 @@ type ManagedClusterModuleReconciler struct {
 	clusterAPI       cluster.ClusterAPI
 	statusupdaterAPI statusupdater.ManagedClusterModuleStatusUpdater
 
-	filter *filter.Filter
+	filter      *filter.Filter
+	micAPI      mic.MIC
+	reconHelper managedClusterModuleReconcilerHelperAPI
 }
 
 //+kubebuilder:rbac:groups=hub.kmm.sigs.x-k8s.io,resources=managedclustermodules,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=hub.kmm.sigs.x-k8s.io,resources=managedclustermodules/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=hub.kmm.sigs.x-k8s.io,resources=managedclustermodules/finalizers,verbs=update
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=moduleimagesconfigs,verbs=get;list;watch;patch;create;delete
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=moduleimagesconfigs/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modulebuildsignconfigs,verbs=get;list;watch;update;patch;create
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modulebuildsignconfigs/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworks,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=create;delete;list;patch;watch
@@ -65,55 +76,62 @@ func NewManagedClusterModuleReconciler(
 	manifestAPI manifestwork.ManifestWorkCreator,
 	clusterAPI cluster.ClusterAPI,
 	statusupdaterAPI statusupdater.ManagedClusterModuleStatusUpdater,
-	filter *filter.Filter) *ManagedClusterModuleReconciler {
+	filter *filter.Filter,
+	micAPI mic.MIC) *ManagedClusterModuleReconciler {
+
+	reconHelper := newManagedClusterModuleReconcilerHelper(clusterAPI, micAPI)
 	return &ManagedClusterModuleReconciler{
 		client:           client,
 		manifestAPI:      manifestAPI,
 		clusterAPI:       clusterAPI,
 		statusupdaterAPI: statusupdaterAPI,
 		filter:           filter,
+		micAPI:           micAPI,
+		reconHelper:      reconHelper,
 	}
 }
 
-func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	res := ctrl.Result{}
+func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule) (ctrl.Result, error) {
 
 	logger := log.FromContext(ctx)
 
-	mcm, err := r.clusterAPI.RequestedManagedClusterModule(ctx, req.NamespacedName)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			logger.Info("ManagedClusterModule deleted")
-			return res, nil
-		}
-
-		return res, fmt.Errorf("failed to get the requested CR: %v", err)
-	}
-
-	logger.Info("Requested KMMO ManagedClusterModule")
+	logger.Info("Starting ManagedClusterModule reconciliation")
 
 	clusters, err := r.clusterAPI.SelectedManagedClusters(ctx, mcm)
 	if err != nil {
-		return res, fmt.Errorf("failed to get selected clusters: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to get selected clusters: %v", err)
 	}
 
 	for _, cluster := range clusters.Items {
+
 		logger := log.FromContext(ctx).WithValues("cluster", cluster.Name)
 		clusterCtx := log.IntoContext(ctx, logger)
 
-		completedSuccessfully, err := r.clusterAPI.BuildAndSign(clusterCtx, *mcm, cluster)
+		kernelVersions, err := r.clusterAPI.KernelVersions(cluster)
 		if err != nil {
-			logger.Error(err, "failed to build")
-			continue
-		}
-		if !completedSuccessfully {
-			logger.Info("Build and Sign have not finished successfully yet; skipping ManifestWork reconciliation")
+			logger.Info(utils.WarnString(
+				fmt.Sprintf("No kernel versions found for managed cluster; skipping MIC patch: %v", err),
+			))
 			continue
 		}
 
-		kernelVersions, err := r.clusterAPI.KernelVersions(cluster)
+		err = r.reconHelper.setMicAsDesired(ctx, mcm, cluster.Name, kernelVersions)
 		if err != nil {
-			logger.Error(err, "no kernel versions found for managed cluster; skipping ManifestWork reconciliation")
+			logger.Info(utils.WarnString(
+				fmt.Sprintf("Failed to set MIC as desired: %v", err),
+			))
+			continue
+		}
+
+		allImagesReady, err := r.reconHelper.areImagesReady(ctx, mcm.Name, cluster.Name)
+		if err != nil {
+			logger.Info(utils.WarnString(
+				fmt.Sprintf("Failed to check if MIC is ready: %v", err),
+			))
+			continue
+		}
+		if !allImagesReady {
+			logger.Info("not all images exist yet for the cluster; skipping ManifestWork reconciliation")
 			continue
 		}
 
@@ -127,9 +145,10 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, req ctrl
 		opRes, err := controllerutil.CreateOrPatch(clusterCtx, r.client, mw, func() error {
 			return r.manifestAPI.SetManifestWorkAsDesired(ctx, mw, *mcm, kernelVersions)
 		})
-
 		if err != nil {
-			logger.Error(err, "failed to create/patch ManifestWork for managed cluster")
+			logger.Info(utils.WarnString(
+				fmt.Sprintf("failed to create/patch ManifestWork for managed cluster: %v", err),
+			))
 			continue
 		}
 
@@ -137,26 +156,19 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	if err := r.manifestAPI.GarbageCollect(ctx, *clusters, *mcm); err != nil {
-		return res, fmt.Errorf("failed to garbage collect ManifestWorks with no matching cluster selector: %v", err)
-	}
-
-	deleted, err := r.clusterAPI.GarbageCollectBuildsAndSigns(ctx, *mcm)
-	if err != nil {
-		return res, fmt.Errorf("failed to garbage collect build and sign objects: %v", err)
-	}
-	if len(deleted) > 0 {
-		logger.Info("Garbage-collected Build objects", "names", deleted)
+		return ctrl.Result{}, fmt.Errorf("failed to garbage collect ManifestWorks with no matching cluster selector: %v", err)
 	}
 
 	ownedManifestWorkList, err := r.manifestAPI.GetOwnedManifestWorks(ctx, *mcm)
 	if err != nil {
-		return res, fmt.Errorf("failed to fetch owned ManifestWorks of the ManagedClusterModule: %v", err)
-	}
-	if err := r.statusupdaterAPI.ManagedClusterModuleUpdateStatus(ctx, mcm, ownedManifestWorkList.Items); err != nil {
-		return res, fmt.Errorf("failed to update status of the ManagedClusterModule: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch owned ManifestWorks of the ManagedClusterModule: %v", err)
 	}
 
-	return res, nil
+	if err := r.statusupdaterAPI.ManagedClusterModuleUpdateStatus(ctx, mcm, ownedManifestWorkList.Items); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update status of the ManagedClusterModule: %v", err)
+	}
+
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -164,7 +176,7 @@ func (r *ManagedClusterModuleReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&hubv1beta1.ManagedClusterModule{}).
 		Owns(&workv1.ManifestWork{}).
-		Owns(&v1.Pod{}).
+		Owns(&kmmv1beta1.ModuleImagesConfig{}, builder.WithPredicates(filter.ModuleReconcileMICPredicate())).
 		Watches(
 			&clusterv1.ManagedCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.filter.FindManagedClusterModulesForCluster),
@@ -173,5 +185,73 @@ func (r *ManagedClusterModuleReconciler) SetupWithManager(mgr ctrl.Manager) erro
 			),
 		).
 		Named(ManagedClusterModuleReconcilerName).
-		Complete(r)
+		Complete(
+			reconcile.AsReconciler[*hubv1beta1.ManagedClusterModule](mgr.GetClient(), r),
+		)
+}
+
+//go:generate mockgen -source=managedclustermodule_reconciler.go -package=hub -destination=mock_managedclustermodule_reconciler.go managedClusterModuleReconcilerHelperAPI
+
+type managedClusterModuleReconcilerHelperAPI interface {
+	setMicAsDesired(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule, clusterName string, kernelVersions []string) error
+	areImagesReady(ctx context.Context, mcmName, clusterName string) (bool, error)
+}
+
+type managedClusterModuleReconcilerHelper struct {
+	clusterAPI cluster.ClusterAPI
+	micAPI     mic.MIC
+}
+
+func newManagedClusterModuleReconcilerHelper(clusterAPI cluster.ClusterAPI, micAPI mic.MIC) managedClusterModuleReconcilerHelperAPI {
+	return &managedClusterModuleReconcilerHelper{
+		clusterAPI: clusterAPI,
+		micAPI:     micAPI,
+	}
+}
+
+func (rh *managedClusterModuleReconcilerHelper) setMicAsDesired(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule,
+	clusterName string, kernelVersions []string) error {
+
+	var images []kmmv1beta1.ModuleImageSpec
+	for _, kver := range kernelVersions {
+
+		kver = strings.TrimSuffix(kver, "+")
+		mld, err := rh.clusterAPI.GetModuleLoaderDataForKernel(mcm, kver)
+		if err != nil {
+			if !errors.Is(err, module.ErrNoMatchingKernelMapping) {
+				return fmt.Errorf("failed to get MLD for kernel %s: %v", kver, err)
+			}
+			// error getting kernelVersion or kernelVersion is not targeted by the managedClusterModule
+			continue
+		}
+		mis := kmmv1beta1.ModuleImageSpec{
+			Image:         mld.ContainerImage,
+			KernelVersion: mld.KernelVersion,
+			Build:         mld.Build,
+			Sign:          mld.Sign,
+			RegistryTLS:   mld.RegistryTLS,
+		}
+		images = append(images, mis)
+	}
+
+	micName := mcm.Name + "-" + clusterName
+	micNamespace := rh.clusterAPI.GetDefaultArtifactsNamespace()
+	if err := rh.micAPI.CreateOrPatch(ctx, micName, micNamespace, images, mcm.Spec.ModuleSpec.ImageRepoSecret, mcm); err != nil {
+		return fmt.Errorf("failed to createOrPatch MIC %s: %v", micName, err)
+	}
+
+	return nil
+}
+
+func (rh *managedClusterModuleReconcilerHelper) areImagesReady(ctx context.Context, mcmName, clusterName string) (bool, error) {
+
+	micName := mcmName + "-" + clusterName
+	micNamespace := rh.clusterAPI.GetDefaultArtifactsNamespace()
+
+	micObj, err := rh.micAPI.Get(ctx, micName, micNamespace)
+	if err != nil {
+		return false, fmt.Errorf("failed to get MIC %s: %v", micName, err)
+	}
+
+	return rh.micAPI.DoAllImagesExist(micObj), nil
 }

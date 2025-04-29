@@ -13,8 +13,8 @@ import (
 	reflect "reflect"
 
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
+	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	gomock "go.uber.org/mock/gomock"
-	types "k8s.io/apimachinery/pkg/types"
 	v1 "open-cluster-management.io/api/cluster/v1"
 )
 
@@ -41,34 +41,33 @@ func (m *MockClusterAPI) EXPECT() *MockClusterAPIMockRecorder {
 	return m.recorder
 }
 
-// BuildAndSign mocks base method.
-func (m *MockClusterAPI) BuildAndSign(ctx context.Context, mcm v1beta1.ManagedClusterModule, cluster v1.ManagedCluster) (bool, error) {
+// GetDefaultArtifactsNamespace mocks base method.
+func (m *MockClusterAPI) GetDefaultArtifactsNamespace() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BuildAndSign", ctx, mcm, cluster)
-	ret0, _ := ret[0].(bool)
+	ret := m.ctrl.Call(m, "GetDefaultArtifactsNamespace")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetDefaultArtifactsNamespace indicates an expected call of GetDefaultArtifactsNamespace.
+func (mr *MockClusterAPIMockRecorder) GetDefaultArtifactsNamespace() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDefaultArtifactsNamespace", reflect.TypeOf((*MockClusterAPI)(nil).GetDefaultArtifactsNamespace))
+}
+
+// GetModuleLoaderDataForKernel mocks base method.
+func (m *MockClusterAPI) GetModuleLoaderDataForKernel(mcm *v1beta1.ManagedClusterModule, kernelVersion string) (*api.ModuleLoaderData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetModuleLoaderDataForKernel", mcm, kernelVersion)
+	ret0, _ := ret[0].(*api.ModuleLoaderData)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// BuildAndSign indicates an expected call of BuildAndSign.
-func (mr *MockClusterAPIMockRecorder) BuildAndSign(ctx, mcm, cluster any) *gomock.Call {
+// GetModuleLoaderDataForKernel indicates an expected call of GetModuleLoaderDataForKernel.
+func (mr *MockClusterAPIMockRecorder) GetModuleLoaderDataForKernel(mcm, kernelVersion any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BuildAndSign", reflect.TypeOf((*MockClusterAPI)(nil).BuildAndSign), ctx, mcm, cluster)
-}
-
-// GarbageCollectBuildsAndSigns mocks base method.
-func (m *MockClusterAPI) GarbageCollectBuildsAndSigns(ctx context.Context, mcm v1beta1.ManagedClusterModule) ([]string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GarbageCollectBuildsAndSigns", ctx, mcm)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GarbageCollectBuildsAndSigns indicates an expected call of GarbageCollectBuildsAndSigns.
-func (mr *MockClusterAPIMockRecorder) GarbageCollectBuildsAndSigns(ctx, mcm any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GarbageCollectBuildsAndSigns", reflect.TypeOf((*MockClusterAPI)(nil).GarbageCollectBuildsAndSigns), ctx, mcm)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetModuleLoaderDataForKernel", reflect.TypeOf((*MockClusterAPI)(nil).GetModuleLoaderDataForKernel), mcm, kernelVersion)
 }
 
 // KernelVersions mocks base method.
@@ -84,21 +83,6 @@ func (m *MockClusterAPI) KernelVersions(cluster v1.ManagedCluster) ([]string, er
 func (mr *MockClusterAPIMockRecorder) KernelVersions(cluster any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "KernelVersions", reflect.TypeOf((*MockClusterAPI)(nil).KernelVersions), cluster)
-}
-
-// RequestedManagedClusterModule mocks base method.
-func (m *MockClusterAPI) RequestedManagedClusterModule(ctx context.Context, namespacedName types.NamespacedName) (*v1beta1.ManagedClusterModule, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RequestedManagedClusterModule", ctx, namespacedName)
-	ret0, _ := ret[0].(*v1beta1.ManagedClusterModule)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RequestedManagedClusterModule indicates an expected call of RequestedManagedClusterModule.
-func (mr *MockClusterAPIMockRecorder) RequestedManagedClusterModule(ctx, namespacedName any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestedManagedClusterModule", reflect.TypeOf((*MockClusterAPI)(nil).RequestedManagedClusterModule), ctx, namespacedName)
 }
 
 // SelectedManagedClusters mocks base method.

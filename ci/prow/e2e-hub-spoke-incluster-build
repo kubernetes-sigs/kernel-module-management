@@ -14,11 +14,12 @@ kubectl label node/${MINIKUBE} node-role.kubernetes.io/worker=""
 
 # Init OCM in the cluster
 clusteradm init --wait
-kubectl wait --for=condition=Available deployment/cluster-manager -n open-cluster-management
-kubectl wait --for=condition=Available deployment/cluster-manager-placement-controller -n open-cluster-management-hub
-kubectl wait --for=condition=Available deployment/cluster-manager-registration-controller -n open-cluster-management-hub
-kubectl wait --for=condition=Available deployment/cluster-manager-registration-webhook -n open-cluster-management-hub
-kubectl wait --for=condition=Available deployment/cluster-manager-work-webhook -n open-cluster-management-hub
+kubectl wait --for=condition=Available -n open-cluster-management deployment/cluster-manager
+kubectl wait --for=condition=Available --timeout=2m -n open-cluster-management-hub \
+    deployment/cluster-manager-placement-controller \
+    deployment/cluster-manager-registration-controller \
+    deployment/cluster-manager-registration-webhook \
+    deployment/cluster-manager-work-webhook
 
 # Join the "spoke" cluster to the "hub" cluster (in this case a single cluster is both hub and spoke)
 token=$(clusteradm get token | grep token= | cut -d"=" -f2-)
@@ -49,11 +50,11 @@ clusteradm addon enable addon --names config-policy-controller --clusters ${MINI
 # Install kmm and kmm-hub
 make deploy deploy-hub
 
-kubectl wait --for=condition=Available -n ${OPERATOR_NAMESPACE} \
+kubectl wait --for=condition=Available --timeout=2m -n ${OPERATOR_NAMESPACE} \
   deployment/kmm-operator-hub-controller \
   deployment/kmm-operator-hub-webhook \
   deployment/kmm-operator-controller \
-  deployment/kmm-operator-webhook \
+  deployment/kmm-operator-webhook
 
 # Make the ManagedCluster selected by the ManagedClusterModule
 kubectl label managedcluster minikube name=minikube
