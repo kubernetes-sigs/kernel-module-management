@@ -2,16 +2,14 @@ package filter
 
 import (
 	"context"
-	"reflect"
-
 	"github.com/go-logr/logr"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubectl/pkg/util/podutils"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -149,53 +147,48 @@ func ListModulesForNMC(_ context.Context, obj client.Object) []reconcile.Request
 	return modules.UnsortedList()
 }
 
-func skipNodeHeartbeat() predicate.Predicate {
-
+func filterRelevantNodeUpdates() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-
 			oldNode, okOld := e.ObjectOld.(*v1.Node)
 			newNode, okNew := e.ObjectNew.(*v1.Node)
 			if !okOld || !okNew {
 				return false
 			}
 
-			oldNodeCopy := oldNode.DeepCopy()
-			newNodeCopy := newNode.DeepCopy()
-
-			// clear heartbeat timestamp for each condition
-			for i, _ := range oldNodeCopy.Status.Conditions {
-				oldNodeCopy.Status.Conditions[i].LastHeartbeatTime = metav1.Time{}
-			}
-			for i, _ := range newNodeCopy.Status.Conditions {
-				newNodeCopy.Status.Conditions[i].LastHeartbeatTime = metav1.Time{}
+			if !reflect.DeepEqual(oldNode.Spec, newNode.Spec) {
+				return true
 			}
 
-			// clear the resource version as it gets updated with every heartbeat
-			oldNodeCopy.ResourceVersion = ""
-			newNodeCopy.ResourceVersion = ""
-
-			// clear kubelet update managedfields timestamp
-			for i, mf := range oldNodeCopy.ManagedFields {
-				if mf.Manager == "kubelet" {
-					oldNodeCopy.ManagedFields[i].Time = nil
-				}
-			}
-			for i, mf := range newNodeCopy.ManagedFields {
-				if mf.Manager == "kubelet" {
-					newNodeCopy.ManagedFields[i].Time = nil
-				}
+			if !reflect.DeepEqual(oldNode.Labels, newNode.Labels) {
+				return true
 			}
 
-			return !reflect.DeepEqual(oldNodeCopy, newNodeCopy)
+			if !reflect.DeepEqual(oldNode.Status.NodeInfo, newNode.Status.NodeInfo) {
+				return true
+			}
+
+			oldReadyCondition := getNodeReadyConditionStatus(oldNode)
+			newReadyCondition := getNodeReadyConditionStatus(newNode)
+
+			return oldReadyCondition != newReadyCondition
 		},
 	}
+}
+
+func getNodeReadyConditionStatus(node *v1.Node) v1.ConditionStatus {
+	for _, cond := range node.Status.Conditions {
+		if cond.Type == v1.NodeReady {
+			return cond.Status
+		}
+	}
+	return v1.ConditionUnknown
 }
 
 func NMCReconcilerNodePredicate() predicate.Predicate {
 	return predicate.And(
 		skipDeletions,
-		skipNodeHeartbeat(),
+		filterRelevantNodeUpdates(),
 	)
 }
 

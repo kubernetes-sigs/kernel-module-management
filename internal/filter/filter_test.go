@@ -113,56 +113,133 @@ var _ = Describe("nodeBecomesSchedulable", func() {
 	)
 })
 
-var _ = Describe("skipNodeHeartbeat", func() {
+var _ = Describe("filterRelevantNodeUpdates", func() {
 
-	It("should return false if the only diff is the heartbeat", func() {
-
+	It("should return false if there's no relevant change", func() {
 		oldNode := v1.Node{
-			Status: v1.NodeStatus{
-				Conditions: []v1.NodeCondition{
-					{
-						LastHeartbeatTime: metav1.NewTime(time.Unix(1, 0)),
-					},
-				},
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{"node-role.kubernetes.io/worker": "true"},
 			},
-		}
-
-		newNode := v1.Node{
-			Status: v1.NodeStatus{
-				Conditions: []v1.NodeCondition{
-					{
-						LastHeartbeatTime: metav1.NewTime(time.Unix(2, 0)),
-					},
-				},
+			Spec: v1.NodeSpec{
+				Unschedulable: false,
 			},
-		}
-
-		res := skipNodeHeartbeat().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
-		Expect(res).To(BeFalse())
-
-	})
-
-	It("should return true if there is a non heartbeat diff", func() {
-
-		oldNode := v1.Node{
 			Status: v1.NodeStatus{
 				NodeInfo: v1.NodeSystemInfo{
 					KernelVersion: "v1",
 				},
-			},
-		}
-
-		newNode := v1.Node{
-			Status: v1.NodeStatus{
-				NodeInfo: v1.NodeSystemInfo{
-					KernelVersion: "v2",
+				Conditions: []v1.NodeCondition{
+					{
+						Type:   v1.NodeReady,
+						Status: v1.ConditionTrue,
+					},
 				},
 			},
 		}
 
-		res := skipNodeHeartbeat().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
-		Expect(res).To(BeTrue())
+		// New node with just a heartbeat difference (which is ignored now)
+		newNode := oldNode.DeepCopy()
+		newNode.Status.Conditions[0].LastHeartbeatTime = metav1.NewTime(time.Now())
 
+		res := filterRelevantNodeUpdates().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: newNode})
+		Expect(res).To(BeFalse())
+	})
+
+	It("should return true if spec changed", func() {
+		oldNode := v1.Node{}
+		newNode := v1.Node{
+			Spec: v1.NodeSpec{
+				Unschedulable: true,
+			},
+		}
+
+		res := filterRelevantNodeUpdates().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
+		Expect(res).To(BeTrue())
+	})
+
+	It("should return true if labels changed", func() {
+		oldNode := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{"a": "1"},
+			},
+		}
+		newNode := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{"a": "2"},
+			},
+		}
+
+		res := filterRelevantNodeUpdates().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
+		Expect(res).To(BeTrue())
+	})
+
+	It("should return true if NodeInfo changed", func() {
+		oldNode := v1.Node{
+			Status: v1.NodeStatus{
+				NodeInfo: v1.NodeSystemInfo{KernelVersion: "1"},
+			},
+		}
+		newNode := v1.Node{
+			Status: v1.NodeStatus{
+				NodeInfo: v1.NodeSystemInfo{KernelVersion: "2"},
+			},
+		}
+
+		res := filterRelevantNodeUpdates().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
+		Expect(res).To(BeTrue())
+	})
+
+	It("should return true if Ready condition transitioned from NotReady to Ready", func() {
+		oldNode := v1.Node{
+			Status: v1.NodeStatus{
+				Conditions: []v1.NodeCondition{
+					{
+						Type:   v1.NodeReady,
+						Status: v1.ConditionFalse,
+					},
+				},
+			},
+		}
+		newNode := v1.Node{
+			Status: v1.NodeStatus{
+				Conditions: []v1.NodeCondition{
+					{
+						Type:   v1.NodeReady,
+						Status: v1.ConditionTrue,
+					},
+				},
+			},
+		}
+
+		res := filterRelevantNodeUpdates().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
+		Expect(res).To(BeTrue())
+	})
+
+	It("should return false if Ready condition stays True", func() {
+		oldNode := v1.Node{
+			Status: v1.NodeStatus{
+				Conditions: []v1.NodeCondition{
+					{
+						Type:   v1.NodeReady,
+						Status: v1.ConditionTrue,
+					},
+				},
+			},
+		}
+		newNode := v1.Node{
+			Status: v1.NodeStatus{
+				Conditions: []v1.NodeCondition{
+					{
+						Type:               v1.NodeReady,
+						Status:             v1.ConditionTrue,
+						LastHeartbeatTime:  metav1.NewTime(time.Now()),
+						LastTransitionTime: metav1.NewTime(time.Now()),
+					},
+				},
+			},
+		}
+
+		res := filterRelevantNodeUpdates().Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
+		Expect(res).To(BeFalse())
 	})
 })
 
