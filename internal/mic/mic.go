@@ -110,10 +110,16 @@ func (mici *micImpl) GetImageState(micObj *kmmv1beta1.ModuleImagesConfig, image 
 	return ""
 }
 
+// FIXME: add a unit-test
 func (mici *micImpl) DoAllImagesExist(micObj *kmmv1beta1.ModuleImagesConfig) bool {
 
+	imagesStates := map[string]kmmv1beta1.ImageState{}
 	for _, img := range micObj.Status.ImagesStates {
-		if img.Status != kmmv1beta1.ImageExists {
+		imagesStates[img.Image] = img.Status
+	}
+
+	for _, img := range micObj.Spec.Images {
+		if imagesStates[img.Image] != kmmv1beta1.ImageExists {
 			return false
 		}
 	}
