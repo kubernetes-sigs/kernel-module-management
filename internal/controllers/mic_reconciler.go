@@ -153,6 +153,9 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByPullPods(ctx context.Context,
 			case imageSpec.Sign != nil:
 				logger.Info("pull pod failed, build does not exist, sign exists, setting status to kmmv1beta1.ImageNeedsSigning")
 				mrhi.micHelper.SetImageStatus(micObj, image, kmmv1beta1.ImageNeedsSigning)
+			case imageSpec.SkipWaitMissingImage:
+				logger.Info("pull pod failed, SkipWaitMissingImage was set, setting status to kmmv1beta1.ImageDoesNotExist")
+				mrhi.micHelper.SetImageStatus(micObj, image, kmmv1beta1.ImageDoesNotExist)
 			default:
 				logger.Info(utils.WarnString("failed pod without build or sign spec, shoud not have happened"))
 			}
@@ -237,11 +240,12 @@ func (mrhi *micReconcilerHelperImpl) processImagesSpecs(ctx context.Context, mic
 			// image State is not set: either new image or pull pod is still running
 			if mrhi.imagePullerAPI.GetPullPodForImage(pullPods, imageSpec.Image) == nil {
 				// no pull pod- create it, otherwise we wait for it to finish
+				oneTimePod := imageSpec.Build != nil || imageSpec.Sign != nil || imageSpec.SkipWaitMissingImage
 				err := mrhi.imagePullerAPI.CreatePullPod(ctx,
 					micObj.Name,
 					micObj.Namespace,
 					imageSpec.Image,
-					(imageSpec.Build != nil || imageSpec.Sign != nil),
+					oneTimePod,
 					micObj.Spec.ImageRepoSecret,
 					micObj)
 				errs = append(errs, err)
