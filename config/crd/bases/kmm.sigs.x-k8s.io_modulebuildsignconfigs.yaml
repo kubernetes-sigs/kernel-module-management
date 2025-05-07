@@ -239,6 +239,11 @@ spec:
                       - certSecret
                       - keySecret
                       type: object
+                    skipWaitMissingImage:
+                      description: |-
+                        SkipWaitMissingImage signals to MIC to stop waiting for image to be present
+                        in case Build andSign not define, and report the image as DoesNotExist
+                      type: boolean
                   required:
                   - action
                   - image
