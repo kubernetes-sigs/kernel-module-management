@@ -50,6 +50,10 @@ type ModuleImageSpec struct {
 	// +optional
 	Sign *Sign `json:"sign,omitempty"`
 
+	// SkipWaitMissingImage signals to MIC to stop waiting for image to be present
+	// in case Build andSign not define, and report the image as DoesNotExist
+	SkipWaitMissingImage bool `json:"skipWaitMissingImage,omitempty"`
+
 	// +optional
 	// RegistryTLS set the TLS configs for accessing the registry of the image.
 	RegistryTLS *TLSOptions `json:"registryTLS,omitempty"`
