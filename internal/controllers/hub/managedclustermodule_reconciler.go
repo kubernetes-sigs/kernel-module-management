@@ -229,12 +229,14 @@ func (rh *managedClusterModuleReconcilerHelper) handleMIC(ctx context.Context, m
 	}
 
 	micName := mcm.Name + "-" + clusterName
-	if err := rh.micAPI.CreateOrPatch(ctx, micName, mcm.Namespace, images, mcm.Spec.ModuleSpec.ImageRepoSecret, mcm); err != nil {
+	//FIXME: MCM is a cluster-wide resource - there is an issue with creating an MIC with no namespace
+	if err := rh.micAPI.CreateOrPatch(ctx, micName, "default", images, mcm.Spec.ModuleSpec.ImageRepoSecret, mcm); err != nil {
 		errs = append(errs, fmt.Errorf("failed to createOrPatch MIC %s: %v", micName, err))
 		return false, errors.Join(errs...)
 	}
 
-	micObj, err := rh.micAPI.Get(ctx, mcm.Name, mcm.Namespace)
+	//FIXME: MCM is a cluster-wide resource - there is an issue with creating an MIC with no namespace
+	micObj, err := rh.micAPI.Get(ctx, micName, "default")
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to get MIC %s: %v", micName, err))
 		return false, errors.Join(errs...)
