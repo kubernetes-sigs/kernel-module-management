@@ -1,8 +1,12 @@
 package config
 
 import (
+	"context"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"os"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -40,6 +44,44 @@ type Config struct {
 	Metrics                Metrics        `yaml:"metrics"`
 	WebhookPort            int            `yaml:"webhookPort"`
 	Worker                 Worker         `yaml:"worker"`
+}
+
+type UserConfig struct {
+	SELinuxType      *string `yaml:"seLinuxType"`
+	FirmwareHostPath *string `yaml:"firmwareHostPath,omitempty"`
+}
+
+func LoadUserConfigFromCM(ctx context.Context, reader ctrlclient.Reader, nsName types.NamespacedName) (*UserConfig, error) {
+	cm := &corev1.ConfigMap{}
+	if err := reader.Get(ctx, nsName, cm); err != nil {
+		return nil, fmt.Errorf("failed to get ConfigMap %s/%s: %v", nsName.Namespace, nsName.Name, err)
+	}
+	uc := &UserConfig{}
+
+	if val, ok := cm.Data["seLinuxType"]; ok {
+		uc.SELinuxType = &val
+	}
+	if val, ok := cm.Data["firmwareHostPath"]; ok {
+		uc.FirmwareHostPath = &val
+	}
+
+	return uc, nil
+}
+
+func MergeUserConfigInto(uc *UserConfig, cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("cfg must not be nil")
+	}
+	if uc == nil {
+		return nil
+	}
+	if uc.SELinuxType != nil {
+		cfg.Worker.SELinuxType = *uc.SELinuxType
+	}
+	if uc.FirmwareHostPath != nil {
+		cfg.Worker.FirmwareHostPath = uc.FirmwareHostPath
+	}
+	return nil
 }
 
 func ParseFile(path string) (*Config, error) {
