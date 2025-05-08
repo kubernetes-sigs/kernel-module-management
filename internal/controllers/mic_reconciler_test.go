@@ -110,25 +110,7 @@ var _ = Describe("updateStatusByPullPods", func() {
 	})
 
 	ctx := context.Background()
-	testMic := kmmv1beta1.ModuleImagesConfig{
-		Spec: kmmv1beta1.ModuleImagesConfigSpec{
-			Images: []kmmv1beta1.ModuleImageSpec{
-				{
-					Image: "image 1",
-					Build: &kmmv1beta1.Build{},
-				},
-				{
-
-					Image: "image 2",
-					Sign:  &kmmv1beta1.Sign{},
-				},
-				{
-
-					Image: "image 3",
-				},
-			},
-		},
-	}
+	testMic := kmmv1beta1.ModuleImagesConfig{}
 
 	It("zero pull pods", func() {
 		pullPods := []v1.Pod{}
@@ -139,8 +121,8 @@ var _ = Describe("updateStatusByPullPods", func() {
 	It("pod's image is not in spec", func() {
 		pullPod := v1.Pod{}
 		gomock.InOrder(
-			mockImagePuller.EXPECT().GetPullPodImage(pullPod).Return("image 3"),
-			micHelper.EXPECT().GetModuleImageSpec(&testMic, "image 3").Return(nil),
+			mockImagePuller.EXPECT().GetPullPodImage(pullPod).Return("missing image"),
+			micHelper.EXPECT().GetModuleImageSpec(&testMic, "missing image").Return(nil),
 			clnt.EXPECT().Status().Return(statusWriter),
 			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
 			mockImagePuller.EXPECT().DeletePod(ctx, &pullPod).Return(nil),
@@ -149,44 +131,45 @@ var _ = Describe("updateStatusByPullPods", func() {
 		Expect(err).To(BeNil())
 	})
 
-	It("pod failed, build config present", func() {
+	DescribeTable("pod failed scenarios",
+		func(buildExists, signExists, skipWaitMissingImage bool, stateToSet kmmv1beta1.ImageState) {
+			pullPod := v1.Pod{}
+			micSpec := kmmv1beta1.ModuleImageSpec{
+				Image: "some test image",
+			}
+			if buildExists {
+				micSpec.Build = &kmmv1beta1.Build{}
+			}
+			if signExists {
+				micSpec.Sign = &kmmv1beta1.Sign{}
+			}
+			micSpec.SkipWaitMissingImage = skipWaitMissingImage
+			gomock.InOrder(
+				mockImagePuller.EXPECT().GetPullPodImage(pullPod).Return("some test image"),
+				micHelper.EXPECT().GetModuleImageSpec(&testMic, "some test image").Return(&micSpec),
+				mockImagePuller.EXPECT().GetPullPodStatus(&pullPod).Return(pod.PullImageFailed),
+				micHelper.EXPECT().SetImageStatus(&testMic, "some test image", stateToSet),
+				clnt.EXPECT().Status().Return(statusWriter),
+				statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
+				mockImagePuller.EXPECT().DeletePod(ctx, &pullPod).Return(nil),
+			)
+			err := mrh.updateStatusByPullPods(ctx, &testMic, []v1.Pod{pullPod})
+			Expect(err).To(BeNil())
+		},
+		Entry("build exists, sign missing, skipWait false, state ImageNeedsBuilding", true, false, false, kmmv1beta1.ImageNeedsBuilding),
+		Entry("build missing, sign exists, skipWait false, state ImageNeedsSigning", false, true, false, kmmv1beta1.ImageNeedsSigning),
+		Entry("build missing, sign missing, skipWait true, state ImageDoesNotExist", false, false, true, kmmv1beta1.ImageDoesNotExist),
+	)
+
+	It("pod failed, build or sign configs are not present, skipWait is false", func() {
 		pullPod := v1.Pod{}
+		micSpec := kmmv1beta1.ModuleImageSpec{
+			Image: "some test image",
+		}
 
 		gomock.InOrder(
-			mockImagePuller.EXPECT().GetPullPodImage(pullPod).Return("image 1"),
-			micHelper.EXPECT().GetModuleImageSpec(&testMic, "image 1").Return(&testMic.Spec.Images[0]),
-			mockImagePuller.EXPECT().GetPullPodStatus(&pullPod).Return(pod.PullImageFailed),
-			micHelper.EXPECT().SetImageStatus(&testMic, "image 1", kmmv1beta1.ImageNeedsBuilding),
-			clnt.EXPECT().Status().Return(statusWriter),
-			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
-			mockImagePuller.EXPECT().DeletePod(ctx, &pullPod).Return(nil),
-		)
-		err := mrh.updateStatusByPullPods(ctx, &testMic, []v1.Pod{pullPod})
-		Expect(err).To(BeNil())
-	})
-
-	It("pod failed, build config not present, sign config present", func() {
-		pullPod := v1.Pod{}
-
-		gomock.InOrder(
-			mockImagePuller.EXPECT().GetPullPodImage(pullPod).Return("image 2"),
-			micHelper.EXPECT().GetModuleImageSpec(&testMic, "image 2").Return(&testMic.Spec.Images[1]),
-			mockImagePuller.EXPECT().GetPullPodStatus(&pullPod).Return(pod.PullImageFailed),
-			micHelper.EXPECT().SetImageStatus(&testMic, "image 2", kmmv1beta1.ImageNeedsSigning),
-			clnt.EXPECT().Status().Return(statusWriter),
-			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
-			mockImagePuller.EXPECT().DeletePod(ctx, &pullPod).Return(nil),
-		)
-		err := mrh.updateStatusByPullPods(ctx, &testMic, []v1.Pod{pullPod})
-		Expect(err).To(BeNil())
-	})
-
-	It("pod failed, build or sign configs are not present", func() {
-		pullPod := v1.Pod{}
-
-		gomock.InOrder(
-			mockImagePuller.EXPECT().GetPullPodImage(pullPod).Return("image 3"),
-			micHelper.EXPECT().GetModuleImageSpec(&testMic, "image 3").Return(&testMic.Spec.Images[2]),
+			mockImagePuller.EXPECT().GetPullPodImage(pullPod).Return("some test image"),
+			micHelper.EXPECT().GetModuleImageSpec(&testMic, "some test image").Return(&micSpec),
 			mockImagePuller.EXPECT().GetPullPodStatus(&pullPod).Return(pod.PullImageFailed),
 			clnt.EXPECT().Status().Return(statusWriter),
 			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
@@ -198,12 +181,15 @@ var _ = Describe("updateStatusByPullPods", func() {
 
 	It("pod succeeded", func() {
 		pullPod := v1.Pod{}
+		micSpec := kmmv1beta1.ModuleImageSpec{
+			Image: "some test image",
+		}
 
 		gomock.InOrder(
-			mockImagePuller.EXPECT().GetPullPodImage(pullPod).Return("image 2"),
-			micHelper.EXPECT().GetModuleImageSpec(&testMic, "image 2").Return(&testMic.Spec.Images[1]),
+			mockImagePuller.EXPECT().GetPullPodImage(pullPod).Return("some test image"),
+			micHelper.EXPECT().GetModuleImageSpec(&testMic, "some test image").Return(&micSpec),
 			mockImagePuller.EXPECT().GetPullPodStatus(&pullPod).Return(pod.PullImageSuccess),
-			micHelper.EXPECT().SetImageStatus(&testMic, "image 2", kmmv1beta1.ImageExists),
+			micHelper.EXPECT().SetImageStatus(&testMic, "some test image", kmmv1beta1.ImageExists),
 			clnt.EXPECT().Status().Return(statusWriter),
 			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()),
 			mockImagePuller.EXPECT().DeletePod(ctx, &pullPod).Return(nil),
@@ -351,7 +337,6 @@ var _ = Describe("processImagesSpecs", func() {
 				Images: []kmmv1beta1.ModuleImageSpec{
 					{
 						Image: "image 1",
-						Build: &kmmv1beta1.Build{},
 					},
 				},
 			},
@@ -361,29 +346,31 @@ var _ = Describe("processImagesSpecs", func() {
 
 	ctx := context.Background()
 	pullPods := []v1.Pod{}
-	testMic = kmmv1beta1.ModuleImagesConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some name",
-			Namespace: "some namespace",
-		},
-		Spec: kmmv1beta1.ModuleImagesConfigSpec{
-			Images: []kmmv1beta1.ModuleImageSpec{
-				{
-					Image: "image 1",
-				},
-			},
-		},
-	}
 
-	It("image status empty, pull pod does not exists, need to create a pull pod", func() {
-		gomock.InOrder(
-			micHelper.EXPECT().GetImageState(&testMic, "image 1").Return(kmmv1beta1.ImageState("")),
-			mockImagePuller.EXPECT().GetPullPodForImage(pullPods, "image 1").Return(nil),
-			mockImagePuller.EXPECT().CreatePullPod(ctx, "some name", "some namespace", "image 1", true, nil, &testMic).Return(nil),
-		)
-		err := mrh.processImagesSpecs(ctx, &testMic, pullPods)
-		Expect(err).To(BeNil())
-	})
+	DescribeTable("image status empty, pull pod does not exists, create a pull pod",
+		func(buildExists, signExists, skipWaitMissingImage, expectedOneTimePodFlag bool) {
+			if buildExists {
+				testMic.Spec.Images[0].Build = &kmmv1beta1.Build{}
+			}
+			if signExists {
+				testMic.Spec.Images[0].Sign = &kmmv1beta1.Sign{}
+			}
+			testMic.Spec.Images[0].SkipWaitMissingImage = skipWaitMissingImage
+			gomock.InOrder(
+				micHelper.EXPECT().GetImageState(&testMic, "image 1").Return(kmmv1beta1.ImageState("")),
+				mockImagePuller.EXPECT().GetPullPodForImage(pullPods, "image 1").Return(nil),
+				mockImagePuller.EXPECT().CreatePullPod(ctx, "some name", "some namespace", "image 1", expectedOneTimePodFlag, nil, &testMic).Return(nil),
+			)
+			err := mrh.processImagesSpecs(ctx, &testMic, pullPods)
+			Expect(err).To(BeNil())
+		},
+		Entry("build exists, sign missing, skipWait false, expectedFlag true", true, false, false, true),
+		Entry("build missing, sign exists, skipWait false, expectedFlag true", false, true, false, true),
+		Entry("build missing, sign missing, skipWait true, expectedFlag true", false, false, true, true),
+		Entry("build exists, sign exists, skipWait false, expectedFlag true", true, true, false, true),
+		Entry("build exists, sign exists, skipWait true, expectedFlag true", true, true, true, true),
+		Entry("build missing, sign missing, skipWait false, expectedFlag false", false, false, false, false),
+	)
 
 	It("image status empty, pull pod exists, nothing to do", func() {
 		gomock.InOrder(
