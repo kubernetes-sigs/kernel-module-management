@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"k8s.io/apimachinery/pkg/types"
 	"os"
 	"strconv"
 
@@ -66,10 +67,16 @@ func main() {
 	logConfig := textlogger.NewConfig()
 	logConfig.AddFlags(flag.CommandLine)
 
-	var configFile string
+	var (
+		configFile          string
+		userConfigNamespace string
+		userConfigName      string
+	)
 
 	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
+	flag.StringVar(&userConfigName, "user-config-name", "", "Name of the ConfigMap containing user config.")
 
+	userConfigNamespace = os.Getenv("OPERATOR_NAMESPACE")
 	flag.Parse()
 
 	logger := textlogger.NewLogger(logConfig).WithName("kmm")
@@ -109,6 +116,15 @@ func main() {
 
 	client := mgr.GetClient()
 
+	ctx := ctrl.SetupSignalHandler()
+	reader := mgr.GetAPIReader()
+	uc, err := config.LoadUserConfigFromCM(ctx, reader, types.NamespacedName{Namespace: userConfigNamespace, Name: userConfigName})
+	if err != nil {
+		setupLogger.Info("No user config loaded, using default configuration", "error", err)
+	} else if err = config.MergeUserConfigInto(uc, cfg); err != nil {
+		setupLogger.Error(err, "Failed to merge user config")
+	}
+
 	nmcHelper := nmc.NewHelper(client)
 	filterAPI := filter.New(client, nmcHelper)
 
@@ -146,8 +162,6 @@ func main() {
 	if err = mnc.SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleReconcilerName)
 	}
-
-	ctx := ctrl.SetupSignalHandler()
 
 	eventRecorder := mgr.GetEventRecorderFor("kmm")
 

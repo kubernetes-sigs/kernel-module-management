@@ -10,6 +10,7 @@ spec:
       - name: manager
         args:
         - "--config=controller_config.yaml"
+        - "--user-config-name=kmm-user-override-config"
         volumeMounts:
         - name: manager-config
           mountPath: /controller_config.yaml
