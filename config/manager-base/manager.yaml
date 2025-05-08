@@ -26,16 +26,16 @@ spec:
     spec:
       affinity:
         nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
               - key: node-role.kubernetes.io/control-plane
                 operator: Exists
-            - matchExpressions:
+          - weight: 1
+            preference:
+              matchExpressions:
               - key: node-role.kubernetes.io/master
-                operator: Exists
-            - matchExpressions:
-              - key: kmm.node.kubernetes.io/control-plane
                 operator: Exists
       securityContext:
         runAsNonRoot: true
