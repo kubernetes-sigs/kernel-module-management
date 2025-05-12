@@ -39,7 +39,8 @@ import (
 
 	hubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
-	buildsignpod "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/pod"
+	buildsign "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign"
+	buildsignresource "github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/resource"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cluster"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -112,11 +113,12 @@ func main() {
 
 	registryAPI := registry.NewRegistry()
 	buildSignCombiner := module.NewCombiner()
+	resourceManager := buildsignresource.NewResourceManager(client, buildSignCombiner, scheme)
 
 	micAPI := mic.New(client, scheme)
 	mbscAPI := mbsc.New(client, scheme)
 	imagePullerAPI := pod.NewImagePuller(client, scheme)
-	builSignAPI := buildsignpod.NewManager(client, buildSignCombiner, scheme)
+	builSignAPI := buildsign.NewManager(client, resourceManager, scheme)
 
 	kernelAPI := module.NewKernelMapper(buildSignCombiner)
 

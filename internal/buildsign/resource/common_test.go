@@ -1,8 +1,7 @@
-package pod
+package resource
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -11,493 +10,20 @@ import (
 	"github.com/mitchellh/hashstructure/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"go.uber.org/mock/gomock"
-	sigclient "sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("PodLabels", func() {
-	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		mockCombiner *module.MockCombiner
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		mockCombiner = module.NewMockCombiner(ctrl)
-	})
-
-	It("get pod labels", func() {
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleName"},
-		}
-		mgr := NewBuildSignPodManager(clnt, mockCombiner, scheme)
-		labels := mgr.PodLabels(mod.Name, "targetKernel", "podType")
-
-		expected := map[string]string{
-			"app.kubernetes.io/name":      "kmm",
-			"app.kubernetes.io/component": "podType",
-			"app.kubernetes.io/part-of":   "kmm",
-			constants.ModuleNameLabel:     "moduleName",
-			constants.TargetKernelTarget:  "targetKernel",
-			constants.PodType:             "podType",
-		}
-
-		Expect(labels).To(Equal(expected))
-	})
-})
-
-var _ = Describe("GetModulePodByKernel", func() {
-	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		mockCombiner = module.NewMockCombiner(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
-	})
-
-	It("should return only one pod", func() {
-		ctx := context.Background()
-
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
-		}
-		j := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "modulePod", Namespace: "moduleNamespace"},
-		}
-
-		err := controllerutil.SetControllerReference(&mod, &j, scheme)
-		Expect(err).NotTo(HaveOccurred())
-
-		labels := map[string]string{
-			constants.ModuleNameLabel:    "moduleName",
-			constants.TargetKernelTarget: "targetKernel",
-			constants.PodType:            "podType",
-		}
-
-		opts := []sigclient.ListOption{
-			sigclient.MatchingLabels(labels),
-			sigclient.InNamespace("moduleNamespace"),
-		}
-
-		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
-				list.Items = []v1.Pod{j}
-				return nil
-			},
-		)
-
-		pod, err := bspm.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
-
-		Expect(pod).To(Equal(&j))
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	It("failure to fetch pods", func() {
-		ctx := context.Background()
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
-		}
-
-		labels := map[string]string{
-			constants.ModuleNameLabel:    "moduleName",
-			constants.TargetKernelTarget: "targetKernel",
-			constants.PodType:            "podType",
-		}
-
-		opts := []sigclient.ListOption{
-			sigclient.MatchingLabels(labels),
-			sigclient.InNamespace("moduleNamespace"),
-		}
-		podList := v1.PodList{}
-
-		clnt.EXPECT().List(ctx, &podList, opts).Return(errors.New("random error"))
-
-		_, err := bspm.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
-
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("should fails if more then 1 pod exists", func() {
-		ctx := context.Background()
-
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
-		}
-
-		j1 := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "modulePod1", Namespace: "moduleNamespace"},
-		}
-		j2 := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "modulePod2", Namespace: "moduleNamespace"},
-		}
-
-		err := controllerutil.SetControllerReference(&mod, &j1, scheme)
-		Expect(err).NotTo(HaveOccurred())
-		err = controllerutil.SetControllerReference(&mod, &j2, scheme)
-		Expect(err).NotTo(HaveOccurred())
-
-		labels := map[string]string{
-			constants.ModuleNameLabel:    "moduleName",
-			constants.TargetKernelTarget: "targetKernel",
-			constants.PodType:            "podType",
-		}
-
-		opts := []sigclient.ListOption{
-			sigclient.MatchingLabels(labels),
-			sigclient.InNamespace("moduleNamespace"),
-		}
-
-		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
-				list.Items = []v1.Pod{j1, j2}
-				return nil
-			},
-		)
-
-		_, err = bspm.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
-
-		Expect(err).To(HaveOccurred())
-	})
-	It("more then 1 pod exists, but only one is owned by the module", func() {
-		ctx := context.Background()
-
-		mod := kmmv1beta1.Module{
-			TypeMeta:   metav1.TypeMeta{Kind: "some kind", APIVersion: "some version"},
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace", UID: "some uuid"},
-		}
-
-		anotherMod := kmmv1beta1.Module{
-			TypeMeta:   metav1.TypeMeta{Kind: "some kind", APIVersion: "some version"},
-			ObjectMeta: metav1.ObjectMeta{Name: "anotherModuleName", Namespace: "moduleNamespace", UID: "another uuid"},
-		}
-
-		j1 := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "modulePod1", Namespace: "moduleNamespace"},
-		}
-		j2 := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "modulePod2", Namespace: "moduleNamespace"},
-		}
-
-		err := controllerutil.SetControllerReference(&mod, &j1, scheme)
-		Expect(err).NotTo(HaveOccurred())
-		err = controllerutil.SetControllerReference(&anotherMod, &j2, scheme)
-		Expect(err).NotTo(HaveOccurred())
-
-		labels := map[string]string{
-			constants.ModuleNameLabel:    "moduleName",
-			constants.TargetKernelTarget: "targetKernel",
-			constants.PodType:            "podType",
-		}
-
-		opts := []sigclient.ListOption{
-			sigclient.MatchingLabels(labels),
-			sigclient.InNamespace("moduleNamespace"),
-		}
-
-		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
-				list.Items = []v1.Pod{j1, j2}
-				return nil
-			},
-		)
-
-		pod, err := bspm.GetModulePodByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "podType", &mod)
-
-		Expect(err).NotTo(HaveOccurred())
-		Expect(pod).To(Equal(&j1))
-	})
-})
-
-var _ = Describe("GetModulePods", func() {
-	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
-	})
-
-	It("return all found pods", func() {
-		ctx := context.Background()
-
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
-		}
-
-		j1 := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "modulePod1", Namespace: "moduleNamespace"},
-		}
-		j2 := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "modulePod12", Namespace: "moduleNamespace"},
-		}
-		err := controllerutil.SetControllerReference(&mod, &j1, scheme)
-		Expect(err).NotTo(HaveOccurred())
-		err = controllerutil.SetControllerReference(&mod, &j2, scheme)
-		Expect(err).NotTo(HaveOccurred())
-
-		labels := map[string]string{
-			constants.ModuleNameLabel: "moduleName",
-			constants.PodType:         "podType",
-		}
-
-		opts := []sigclient.ListOption{
-			sigclient.MatchingLabels(labels),
-			sigclient.InNamespace("moduleNamespace"),
-		}
-
-		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
-				list.Items = []v1.Pod{j1, j2}
-				return nil
-			},
-		)
-
-		pods, err := bspm.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
-
-		Expect(err).NotTo(HaveOccurred())
-		Expect(len(pods)).To(Equal(2))
-	})
-
-	It("error flow", func() {
-		ctx := context.Background()
-
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
-		}
-
-		labels := map[string]string{
-			constants.ModuleNameLabel: "moduleName",
-			constants.PodType:         "podType",
-		}
-
-		opts := []sigclient.ListOption{
-			sigclient.MatchingLabels(labels),
-			sigclient.InNamespace("moduleNamespace"),
-		}
-
-		clnt.EXPECT().List(ctx, gomock.Any(), opts).Return(fmt.Errorf("some error"))
-
-		_, err := bspm.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
-
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("zero pods found", func() {
-		ctx := context.Background()
-
-		mod := kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "moduleNamespace"},
-		}
-
-		labels := map[string]string{
-			constants.ModuleNameLabel: "moduleName",
-			constants.PodType:         "podType",
-		}
-
-		opts := []sigclient.ListOption{
-			sigclient.MatchingLabels(labels),
-			sigclient.InNamespace("moduleNamespace"),
-		}
-
-		clnt.EXPECT().List(ctx, gomock.Any(), opts).DoAndReturn(
-			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
-				list.Items = []v1.Pod{}
-				return nil
-			},
-		)
-
-		pods, err := bspm.GetModulePods(ctx, mod.Name, mod.Namespace, "podType", &mod)
-
-		Expect(err).NotTo(HaveOccurred())
-		Expect(len(pods)).To(Equal(0))
-	})
-})
-
-var _ = Describe("DeletePod", func() {
-	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
-	})
-
-	It("good flow", func() {
-		ctx := context.Background()
-
-		pod := v1.Pod{}
-		opts := []sigclient.DeleteOption{
-			sigclient.PropagationPolicy(metav1.DeletePropagationBackground),
-		}
-		clnt.EXPECT().Delete(ctx, &pod, opts).Return(nil)
-
-		err := bspm.DeletePod(ctx, &pod)
-
-		Expect(err).NotTo(HaveOccurred())
-
-	})
-
-	It("error flow", func() {
-		ctx := context.Background()
-
-		pod := v1.Pod{}
-		opts := []sigclient.DeleteOption{
-			sigclient.PropagationPolicy(metav1.DeletePropagationBackground),
-		}
-		clnt.EXPECT().Delete(ctx, &pod, opts).Return(errors.New("random error"))
-
-		err := bspm.DeletePod(ctx, &pod)
-
-		Expect(err).To(HaveOccurred())
-
-	})
-})
-
-var _ = Describe("CreatePod", func() {
-	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
-	})
-
-	It("good flow", func() {
-		ctx := context.Background()
-
-		pod := v1.Pod{}
-		clnt.EXPECT().Create(ctx, &pod).Return(nil)
-
-		err := bspm.CreatePod(ctx, &pod)
-
-		Expect(err).NotTo(HaveOccurred())
-
-	})
-
-	It("error flow", func() {
-		ctx := context.Background()
-
-		pod := v1.Pod{}
-		clnt.EXPECT().Create(ctx, &pod).Return(errors.New("random error"))
-
-		err := bspm.CreatePod(ctx, &pod)
-
-		Expect(err).To(HaveOccurred())
-
-	})
-})
-
-var _ = Describe("PodStatus", func() {
-	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
-	})
-
-	DescribeTable("should return the correct status depending on the pod status",
-		func(s *v1.Pod, podStatus Status, expectsErr bool) {
-
-			res, err := bspm.GetPodStatus(s)
-			if expectsErr {
-				Expect(err).To(HaveOccurred())
-				return
-			}
-
-			Expect(res).To(Equal(podStatus))
-		},
-		Entry("succeeded", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodSucceeded}}, StatusCompleted, false),
-		Entry("in progress", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodRunning}}, StatusInProgress, false),
-		Entry("pending", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodPending}}, StatusInProgress, false),
-		Entry("Failed", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodFailed}}, StatusFailed, false),
-		Entry("Unknown", &v1.Pod{Status: v1.PodStatus{Phase: v1.PodUnknown}}, Status(""), true),
-	)
-})
-
-var _ = Describe("IsPodChnaged", func() {
-	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
-	})
-
-	DescribeTable("should detect if a pod has changed",
-		func(annotation map[string]string, expectchanged bool, expectsErr bool) {
-			existingPod := v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: annotation,
-				},
-			}
-			newPod := v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{constants.PodHashAnnotation: "some hash"},
-				},
-			}
-			fmt.Println(existingPod.GetAnnotations())
-
-			changed, err := bspm.IsPodChanged(&existingPod, &newPod)
-
-			if expectsErr {
-				Expect(err).To(HaveOccurred())
-				return
-			}
-			Expect(expectchanged).To(Equal(changed))
-		},
-
-		Entry("should error if pod has no annotations", nil, false, true),
-		Entry("should return true if pod has changed", map[string]string{constants.PodHashAnnotation: "some other hash"}, true, false),
-		Entry("should return false is pod has not changed ", map[string]string{constants.PodHashAnnotation: "some hash"}, false, false),
-	)
-})
-
-var _ = Describe("MakeBuildResourceTemplate", func() {
+var _ = Describe("makeBuildTemplate", func() {
 	const (
 		image                   = "my.registry/my/image"
 		dockerfile              = "FROM test"
@@ -510,17 +36,21 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 	)
 
 	var (
-		ctrl                *gomock.Controller
-		clnt                *client.MockClient
-		mc                  *module.MockCombiner
-		buildSignPodManager BuildSignPodManager
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		mc   *module.MockCombiner
+		rm   *resourceManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mc = module.NewMockCombiner(ctrl)
-		buildSignPodManager = NewBuildSignPodManager(clnt, mc, scheme)
+		rm = &resourceManager{
+			client:   clnt,
+			combiner: mc,
+			scheme:   scheme,
+		}
 	})
 
 	AfterEach(func() {
@@ -581,7 +111,7 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: mld.Name + "-build-",
 				Namespace:    namespace,
-				Labels:       buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, string(kmmv1beta1.BuildImage)),
+				Labels:       resourceLabels(mld.Name, mld.KernelNormalizedVersion, kmmv1beta1.BuildImage),
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						APIVersion:         "kmm.sigs.x-k8s.io/v1beta1",
@@ -693,15 +223,15 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 				)
 		}
 		dataToHash := struct {
-			PodSpec    *v1.PodSpec
+			BuildSpec  *v1.PodSpec
 			Dockerfile string
 		}{
-			PodSpec:    &expected.Spec,
+			BuildSpec:  &expected.Spec,
 			Dockerfile: dockerfile,
 		}
 		hash, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
 		Expect(err).NotTo(HaveOccurred())
-		annotations := map[string]string{constants.PodHashAnnotation: fmt.Sprintf("%d", hash)}
+		annotations := map[string]string{constants.ResourceHashAnnotation: fmt.Sprintf("%d", hash)}
 		expected.SetAnnotations(annotations)
 
 		gomock.InOrder(
@@ -714,7 +244,7 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 			),
 		)
 
-		actual, err := buildSignPodManager.MakeBuildResourceTemplate(ctx, &mld, mld.Owner, true)
+		actual, err := rm.makeBuildTemplate(ctx, &mld, mld.Owner, true)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -779,15 +309,17 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 			),
 		)
 
-		actual, err := buildSignPodManager.MakeBuildResourceTemplate(ctx, &mld, mld.Owner, pushImage)
+		actual, err := rm.makeBuildTemplate(ctx, &mld, mld.Owner, pushImage)
+		actualPod, ok := actual.(*v1.Pod)
+		Expect(ok).To(BeTrue())
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
+		Expect(actualPod.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
 
 		if pushImage {
-			Expect(actual.Spec.Containers[0].Args).To(ContainElement("--destination"))
+			Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--destination"))
 		} else {
-			Expect(actual.Spec.Containers[0].Args).To(ContainElement("--no-push"))
+			Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--no-push"))
 		}
 	},
 		Entry(
@@ -857,10 +389,12 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 			),
 		)
 
-		actual, err := buildSignPodManager.MakeBuildResourceTemplate(ctx, &mld, mld.Owner, false)
+		actual, err := rm.makeBuildTemplate(ctx, &mld, mld.Owner, false)
+		actualPod, ok := actual.(*v1.Pod)
+		Expect(ok).To(BeTrue())
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Containers[0].Image).To(Equal("some-build-image:" + customTag))
+		Expect(actualPod.Spec.Containers[0].Image).To(Equal("some-build-image:" + customTag))
 	})
 
 	It("should add the kmm_unsigned suffix to the target image if sign is defined", func() {
@@ -893,15 +427,17 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 			),
 		)
 
-		actual, err := buildSignPodManager.MakeBuildResourceTemplate(ctx, &mld, mld.Owner, true)
+		actual, err := rm.makeBuildTemplate(ctx, &mld, mld.Owner, true)
+		actualPod, ok := actual.(*v1.Pod)
+		Expect(ok).To(BeTrue())
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Containers[0].Args).To(ContainElement("--destination"))
-		Expect(actual.Spec.Containers[0].Args).To(ContainElement(expectedImageName))
+		Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--destination"))
+		Expect(actualPod.Spec.Containers[0].Args).To(ContainElement(expectedImageName))
 	})
 })
 
-var _ = Describe("MakeSignResourceTemplate", func() {
+var _ = Describe("makeSignTemplate", func() {
 	const (
 		unsignedImage = "my.registry/my/image"
 		signedImage   = unsignedImage + "-signed"
@@ -931,11 +467,11 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 	)
 
 	var (
-		ctrl                *gomock.Controller
-		clnt                *client.MockClient
-		mld                 api.ModuleLoaderData
-		mockCombiner        *module.MockCombiner
-		buildSignPodManager BuildSignPodManager
+		ctrl         *gomock.Controller
+		clnt         *client.MockClient
+		mld          api.ModuleLoaderData
+		mockCombiner *module.MockCombiner
+		rm           *resourceManager
 
 		filesToSign = []string{
 			"/modules/simple-kmod.ko",
@@ -947,7 +483,11 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mockCombiner = module.NewMockCombiner(ctrl)
-		buildSignPodManager = NewBuildSignPodManager(clnt, mockCombiner, scheme)
+		rm = &resourceManager{
+			client:   clnt,
+			combiner: mockCombiner,
+			scheme:   scheme,
+		}
 		mld = api.ModuleLoaderData{
 			Name:      moduleName,
 			Namespace: namespace,
@@ -1024,7 +564,7 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: mld.Name + "-sign-",
 				Namespace:    namespace,
-				Labels:       buildSignPodManager.PodLabels(mld.Name, mld.KernelNormalizedVersion, string(kmmv1beta1.SignImage)),
+				Labels:       resourceLabels(mld.Name, mld.KernelNormalizedVersion, kmmv1beta1.SignImage),
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						APIVersion:         "kmm.sigs.x-k8s.io/v1beta1",
@@ -1104,12 +644,12 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		}
 
 		dataToHash := struct {
-			PodSpec        *v1.PodSpec
+			SignSpec       *v1.PodSpec
 			PrivateKeyData []byte
 			PublicKeyData  []byte
 			SignConfig     []byte
 		}{
-			PodSpec:        &expected.Spec,
+			SignSpec:       &expected.Spec,
 			PrivateKeyData: []byte(privateKey),
 			PublicKeyData:  []byte(publicKey),
 			SignConfig:     []byte(dockerfile),
@@ -1117,8 +657,8 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		hash, err := hashstructure.Hash(dataToHash, hashstructure.FormatV2, nil)
 		Expect(err).NotTo(HaveOccurred())
 		annotations := map[string]string{
-			constants.PodHashAnnotation: fmt.Sprintf("%d", hash),
-			"dockerfile":                dockerfile,
+			constants.ResourceHashAnnotation: fmt.Sprintf("%d", hash),
+			"dockerfile":                     dockerfile,
 		}
 		expected.SetAnnotations(annotations)
 
@@ -1139,7 +679,7 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			),
 		)
 
-		actual, err := buildSignPodManager.MakeSignResourceTemplate(ctx, &mld, mld.Owner, true)
+		actual, err := rm.makeSignTemplate(ctx, &mld, mld.Owner, true)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(
@@ -1184,14 +724,15 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			),
 		)
 
-		actual, err := buildSignPodManager.MakeSignResourceTemplate(ctx, &mld, mld.Owner, pushImage)
-
+		actual, err := rm.makeSignTemplate(ctx, &mld, mld.Owner, pushImage)
 		Expect(err).NotTo(HaveOccurred())
+		actualPod, ok := actual.(*v1.Pod)
+		Expect(ok).To(BeTrue())
 
 		if pushImage {
-			Expect(actual.Spec.Containers[0].Args).To(ContainElement("--destination"))
+			Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--destination"))
 		} else {
-			Expect(actual.Spec.Containers[0].Args).To(ContainElement("--no-push"))
+			Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--no-push"))
 		}
 
 	},
@@ -1243,10 +784,11 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			),
 		)
 
-		actual, err := buildSignPodManager.MakeSignResourceTemplate(ctx, &mld, mld.Owner, true)
-
+		actual, err := rm.makeSignTemplate(ctx, &mld, mld.Owner, true)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actual.Spec.Containers[0].Args).To(ContainElement(expectedFlag))
+		actualPod, ok := actual.(*v1.Pod)
+		Expect(ok).To(BeTrue())
+		Expect(actualPod.Spec.Containers[0].Args).To(ContainElement(expectedFlag))
 	},
 		Entry(
 			"filelist and push",
@@ -1281,4 +823,23 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			"--skip-tls-verify-pull",
 		),
 	)
+})
+var _ = Describe("resourceLabels", func() {
+
+	It("get pod labels", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName"},
+		}
+		expected := map[string]string{
+			"app.kubernetes.io/name":      "kmm",
+			"app.kubernetes.io/component": "podType",
+			"app.kubernetes.io/part-of":   "kmm",
+			constants.ModuleNameLabel:     "moduleName",
+			constants.TargetKernelTarget:  "targetKernel",
+			constants.ResourceType:        "podType",
+		}
+
+		labels := resourceLabels(mod.Name, "targetKernel", "podType")
+		Expect(labels).To(Equal(expected))
+	})
 })

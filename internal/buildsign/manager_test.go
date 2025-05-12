@@ -1,4 +1,4 @@
-package pod
+package buildsign
 
 import (
 	"context"
@@ -18,10 +18,10 @@ import (
 
 var _ = Describe("GetStatus", func() {
 	var (
-		ctrl                    *gomock.Controller
-		clnt                    *client.MockClient
-		mockBuildSignPodManager *MockBuildSignPodManager
-		mgr                     *podManager
+		ctrl                *gomock.Controller
+		clnt                *client.MockClient
+		mockResourceManager *MockResourceManager
+		mgr                 Manager
 	)
 	const (
 		mbscName      = "some-name"
@@ -33,20 +33,17 @@ var _ = Describe("GetStatus", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
-		mgr = &podManager{
-			client:              clnt,
-			buildSignPodManager: mockBuildSignPodManager,
-		}
+		mockResourceManager = NewMockResourceManager(ctrl)
+		mgr = NewManager(clnt, mockResourceManager, scheme)
 	})
 
 	ctx := context.Background()
 	testMBSC := kmmv1beta1.ModuleBuildSignConfig{}
 
-	It("failed flow, GetModulePodByKernel fails", func() {
+	It("failed flow, GetResourceByKernel fails", func() {
 		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
-		mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
-			string(kmmv1beta1.BuildImage), &testMBSC).
+		mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
+			kmmv1beta1.BuildImage, &testMBSC).
 			Return(nil, fmt.Errorf("some error"))
 
 		status, err := mgr.GetStatus(ctx, mbscName, mbscNamespace, kernelVersion, kmmv1beta1.BuildImage, &testMBSC)
@@ -54,25 +51,25 @@ var _ = Describe("GetStatus", func() {
 		Expect(status).To(Equal(kmmv1beta1.BuildOrSignStatus("")))
 	})
 
-	It("GetModulePodByKernel returns pod does not exists", func() {
+	It("GetResourceByKernel returns pod does not exists", func() {
 		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
-		mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
-			string(kmmv1beta1.BuildImage), &testMBSC).
-			Return(nil, ErrNoMatchingPod)
+		mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
+			kmmv1beta1.BuildImage, &testMBSC).
+			Return(nil, ErrNoMatchingBuildSignResource)
 
 		status, err := mgr.GetStatus(ctx, mbscName, mbscNamespace, kernelVersion, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(BeNil())
 		Expect(status).To(Equal(kmmv1beta1.BuildOrSignStatus("")))
 	})
 
-	It("failed flow, GetPodStatus fails", func() {
+	It("failed flow, GetResourceStatus fails", func() {
 		foundPod := v1.Pod{}
 		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
-				string(kmmv1beta1.BuildImage), &testMBSC).
+			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
+				kmmv1beta1.BuildImage, &testMBSC).
 				Return(&foundPod, nil),
-			mockBuildSignPodManager.EXPECT().GetPodStatus(&foundPod).Return(Status(""), fmt.Errorf("some error")),
+			mockResourceManager.EXPECT().GetResourceStatus(&foundPod).Return(Status(""), fmt.Errorf("some error")),
 		)
 
 		status, err := mgr.GetStatus(ctx, mbscName, mbscNamespace, kernelVersion, kmmv1beta1.BuildImage, &testMBSC)
@@ -84,10 +81,10 @@ var _ = Describe("GetStatus", func() {
 		foundPod := v1.Pod{}
 		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
-				string(kmmv1beta1.BuildImage), &testMBSC).
+			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
+				kmmv1beta1.BuildImage, &testMBSC).
 				Return(&foundPod, nil),
-			mockBuildSignPodManager.EXPECT().GetPodStatus(&foundPod).Return(podStatus, nil),
+			mockResourceManager.EXPECT().GetResourceStatus(&foundPod).Return(podStatus, nil),
 		)
 		status, err := mgr.GetStatus(ctx, mbscName, mbscNamespace, kernelVersion, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(BeNil())
@@ -102,10 +99,10 @@ var _ = Describe("GetStatus", func() {
 
 var _ = Describe("Sync", func() {
 	var (
-		ctrl                    *gomock.Controller
-		clnt                    *client.MockClient
-		mockBuildSignPodManager *MockBuildSignPodManager
-		mgr                     *podManager
+		ctrl                *gomock.Controller
+		clnt                *client.MockClient
+		mockResourceManager *MockResourceManager
+		mgr                 Manager
 	)
 	const (
 		mbscName      = "some-name"
@@ -117,11 +114,8 @@ var _ = Describe("Sync", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
-		mgr = &podManager{
-			client:              clnt,
-			buildSignPodManager: mockBuildSignPodManager,
-		}
+		mockResourceManager = NewMockResourceManager(ctrl)
+		mgr = NewManager(clnt, mockResourceManager, scheme)
 	})
 
 	ctx := context.Background()
@@ -134,64 +128,70 @@ var _ = Describe("Sync", func() {
 
 	It("MakePodTemplate failed", func() {
 		By("test build action")
-		mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, true).Return(nil, fmt.Errorf("some error"))
+		mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, true, kmmv1beta1.BuildImage).
+			Return(nil, fmt.Errorf("some error"))
 		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 
 		By("test sign action")
-		mockBuildSignPodManager.EXPECT().MakeSignResourceTemplate(ctx, testMLD, &testMBSC, true).Return(nil, fmt.Errorf("some error"))
+		mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, true, kmmv1beta1.SignImage).
+			Return(nil, fmt.Errorf("some error"))
 		err = mgr.Sync(ctx, testMLD, true, kmmv1beta1.SignImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("GetModulePodByKernel failed", func() {
+	It("GetResourceByKernel failed", func() {
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, true).Return(nil, nil),
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
-				string(kmmv1beta1.BuildImage), &testMBSC).
+			mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, true, kmmv1beta1.BuildImage).
+				Return(nil, nil),
+			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				kmmv1beta1.BuildImage, &testMBSC).
 				Return(nil, fmt.Errorf("some error")),
 		)
 		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("CreatePod failed", func() {
+	It("CreateResource failed", func() {
 		testTemplate := v1.Pod{}
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, true).Return(&testTemplate, nil),
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
-				string(kmmv1beta1.BuildImage), &testMBSC).
-				Return(nil, ErrNoMatchingPod),
-			mockBuildSignPodManager.EXPECT().CreatePod(ctx, &testTemplate).Return(fmt.Errorf("some error")),
+			mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, true, kmmv1beta1.BuildImage).
+				Return(&testTemplate, nil),
+			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				kmmv1beta1.BuildImage, &testMBSC).
+				Return(nil, ErrNoMatchingBuildSignResource),
+			mockResourceManager.EXPECT().CreateResource(ctx, &testTemplate).Return(fmt.Errorf("some error")),
 		)
 		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("IsPodChanged failed", func() {
+	It("IsResourceChanged failed", func() {
 		testTemplate := v1.Pod{}
 		testPod := v1.Pod{}
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, true).Return(&testTemplate, nil),
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
-				string(kmmv1beta1.BuildImage), &testMBSC).
+			mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, true, kmmv1beta1.BuildImage).
+				Return(&testTemplate, nil),
+			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				kmmv1beta1.BuildImage, &testMBSC).
 				Return(&testPod, nil),
-			mockBuildSignPodManager.EXPECT().IsPodChanged(&testPod, &testTemplate).Return(false, fmt.Errorf("some error")),
+			mockResourceManager.EXPECT().IsResourceChanged(&testPod, &testTemplate).Return(false, fmt.Errorf("some error")),
 		)
 		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("DeletePod failed should not cause failure", func() {
+	It("DeleteResource failed should not cause failure", func() {
 		testTemplate := v1.Pod{}
 		testPod := v1.Pod{}
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, true).Return(&testTemplate, nil),
-			mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
-				string(kmmv1beta1.BuildImage), &testMBSC).
+			mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, true, kmmv1beta1.BuildImage).
+				Return(&testTemplate, nil),
+			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				kmmv1beta1.BuildImage, &testMBSC).
 				Return(&testPod, nil),
-			mockBuildSignPodManager.EXPECT().IsPodChanged(&testPod, &testTemplate).Return(true, nil),
-			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &testPod).Return(fmt.Errorf("some error")),
+			mockResourceManager.EXPECT().IsResourceChanged(&testPod, &testTemplate).Return(true, nil),
+			mockResourceManager.EXPECT().DeleteResource(ctx, &testPod).Return(fmt.Errorf("some error")),
 		)
 		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(BeNil())
@@ -206,23 +206,25 @@ var _ = Describe("Sync", func() {
 		}
 
 		if buildAction {
-			mockBuildSignPodManager.EXPECT().MakeBuildResourceTemplate(ctx, testMLD, &testMBSC, pushImage).Return(&testPodTemplate, nil)
+			mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, pushImage, kmmv1beta1.BuildImage).
+				Return(&testPodTemplate, nil)
 		} else {
-			mockBuildSignPodManager.EXPECT().MakeSignResourceTemplate(ctx, testMLD, &testMBSC, pushImage).Return(&testPodTemplate, nil)
+			mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, pushImage, kmmv1beta1.SignImage).
+				Return(&testPodTemplate, nil)
 		}
 		var getPodError error
 		if !podExists {
-			getPodError = ErrNoMatchingPod
+			getPodError = ErrNoMatchingBuildSignResource
 		}
-		mockBuildSignPodManager.EXPECT().GetModulePodByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
-			string(testAction), &testMBSC).Return(&existingTestPod, getPodError)
+		mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+			testAction, &testMBSC).Return(&existingTestPod, getPodError)
 		if !podExists {
-			mockBuildSignPodManager.EXPECT().CreatePod(ctx, &testPodTemplate).Return(nil)
+			mockResourceManager.EXPECT().CreateResource(ctx, &testPodTemplate).Return(nil)
 			goto executeTestFunction
 		}
-		mockBuildSignPodManager.EXPECT().IsPodChanged(&existingTestPod, &testPodTemplate).Return(podChanged, nil)
+		mockResourceManager.EXPECT().IsResourceChanged(&existingTestPod, &testPodTemplate).Return(podChanged, nil)
 		if podChanged {
-			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &existingTestPod).Return(nil)
+			mockResourceManager.EXPECT().DeleteResource(ctx, &existingTestPod).Return(nil)
 		}
 
 	executeTestFunction:
@@ -240,10 +242,10 @@ var _ = Describe("Sync", func() {
 
 var _ = Describe("GarbageCollect", func() {
 	var (
-		ctrl                    *gomock.Controller
-		clnt                    *client.MockClient
-		mockBuildSignPodManager *MockBuildSignPodManager
-		mgr                     *podManager
+		ctrl                *gomock.Controller
+		clnt                *client.MockClient
+		mockResourceManager *MockResourceManager
+		mgr                 Manager
 	)
 	const (
 		mbscName      = "some-name"
@@ -255,34 +257,32 @@ var _ = Describe("GarbageCollect", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockBuildSignPodManager = NewMockBuildSignPodManager(ctrl)
-		mgr = &podManager{
-			client:              clnt,
-			buildSignPodManager: mockBuildSignPodManager,
-		}
+		mockResourceManager = NewMockResourceManager(ctrl)
+		mgr = NewManager(clnt, mockResourceManager, scheme)
 	})
 
 	ctx := context.Background()
 	testMBSC := kmmv1beta1.ModuleBuildSignConfig{}
 
 	It("failed to get module pods", func() {
-		mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace,
-			string(kmmv1beta1.BuildImage), &testMBSC).Return(nil, fmt.Errorf("some error"))
+		mockResourceManager.EXPECT().GetModuleResources(ctx, mbscName, mbscNamespace,
+			kmmv1beta1.BuildImage, &testMBSC).Return(nil, fmt.Errorf("some error"))
 
 		_, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("delete pod failed", func() {
-		testPod := v1.Pod{
+		testPod := &v1.Pod{
 			Status: v1.PodStatus{
 				Phase: v1.PodSucceeded,
 			},
 		}
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, string(kmmv1beta1.SignImage), &testMBSC).
-				Return([]v1.Pod{testPod}, nil),
-			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &testPod).Return(fmt.Errorf("some error")),
+			mockResourceManager.EXPECT().GetModuleResources(ctx, mbscName, mbscNamespace, kmmv1beta1.SignImage, &testMBSC).
+				Return([]metav1.Object{testPod}, nil),
+			mockResourceManager.EXPECT().HasResourcesCompletedSuccessfully(ctx, testPod).Return(true, nil),
+			mockResourceManager.EXPECT().DeleteResource(ctx, testPod).Return(fmt.Errorf("some error")),
 		)
 
 		_, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, kmmv1beta1.SignImage, &testMBSC)
@@ -290,31 +290,36 @@ var _ = Describe("GarbageCollect", func() {
 	})
 
 	It("good flow", func() {
-		testPodSuccess := v1.Pod{
+		testPodSuccess := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "podSuccess"},
 			Status:     v1.PodStatus{Phase: v1.PodSucceeded},
 		}
-		testPodFailure := v1.Pod{
+		testPodFailure := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "podFailure"},
 			Status:     v1.PodStatus{Phase: v1.PodFailed},
 		}
-		testPodRunning := v1.Pod{
+		testPodRunning := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "podRunning"},
 			Status:     v1.PodStatus{Phase: v1.PodRunning},
 		}
-		testPodUnknown := v1.Pod{
+		testPodUnknown := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "podUnknown"},
 			Status:     v1.PodStatus{Phase: v1.PodUnknown},
 		}
-		testPodPending := v1.Pod{
+		testPodPending := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "podPending"},
 			Status:     v1.PodStatus{Phase: v1.PodPending},
 		}
-		returnedPods := []v1.Pod{testPodSuccess, testPodFailure, testPodRunning, testPodUnknown, testPodPending}
+		returnedPods := []metav1.Object{testPodSuccess, testPodFailure, testPodRunning, testPodUnknown, testPodPending}
 		gomock.InOrder(
-			mockBuildSignPodManager.EXPECT().GetModulePods(ctx, mbscName, mbscNamespace, string(kmmv1beta1.BuildImage), &testMBSC).
+			mockResourceManager.EXPECT().GetModuleResources(ctx, mbscName, mbscNamespace, kmmv1beta1.BuildImage, &testMBSC).
 				Return(returnedPods, nil),
-			mockBuildSignPodManager.EXPECT().DeletePod(ctx, &testPodSuccess).Return(nil),
+			mockResourceManager.EXPECT().HasResourcesCompletedSuccessfully(ctx, testPodSuccess).Return(true, nil),
+			mockResourceManager.EXPECT().DeleteResource(ctx, testPodSuccess).Return(nil),
+			mockResourceManager.EXPECT().HasResourcesCompletedSuccessfully(ctx, testPodFailure).Return(false, nil),
+			mockResourceManager.EXPECT().HasResourcesCompletedSuccessfully(ctx, testPodRunning).Return(false, nil),
+			mockResourceManager.EXPECT().HasResourcesCompletedSuccessfully(ctx, testPodUnknown).Return(false, nil),
+			mockResourceManager.EXPECT().HasResourcesCompletedSuccessfully(ctx, testPodPending).Return(false, nil),
 		)
 
 		res, err := mgr.GarbageCollect(ctx, mbscName, mbscNamespace, kmmv1beta1.BuildImage, &testMBSC)
