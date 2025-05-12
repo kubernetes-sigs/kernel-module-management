@@ -103,6 +103,24 @@ spec:
 The worker Pod will first try to unload the in-tree `mod_b` before loading `mod_a` from the kmod image.  
 When the worker Pod is terminated and `mod_a` is unloaded, `mod_b` will not be loaded again.
 
+### Supporting Modules without OOT kmods
+In some cases, there is a need to configure the KMM Module to avoid loading an out-of-tree kernel module and
+instead use the in-tree one, running only the device plugin.
+In such cases, the moduleLoader can be omitted from the Module custom resource, leaving only the devicePlugin section.
+
+```yaml
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: Module
+metadata:
+  name: my-kmod
+spec:
+  selector:
+    node-role.kubernetes.io/worker: ""
+  devicePlugin:
+    container:
+      image: some.registry/org/my-device-plugin:latest
+```
+
 ### Example resource
 
 Below is an annotated `Module` example with most options set.
