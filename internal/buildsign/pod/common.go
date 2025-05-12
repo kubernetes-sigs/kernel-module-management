@@ -40,7 +40,7 @@ func (bspm *buildSignPodManager) buildPodSpec(mld *api.ModuleLoaderData, destina
 		{Name: "MOD_NAME", Value: mld.Name},
 		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
 	}
-	buildArgs := bspm.combiner.ApplyBuildArgOverrides(
+	buildArgs := bspm.buildArgOverrider.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
 		overrides...,
 	)

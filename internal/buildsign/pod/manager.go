@@ -24,8 +24,8 @@ type podManager struct {
 	buildSignPodManager BuildSignPodManager
 }
 
-func NewManager(client client.Client, combiner module.Combiner, scheme *runtime.Scheme) buildsign.Manager {
-	buildSignPodManager := NewBuildSignPodManager(client, combiner, scheme)
+func NewManager(client client.Client, buildArgOverrider module.BuildArgOverrider, scheme *runtime.Scheme) buildsign.Manager {
+	buildSignPodManager := NewBuildSignPodManager(client, buildArgOverrider, scheme)
 	return &podManager{
 		client:              client,
 		buildSignPodManager: buildSignPodManager,
