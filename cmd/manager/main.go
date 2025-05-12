@@ -115,10 +115,10 @@ func main() {
 	metricsAPI := metrics.New()
 	metricsAPI.Register()
 
-	buildSignCombinerAPI := module.NewCombiner()
-	resourceManager := buildsignresource.NewResourceManager(client, buildSignCombinerAPI, scheme)
+	buildArgOverriderAPI := module.NewBuildArgOverrider()
+	resourceManager := buildsignresource.NewResourceManager(client, buildArgOverriderAPI, scheme)
 	nodeAPI := node.NewNode(client)
-	kernelAPI := module.NewKernelMapper(buildSignCombinerAPI)
+	kernelAPI := module.NewKernelMapper(buildArgOverriderAPI)
 	micAPI := mic.New(client, scheme)
 	mbscAPI := mbsc.New(client, scheme)
 	imagePullerAPI := pod.NewImagePuller(client, scheme)

@@ -45,7 +45,7 @@ func (rm *resourceManager) buildSpec(mld *api.ModuleLoaderData, destinationImg s
 		{Name: "MOD_NAME", Value: mld.Name},
 		{Name: "MOD_NAMESPACE", Value: mld.Namespace},
 	}
-	buildArgs := rm.combiner.ApplyBuildArgOverrides(
+	buildArgs := rm.buildArgOverrider.ApplyBuildArgOverrides(
 		buildConfig.BuildArgs,
 		overrides...,
 	)

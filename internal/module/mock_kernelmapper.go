@@ -92,6 +92,35 @@ func (mr *MockkernelMapperHelperAPIMockRecorder) findKernelMapping(mappings, ker
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "findKernelMapping", reflect.TypeOf((*MockkernelMapperHelperAPI)(nil).findKernelMapping), mappings, kernelVersion)
 }
 
+// getRelevantBuild mocks base method.
+func (m *MockkernelMapperHelperAPI) getRelevantBuild(moduleBuild, mappingBuild *v1beta1.Build) *v1beta1.Build {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getRelevantBuild", moduleBuild, mappingBuild)
+	ret0, _ := ret[0].(*v1beta1.Build)
+	return ret0
+}
+
+// getRelevantBuild indicates an expected call of getRelevantBuild.
+func (mr *MockkernelMapperHelperAPIMockRecorder) getRelevantBuild(moduleBuild, mappingBuild any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getRelevantBuild", reflect.TypeOf((*MockkernelMapperHelperAPI)(nil).getRelevantBuild), moduleBuild, mappingBuild)
+}
+
+// getRelevantSign mocks base method.
+func (m *MockkernelMapperHelperAPI) getRelevantSign(moduleSign, mappingSign *v1beta1.Sign, kernel string) (*v1beta1.Sign, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getRelevantSign", moduleSign, mappingSign, kernel)
+	ret0, _ := ret[0].(*v1beta1.Sign)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// getRelevantSign indicates an expected call of getRelevantSign.
+func (mr *MockkernelMapperHelperAPIMockRecorder) getRelevantSign(moduleSign, mappingSign, kernel any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getRelevantSign", reflect.TypeOf((*MockkernelMapperHelperAPI)(nil).getRelevantSign), moduleSign, mappingSign, kernel)
+}
+
 // prepareModuleLoaderData mocks base method.
 func (m *MockkernelMapperHelperAPI) prepareModuleLoaderData(mapping *v1beta1.KernelMapping, mod *v1beta1.Module, kernelVersion string) (*api.ModuleLoaderData, error) {
 	m.ctrl.T.Helper()

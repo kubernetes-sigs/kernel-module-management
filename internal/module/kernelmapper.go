@@ -23,9 +23,9 @@ type kernelMapper struct {
 	helper kernelMapperHelperAPI
 }
 
-func NewKernelMapper(buildSignCombiner Combiner) KernelMapper {
+func NewKernelMapper(buildArgOverrider BuildArgOverrider) KernelMapper {
 	return &kernelMapper{
-		helper: newKernelMapperHelper(buildSignCombiner),
+		helper: newKernelMapperHelper(buildArgOverrider),
 	}
 }
 
@@ -51,15 +51,17 @@ type kernelMapperHelperAPI interface {
 	findKernelMapping(mappings []kmmv1beta1.KernelMapping, kernelVersion string) (*kmmv1beta1.KernelMapping, error)
 	prepareModuleLoaderData(mapping *kmmv1beta1.KernelMapping, mod *kmmv1beta1.Module, kernelVersion string) (*api.ModuleLoaderData, error)
 	replaceTemplates(mld *api.ModuleLoaderData) error
+	getRelevantBuild(moduleBuild *kmmv1beta1.Build, mappingBuild *kmmv1beta1.Build) *kmmv1beta1.Build
+	getRelevantSign(moduleSign *kmmv1beta1.Sign, mappingSign *kmmv1beta1.Sign, kernel string) (*kmmv1beta1.Sign, error)
 }
 
 type kernelMapperHelper struct {
-	buildSignCombiner Combiner
+	buildArgOverrider BuildArgOverrider
 }
 
-func newKernelMapperHelper(buildSignCombiner Combiner) kernelMapperHelperAPI {
+func newKernelMapperHelper(buildArgOverrider BuildArgOverrider) kernelMapperHelperAPI {
 	return &kernelMapperHelper{
-		buildSignCombiner: buildSignCombiner,
+		buildArgOverrider: buildArgOverrider,
 	}
 }
 
@@ -89,12 +91,12 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 	mld := &api.ModuleLoaderData{}
 	// prepare the build
 	if mapping.Build != nil || mod.Spec.ModuleLoader.Container.Build != nil {
-		mld.Build = kh.buildSignCombiner.GetRelevantBuild(mod.Spec.ModuleLoader.Container.Build, mapping.Build)
+		mld.Build = kh.getRelevantBuild(mod.Spec.ModuleLoader.Container.Build, mapping.Build)
 	}
 
 	// prepare the sign
 	if mapping.Sign != nil || mod.Spec.ModuleLoader.Container.Sign != nil {
-		mld.Sign, err = kh.buildSignCombiner.GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion)
+		mld.Sign, err = kh.getRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get the relevant Sign configuration for kernel %s: %v", kernelVersion, err)
 		}
@@ -157,4 +159,65 @@ func (kh *kernelMapperHelper) replaceTemplates(mld *api.ModuleLoaderData) error 
 	mld.ContainerImage = replacedContainerImage[0]
 
 	return nil
+}
+
+func (kh *kernelMapperHelper) getRelevantBuild(moduleBuild *kmmv1beta1.Build, mappingBuild *kmmv1beta1.Build) *kmmv1beta1.Build {
+	if moduleBuild == nil {
+		return mappingBuild.DeepCopy()
+	}
+
+	if mappingBuild == nil {
+		return moduleBuild.DeepCopy()
+	}
+
+	buildConfig := moduleBuild.DeepCopy()
+	if mappingBuild.DockerfileConfigMap != nil {
+		buildConfig.DockerfileConfigMap = mappingBuild.DockerfileConfigMap
+	}
+
+	buildConfig.BuildArgs = kh.buildArgOverrider.ApplyBuildArgOverrides(buildConfig.BuildArgs, mappingBuild.BuildArgs...)
+
+	buildConfig.Secrets = append(buildConfig.Secrets, mappingBuild.Secrets...)
+	return buildConfig
+}
+
+func (kh *kernelMapperHelper) getRelevantSign(moduleSign *kmmv1beta1.Sign, mappingSign *kmmv1beta1.Sign, kernelVersion string) (*kmmv1beta1.Sign, error) {
+	var signConfig *kmmv1beta1.Sign
+	if moduleSign == nil {
+		// km.Sign cannot be nil in case mod.Sign is nil, checked above
+		signConfig = mappingSign.DeepCopy()
+	} else if mappingSign == nil {
+		signConfig = moduleSign.DeepCopy()
+	} else {
+		signConfig = moduleSign.DeepCopy()
+
+		if mappingSign.UnsignedImage != "" {
+			signConfig.UnsignedImage = mappingSign.UnsignedImage
+		}
+
+		if mappingSign.KeySecret != nil {
+			signConfig.KeySecret = mappingSign.KeySecret
+		}
+		if mappingSign.CertSecret != nil {
+			signConfig.CertSecret = mappingSign.CertSecret
+		}
+		//append (not overwrite) any files in the km to the defaults
+		signConfig.FilesToSign = append(signConfig.FilesToSign, mappingSign.FilesToSign...)
+	}
+
+	osConfigEnvVars := utils.KernelComponentsAsEnvVars(
+		kernel.NormalizeVersion(kernelVersion),
+	)
+	unsignedImage, err := utils.ReplaceInTemplates(osConfigEnvVars, signConfig.UnsignedImage)
+	if err != nil {
+		return nil, err
+	}
+	signConfig.UnsignedImage = unsignedImage[0]
+	filesToSign, err := utils.ReplaceInTemplates(osConfigEnvVars, signConfig.FilesToSign...)
+	if err != nil {
+		return nil, err
+	}
+	signConfig.FilesToSign = filesToSign
+
+	return signConfig, nil
 }
