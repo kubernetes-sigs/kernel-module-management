@@ -160,7 +160,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
-					constants.PodType:            string(kmmv1beta1.BuildImage),
+					constants.ResourceType:       string(kmmv1beta1.BuildImage),
 					constants.TargetKernelTarget: kernelVersion,
 				},
 				OwnerReferences: []metav1.OwnerReference{or},
@@ -193,7 +193,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations:     map[string]string{createdAnnotationKey: ""},
-				Labels:          map[string]string{constants.PodType: string(kmmv1beta1.BuildImage)},
+				Labels:          map[string]string{constants.ResourceType: string(kmmv1beta1.BuildImage)},
 				Namespace:       namespace,
 				OwnerReferences: []metav1.OwnerReference{or},
 			},
@@ -218,7 +218,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels:          map[string]string{constants.PodType: string(kmmv1beta1.BuildImage)},
+				Labels:          map[string]string{constants.ResourceType: string(kmmv1beta1.BuildImage)},
 				Finalizers:      []string{constants.JobEventFinalizer},
 				Namespace:       namespace,
 				OwnerReferences: []metav1.OwnerReference{or},
@@ -258,7 +258,7 @@ var _ = Describe("JobEventReconciler_Reconcile", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{createdAnnotationKey: ""},
 					Labels: map[string]string{
-						constants.PodType:            jobType,
+						constants.ResourceType:       jobType,
 						constants.TargetKernelTarget: kernelVersion,
 					},
 					Finalizers:      []string{constants.JobEventFinalizer},
@@ -389,10 +389,10 @@ var _ = Describe("jobEventReconcilerHelper_GetOwner", func() {
 var _ = Describe("jobEventPredicate", func() {
 	DescribeTable(
 		"should work as expected",
-		func(podType string, hasFinalizer, expectedResult bool) {
+		func(resourceType string, hasFinalizer, expectedResult bool) {
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{constants.PodType: podType},
+					Labels: map[string]string{constants.ResourceType: resourceType},
 				},
 			}
 

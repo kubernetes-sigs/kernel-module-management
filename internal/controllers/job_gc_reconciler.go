@@ -62,7 +62,7 @@ func (r *JobGCReconciler) SetupWithManager(mgr manager.Manager) error {
 
 	p := predicate.NewPredicateFuncs(func(object client.Object) bool {
 		return podTypes.Has(
-			object.GetLabels()[constants.PodType],
+			object.GetLabels()[constants.ResourceType],
 		) &&
 			controllerutil.ContainsFinalizer(object, constants.GCDelayFinalizer) &&
 			object.GetDeletionTimestamp() != nil
