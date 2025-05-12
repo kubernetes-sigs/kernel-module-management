@@ -110,15 +110,15 @@ func main() {
 	metricsAPI := metrics.New()
 	metricsAPI.Register()
 
-	buildSignCombiner := module.NewCombiner()
-	resourceManager := buildsignresource.NewResourceManager(client, buildSignCombiner, scheme)
+	buildArgOverrider := module.NewBuildArgOverrider()
+	resourceManager := buildsignresource.NewResourceManager(client, buildArgOverrider, scheme)
 
 	micAPI := mic.New(client, scheme)
 	mbscAPI := mbsc.New(client, scheme)
 	imagePullerAPI := pod.NewImagePuller(client, scheme)
 	builSignAPI := buildsign.NewManager(client, resourceManager, scheme)
 
-	kernelAPI := module.NewKernelMapper(buildSignCombiner)
+	kernelAPI := module.NewKernelMapper(buildArgOverrider)
 
 	ctrlLogger := setupLogger.WithValues("name", hub.ManagedClusterModuleReconcilerName)
 	ctrlLogger.Info("Adding controller")

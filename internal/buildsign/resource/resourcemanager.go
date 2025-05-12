@@ -23,18 +23,18 @@ const (
 )
 
 type resourceManager struct {
-	client   client.Client
-	combiner module.Combiner
-	scheme   *runtime.Scheme
+	client            client.Client
+	buildArgOverrider module.BuildArgOverrider
+	scheme            *runtime.Scheme
 }
 
-func NewResourceManager(client client.Client, combiner module.Combiner,
+func NewResourceManager(client client.Client, buildArgOverrider module.BuildArgOverrider,
 	scheme *runtime.Scheme) buildsign.ResourceManager {
 
 	return &resourceManager{
-		client:   client,
-		combiner: combiner,
-		scheme:   scheme,
+		client:            client,
+		buildArgOverrider: buildArgOverrider,
+		scheme:            scheme,
 	}
 }
 

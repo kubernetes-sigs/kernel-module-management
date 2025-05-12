@@ -22,17 +22,17 @@ import (
 
 var _ = Describe("GetResourceByKernel", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		rm           buildsign.ResourceManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		rm                    buildsign.ResourceManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockCombiner = module.NewMockCombiner(ctrl)
-		rm = NewResourceManager(clnt, mockCombiner, scheme)
+		mockBuildArgOverrider = module.NewMockBuildArgOverrider(ctrl)
+		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("should return only one pod", func() {
@@ -190,16 +190,16 @@ var _ = Describe("GetResourceByKernel", func() {
 
 var _ = Describe("GetModuleResources", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		rm           buildsign.ResourceManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		rm                    buildsign.ResourceManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockCombiner, scheme)
+		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("return all found pods", func() {
@@ -300,16 +300,16 @@ var _ = Describe("GetModuleResources", func() {
 
 var _ = Describe("DeleteResource", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		rm           buildsign.ResourceManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		rm                    buildsign.ResourceManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockCombiner, scheme)
+		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("good flow", func() {
@@ -345,16 +345,16 @@ var _ = Describe("DeleteResource", func() {
 
 var _ = Describe("CreateResource", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		rm           buildsign.ResourceManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		rm                    buildsign.ResourceManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockCombiner, scheme)
+		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("good flow", func() {
@@ -384,16 +384,16 @@ var _ = Describe("CreateResource", func() {
 
 var _ = Describe("PodStatus", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		rm           buildsign.ResourceManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		rm                    buildsign.ResourceManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockCombiner, scheme)
+		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	DescribeTable("should return the correct status depending on the pod status",
@@ -417,16 +417,16 @@ var _ = Describe("PodStatus", func() {
 
 var _ = Describe("IsPodChnaged", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		rm           buildsign.ResourceManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		rm                    buildsign.ResourceManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockCombiner, scheme)
+		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	DescribeTable("should detect if a pod has changed",

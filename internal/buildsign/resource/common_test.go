@@ -38,18 +38,18 @@ var _ = Describe("makeBuildTemplate", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
-		mc   *module.MockCombiner
+		mbao *module.MockBuildArgOverrider
 		rm   *resourceManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mc = module.NewMockCombiner(ctrl)
+		mbao = module.NewMockBuildArgOverrider(ctrl)
 		rm = &resourceManager{
-			client:   clnt,
-			combiner: mc,
-			scheme:   scheme,
+			client:            clnt,
+			buildArgOverrider: mbao,
+			scheme:            scheme,
 		}
 	})
 
@@ -235,7 +235,7 @@ var _ = Describe("makeBuildTemplate", func() {
 		expected.SetAnnotations(annotations)
 
 		gomock.InOrder(
-			mc.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs).Return(append(slices.Clone(buildArgs), defaultBuildArgs...)),
+			mbao.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs).Return(append(slices.Clone(buildArgs), defaultBuildArgs...)),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -300,7 +300,7 @@ var _ = Describe("makeBuildTemplate", func() {
 		}
 
 		gomock.InOrder(
-			mc.EXPECT().ApplyBuildArgOverrides(nil, defaultBuildArgs),
+			mbao.EXPECT().ApplyBuildArgOverrides(nil, defaultBuildArgs),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -380,7 +380,7 @@ var _ = Describe("makeBuildTemplate", func() {
 		}
 
 		gomock.InOrder(
-			mc.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
+			mbao.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -418,7 +418,7 @@ var _ = Describe("makeBuildTemplate", func() {
 		expectedImageName := mld.ContainerImage + ":" + mld.Namespace + "_" + mld.Name + "_kmm_unsigned"
 
 		gomock.InOrder(
-			mc.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
+			mbao.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -467,11 +467,11 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 	)
 
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		mld          api.ModuleLoaderData
-		mockCombiner *module.MockCombiner
-		rm           *resourceManager
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		mld                   api.ModuleLoaderData
+		mockBuildArgOverrider *module.MockBuildArgOverrider
+		rm                    *resourceManager
 
 		filesToSign = []string{
 			"/modules/simple-kmod.ko",
@@ -482,11 +482,11 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockCombiner = module.NewMockCombiner(ctrl)
+		mockBuildArgOverrider = module.NewMockBuildArgOverrider(ctrl)
 		rm = &resourceManager{
-			client:   clnt,
-			combiner: mockCombiner,
-			scheme:   scheme,
+			client:            clnt,
+			buildArgOverrider: mockBuildArgOverrider,
+			scheme:            scheme,
 		}
 		mld = api.ModuleLoaderData{
 			Name:      moduleName,
