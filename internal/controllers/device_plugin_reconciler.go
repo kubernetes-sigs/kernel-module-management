@@ -79,12 +79,6 @@ func (r *DevicePluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)
 }
 
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modules,verbs=get;list;watch;
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modules/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=create;delete;get;list;patch;watch
-//+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
-//+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
-
 func (r *DevicePluginReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (ctrl.Result, error) {
 	res := ctrl.Result{}
 

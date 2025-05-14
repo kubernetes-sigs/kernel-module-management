@@ -63,12 +63,6 @@ func (r *mbscReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)
 }
 
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modulebuildsignconfigs,verbs=get;list;watch;update;patch;create
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modulebuildsignconfigs/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
-//+kubebuilder:rbac:groups="core",resources=configmaps,verbs=get;list;watch
-//+kubebuilder:rbac:groups="core",resources=pods,verbs=create;list;watch;delete
-
 func (r *mbscReconciler) Reconcile(ctx context.Context, mbscObj *kmmv1beta1.ModuleBuildSignConfig) (ctrl.Result, error) {
 	res := ctrl.Result{}
 
