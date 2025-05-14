@@ -16,8 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-//+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;watch;patch
-
 // this struct contains all the version labels related to a specific Module
 type modulesVersionLabels struct {
 	name                     string

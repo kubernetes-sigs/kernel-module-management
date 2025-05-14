@@ -18,9 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-//+kubebuilder:rbac:groups="core",resources=pods,verbs=get;patch;list;watch
-//+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;watch
-
 const DevicePluginPodReconcilerName = "DevicePluginPod"
 
 type DevicePluginPodReconciler struct {

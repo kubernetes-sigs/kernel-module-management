@@ -37,13 +37,6 @@ const (
 	NodeModulesConfigReconcilerName = "NodeModulesConfig"
 )
 
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=nodemodulesconfigs,verbs=get;list;watch
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=nodemodulesconfigs/status,verbs=patch
-//+kubebuilder:rbac:groups="core",resources=pods,verbs=create;delete;get;list;watch
-//+kubebuilder:rbac:groups="core",resources=nodes,verbs=get;list;watch
-//+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
-//+kubebuilder:rbac:groups="core",resources=serviceaccounts,verbs=get;list;watch
-
 type NMCReconciler struct {
 	client     client.Client
 	helper     nmcReconcilerHelper
