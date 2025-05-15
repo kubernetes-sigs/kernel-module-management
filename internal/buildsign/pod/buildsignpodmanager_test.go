@@ -28,22 +28,22 @@ import (
 
 var _ = Describe("PodLabels", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockCombiner = module.NewMockCombiner(ctrl)
+		mockBuildArgOverrider = module.NewMockBuildArgOverrider(ctrl)
 	})
 
 	It("get pod labels", func() {
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "moduleName"},
 		}
-		mgr := NewBuildSignPodManager(clnt, mockCombiner, scheme)
+		mgr := NewBuildSignPodManager(clnt, mockBuildArgOverrider, scheme)
 		labels := mgr.PodLabels(mod.Name, "targetKernel", "podType")
 
 		expected := map[string]string{
@@ -61,17 +61,17 @@ var _ = Describe("PodLabels", func() {
 
 var _ = Describe("GetModulePodByKernel", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		bspm                  BuildSignPodManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockCombiner = module.NewMockCombiner(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
+		mockBuildArgOverrider = module.NewMockBuildArgOverrider(ctrl)
+		bspm = NewBuildSignPodManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("should return only one pod", func() {
@@ -229,16 +229,16 @@ var _ = Describe("GetModulePodByKernel", func() {
 
 var _ = Describe("GetModulePods", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		bspm                  BuildSignPodManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
+		bspm = NewBuildSignPodManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("return all found pods", func() {
@@ -339,16 +339,16 @@ var _ = Describe("GetModulePods", func() {
 
 var _ = Describe("DeletePod", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		bspm                  BuildSignPodManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
+		bspm = NewBuildSignPodManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("good flow", func() {
@@ -384,16 +384,16 @@ var _ = Describe("DeletePod", func() {
 
 var _ = Describe("CreatePod", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		bspm                  BuildSignPodManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
+		bspm = NewBuildSignPodManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("good flow", func() {
@@ -423,16 +423,16 @@ var _ = Describe("CreatePod", func() {
 
 var _ = Describe("PodStatus", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		bspm                  BuildSignPodManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
+		bspm = NewBuildSignPodManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	DescribeTable("should return the correct status depending on the pod status",
@@ -456,16 +456,16 @@ var _ = Describe("PodStatus", func() {
 
 var _ = Describe("IsPodChnaged", func() {
 	var (
-		ctrl         *gomock.Controller
-		clnt         *client.MockClient
-		bspm         BuildSignPodManager
-		mockCombiner *module.MockCombiner
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		bspm                  BuildSignPodManager
+		mockBuildArgOverrider *module.MockBuildArgOverrider
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		bspm = NewBuildSignPodManager(clnt, mockCombiner, scheme)
+		bspm = NewBuildSignPodManager(clnt, mockBuildArgOverrider, scheme)
 	})
 
 	DescribeTable("should detect if a pod has changed",
@@ -512,15 +512,15 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 	var (
 		ctrl                *gomock.Controller
 		clnt                *client.MockClient
-		mc                  *module.MockCombiner
+		mbao                *module.MockBuildArgOverrider
 		buildSignPodManager BuildSignPodManager
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mc = module.NewMockCombiner(ctrl)
-		buildSignPodManager = NewBuildSignPodManager(clnt, mc, scheme)
+		mbao = module.NewMockBuildArgOverrider(ctrl)
+		buildSignPodManager = NewBuildSignPodManager(clnt, mbao, scheme)
 	})
 
 	AfterEach(func() {
@@ -705,7 +705,7 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 		expected.SetAnnotations(annotations)
 
 		gomock.InOrder(
-			mc.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs).Return(append(slices.Clone(buildArgs), defaultBuildArgs...)),
+			mbao.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs).Return(append(slices.Clone(buildArgs), defaultBuildArgs...)),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -770,7 +770,7 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 		}
 
 		gomock.InOrder(
-			mc.EXPECT().ApplyBuildArgOverrides(nil, defaultBuildArgs),
+			mbao.EXPECT().ApplyBuildArgOverrides(nil, defaultBuildArgs),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mod.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -848,7 +848,7 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 		}
 
 		gomock.InOrder(
-			mc.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
+			mbao.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -884,7 +884,7 @@ var _ = Describe("MakeBuildResourceTemplate", func() {
 		expectedImageName := mld.ContainerImage + ":" + mld.Namespace + "_" + mld.Name + "_kmm_unsigned"
 
 		gomock.InOrder(
-			mc.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
+			mbao.EXPECT().ApplyBuildArgOverrides(buildArgs, defaultBuildArgs),
 			clnt.EXPECT().Get(ctx, types.NamespacedName{Name: dockerfileConfigMap.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
 				func(_ interface{}, _ interface{}, cm *v1.ConfigMap, _ ...ctrlclient.GetOption) error {
 					cm.Data = dockerfileCMData
@@ -931,11 +931,11 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 	)
 
 	var (
-		ctrl                *gomock.Controller
-		clnt                *client.MockClient
-		mld                 api.ModuleLoaderData
-		mockCombiner        *module.MockCombiner
-		buildSignPodManager BuildSignPodManager
+		ctrl                  *gomock.Controller
+		clnt                  *client.MockClient
+		mld                   api.ModuleLoaderData
+		mockBuildArgOverrider *module.MockBuildArgOverrider
+		buildSignPodManager   BuildSignPodManager
 
 		filesToSign = []string{
 			"/modules/simple-kmod.ko",
@@ -946,8 +946,8 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		mockCombiner = module.NewMockCombiner(ctrl)
-		buildSignPodManager = NewBuildSignPodManager(clnt, mockCombiner, scheme)
+		mockBuildArgOverrider = module.NewMockBuildArgOverrider(ctrl)
+		buildSignPodManager = NewBuildSignPodManager(clnt, mockBuildArgOverrider, scheme)
 		mld = api.ModuleLoaderData{
 			Name:      moduleName,
 			Namespace: namespace,

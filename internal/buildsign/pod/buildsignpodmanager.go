@@ -48,16 +48,16 @@ type BuildSignPodManager interface {
 }
 
 type buildSignPodManager struct {
-	client   client.Client
-	combiner module.Combiner
-	scheme   *runtime.Scheme
+	client            client.Client
+	buildArgOverrider module.BuildArgOverrider
+	scheme            *runtime.Scheme
 }
 
-func NewBuildSignPodManager(client client.Client, combiner module.Combiner, scheme *runtime.Scheme) BuildSignPodManager {
+func NewBuildSignPodManager(client client.Client, buildArgOverrider module.BuildArgOverrider, scheme *runtime.Scheme) BuildSignPodManager {
 	return &buildSignPodManager{
-		client:   client,
-		combiner: combiner,
-		scheme:   scheme,
+		client:            client,
+		buildArgOverrider: buildArgOverrider,
+		scheme:            scheme,
 	}
 }
 

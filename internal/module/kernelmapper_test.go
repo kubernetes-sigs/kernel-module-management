@@ -3,6 +3,8 @@ package module
 import (
 	"errors"
 	"fmt"
+	"github.com/google/go-cmp/cmp"
+	"strings"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
@@ -155,17 +157,17 @@ var _ = Describe("prepareModuleLoaderData", func() {
 	)
 
 	var (
-		ctrl         *gomock.Controller
-		mockCombiner *MockCombiner
-		kh           kernelMapperHelperAPI
-		mod          kmmv1beta1.Module
-		mapping      kmmv1beta1.KernelMapping
+		ctrl                  *gomock.Controller
+		mockBuildArgOverrider *MockBuildArgOverrider
+		kh                    kernelMapperHelperAPI
+		mod                   kmmv1beta1.Module
+		mapping               kmmv1beta1.KernelMapping
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
-		mockCombiner = NewMockCombiner(ctrl)
-		kh = newKernelMapperHelper(mockCombiner)
+		mockBuildArgOverrider = NewMockBuildArgOverrider(ctrl)
+		kh = newKernelMapperHelper(mockBuildArgOverrider)
 		mod = kmmv1beta1.Module{}
 		ModuleLoader := kmmv1beta1.ModuleLoaderSpec{Container: kmmv1beta1.ModuleLoaderContainerSpec{ContainerImage: "spec container image", ImagePullPolicy: "Always"}}
 		mod.Spec.ModuleLoader = &ModuleLoader
@@ -228,11 +230,10 @@ var _ = Describe("prepareModuleLoaderData", func() {
 
 		if buildExistsInMapping || buildExistsInModuleSpec {
 			mld.Build = build
-			mockCombiner.EXPECT().GetRelevantBuild(mod.Spec.ModuleLoader.Container.Build, mapping.Build).Return(build)
 		}
 		if signExistsInMapping || SignExistsInModuleSpec {
 			mld.Sign = sign
-			mockCombiner.EXPECT().GetRelevantSign(mod.Spec.ModuleLoader.Container.Sign, mapping.Sign, kernelVersion).Return(sign, nil)
+			mld.Sign.FilesToSign = []string{}
 		}
 		if inTreeModulesToRemoveExistsInMapping {
 			mld.InTreeModulesToRemove = []string{"inTreeModule1", "inTreeModule2"}
@@ -335,5 +336,156 @@ var _ = Describe("replaceTemplates", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(mld).To(Equal(expectMld))
 	})
+
+})
+
+var _ = Describe("getRelevantBuild", func() {
+
+	var bao BuildArgOverrider
+	var kh kernelMapperHelperAPI
+
+	BeforeEach(func() {
+		bao = NewBuildArgOverrider()
+		kh = newKernelMapperHelper(bao)
+	})
+
+	It("kernel mapping build present, module loader build absent", func() {
+		mappingBuild := &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some kernel mapping build name"},
+		}
+
+		res := kh.getRelevantBuild(nil, mappingBuild)
+		Expect(res).To(Equal(mappingBuild))
+	})
+
+	It("kernel mapping build absent, module loader build present", func() {
+		moduleBuild := &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some load module build name"},
+		}
+
+		res := kh.getRelevantBuild(moduleBuild, nil)
+
+		Expect(res).To(Equal(moduleBuild))
+	})
+
+	It("kernel mapping and module loader builds are present, overrides", func() {
+		moduleBuild := &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some load module build name"},
+			BaseImageRegistryTLS: kmmv1beta1.TLSOptions{
+				Insecure:              true,
+				InsecureSkipTLSVerify: true,
+			},
+		}
+		mappingBuild := &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{Name: "some kernel mapping build name"},
+		}
+
+		res := kh.getRelevantBuild(moduleBuild, mappingBuild)
+		Expect(res.DockerfileConfigMap).To(Equal(mappingBuild.DockerfileConfigMap))
+		Expect(res.BaseImageRegistryTLS).To(Equal(moduleBuild.BaseImageRegistryTLS))
+	})
+})
+
+var _ = Describe("getRelevantSign", func() {
+
+	const (
+		unsignedImage = "my.registry/my/image"
+		keySecret     = "securebootkey"
+		certSecret    = "securebootcert"
+		filesToSign   = "/modules/simple-kmod.ko:/modules/simple-procfs-kmod.ko"
+		kernelVersion = "1.2.3"
+	)
+
+	var (
+		bao BuildArgOverrider
+		kh  kernelMapperHelperAPI
+	)
+
+	BeforeEach(func() {
+		bao = NewBuildArgOverrider()
+		kh = newKernelMapperHelper(bao)
+	})
+
+	expected := &kmmv1beta1.Sign{
+		UnsignedImage: unsignedImage,
+		KeySecret:     &v1.LocalObjectReference{Name: keySecret},
+		CertSecret:    &v1.LocalObjectReference{Name: certSecret},
+		FilesToSign:   strings.Split(filesToSign, ":"),
+	}
+
+	DescribeTable("should set fields correctly", func(moduleSign *kmmv1beta1.Sign, mappingSign *kmmv1beta1.Sign) {
+		actual, err := kh.getRelevantSign(moduleSign, mappingSign, kernelVersion)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(
+			cmp.Diff(expected, actual),
+		).To(
+			BeEmpty(),
+		)
+	},
+		Entry(
+			"no km.Sign",
+			&kmmv1beta1.Sign{
+				UnsignedImage: unsignedImage,
+				KeySecret:     &v1.LocalObjectReference{Name: keySecret},
+				CertSecret:    &v1.LocalObjectReference{Name: certSecret},
+				FilesToSign:   strings.Split(filesToSign, ":"),
+			},
+			nil,
+		),
+		Entry(
+			"no container.Sign",
+			nil,
+			&kmmv1beta1.Sign{
+				UnsignedImage: unsignedImage,
+				KeySecret:     &v1.LocalObjectReference{Name: keySecret},
+				CertSecret:    &v1.LocalObjectReference{Name: certSecret},
+				FilesToSign:   strings.Split(filesToSign, ":"),
+			},
+		),
+		Entry(
+			"default UnsignedImage",
+			&kmmv1beta1.Sign{
+				UnsignedImage: unsignedImage,
+			},
+			&kmmv1beta1.Sign{
+				KeySecret:   &v1.LocalObjectReference{Name: keySecret},
+				CertSecret:  &v1.LocalObjectReference{Name: certSecret},
+				FilesToSign: strings.Split(filesToSign, ":"),
+			},
+		),
+		Entry(
+			"default UnsignedImage and KeySecret",
+			&kmmv1beta1.Sign{
+				UnsignedImage: unsignedImage,
+				KeySecret:     &v1.LocalObjectReference{Name: keySecret},
+			},
+			&kmmv1beta1.Sign{
+				CertSecret:  &v1.LocalObjectReference{Name: certSecret},
+				FilesToSign: strings.Split(filesToSign, ":"),
+			},
+		),
+		Entry(
+			"default UnsignedImage, KeySecret, and CertSecret",
+			&kmmv1beta1.Sign{
+				UnsignedImage: unsignedImage,
+				KeySecret:     &v1.LocalObjectReference{Name: keySecret},
+				CertSecret:    &v1.LocalObjectReference{Name: certSecret},
+			},
+			&kmmv1beta1.Sign{
+				FilesToSign: strings.Split(filesToSign, ":"),
+			},
+		),
+		Entry(
+			"default FilesToSign only",
+			&kmmv1beta1.Sign{
+				FilesToSign: strings.Split(filesToSign, ":"),
+			},
+			&kmmv1beta1.Sign{
+				UnsignedImage: unsignedImage,
+				KeySecret:     &v1.LocalObjectReference{Name: keySecret},
+				CertSecret:    &v1.LocalObjectReference{Name: certSecret},
+			},
+		),
+	)
 
 })

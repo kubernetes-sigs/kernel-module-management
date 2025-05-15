@@ -116,9 +116,9 @@ func main() {
 	metricsAPI.Register()
 
 	registryAPI := registry.NewRegistry()
-	buildSignCombinerAPI := module.NewCombiner()
+	buildArgOverriderAPI := module.NewBuildArgOverrider()
 	nodeAPI := node.NewNode(client)
-	kernelAPI := module.NewKernelMapper(buildSignCombinerAPI)
+	kernelAPI := module.NewKernelMapper(buildArgOverriderAPI)
 	micAPI := mic.New(client, scheme)
 	mbscAPI := mbsc.New(client, scheme)
 	imagePullerAPI := pod.NewImagePuller(client, scheme)
@@ -181,7 +181,7 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeKernelClusterClaimReconcilerName)
 		}
 	} else {
-		builSignAPI := buildsignpod.NewManager(client, buildSignCombinerAPI, scheme)
+		builSignAPI := buildsignpod.NewManager(client, buildArgOverriderAPI, scheme)
 
 		mbscr := controllers.NewMBSCReconciler(client, builSignAPI, mbscAPI)
 		if err = mbscr.SetupWithManager(mgr); err != nil {
