@@ -83,9 +83,6 @@ spec:
                         image (image existence verification), build(build process verification)
                       enum:
                       - Image
-                      - Build
-                      - Sign
-                      - Requeued
                       - Done
                       type: string
                     verificationStatus:
@@ -93,8 +90,9 @@ spec:
                         Status of Module CR verification: true (verified), false (verification failed),
                         error (error during verification process), unknown (verification has not started yet)
                       enum:
-                      - "True"
-                      - "False"
+                      - Success
+                      - Failure
+                      - InProgress
                       type: string
                   required:
                   - lastTransitionTime
@@ -186,9 +184,6 @@ spec:
                         image (image existence verification), build(build process verification)
                       enum:
                       - Image
-                      - Build
-                      - Sign
-                      - Requeued
                       - Done
                       type: string
                     verificationStatus:
@@ -196,8 +191,9 @@ spec:
                         Status of Module CR verification: true (verified), false (verification failed),
                         error (error during verification process), unknown (verification has not started yet)
                       enum:
-                      - "True"
-                      - "False"
+                      - Success
+                      - Failure
+                      - InProgress
                       type: string
                   required:
                   - lastTransitionTime

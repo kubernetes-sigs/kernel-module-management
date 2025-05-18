@@ -25,13 +25,11 @@ import (
 )
 
 const (
-	VerificationTrue          = v1beta2.VerificationTrue
-	VerificationFalse         = v1beta2.VerificationFalse
-	VerificationStageImage    = v1beta2.VerificationStageImage
-	VerificationStageBuild    = v1beta2.VerificationStageBuild
-	VerificationStageSign     = v1beta2.VerificationStageSign
-	VerificationStageRequeued = v1beta2.VerificationStageRequeued
-	VerificationStageDone     = v1beta2.VerificationStageDone
+	VerificationSuccess    = v1beta2.VerificationSuccess
+	VerificationFailure    = v1beta2.VerificationFailure
+	VerificationInProgress = v1beta2.VerificationInProgress
+	VerificationStageImage = v1beta2.VerificationStageImage
+	VerificationStageDone  = v1beta2.VerificationStageDone
 )
 
 // PreflightValidationSpec describes the desired state of the resource, such as the kernel version
