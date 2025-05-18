@@ -37,8 +37,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -115,7 +113,6 @@ func main() {
 	metricsAPI := metrics.New()
 	metricsAPI.Register()
 
-	registryAPI := registry.NewRegistry()
 	buildSignCombinerAPI := module.NewCombiner()
 	nodeAPI := node.NewNode(client)
 	kernelAPI := module.NewKernelMapper(buildSignCombinerAPI)
@@ -136,7 +133,6 @@ func main() {
 	mnc := controllers.NewModuleReconciler(
 		client,
 		kernelAPI,
-		registryAPI,
 		nmcHelper,
 		filterAPI,
 		nodeAPI,

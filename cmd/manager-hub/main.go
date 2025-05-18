@@ -49,7 +49,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/statusupdater"
 	//+kubebuilder:scaffold:imports
 )
@@ -110,7 +109,6 @@ func main() {
 	metricsAPI := metrics.New()
 	metricsAPI.Register()
 
-	registryAPI := registry.NewRegistry()
 	buildSignCombiner := module.NewCombiner()
 
 	micAPI := mic.New(client, scheme)
@@ -127,7 +125,7 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 	mcmr := hub.NewManagedClusterModuleReconciler(
 		client,
-		manifestwork.NewCreator(client, scheme, kernelAPI, registryAPI, operatorNamespace),
+		manifestwork.NewCreator(client, scheme, kernelAPI, operatorNamespace),
 		cluster.NewClusterAPI(client, kernelAPI, operatorNamespace),
 		statusupdater.NewManagedClusterModuleStatusUpdater(client),
 		filterAPI,

@@ -22,7 +22,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 )
 
 var moduleStatusJSONPaths = []workv1.JsonPath{
@@ -64,7 +63,6 @@ type manifestWorkGenerator struct {
 	client            client.Client
 	scheme            *runtime.Scheme
 	kernelAPI         module.KernelMapper
-	registryAPI       registry.Registry
 	operatorNamespace string
 }
 
@@ -72,13 +70,11 @@ func NewCreator(
 	client client.Client,
 	scheme *runtime.Scheme,
 	kernelAPI module.KernelMapper,
-	registryAPI registry.Registry,
 	operatorNamespace string) ManifestWorkCreator {
 	return &manifestWorkGenerator{
 		client:            client,
 		scheme:            scheme,
 		kernelAPI:         kernelAPI,
-		registryAPI:       registryAPI,
 		operatorNamespace: operatorNamespace,
 	}
 }
