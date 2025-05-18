@@ -21,13 +21,11 @@ import (
 )
 
 const (
-	VerificationTrue          string = "True"
-	VerificationFalse         string = "False"
-	VerificationStageImage    string = "Image"
-	VerificationStageBuild    string = "Build"
-	VerificationStageSign     string = "Sign"
-	VerificationStageRequeued string = "Requeued"
-	VerificationStageDone     string = "Done"
+	VerificationSuccess    string = "Success"
+	VerificationFailure    string = "Failure"
+	VerificationInProgress string = "InProgress"
+	VerificationStageImage string = "Image"
+	VerificationStageDone  string = "Done"
 )
 
 // PreflightValidationSpec describes the desired state of the resource, such as the kernel version
@@ -50,7 +48,7 @@ type CRBaseStatus struct {
 	// error (error during verification process), unknown (verification has not started yet)
 	// +required
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=True;False
+	// +kubebuilder:validation:Enum=Success;Failure;InProgress
 	VerificationStatus string `json:"verificationStatus"`
 
 	// StatusReason contains a string describing the status source.
@@ -61,7 +59,7 @@ type CRBaseStatus struct {
 	// image (image existence verification), build(build process verification)
 	// +required
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=Image;Build;Sign;Requeued;Done
+	// +kubebuilder:validation:Enum=Image;Done
 	VerificationStage string `json:"verificationStage"`
 
 	// LastTransitionTime is the last time the CR status transitioned from one status to another.
