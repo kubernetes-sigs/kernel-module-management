@@ -16,7 +16,6 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,13 +71,12 @@ type ModuleReconciler struct {
 
 func NewModuleReconciler(client client.Client,
 	kernelAPI module.KernelMapper,
-	registryAPI registry.Registry,
 	nmcHelper nmc.Helper,
 	filter *filter.Filter,
 	nodeAPI node.Node,
 	micAPI mic.MIC,
 	scheme *runtime.Scheme) *ModuleReconciler {
-	reconHelper := newModuleReconcilerHelper(client, kernelAPI, registryAPI, micAPI, nmcHelper, scheme)
+	reconHelper := newModuleReconcilerHelper(client, kernelAPI, micAPI, nmcHelper, scheme)
 	return &ModuleReconciler{
 		filter:      filter,
 		nsLabeler:   newNamespaceLabeler(client),
@@ -195,28 +193,25 @@ type moduleReconcilerHelperAPI interface {
 }
 
 type moduleReconcilerHelper struct {
-	client      client.Client
-	kernelAPI   module.KernelMapper
-	registryAPI registry.Registry
-	micAPI      mic.MIC
-	nmcHelper   nmc.Helper
-	scheme      *runtime.Scheme
+	client    client.Client
+	kernelAPI module.KernelMapper
+	micAPI    mic.MIC
+	nmcHelper nmc.Helper
+	scheme    *runtime.Scheme
 }
 
 func newModuleReconcilerHelper(
 	client client.Client,
 	kernelAPI module.KernelMapper,
-	registryAPI registry.Registry,
 	micAPI mic.MIC,
 	nmcHelper nmc.Helper,
 	scheme *runtime.Scheme) moduleReconcilerHelperAPI {
 	return &moduleReconcilerHelper{
-		client:      client,
-		kernelAPI:   kernelAPI,
-		registryAPI: registryAPI,
-		micAPI:      micAPI,
-		nmcHelper:   nmcHelper,
-		scheme:      scheme,
+		client:    client,
+		kernelAPI: kernelAPI,
+		micAPI:    micAPI,
+		nmcHelper: nmcHelper,
+		scheme:    scheme,
 	}
 }
 

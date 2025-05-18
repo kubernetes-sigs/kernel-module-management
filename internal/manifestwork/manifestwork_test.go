@@ -18,14 +18,12 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/registry"
 )
 
 var (
-	ctrl         *gomock.Controller
-	clnt         *client.MockClient
-	mockKM       *module.MockKernelMapper
-	mockRegistry *registry.MockRegistry
+	ctrl   *gomock.Controller
+	clnt   *client.MockClient
+	mockKM *module.MockKernelMapper
 )
 
 var _ = Describe("GarbageCollect", func() {
@@ -33,7 +31,6 @@ var _ = Describe("GarbageCollect", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mockKM = module.NewMockKernelMapper(ctrl)
-		mockRegistry = registry.NewMockRegistry(ctrl)
 	})
 
 	ctx := context.Background()
@@ -92,7 +89,7 @@ var _ = Describe("GarbageCollect", func() {
 			clnt.EXPECT().Delete(ctx, &mwToBeCollected),
 		)
 
-		mwc := NewCreator(clnt, scheme, nil, nil, "")
+		mwc := NewCreator(clnt, scheme, nil, "")
 
 		err := mwc.GarbageCollect(context.Background(), clusterList, mcm)
 		Expect(err).NotTo(HaveOccurred())
@@ -150,7 +147,7 @@ var _ = Describe("GetOwnedManifestWorks", func() {
 			),
 		)
 
-		mwc := NewCreator(clnt, scheme, nil, nil, "")
+		mwc := NewCreator(clnt, scheme, nil, "")
 
 		ownedManifestWorks, err := mwc.GetOwnedManifestWorks(context.Background(), mcm)
 		Expect(err).NotTo(HaveOccurred())
@@ -177,7 +174,6 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mockKM = module.NewMockKernelMapper(ctrl)
-		mockRegistry = registry.NewMockRegistry(ctrl)
 
 		mcm = hubv1beta1.ManagedClusterModule{
 			ObjectMeta: metav1.ObjectMeta{Name: mcmName},
@@ -212,7 +208,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 	})
 
 	It("should return an error if the ManifestWork is nil", func() {
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, "")
+		mwc := NewCreator(clnt, scheme, mockKM, "")
 
 		Expect(
 			mwc.SetManifestWorkAsDesired(context.Background(), nil, hubv1beta1.ManagedClusterModule{}, nil),
@@ -226,7 +222,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(gomock.Any(), kernelVersion).Return(nil, errors.New("no-mappings-found")),
 		)
 
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, "")
+		mwc := NewCreator(clnt, scheme, mockKM, "")
 
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
 		Expect(err).NotTo(HaveOccurred())
@@ -266,7 +262,7 @@ var _ = Describe("SetManifestWorkAsDesired", func() {
 			mockKM.EXPECT().GetModuleLoaderDataForKernel(gomock.Any(), kernelVersion).Return(&mld, nil),
 		)
 
-		mwc := NewCreator(clnt, scheme, mockKM, mockRegistry, "")
+		mwc := NewCreator(clnt, scheme, mockKM, "")
 
 		err := mwc.SetManifestWorkAsDesired(context.Background(), mw, mcm, []string{kernelVersion})
 
