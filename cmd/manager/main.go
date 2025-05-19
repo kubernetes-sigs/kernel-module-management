@@ -27,6 +27,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/preflight"
 
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
@@ -196,15 +197,11 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.JobGCReconcilerName)
 		}
 
-		//[TODO] - update the preflight flow with the MIC/MBSC implementation and then uncomment the preflight conroller
-		/*
-			preflightStatusUpdaterAPI := preflight.NewStatusUpdater(client)
-			preflightAPI := preflight.NewPreflightAPI(client, buildAPI, signAPI, registryAPI, preflightStatusUpdaterAPI, kernelAPI)
+		preflightAPI := preflight.NewPreflightAPI()
 
-			if err = controllers.NewPreflightValidationReconciler(client, filterAPI, metricsAPI, preflightStatusUpdaterAPI, preflightAPI).SetupWithManager(mgr); err != nil {
-				cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PreflightValidationReconcilerName)
-			}
-		*/
+		if err = controllers.NewPreflightValidationReconciler(client, filterAPI, metricsAPI, micAPI, kernelAPI, preflightAPI).SetupWithManager(mgr); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PreflightValidationReconcilerName)
+		}
 	}
 
 	//+kubebuilder:scaffold:builder
