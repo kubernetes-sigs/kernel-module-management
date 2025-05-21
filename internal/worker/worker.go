@@ -51,7 +51,8 @@ func (w *worker) LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, fir
 		for _, module := range inTreeModulesToRemove {
 			exists, err := w.fh.FileExists("/lib/modules", fmt.Sprintf("^%s.ko", module))
 			if err != nil {
-				w.logger.Info(utils.WarnString(fmt.Sprintf("failed to check if module file %s present on the host:", module)), "error", err)
+				w.logger.Info(utils.WarnString(
+					fmt.Sprintf("failed to check if module file %s present on the host", module)), "error", err)
 				continue
 			}
 			if !exists {

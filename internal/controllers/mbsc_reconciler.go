@@ -147,7 +147,7 @@ func (mrh *mbscReconcilerHelper) processImagesSpecs(ctx context.Context, mbscObj
 		err := mrh.buildSignAPI.Sync(ctx, mld, true, imageSpec.Action, mbscObj)
 		if err != nil {
 			errs = append(errs, err)
-			logger.Info(utils.WarnString("sync for image %s, action %s failed: %v"), imageSpec.Image, imageSpec.Action, err)
+			logger.Info(utils.WarnString(fmt.Sprintf("sync for image %s, action %s failed: %v", imageSpec.Image, imageSpec.Action, err)))
 		}
 	}
 	return errors.Join(errs...)

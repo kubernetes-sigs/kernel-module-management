@@ -135,7 +135,9 @@ func (m *manager) GarbageCollect(ctx context.Context, name, namespace string, ac
 			err = m.resourceManager.DeleteResource(ctx, obj)
 			errs = append(errs, err)
 			if err != nil {
-				logger.Info(utils.WarnString("failed to delete %s resource %s in garbage collection: %v"), action, obj.GetName(), err)
+				logger.Info(utils.WarnString(
+					fmt.Sprintf("failed to delete %s resource %s in garbage collection: %v", action, obj.GetName(), err),
+				))
 				continue
 			}
 			deleteResourceNames = append(deleteResourceNames, obj.GetName())
