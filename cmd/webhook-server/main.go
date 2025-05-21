@@ -2,12 +2,12 @@ package main
 
 import (
 	"flag"
-
 	kmmhubv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	kmmv1beta2 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/webhook"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/webhook/hub"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,14 +33,14 @@ func main() {
 	logConfig.AddFlags(flag.CommandLine)
 
 	var (
-		configFile                 string
 		enableModule               bool
 		enableManagedClusterModule bool
 		enableNamespaceDeletion    bool
 		enablePreflightValidation  bool
+		userConfigMapName          string
 	)
 
-	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
+	flag.StringVar(&userConfigMapName, "config", "", "Name of the ConfigMap containing user config.")
 	flag.BoolVar(&enableModule, "enable-module", false, "Enable the webhook for Module resources")
 	flag.BoolVar(&enableManagedClusterModule, "enable-managedclustermodule", false, "Enable the webhook for ManagedClusterModule resources")
 	flag.BoolVar(&enableNamespaceDeletion, "enable-namespace", false, "Enable the webhook for Namespace deletion")
@@ -61,10 +61,14 @@ func main() {
 	}
 
 	setupLogger.Info("Creating manager", "git commit", commit)
+	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
 
-	cfg, err := config.ParseFile(configFile)
+	ctx := ctrl.SetupSignalHandler()
+	cg := config.NewConfigGetter(setupLogger)
+
+	cfg, err := cg.GetConfig(ctx, userConfigMapName, operatorNamespace)
 	if err != nil {
-		cmd.FatalError(setupLogger, err, "could not parse the configuration file", "path", configFile)
+		cmd.FatalError(setupLogger, err, "failed to get kmm config")
 	}
 
 	options := cfg.ManagerOptions()
@@ -118,7 +122,7 @@ func main() {
 	}
 
 	setupLogger.Info("starting manager")
-	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = mgr.Start(ctx); err != nil {
 		cmd.FatalError(setupLogger, err, "problem running manager")
 	}
 }

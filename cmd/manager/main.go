@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"os"
 	"strconv"
 
@@ -66,9 +67,9 @@ func main() {
 	logConfig := textlogger.NewConfig()
 	logConfig.AddFlags(flag.CommandLine)
 
-	var configFile string
+	var userConfigMapName string
 
-	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
+	flag.StringVar(&userConfigMapName, "config", "", "Name of the ConfigMap containing user config.")
 
 	flag.Parse()
 
@@ -77,6 +78,7 @@ func main() {
 	ctrl.SetLogger(logger)
 
 	setupLogger := logger.WithName("setup")
+	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
 
 	commit, err := cmd.GitCommit()
 	if err != nil {
@@ -94,9 +96,12 @@ func main() {
 
 	setupLogger.Info("Creating manager", "git commit", commit)
 
-	cfg, err := config.ParseFile(configFile)
+	ctx := ctrl.SetupSignalHandler()
+	cg := config.NewConfigGetter(setupLogger)
+
+	cfg, err := cg.GetConfig(ctx, userConfigMapName, operatorNamespace)
 	if err != nil {
-		cmd.FatalError(setupLogger, err, "could not parse the configuration file", "path", configFile)
+		cmd.FatalError(setupLogger, err, "failed to get kmm config")
 	}
 
 	options := cfg.ManagerOptions()
@@ -145,8 +150,6 @@ func main() {
 	if err = mnc.SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleReconcilerName)
 	}
-
-	ctx := ctrl.SetupSignalHandler()
 
 	eventRecorder := mgr.GetEventRecorderFor("kmm")
 
