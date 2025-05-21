@@ -36,7 +36,12 @@ spec:
       containers:
         - image: webhook-server:latest
           name: webhook-server
-          args: [--config=controller_config.yaml]
+          env:
+            - name: OPERATOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          args: [--config=kmm-operator-manager-config]
           securityContext:
             allowPrivilegeEscalation: false
           livenessProbe:
@@ -67,10 +72,6 @@ spec:
             requests:
               cpu: 10m
               memory: 64Mi
-          volumeMounts:
-            - name: manager-config
-              mountPath: /controller_config.yaml
-              subPath: controller_config.yaml
       serviceAccountName: controller
       terminationGracePeriodSeconds: 10
       tolerations:
@@ -80,7 +81,3 @@ spec:
         - key: node-role.kubernetes.io/control-plane
           operator: Equal
           effect: NoSchedule
-      volumes:
-        - name: manager-config
-          configMap:
-            name: manager-config
