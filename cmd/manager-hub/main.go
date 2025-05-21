@@ -24,7 +24,9 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/mbsc"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/mic"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/pod"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2/textlogger"
@@ -69,9 +71,9 @@ func main() {
 	logConfig := textlogger.NewConfig()
 	logConfig.AddFlags(flag.CommandLine)
 
-	var configFile string
+	var userConfigName string
 
-	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
+	flag.StringVar(&userConfigName, "config", "", "Name of the ConfigMap containing user config.")
 
 	flag.Parse()
 
@@ -80,6 +82,7 @@ func main() {
 	ctrl.SetLogger(logger)
 
 	setupLogger := logger.WithName("setup")
+	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
 
 	commit, err := cmd.GitCommit()
 	if err != nil {
@@ -89,10 +92,7 @@ func main() {
 
 	setupLogger.Info("Creating manager", "git commit", commit)
 
-	cfg, err := config.ParseFile(configFile)
-	if err != nil {
-		cmd.FatalError(setupLogger, err, "could not parse the configuration file", "path", configFile)
-	}
+	cfg := config.NewDefaultConfig()
 
 	options := cfg.ManagerOptions()
 	options.Scheme = scheme
@@ -103,6 +103,18 @@ func main() {
 	}
 
 	client := mgr.GetClient()
+
+	ctx := ctrl.SetupSignalHandler()
+	reader := mgr.GetAPIReader()
+	managerConfig := &corev1.ConfigMap{}
+	if err = reader.Get(ctx, types.NamespacedName{Namespace: operatorNamespace, Name: userConfigName}, managerConfig); err != nil {
+		setupLogger.Info("no ConfigMap configuring the manager was found in the namespace, using the default configuration", "namespace", operatorNamespace, "name", userConfigName)
+	} else {
+		err = config.LoadConfigFromCM(managerConfig, cfg)
+		if err != nil {
+			cmd.FatalError(setupLogger, err, "unable to load KMM config from ConfigMap")
+		}
+	}
 
 	nmcHelper := nmc.NewHelper(client)
 	filterAPI := filter.New(client, nmcHelper)
@@ -123,8 +135,6 @@ func main() {
 	ctrlLogger := setupLogger.WithValues("name", hub.ManagedClusterModuleReconcilerName)
 	ctrlLogger.Info("Adding controller")
 
-	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
-	ctx := ctrl.SetupSignalHandler()
 	mcmr := hub.NewManagedClusterModuleReconciler(
 		client,
 		manifestwork.NewCreator(client, scheme, kernelAPI, operatorNamespace),

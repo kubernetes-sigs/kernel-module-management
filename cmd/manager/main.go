@@ -19,6 +19,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"os"
 	"strconv"
 
@@ -66,9 +69,9 @@ func main() {
 	logConfig := textlogger.NewConfig()
 	logConfig.AddFlags(flag.CommandLine)
 
-	var configFile string
+	var userConfigName string
 
-	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
+	flag.StringVar(&userConfigName, "config", "", "Name of the ConfigMap containing user config.")
 
 	flag.Parse()
 
@@ -77,6 +80,7 @@ func main() {
 	ctrl.SetLogger(logger)
 
 	setupLogger := logger.WithName("setup")
+	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
 
 	commit, err := cmd.GitCommit()
 	if err != nil {
@@ -94,10 +98,7 @@ func main() {
 
 	setupLogger.Info("Creating manager", "git commit", commit)
 
-	cfg, err := config.ParseFile(configFile)
-	if err != nil {
-		cmd.FatalError(setupLogger, err, "could not parse the configuration file", "path", configFile)
-	}
+	cfg := config.NewDefaultConfig()
 
 	options := cfg.ManagerOptions()
 	options.Scheme = scheme
@@ -108,6 +109,18 @@ func main() {
 	}
 
 	client := mgr.GetClient()
+
+	ctx := ctrl.SetupSignalHandler()
+	reader := mgr.GetAPIReader()
+	managerConfig := &corev1.ConfigMap{}
+	if err = reader.Get(ctx, types.NamespacedName{Namespace: operatorNamespace, Name: userConfigName}, managerConfig); err != nil {
+		setupLogger.Info("no ConfigMap configuring the manager was found in the namespace, using the default configuration", "namespace", operatorNamespace, "name", userConfigName)
+	} else {
+		err = config.LoadConfigFromCM(managerConfig, cfg)
+		if err != nil {
+			cmd.FatalError(setupLogger, err, "unable to load KMM config from ConfigMap")
+		}
+	}
 
 	nmcHelper := nmc.NewHelper(client)
 	filterAPI := filter.New(client, nmcHelper)
@@ -145,8 +158,6 @@ func main() {
 	if err = mnc.SetupWithManager(mgr); err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.ModuleReconcilerName)
 	}
-
-	ctx := ctrl.SetupSignalHandler()
 
 	eventRecorder := mgr.GetEventRecorderFor("kmm")
 

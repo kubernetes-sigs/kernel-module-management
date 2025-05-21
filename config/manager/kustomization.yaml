@@ -6,6 +6,7 @@ resources:
 
 patches:
 - path: manager_worker_image_patch.yaml
+- path: manager_config_patch.yaml
 
 images:
 - name: controller
@@ -14,11 +15,3 @@ images:
 - name: worker
   newName: gcr.io/k8s-staging-kmm/kernel-module-management-worker
   newTag: latest
-
-configMapGenerator:
-- files:
-  - controller_config.yaml
-  name: manager-config
-
-generatorOptions:
-  disableNameSuffixHash: true

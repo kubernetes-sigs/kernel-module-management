@@ -1,15 +1,16 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
-	"os"
-	"time"
-
 	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"time"
 )
 
 type Job struct {
@@ -42,20 +43,45 @@ type Config struct {
 	Worker                 Worker         `yaml:"worker"`
 }
 
-func ParseFile(path string) (*Config, error) {
-	fd, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("could not open the configuration file: %v", err)
+func LoadConfigFromCM(cm *corev1.ConfigMap, cfg *Config) error {
+	const configKey = "controller_config.yaml"
+	rawConfig, ok := cm.Data[configKey]
+	if !ok {
+		return fmt.Errorf("key %q not found in ConfigMap %s/%s", configKey, cm.Namespace, cm.Name)
 	}
-	defer fd.Close()
+	return decodeStrictYAMLIntoConfig([]byte(rawConfig), cfg)
+}
 
-	cfg := Config{}
+func decodeStrictYAMLIntoConfig(yamlData []byte, config *Config) error {
+	decoder := yaml.NewDecoder(bytes.NewReader(yamlData))
+	decoder.KnownFields(true)
 
-	if err = yaml.NewDecoder(fd).Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("could not decode configuration file: %v", err)
+	if err := decoder.Decode(config); err != nil {
+		return fmt.Errorf("error unmarshaling YAML: %v", err)
 	}
 
-	return &cfg, nil
+	return nil
+}
+
+func NewDefaultConfig() *Config {
+	return &Config{
+		HealthProbeBindAddress: ":8081",
+		WebhookPort:            9443,
+		LeaderElection: LeaderElection{
+			Enabled:    true,
+			ResourceID: "kmm.sigs.x-k8s.io",
+		},
+		Metrics: Metrics{
+			EnableAuthnAuthz: true,
+			BindAddress:      "0.0.0.0:8443",
+			SecureServing:    true,
+		},
+		Worker: Worker{
+			RunAsUser:        ptr.To[int64](0),
+			SELinuxType:      "spc_t",
+			FirmwareHostPath: ptr.To("/lib/firmware"),
+		},
+	}
 }
 
 func (c *Config) ManagerOptions() *manager.Options {
