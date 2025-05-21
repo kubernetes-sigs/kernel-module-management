@@ -117,17 +117,13 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, mcm *hub
 
 		err = r.reconHelper.setMicAsDesired(ctx, mcm, cluster.Name, kernelVersions)
 		if err != nil {
-			logger.Info(utils.WarnString(
-				fmt.Sprintf("Failed to set MIC as desired: %v", err),
-			))
+			logger.Info(utils.WarnString(fmt.Sprintf("Failed to set MIC as desired: %v", err)))
 			continue
 		}
 
 		allImagesReady, err := r.reconHelper.areImagesReady(ctx, mcm.Name, cluster.Name)
 		if err != nil {
-			logger.Info(utils.WarnString(
-				fmt.Sprintf("Failed to check if MIC is ready: %v", err),
-			))
+			logger.Info(utils.WarnString(fmt.Sprintf("Failed to check if MIC is ready: %v", err)))
 			continue
 		}
 		if !allImagesReady {
@@ -146,9 +142,7 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, mcm *hub
 			return r.manifestAPI.SetManifestWorkAsDesired(ctx, mw, *mcm, kernelVersions)
 		})
 		if err != nil {
-			logger.Info(utils.WarnString(
-				fmt.Sprintf("failed to create/patch ManifestWork for managed cluster: %v", err),
-			))
+			logger.Info(utils.WarnString(fmt.Sprintf("failed to create/patch ManifestWork for managed cluster: %v", err)))
 			continue
 		}
 

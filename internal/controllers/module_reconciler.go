@@ -330,7 +330,9 @@ func (mrh *moduleReconcilerHelper) prepareSchedulingData(ctx context.Context,
 		if err != nil && !errors.Is(err, module.ErrNoMatchingKernelMapping) {
 			// deleting earlier, so as not to change NMC in case we failed to determine mld
 			currentNMCs.Delete(node.Name)
-			logger.Info(utils.WarnString(fmt.Sprintf("internal errors while fetching kernel mapping for version %s: %v", kernelVersion, err)))
+			logger.Info(utils.WarnString(
+				fmt.Sprintf("internal errors while fetching kernel mapping for version %s: %v", kernelVersion, err),
+			))
 			errs = append(errs, err)
 			continue
 		}
@@ -356,8 +358,9 @@ func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta
 		mld, err := mrh.kernelAPI.GetModuleLoaderDataForKernel(mod, kernelVersion)
 		if err != nil {
 			if !errors.Is(err, module.ErrNoMatchingKernelMapping) {
-				logger.Info(utils.WarnString(fmt.Sprintf("internal errors while fetching kernel mapping for kernel %s: %v",
-					kernelVersion, err)))
+				logger.Info(utils.WarnString(
+					fmt.Sprintf("internal errors while fetching kernel mapping for kernel %s: %v", kernelVersion, err),
+				))
 				errs = append(errs, fmt.Errorf("failed to get moduleLoaderData for kernel %s: %v", kernelVersion, err))
 			}
 			// node is not targeted by module
@@ -471,7 +474,9 @@ func (mrh *moduleReconcilerHelper) moduleUpdateWorkerPodsStatus(ctx context.Cont
 		modSpec, _ := mrh.nmcHelper.GetModuleSpecEntry(&nmc, mod.Namespace, mod.Name)
 		if modSpec == nil {
 			logger.Info(utils.WarnString(
-				fmt.Sprintf("module %s/%s spec is missing in NMC %s although config label is present", mod.Namespace, mod.Name, nmc.Name)))
+				fmt.Sprintf("module %s/%s spec is missing in NMC %s although config label is present", mod.Namespace,
+					mod.Name, nmc.Name),
+			))
 			continue
 		}
 		modStatus := mrh.nmcHelper.GetModuleStatusEntry(&nmc, mod.Namespace, mod.Name)

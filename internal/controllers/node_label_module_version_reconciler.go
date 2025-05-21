@@ -95,7 +95,9 @@ func (nlmvha *nodeLabelModuleVersionHelper) getLabelsPerModules(ctx context.Cont
 		if utils.IsVersionLabel(key) {
 			namespace, name, err := utils.GetNamespaceNameFromVersionLabel(key)
 			if err != nil {
-				logger.Info(utils.WarnString("failed to extract namespace and name from version label"), "label", key, "labelValue", value)
+				logger.Info(
+					utils.WarnString("failed to extract namespace and name from version label"), "label", key, "labelValue", value,
+				)
 				continue
 			}
 			mapKey := namespace + "-" + name
