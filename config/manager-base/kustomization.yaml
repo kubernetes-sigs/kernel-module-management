@@ -9,8 +9,5 @@ images:
   newName: gcr.io/k8s-staging-kmm/kernel-module-management-signimage
   newTag: latest
 
-patches:
-- path: manager_config_patch.yaml
-
 configurations:
 - kustomizeconfig.yaml

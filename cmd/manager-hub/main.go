@@ -69,9 +69,9 @@ func main() {
 	logConfig := textlogger.NewConfig()
 	logConfig.AddFlags(flag.CommandLine)
 
-	var configFile string
+	var userConfigMapName string
 
-	flag.StringVar(&configFile, "config", "", "The path to the configuration file.")
+	flag.StringVar(&userConfigMapName, "config", "", "Name of the ConfigMap containing user config.")
 
 	flag.Parse()
 
@@ -80,6 +80,7 @@ func main() {
 	ctrl.SetLogger(logger)
 
 	setupLogger := logger.WithName("setup")
+	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
 
 	commit, err := cmd.GitCommit()
 	if err != nil {
@@ -89,15 +90,16 @@ func main() {
 
 	setupLogger.Info("Creating manager", "git commit", commit)
 
-	cfg, err := config.ParseFile(configFile)
+	ctx := ctrl.SetupSignalHandler()
+	cg := config.NewConfigGetter(setupLogger)
+
+	cfg, err := cg.GetConfig(ctx, userConfigMapName, operatorNamespace, true)
 	if err != nil {
-		cmd.FatalError(setupLogger, err, "could not parse the configuration file", "path", configFile)
+		cmd.FatalError(setupLogger, err, "failed to get kmm config")
 	}
 
-	options := cfg.ManagerOptions()
-	options.Scheme = scheme
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), *options)
+	options := cg.GetManagerOptionsFromConfig(cfg, scheme)
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create manager")
 	}
@@ -123,8 +125,6 @@ func main() {
 	ctrlLogger := setupLogger.WithValues("name", hub.ManagedClusterModuleReconcilerName)
 	ctrlLogger.Info("Adding controller")
 
-	operatorNamespace := cmd.GetEnvOrFatalError(constants.OperatorNamespaceEnvVar, setupLogger)
-	ctx := ctrl.SetupSignalHandler()
 	mcmr := hub.NewManagedClusterModuleReconciler(
 		client,
 		manifestwork.NewCreator(client, scheme, kernelAPI, operatorNamespace),

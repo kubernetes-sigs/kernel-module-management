@@ -1,16 +1,16 @@
 healthProbeBindAddress: :8081
 webhookPort: 9443
 job:
-  gcDelay: 1h
+  gcDelay: "0s"
 leaderElection:
   enabled: true
-  resourceID: some-resource-id
+  resourceID: kmm.sigs.x-k8s.io
 metrics:
   enableAuthnAuthz: true
   bindAddress: 0.0.0.0:8443
   secureServing: true
 worker:
-  runAsUser: 1234
-  seLinuxType: mySELinuxType
-  firmwareHostPath: /some/path
+  runAsUser: 0
+  seLinuxType: spc_t
+  firmwareHostPath: /lib/firmware
 

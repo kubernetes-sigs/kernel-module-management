@@ -9,10 +9,5 @@ images:
   newName: gcr.io/k8s-staging-kmm/kernel-module-management-operator-hub
   newTag: latest
 
-configMapGenerator:
-- files:
-  - controller_config.yaml
-  name: manager-config
-
-generatorOptions:
-  disableNameSuffixHash: true
+patches:
+- path: manager_hub_config_patch.yaml
