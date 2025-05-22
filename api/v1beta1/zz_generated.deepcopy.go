@@ -158,6 +158,11 @@ func (in *DevicePluginContainerSpec) DeepCopy() *DevicePluginContainerSpec {
 func (in *DevicePluginSpec) DeepCopyInto(out *DevicePluginSpec) {
 	*out = *in
 	in.Container.DeepCopyInto(&out.Container)
+	if in.InitContainer != nil {
+		in, out := &in.InitContainer, &out.InitContainer
+		*out = new(DevicePluginContainerSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Volumes != nil {
 		in, out := &in.Volumes, &out.Volumes
 		*out = make([]v1.Volume, len(*in))
