@@ -303,6 +303,10 @@ type DevicePluginSpec struct {
 	Container DevicePluginContainerSpec `json:"container"`
 
 	// +optional
+	// InitContainer allows defines the init container that will be used by the device plugin
+	InitContainer *DevicePluginContainerSpec `json:"initContainer,omitempty"`
+
+	// +optional
 	// ServiceAccountName is the name of the ServiceAccount to use to run this pod.
 	// More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
