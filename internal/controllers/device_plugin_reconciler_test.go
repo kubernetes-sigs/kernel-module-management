@@ -626,174 +626,211 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 		Expect(ds.GetLabels()).Should(HaveKeyWithValue(versionLabel, "some version"))
 	})
 
-	DescribeTable("should work as expected", func(moduleLoader *kmmv1beta1.ModuleLoaderSpec, expectedNodeSelector map[string]string) {
-		const (
-			dsName             = "ds-name"
-			serviceAccountName = "some-service-account"
-		)
+	DescribeTable("should work as expected",
+		func(moduleLoader *kmmv1beta1.ModuleLoaderSpec, expectedNodeSelector map[string]string, withInitContainer bool) {
+			const (
+				dsName             = "ds-name"
+				serviceAccountName = "some-service-account"
+			)
 
-		dpVol := v1.Volume{
-			Name:         "test-volume",
-			VolumeSource: v1.VolumeSource{},
-		}
+			dpVol := v1.Volume{
+				Name:         "test-volume",
+				VolumeSource: v1.VolumeSource{},
+			}
 
-		dpVolMount := v1.VolumeMount{
-			Name:      "some-dp-volume-mount",
-			MountPath: "/some/path",
-		}
+			dpVolMount := v1.VolumeMount{
+				Name:      "some-dp-volume-mount",
+				MountPath: "/some/path",
+			}
 
-		repoSecret := v1.LocalObjectReference{Name: "pull-secret-name"}
+			repoSecret := v1.LocalObjectReference{Name: "pull-secret-name"}
 
-		env := []v1.EnvVar{
-			{
-				Name:  "ENV_KEY",
-				Value: "ENV_VALUE",
-			},
-		}
-
-		resources := v1.ResourceRequirements{
-			Limits: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceCPU:    resource.MustParse("200m"),
-				v1.ResourceMemory: resource.MustParse("4G"),
-			},
-			Requests: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceCPU:    resource.MustParse("100m"),
-				v1.ResourceMemory: resource.MustParse("2G"),
-			},
-		}
-
-		args := []string{"some", "args"}
-		command := []string{"some", "command"}
-
-		testToleration := v1.Toleration{
-			Key:    "test-key",
-			Value:  "test-value",
-			Effect: v1.TaintEffectNoExecute,
-		}
-
-		const ipp = v1.PullIfNotPresent
-
-		mod := kmmv1beta1.Module{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: kmmv1beta1.GroupVersion.String(),
-				Kind:       "Module",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      moduleName,
-				Namespace: namespace,
-			},
-			Spec: kmmv1beta1.ModuleSpec{
-				ModuleLoader: moduleLoader,
-				DevicePlugin: &kmmv1beta1.DevicePluginSpec{
-					Container: kmmv1beta1.DevicePluginContainerSpec{
-						Args:            args,
-						Command:         command,
-						Env:             env,
-						Image:           devicePluginImage,
-						ImagePullPolicy: ipp,
-						Resources:       resources,
-						VolumeMounts:    []v1.VolumeMount{dpVolMount},
-					},
-					ServiceAccountName: serviceAccountName,
-					Volumes:            []v1.Volume{dpVol},
+			env := []v1.EnvVar{
+				{
+					Name:  "ENV_KEY",
+					Value: "ENV_VALUE",
 				},
-				ImageRepoSecret: &repoSecret,
-				Selector:        map[string]string{"has-feature-x": "true"},
-				Tolerations:     []v1.Toleration{testToleration},
-			},
-		}
-		ds := appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      dsName,
-				Namespace: namespace,
-			},
-		}
+			}
 
-		err := dsc.setDevicePluginAsDesired(context.Background(), &ds, &mod)
-		Expect(err).NotTo(HaveOccurred())
-
-		podLabels := map[string]string{constants.ModuleNameLabel: moduleName}
-
-		directory := v1.HostPathDirectory
-		expected := appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      dsName,
-				Namespace: namespace,
-				Labels:    podLabels,
-				OwnerReferences: []metav1.OwnerReference{
-					{
-						APIVersion:         mod.APIVersion,
-						BlockOwnerDeletion: ptr.To(true),
-						Controller:         ptr.To(true),
-						Kind:               mod.Kind,
-						Name:               moduleName,
-						UID:                mod.UID,
-					},
+			resources := v1.ResourceRequirements{
+				Limits: map[v1.ResourceName]resource.Quantity{
+					v1.ResourceCPU:    resource.MustParse("200m"),
+					v1.ResourceMemory: resource.MustParse("4G"),
 				},
-			},
-			Spec: appsv1.DaemonSetSpec{
-				Selector: &metav1.LabelSelector{MatchLabels: podLabels},
-				Template: v1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels:     podLabels,
-						Finalizers: []string{constants.NodeLabelerFinalizer},
-					},
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Args:            args,
-								Command:         command,
-								Env:             env,
-								Image:           devicePluginImage,
-								ImagePullPolicy: ipp,
-								Name:            "device-plugin",
-								Resources:       resources,
-								SecurityContext: &v1.SecurityContext{
-									Privileged: ptr.To(true),
-								},
-								VolumeMounts: []v1.VolumeMount{
-									dpVolMount,
-									{
-										Name:      "kubelet-device-plugins",
-										MountPath: "/var/lib/kubelet/device-plugins",
-									},
-								},
-							},
+				Requests: map[v1.ResourceName]resource.Quantity{
+					v1.ResourceCPU:    resource.MustParse("100m"),
+					v1.ResourceMemory: resource.MustParse("2G"),
+				},
+			}
+
+			args := []string{"some", "args"}
+			command := []string{"some", "command"}
+
+			testToleration := v1.Toleration{
+				Key:    "test-key",
+				Value:  "test-value",
+				Effect: v1.TaintEffectNoExecute,
+			}
+
+			const ipp = v1.PullIfNotPresent
+
+			initContainer := &kmmv1beta1.DevicePluginContainerSpec{
+				Args:         args,
+				Command:      command,
+				Env:          env,
+				Image:        devicePluginImage,
+				Resources:    resources,
+				VolumeMounts: []v1.VolumeMount{dpVolMount},
+			}
+			if !withInitContainer {
+				initContainer = nil
+			}
+
+			mod := kmmv1beta1.Module{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kmmv1beta1.GroupVersion.String(),
+					Kind:       "Module",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      moduleName,
+					Namespace: namespace,
+				},
+				Spec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: moduleLoader,
+					DevicePlugin: &kmmv1beta1.DevicePluginSpec{
+						InitContainer: initContainer,
+						Container: kmmv1beta1.DevicePluginContainerSpec{
+							Args:            args,
+							Command:         command,
+							Env:             env,
+							Image:           devicePluginImage,
+							ImagePullPolicy: ipp,
+							Resources:       resources,
+							VolumeMounts:    []v1.VolumeMount{dpVolMount},
 						},
-						ImagePullSecrets:   []v1.LocalObjectReference{repoSecret},
-						NodeSelector:       expectedNodeSelector,
-						PriorityClassName:  "system-node-critical",
 						ServiceAccountName: serviceAccountName,
-						Volumes: []v1.Volume{
-							{
-								Name: "kubelet-device-plugins",
-								VolumeSource: v1.VolumeSource{
-									HostPath: &v1.HostPathVolumeSource{
-										Path: "/var/lib/kubelet/device-plugins",
-										Type: &directory,
+						Volumes:            []v1.Volume{dpVol},
+					},
+					ImageRepoSecret: &repoSecret,
+					Selector:        map[string]string{"has-feature-x": "true"},
+					Tolerations:     []v1.Toleration{testToleration},
+				},
+			}
+			ds := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      dsName,
+					Namespace: namespace,
+				},
+			}
+
+			err := dsc.setDevicePluginAsDesired(context.Background(), &ds, &mod)
+			Expect(err).NotTo(HaveOccurred())
+
+			podLabels := map[string]string{constants.ModuleNameLabel: moduleName}
+
+			expectedInitContainer := []v1.Container{
+				{
+					Args:      args,
+					Command:   command,
+					Env:       env,
+					Image:     devicePluginImage,
+					Name:      "device-plugin-init",
+					Resources: resources,
+					SecurityContext: &v1.SecurityContext{
+						Privileged: ptr.To(true),
+					},
+					VolumeMounts: []v1.VolumeMount{
+						dpVolMount,
+					},
+				},
+			}
+
+			if !withInitContainer {
+				expectedInitContainer = nil
+			}
+			directory := v1.HostPathDirectory
+			expected := appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      dsName,
+					Namespace: namespace,
+					Labels:    podLabels,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         mod.APIVersion,
+							BlockOwnerDeletion: ptr.To(true),
+							Controller:         ptr.To(true),
+							Kind:               mod.Kind,
+							Name:               moduleName,
+							UID:                mod.UID,
+						},
+					},
+				},
+				Spec: appsv1.DaemonSetSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: podLabels},
+					Template: v1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels:     podLabels,
+							Finalizers: []string{constants.NodeLabelerFinalizer},
+						},
+						Spec: v1.PodSpec{
+							InitContainers: expectedInitContainer,
+							Containers: []v1.Container{
+								{
+									Args:            args,
+									Command:         command,
+									Env:             env,
+									Image:           devicePluginImage,
+									ImagePullPolicy: ipp,
+									Name:            "device-plugin",
+									Resources:       resources,
+									SecurityContext: &v1.SecurityContext{
+										Privileged: ptr.To(true),
+									},
+									VolumeMounts: []v1.VolumeMount{
+										dpVolMount,
+										{
+											Name:      "kubelet-device-plugins",
+											MountPath: "/var/lib/kubelet/device-plugins",
+										},
 									},
 								},
 							},
-							dpVol,
+							ImagePullSecrets:   []v1.LocalObjectReference{repoSecret},
+							NodeSelector:       expectedNodeSelector,
+							PriorityClassName:  "system-node-critical",
+							ServiceAccountName: serviceAccountName,
+							Volumes: []v1.Volume{
+								{
+									Name: "kubelet-device-plugins",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{
+											Path: "/var/lib/kubelet/device-plugins",
+											Type: &directory,
+										},
+									},
+								},
+								dpVol,
+							},
+							Tolerations: []v1.Toleration{testToleration},
 						},
-						Tolerations: []v1.Toleration{testToleration},
 					},
 				},
-			},
-		}
-		Expect(
-			cmp.Equal(expected, ds),
-		).To(
-			BeTrue(), cmp.Diff(expected, ds),
-		)
-	},
+			}
+			Expect(
+				cmp.Equal(expected, ds),
+			).To(
+				BeTrue(), cmp.Diff(expected, ds),
+			)
+		},
 		Entry("moduleLoader is nil",
 			nil,
 			map[string]string{"has-feature-x": "true"},
+			false,
 		),
 		Entry("moduleLoader is defined",
 			&kmmv1beta1.ModuleLoaderSpec{},
 			map[string]string{utils.GetKernelModuleReadyNodeLabel(namespace, moduleName): ""},
+			true,
 		),
 	)
 })
