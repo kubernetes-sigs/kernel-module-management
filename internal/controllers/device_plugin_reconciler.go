@@ -364,19 +364,8 @@ func (dsci *daemonSetCreatorImpl) setDevicePluginAsDesired(
 				Finalizers: []string{constants.NodeLabelerFinalizer},
 			},
 			Spec: v1.PodSpec{
-				Containers: []v1.Container{
-					{
-						Args:            mod.Spec.DevicePlugin.Container.Args,
-						Command:         mod.Spec.DevicePlugin.Container.Command,
-						Env:             mod.Spec.DevicePlugin.Container.Env,
-						Name:            "device-plugin",
-						Image:           mod.Spec.DevicePlugin.Container.Image,
-						ImagePullPolicy: mod.Spec.DevicePlugin.Container.ImagePullPolicy,
-						Resources:       mod.Spec.DevicePlugin.Container.Resources,
-						SecurityContext: &v1.SecurityContext{Privileged: ptr.To(true)},
-						VolumeMounts:    append(mod.Spec.DevicePlugin.Container.VolumeMounts, containerVolumeMounts...),
-					},
-				},
+				InitContainers:     generatePodContainerSpec(mod.Spec.DevicePlugin.InitContainer, "device-plugin-init", nil),
+				Containers:         generatePodContainerSpec(&mod.Spec.DevicePlugin.Container, "device-plugin", containerVolumeMounts),
 				PriorityClassName:  "system-node-critical",
 				ImagePullSecrets:   getPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:       nodeSelector,
@@ -388,6 +377,25 @@ func (dsci *daemonSetCreatorImpl) setDevicePluginAsDesired(
 	}
 
 	return controllerutil.SetControllerReference(mod, ds, dsci.scheme)
+}
+
+func generatePodContainerSpec(containerSpec *kmmv1beta1.DevicePluginContainerSpec, containerName string, presetVolumeMounts []v1.VolumeMount) []v1.Container {
+	if containerSpec == nil {
+		return nil
+	}
+	return []v1.Container{
+		{
+			Args:            containerSpec.Args,
+			Command:         containerSpec.Command,
+			Env:             containerSpec.Env,
+			Name:            containerName,
+			Image:           containerSpec.Image,
+			ImagePullPolicy: containerSpec.ImagePullPolicy,
+			Resources:       containerSpec.Resources,
+			SecurityContext: &v1.SecurityContext{Privileged: ptr.To(true)},
+			VolumeMounts:    append(containerSpec.VolumeMounts, presetVolumeMounts...),
+		},
+	}
 }
 
 func generateDevicePluginLabelsAndSelector(mod *kmmv1beta1.Module) (map[string]string, map[string]string) {
