@@ -11,6 +11,12 @@ Where:
 - `<prefix>` should be equal to `/opt` in most cases, as it is the `Module` CRD's default value;
 - `kernel-version` must be non-empty and equal to the kernel version the kernel modules were built for.
 
+In addition to the present of the `.ko` files, the kmod image also requires
+the `cp` binary to be present as the `.ko` files will be copied from this image to
+the image-loader worker pod created by the operator.
+This is a minimal requirement and we do not require any other binary tool to be
+present in the image.
+
 ## `depmod`
 
 It is recommended to run `depmod` at the end of the build process to generate `modules.dep` and map files.
