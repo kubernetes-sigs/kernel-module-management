@@ -36,12 +36,6 @@ A `PreflightValidation` resource will report that status and progress of each mo
 tried to validate in its `.status.modules` list.  
 Elements of that list contain the following fields:
 
-#### `lastTransitionTime`
-
-The last time when the `Module` status transitioned from one status to another.  
-This should be when the underlying status changed.
-If that is not known, then using the time when the API field changed is acceptable.
-
 #### `name`
 
 The name of the `Module` resource.
@@ -50,71 +44,36 @@ The name of the `Module` resource.
 
 The namespace of the `Module` resource.
 
-#### `statusReason`
+#### `CRBaseStatus.statusReason`
 
 A string describing the status source.
 
-#### `verificationStage`
+#### `CRBaseStatus.verificationStage`
 
 The current stage of the verification process, either:
 
-- `image` (image existence verification), or;
-- `build` (build process verification), or;
-- `sign` (sign process verification), or;
+- `Image` (image existence verification), or;
+- `Done` (verification is done)
 
-#### `verificationStatus`
+#### `CRBaseStatus.verificationStatus`
 
 The status of the `Module` verification, either:
 
-- `true` (verified), or;
-- `false` (verification failed), or;
-- `error` (error during the verification process), or;
-- `unknown` (verification has not started yet).
-
-## Preflight validation stages per Module
-
-On every KMM Module present in the cluster, preflight will run the following validations:
-
-1. [Image validation](#Image-validation-stage)
-2. [Build validation](#Build-validation-stage)
-3. [Sign validation](#Sign-validation-stage)
+- `Success` (verified), or;
+- `Failure` (verification failed), or;
+- `InProgress` (verification is in-progress).
 
 ### Image validation stage
 
 Image validation is always the first stage of the preflight validation that is being executed.
 In case image validation is successful, no other validations will be run on that specific module.
-Image validation consists of 2 stages:
+The operator will check, using the container-runtime, the image existence and accessibility for the updaded kernel in the module.
 
-1. image existence and accessibility. The code tries to access the image defined for the upgraded kernel in the module,
-   and get its manifests.
-2. verify the presence of the kernel module defined in the `Module` in the correct path for future `modprobe` execution.
-   If this validation is successful, it probably means that the kernel module was compiled with the correct linux
-   headers.
-   The correct path is `<DirName>/lib/modules/<UpgradedKernel>/`.
-
-### Build validation stage
-
-Build validation is executed only in case image validation has failed, and there is a `build` section in the `Module`
-that is relevant for the upgraded kernel.
-Build validation will try to run build pod and validate that it finishes successfully.
+If the image validation has failed, and there is a `build`/`sign` section in the `Module` that is relevant for the upgraded kernel,
+the controller will try to build and/or sign the image.
 If the `PushBuiltImage` flag is defined in the `PreflightValidation` CR, it will also try to push the resulting image
 into its repo.
 The resulting image name is taken from the definition of the `containerImage` field of the `Module` CR.
-
-!!! note
-    If the `sign` section is defined for the upgraded kernel, then the resulting image will not be `containerImage`
-    field of the `Module` CR, but a temporary image name, since the resulting image should be the product of Sign flow.
-
-### Sign validation stage
-
-Sign validation is executed only in case image validation has failed, there is a `sign` section in the `Module` that is
-relevant for the upgrade kernel, and build validation finished successfully in case there was a `build` section in the
-`Module` relevant for the upgraded kernel.
-Sign validation will try to run the sign pod and validate that it finishes successfully.
-In case the `PushBuiltImage` flag is defined in the `PreflightValidation` CR, it will also try to push the resulting
-image to its registry.
-The result image is always the image defined in the `ContainerImage` field of the `Module`.
-The input image is either the output of the Build stage, or an image defined in the `UnsignedImage` field.
 
 !!! note
     In case a `build` section exists, the `sign` section input image is the `build` section's output image.
