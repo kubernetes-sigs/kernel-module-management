@@ -35,6 +35,13 @@ That DaemonSet will target nodes:
 - that match the `Module`'s `.spec.selector`;
 - on which the kernel module is loaded.
 
+There is also support for running an init-container as part of the device-plugin by setting `.spec.devicePlugin.initContainer`.
+
+For example, for some devices, a successful load of the kernel module into the kernel might not constitute the indication of
+successful loading. For those devices, the indication is the appearance of the device file under /dev filesystem.
+For those cases, using an init-container looping over files verification instead of adding that verification to the device-plugin
+image is preferable for debuggability and code re-usage reasons.
+
 ## `Module` CRD
 
 The `Module` Custom Resource Definition represents a kernel module that should be loaded on all or select nodes in the
