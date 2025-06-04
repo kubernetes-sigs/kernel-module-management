@@ -83,36 +83,6 @@ var _ = Describe("skipCreations", func() {
 	})
 })
 
-var _ = Describe("nodeBecomesSchedulable", func() {
-	DescribeTable("should work as expected", func(oldNodeSchedulable, newNodeSchedulable, expectedRes bool) {
-		oldNode := v1.Node{}
-		newNode := v1.Node{}
-		if !oldNodeSchedulable {
-			oldNode.Spec.Taints = []v1.Taint{
-				v1.Taint{
-					Effect: v1.TaintEffectNoSchedule,
-				},
-			}
-		}
-		if !newNodeSchedulable {
-			newNode.Spec.Taints = []v1.Taint{
-				v1.Taint{
-					Effect: v1.TaintEffectNoSchedule,
-				},
-			}
-		}
-
-		res := nodeBecomesSchedulable.Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: &newNode})
-		Expect(res).To(Equal(expectedRes))
-
-	},
-		Entry("old schedulable, new schedulable", true, true, false),
-		Entry("old schedulable, new non-schedulable", true, false, false),
-		Entry("old non-schedulable, new non-schedulable", false, false, false),
-		Entry("old non-schedulable, new schedulable", false, true, true),
-	)
-})
-
 var _ = Describe("filterRelevantNodeUpdates", func() {
 
 	It("should return false if there's no relevant change", func() {
@@ -338,21 +308,15 @@ var _ = Describe("ListModulesForNMC", func() {
 })
 
 var _ = Describe("ModuleReconcilerNodePredicate", func() {
-	const kernelLabel = "kernel-label"
 	var p predicate.Predicate
 
 	BeforeEach(func() {
-		f = New(nil, nil)
-		p = f.ModuleReconcilerNodePredicate(kernelLabel)
+		p = ModuleReconcilerNodePredicate()
 	})
 
 	It("should return true for creations", func() {
 		ev := event.CreateEvent{
-			Object: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{kernelLabel: "1.2.3"},
-				},
-			},
+			Object: &v1.Node{},
 		}
 
 		Expect(
@@ -367,7 +331,7 @@ var _ = Describe("ModuleReconcilerNodePredicate", func() {
 			ObjectOld: &v1.Node{},
 			ObjectNew: &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{kernelLabel: "1.2.3"},
+					Labels: map[string]string{"some label": "some value"},
 				},
 			},
 		}
@@ -378,34 +342,9 @@ var _ = Describe("ModuleReconcilerNodePredicate", func() {
 			BeTrue(),
 		)
 	})
-	It("should return false for label updates without the expected label", func() {
-		ev := event.UpdateEvent{
-			ObjectOld: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"a": "b"},
-				},
-			},
-			ObjectNew: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"c": "d"},
-				},
-			},
-		}
-
-		Expect(
-			p.Update(ev),
-		).To(
-			BeFalse(),
-		)
-	})
-
 	It("should return false for deletions", func() {
 		ev := event.DeleteEvent{
-			Object: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{kernelLabel: "1.2.3"},
-				},
-			},
+			Object: &v1.Node{},
 		}
 
 		Expect(
@@ -880,7 +819,7 @@ var _ = Describe("FindPreflightsForModule", func() {
 
 })
 
-var _ = Describe("nodeBecomesSchedulable", func() {
+var _ = Describe("nodeTaintsChanged", func() {
 	var (
 		oldNode v1.Node
 		newNode *v1.Node
@@ -900,8 +839,15 @@ var _ = Describe("nodeBecomesSchedulable", func() {
 		newNode = oldNode.DeepCopy()
 	})
 
-	nonSchedulableTaint := v1.Taint{
+	taint1 := v1.Taint{
+		Key:    "key1",
+		Value:  "value1",
 		Effect: v1.TaintEffectNoSchedule,
+	}
+	taint2 := v1.Taint{
+		Key:    "key2",
+		Value:  "value2",
+		Effect: v1.TaintEffectPreferNoSchedule,
 	}
 
 	DescribeTable("Should return the expected value", func(oldTaint *v1.Taint, newTaint *v1.Taint, expected bool) {
@@ -912,16 +858,15 @@ var _ = Describe("nodeBecomesSchedulable", func() {
 			oldNode.Spec.Taints = append(oldNode.Spec.Taints, *oldTaint)
 		}
 
-		res := nodeBecomesSchedulable.Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: newNode})
+		res := nodeTaintsChanged.Update(event.UpdateEvent{ObjectOld: &oldNode, ObjectNew: newNode})
 		if expected {
 			Expect(res).To(BeTrue())
 		} else {
 			Expect(res).To(BeFalse())
 		}
 	},
-		Entry("old Schedulable, new Schedulable", nil, nil, false),
-		Entry("old NonSchedulable, new NonSchedulable", &nonSchedulableTaint, &nonSchedulableTaint, false),
-		Entry("old Schedulable, new NonSchedulable", nil, &nonSchedulableTaint, false),
-		Entry("old NonSchedulable, new Schedulable", &nonSchedulableTaint, nil, true),
+		Entry("no old taints, no new taints", nil, nil, false),
+		Entry("taints are different between old and new", &taint1, &taint2, true),
+		Entry("taints are equal between old and new", &taint2, &taint2, false),
 	)
 })
