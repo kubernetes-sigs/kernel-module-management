@@ -41,17 +41,17 @@ func (m *MockImagePuller) EXPECT() *MockImagePullerMockRecorder {
 }
 
 // CreatePullPod mocks base method.
-func (m *MockImagePuller) CreatePullPod(ctx context.Context, name, namespace, imageToPull string, oneTimePod bool, imageRepoSecret *v1.LocalObjectReference, owner v10.Object) error {
+func (m *MockImagePuller) CreatePullPod(ctx context.Context, name, namespace, imageToPull string, oneTimePod bool, imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, owner v10.Object) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreatePullPod", ctx, name, namespace, imageToPull, oneTimePod, imageRepoSecret, owner)
+	ret := m.ctrl.Call(m, "CreatePullPod", ctx, name, namespace, imageToPull, oneTimePod, imageRepoSecret, pullPolicy, owner)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreatePullPod indicates an expected call of CreatePullPod.
-func (mr *MockImagePullerMockRecorder) CreatePullPod(ctx, name, namespace, imageToPull, oneTimePod, imageRepoSecret, owner any) *gomock.Call {
+func (mr *MockImagePullerMockRecorder) CreatePullPod(ctx, name, namespace, imageToPull, oneTimePod, imageRepoSecret, pullPolicy, owner any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePullPod", reflect.TypeOf((*MockImagePuller)(nil).CreatePullPod), ctx, name, namespace, imageToPull, oneTimePod, imageRepoSecret, owner)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePullPod", reflect.TypeOf((*MockImagePuller)(nil).CreatePullPod), ctx, name, namespace, imageToPull, oneTimePod, imageRepoSecret, pullPolicy, owner)
 }
 
 // DeletePod mocks base method.
