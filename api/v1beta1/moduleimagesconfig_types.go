@@ -67,6 +67,11 @@ type ModuleImagesConfigSpec struct {
 	// ImageRepoSecret contains pull secret for the image's repo, if needed
 	// +optional
 	ImageRepoSecret *v1.LocalObjectReference `json:"imageRepoSecret,omitempty"`
+
+	// +kubebuilder:default=IfNotPresent
+	// ImagePullPolicy defines the pull policy used for verifying the presence of the image
+	//+optional
+	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy"`
 }
 
 type ModuleImageState struct {
