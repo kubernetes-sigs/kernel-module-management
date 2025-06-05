@@ -1,8 +1,8 @@
-FROM alpine:3.21 as ksource
+FROM alpine:3.22 as ksource
 
 RUN ["apk", "add", "linux-virt-dev"]
 
-FROM alpine:3.21
+FROM alpine:3.22
 
 COPY --from=ksource /usr/src/linux-headers-*-virt/scripts/sign-file /usr/local/bin/sign-file
 
