@@ -35,7 +35,7 @@ const (
 
 type ImagePuller interface {
 	CreatePullPod(ctx context.Context, name, namespace, imageToPull string, oneTimePod bool,
-		imageRepoSecret *v1.LocalObjectReference, owner metav1.Object) error
+		imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, owner metav1.Object) error
 	DeletePod(ctx context.Context, pod *v1.Pod) error
 	ListPullPods(ctx context.Context, name, namespace string) ([]v1.Pod, error)
 	GetPullPodForImage(pods []v1.Pod, image string) *v1.Pod
@@ -56,7 +56,7 @@ func NewImagePuller(client client.Client, scheme *runtime.Scheme) ImagePuller {
 }
 
 func (ipi *imagePullerImpl) CreatePullPod(ctx context.Context, name, namespace, imageToPull string, oneTimePod bool,
-	imageRepoSecret *v1.LocalObjectReference, owner metav1.Object) error {
+	imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, owner metav1.Object) error {
 
 	pullPodTypeLabelValue := pullPodUntilSuccess
 	if oneTimePod {
@@ -80,9 +80,10 @@ func (ipi *imagePullerImpl) CreatePullPod(ctx context.Context, name, namespace, 
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
-					Name:    pullerContainerName,
-					Image:   imageToPull,
-					Command: []string{"/bin/sh", "-c", "exit 0"},
+					Name:            pullerContainerName,
+					Image:           imageToPull,
+					Command:         []string{"/bin/sh", "-c", "exit 0"},
+					ImagePullPolicy: pullPolicy,
 				},
 			},
 			RestartPolicy:    v1.RestartPolicyNever,
