@@ -162,6 +162,7 @@ var _ = Describe("CreatePullPod", func() {
 	testImage := "some image"
 	testMic := kmmv1beta1.ModuleImagesConfig{}
 	testRepoSecret := v1.LocalObjectReference{}
+	imagePullPolicy := v1.PullAlways
 
 	It("check the pod fields", func() {
 		expectedPod := v1.Pod{
@@ -176,9 +177,10 @@ var _ = Describe("CreatePullPod", func() {
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{
 					{
-						Name:    pullerContainerName,
-						Image:   testImage,
-						Command: []string{"/bin/sh", "-c", "exit 0"},
+						Name:            pullerContainerName,
+						Image:           testImage,
+						Command:         []string{"/bin/sh", "-c", "exit 0"},
+						ImagePullPolicy: imagePullPolicy,
 					},
 				},
 				RestartPolicy:    v1.RestartPolicyNever,
@@ -198,7 +200,7 @@ var _ = Describe("CreatePullPod", func() {
 				}
 				return nil
 			})
-		err := ip.CreatePullPod(ctx, testName, testNamespace, testImage, false, &testRepoSecret, &testMic)
+		err := ip.CreatePullPod(ctx, testName, testNamespace, testImage, false, &testRepoSecret, imagePullPolicy, &testMic)
 		Expect(err).To(BeNil())
 	})
 })
