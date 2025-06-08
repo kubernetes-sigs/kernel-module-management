@@ -18,7 +18,7 @@ import (
 
 type MIC interface {
 	CreateOrPatch(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
-		imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, owner metav1.Object) error
+		imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, owner metav1.Object) (controllerutil.OperationResult, error)
 	Get(ctx context.Context, name, ns string) (*kmmv1beta1.ModuleImagesConfig, error)
 	GetModuleImageSpec(micObj *kmmv1beta1.ModuleImagesConfig, image string) *kmmv1beta1.ModuleImageSpec
 	SetImageStatus(micObj *kmmv1beta1.ModuleImagesConfig, image string, status kmmv1beta1.ImageState)
@@ -39,7 +39,7 @@ func New(client client.Client, scheme *runtime.Scheme) MIC {
 }
 
 func (mici *micImpl) CreateOrPatch(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
-	imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, owner metav1.Object) error {
+	imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, owner metav1.Object) (controllerutil.OperationResult, error) {
 
 	logger := log.FromContext(ctx)
 
@@ -61,12 +61,12 @@ func (mici *micImpl) CreateOrPatch(ctx context.Context, name, ns string, images 
 		return controllerutil.SetControllerReference(owner, mic, mici.scheme)
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create or patch %s/%s: %v", ns, name, err)
+		return controllerutil.OperationResult(""), fmt.Errorf("failed to create or patch %s/%s: %v", ns, name, err)
 	}
 
 	logger.Info("Applied MIC", "name", name, "namespace", ns, "result", opRes)
 
-	return nil
+	return opRes, nil
 }
 
 func (mici *micImpl) Get(ctx context.Context, name, ns string) (*kmmv1beta1.ModuleImagesConfig, error) {

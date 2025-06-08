@@ -115,10 +115,12 @@ func (r *ManagedClusterModuleReconciler) Reconcile(ctx context.Context, mcm *hub
 			continue
 		}
 
-		err = r.reconHelper.setMicAsDesired(ctx, mcm, cluster.Name, kernelVersions)
-		if err != nil {
+		if micOpRes, err := r.reconHelper.setMicAsDesired(ctx, mcm, cluster.Name, kernelVersions); err != nil {
 			logger.Info(utils.WarnString(fmt.Sprintf("Failed to set MIC as desired: %v", err)))
 			continue
+		} else if micOpRes == controllerutil.OperationResultCreated {
+			logger.Info("MIC was just created, waiting for its status to get updated")
+			return ctrl.Result{}, nil
 		}
 
 		allImagesReady, err := r.reconHelper.areImagesReady(ctx, mcm.Name, cluster.Name)
@@ -187,7 +189,8 @@ func (r *ManagedClusterModuleReconciler) SetupWithManager(mgr ctrl.Manager) erro
 //go:generate mockgen -source=managedclustermodule_reconciler.go -package=hub -destination=mock_managedclustermodule_reconciler.go managedClusterModuleReconcilerHelperAPI
 
 type managedClusterModuleReconcilerHelperAPI interface {
-	setMicAsDesired(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule, clusterName string, kernelVersions []string) error
+	setMicAsDesired(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule, clusterName string,
+		kernelVersions []string) (controllerutil.OperationResult, error)
 	areImagesReady(ctx context.Context, mcmName, clusterName string) (bool, error)
 }
 
@@ -204,7 +207,7 @@ func newManagedClusterModuleReconcilerHelper(clusterAPI cluster.ClusterAPI, micA
 }
 
 func (rh *managedClusterModuleReconcilerHelper) setMicAsDesired(ctx context.Context, mcm *hubv1beta1.ManagedClusterModule,
-	clusterName string, kernelVersions []string) error {
+	clusterName string, kernelVersions []string) (controllerutil.OperationResult, error) {
 
 	var images []kmmv1beta1.ModuleImageSpec
 	for _, kver := range kernelVersions {
@@ -213,7 +216,7 @@ func (rh *managedClusterModuleReconcilerHelper) setMicAsDesired(ctx context.Cont
 		mld, err := rh.clusterAPI.GetModuleLoaderDataForKernel(mcm, kver)
 		if err != nil {
 			if !errors.Is(err, module.ErrNoMatchingKernelMapping) {
-				return fmt.Errorf("failed to get MLD for kernel %s: %v", kver, err)
+				return controllerutil.OperationResult(""), fmt.Errorf("failed to get MLD for kernel %s: %v", kver, err)
 			}
 			// error getting kernelVersion or kernelVersion is not targeted by the managedClusterModule
 			continue
@@ -230,12 +233,13 @@ func (rh *managedClusterModuleReconcilerHelper) setMicAsDesired(ctx context.Cont
 
 	micName := mcm.Name + "-" + clusterName
 	micNamespace := rh.clusterAPI.GetDefaultArtifactsNamespace()
-	if err := rh.micAPI.CreateOrPatch(ctx, micName, micNamespace, images, mcm.Spec.ModuleSpec.ImageRepoSecret,
-		mcm.Spec.ModuleSpec.ModuleLoader.Container.ImagePullPolicy, mcm); err != nil {
-		return fmt.Errorf("failed to createOrPatch MIC %s: %v", micName, err)
+	opRes, err := rh.micAPI.CreateOrPatch(ctx, micName, micNamespace, images, mcm.Spec.ModuleSpec.ImageRepoSecret,
+		mcm.Spec.ModuleSpec.ModuleLoader.Container.ImagePullPolicy, mcm)
+	if err != nil {
+		return controllerutil.OperationResult(""), fmt.Errorf("failed to createOrPatch MIC %s: %v", micName, err)
 	}
 
-	return nil
+	return opRes, nil
 }
 
 func (rh *managedClusterModuleReconcilerHelper) areImagesReady(ctx context.Context, mcmName, clusterName string) (bool, error) {

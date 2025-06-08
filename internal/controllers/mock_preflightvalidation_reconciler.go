@@ -16,6 +16,7 @@ import (
 	api "github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	gomock "go.uber.org/mock/gomock"
 	types "k8s.io/apimachinery/pkg/types"
+	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // MockpreflightReconcilerHelper is a mock of preflightReconcilerHelper interface.
@@ -58,11 +59,12 @@ func (mr *MockpreflightReconcilerHelperMockRecorder) getModulesData(ctx, pv any)
 }
 
 // processPreflightValidation mocks base method.
-func (m *MockpreflightReconcilerHelper) processPreflightValidation(ctx context.Context, modsWithMapping []*api.ModuleLoaderData, pv *v1beta2.PreflightValidation) error {
+func (m *MockpreflightReconcilerHelper) processPreflightValidation(ctx context.Context, modsWithMapping []*api.ModuleLoaderData, pv *v1beta2.PreflightValidation) (controllerutil.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "processPreflightValidation", ctx, modsWithMapping, pv)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(controllerutil.OperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // processPreflightValidation indicates an expected call of processPreflightValidation.

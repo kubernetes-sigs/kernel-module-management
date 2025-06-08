@@ -16,6 +16,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	v10 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // MockMIC is a mock of MIC interface.
@@ -42,11 +43,12 @@ func (m *MockMIC) EXPECT() *MockMICMockRecorder {
 }
 
 // CreateOrPatch mocks base method.
-func (m *MockMIC) CreateOrPatch(ctx context.Context, name, ns string, images []v1beta1.ModuleImageSpec, imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, owner v10.Object) error {
+func (m *MockMIC) CreateOrPatch(ctx context.Context, name, ns string, images []v1beta1.ModuleImageSpec, imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, owner v10.Object) (controllerutil.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateOrPatch", ctx, name, ns, images, imageRepoSecret, pullPolicy, owner)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(controllerutil.OperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CreateOrPatch indicates an expected call of CreateOrPatch.
