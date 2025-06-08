@@ -368,3 +368,26 @@ var _ = Describe("DoAllImagesExist", func() {
 		Expect(micAPI.DoAllImagesExist(micObj)).To(BeTrue())
 	})
 })
+
+var _ = Describe("filterDuplicateImages", func() {
+	It("check flow", func() {
+		images := []kmmv1beta1.ModuleImageSpec{
+			{Image: "example.registry.com/org/user/image1:tag"},
+			{Image: "example.registry.com/org/user/image2:tag"},
+			{Image: "example.registry.com/org/user/image3:tag"},
+			{Image: "example.registry.com/org/user/image2:tag"},
+			{Image: "example.registry.com/org/user/image4:tag"},
+			{Image: "example.registry.com/org/user/image1:tag"},
+		}
+
+		expectedRes := []kmmv1beta1.ModuleImageSpec{
+			{Image: "example.registry.com/org/user/image1:tag"},
+			{Image: "example.registry.com/org/user/image2:tag"},
+			{Image: "example.registry.com/org/user/image3:tag"},
+			{Image: "example.registry.com/org/user/image4:tag"},
+		}
+
+		res := filterDuplicateImages(images)
+		Expect(res).To(Equal(expectedRes))
+	})
+})
