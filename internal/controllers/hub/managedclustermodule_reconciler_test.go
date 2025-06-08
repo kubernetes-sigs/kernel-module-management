@@ -33,6 +33,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
@@ -451,7 +452,9 @@ var _ = Describe("managedClusterModuleReconcilerHelperAPI_setMicAsDesired", func
 				Name: mcmName,
 			},
 			Spec: hubv1beta1.ManagedClusterModuleSpec{
-				ModuleSpec: kmmv1beta1.ModuleSpec{},
+				ModuleSpec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+				},
 			},
 		}
 		kernelVersions := []string{"v1.1.1"}
@@ -459,7 +462,7 @@ var _ = Describe("managedClusterModuleReconcilerHelperAPI_setMicAsDesired", func
 		gomock.InOrder(
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[0]).Return(&api.ModuleLoaderData{}, nil),
 			mockClusterAPI.EXPECT().GetDefaultArtifactsNamespace().Return(defaultNs),
-			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, gomock.Any(), nil, mcm).
+			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, gomock.Any(), nil, v1.PullPolicy(""), mcm).
 				Return(errors.New("some error")),
 		)
 
@@ -475,7 +478,9 @@ var _ = Describe("managedClusterModuleReconcilerHelperAPI_setMicAsDesired", func
 				Name: mcmName,
 			},
 			Spec: hubv1beta1.ManagedClusterModuleSpec{
-				ModuleSpec: kmmv1beta1.ModuleSpec{},
+				ModuleSpec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+				},
 			},
 		}
 		kernelVersions := []string{"v1.1.1", "1.1.2"}
@@ -495,7 +500,7 @@ var _ = Describe("managedClusterModuleReconcilerHelperAPI_setMicAsDesired", func
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[0]).Return(nil, module.ErrNoMatchingKernelMapping),
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[1]).Return(expectedMLD, nil),
 			mockClusterAPI.EXPECT().GetDefaultArtifactsNamespace().Return(defaultNs),
-			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, expectedImages, gomock.Any(), mcm).Return(nil),
+			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, expectedImages, gomock.Any(), v1.PullPolicy(""), mcm).Return(nil),
 		)
 
 		err := mcmReconHelperAPI.setMicAsDesired(ctx, mcm, clusterName, kernelVersions)
@@ -509,7 +514,9 @@ var _ = Describe("managedClusterModuleReconcilerHelperAPI_setMicAsDesired", func
 				Name: mcmName,
 			},
 			Spec: hubv1beta1.ManagedClusterModuleSpec{
-				ModuleSpec: kmmv1beta1.ModuleSpec{},
+				ModuleSpec: kmmv1beta1.ModuleSpec{
+					ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+				},
 			},
 		}
 		kernelVersions := []string{"v1.1.1", "1.1.2"}
@@ -539,7 +546,7 @@ var _ = Describe("managedClusterModuleReconcilerHelperAPI_setMicAsDesired", func
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[0]).Return(expectedMLDs[0], nil),
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[1]).Return(expectedMLDs[1], nil),
 			mockClusterAPI.EXPECT().GetDefaultArtifactsNamespace().Return(defaultNs),
-			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, expectedImages, gomock.Any(), mcm).Return(nil),
+			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, expectedImages, gomock.Any(), v1.PullPolicy(""), mcm).Return(nil),
 		)
 
 		err := mcmReconHelperAPI.setMicAsDesired(ctx, mcm, clusterName, kernelVersions)
