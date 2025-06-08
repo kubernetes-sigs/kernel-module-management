@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -49,6 +50,8 @@ func (mici *micImpl) CreateOrPatch(ctx context.Context, name, ns string, images 
 			Namespace: ns,
 		},
 	}
+
+	images = filterDuplicateImages(images)
 
 	opRes, err := controllerutil.CreateOrPatch(ctx, mici.client, mic, func() error {
 
@@ -126,4 +129,16 @@ func (mici *micImpl) DoAllImagesExist(micObj *kmmv1beta1.ModuleImagesConfig) boo
 	}
 
 	return true
+}
+
+func filterDuplicateImages(images []kmmv1beta1.ModuleImageSpec) []kmmv1beta1.ModuleImageSpec {
+	imagesSet := sets.New[string]()
+	filteredImages := make([]kmmv1beta1.ModuleImageSpec, 0, len(images))
+	for _, image := range images {
+		if !imagesSet.Has(image.Image) {
+			imagesSet.Insert(image.Image)
+			filteredImages = append(filteredImages, image)
+		}
+	}
+	return filteredImages
 }
