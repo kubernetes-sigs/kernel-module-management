@@ -443,6 +443,7 @@ var _ = Describe("handleMIC", func() {
 				ImageRepoSecret: &v1.LocalObjectReference{
 					Name: "my-secret",
 				},
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
 			},
 		}
 		targetedNodes = []v1.Node{
@@ -457,7 +458,7 @@ var _ = Describe("handleMIC", func() {
 	It("should return an error if we failed to get moduleLoaderData for kernel", func() {
 
 		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(nil, errors.New("some error"))
-		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
+		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, v1.PullPolicy(""), mod).Return(nil)
 
 		err := mrh.handleMIC(ctx, mod, targetedNodes)
 		Expect(err).To(HaveOccurred())
@@ -470,7 +471,7 @@ var _ = Describe("handleMIC", func() {
 		mld := &api.ModuleLoaderData{ContainerImage: img}
 		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(mld, nil)
 		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret,
-			mod).Return(errors.New("some error"))
+			v1.PullPolicy(""), mod).Return(errors.New("some error"))
 
 		err := mrh.handleMIC(ctx, mod, targetedNodes)
 		Expect(err).To(HaveOccurred())
@@ -478,7 +479,7 @@ var _ = Describe("handleMIC", func() {
 	})
 
 	It("should not do anything if targetedNodes is empty", func() {
-		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, mod).Return(nil)
+		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, gomock.Any(), mod.Spec.ImageRepoSecret, v1.PullPolicy(""), mod).Return(nil)
 		err := mrh.handleMIC(ctx, mod, []v1.Node{})
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -501,7 +502,8 @@ var _ = Describe("handleMIC", func() {
 			RegistryTLS:   mld.RegistryTLS,
 		}
 		mockKernelMapper.EXPECT().GetModuleLoaderDataForKernel(mod, gomock.Any()).Return(mld, nil)
-		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, []kmmv1beta1.ModuleImageSpec{expectedSpec}, mod.Spec.ImageRepoSecret, mod).Return(nil)
+		mockMICAPI.EXPECT().CreateOrPatch(ctx, mod.Name, mod.Namespace, []kmmv1beta1.ModuleImageSpec{expectedSpec},
+			mod.Spec.ImageRepoSecret, v1.PullPolicy(""), mod).Return(nil)
 
 		err := mrh.handleMIC(ctx, mod, targetedNodes)
 		Expect(err).NotTo(HaveOccurred())
