@@ -17,6 +17,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	sets "k8s.io/apimachinery/pkg/util/sets"
+	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // MockmoduleReconcilerHelperAPI is a mock of moduleReconcilerHelperAPI interface.
@@ -100,11 +101,12 @@ func (mr *MockmoduleReconcilerHelperAPIMockRecorder) getNMCsByModuleSet(ctx, mod
 }
 
 // handleMIC mocks base method.
-func (m *MockmoduleReconcilerHelperAPI) handleMIC(ctx context.Context, mod *v1beta1.Module, nodes []v1.Node) error {
+func (m *MockmoduleReconcilerHelperAPI) handleMIC(ctx context.Context, mod *v1beta1.Module, nodes []v1.Node) (controllerutil.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "handleMIC", ctx, mod, nodes)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(controllerutil.OperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // handleMIC indicates an expected call of handleMIC.

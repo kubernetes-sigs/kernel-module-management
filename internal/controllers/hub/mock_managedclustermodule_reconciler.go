@@ -14,6 +14,7 @@ import (
 
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	gomock "go.uber.org/mock/gomock"
+	controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // MockmanagedClusterModuleReconcilerHelperAPI is a mock of managedClusterModuleReconcilerHelperAPI interface.
@@ -55,11 +56,12 @@ func (mr *MockmanagedClusterModuleReconcilerHelperAPIMockRecorder) areImagesRead
 }
 
 // setMicAsDesired mocks base method.
-func (m *MockmanagedClusterModuleReconcilerHelperAPI) setMicAsDesired(ctx context.Context, mcm *v1beta1.ManagedClusterModule, clusterName string, kernelVersions []string) error {
+func (m *MockmanagedClusterModuleReconcilerHelperAPI) setMicAsDesired(ctx context.Context, mcm *v1beta1.ManagedClusterModule, clusterName string, kernelVersions []string) (controllerutil.OperationResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "setMicAsDesired", ctx, mcm, clusterName, kernelVersions)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(controllerutil.OperationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // setMicAsDesired indicates an expected call of setMicAsDesired.

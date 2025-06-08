@@ -68,7 +68,6 @@ type ModuleReconciler struct {
 	nsLabeler   namespaceLabeler
 	reconHelper moduleReconcilerHelperAPI
 	nodeAPI     node.Node
-	micAPI      mic.MIC
 }
 
 func NewModuleReconciler(client client.Client,
@@ -125,8 +124,11 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 		return ctrl.Result{}, fmt.Errorf("failed to get list of nodes by selector: %v", err)
 	}
 
-	if err := mr.reconHelper.handleMIC(ctx, mod, targetedNodes); err != nil {
+	if opRes, err := mr.reconHelper.handleMIC(ctx, mod, targetedNodes); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to handle MIC: %v", err)
+	} else if opRes == controllerutil.OperationResultCreated {
+		logger.Info("MIC was just created, waiting for its status to get updated")
+		return ctrl.Result{}, nil
 	}
 
 	currentNMCs, err := mr.reconHelper.getNMCsByModuleSet(ctx, mod)
@@ -184,7 +186,7 @@ func (mr *ModuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //go:generate mockgen -source=module_reconciler.go -package=controllers -destination=mock_module_reconciler.go moduleReconcilerHelperAPI,namespaceLabeler
 
 type moduleReconcilerHelperAPI interface {
-	handleMIC(ctx context.Context, mod *kmmv1beta1.Module, nodes []v1.Node) error
+	handleMIC(ctx context.Context, mod *kmmv1beta1.Module, nodes []v1.Node) (controllerutil.OperationResult, error)
 	setFinalizerAndStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error)
@@ -345,7 +347,8 @@ func (mrh *moduleReconcilerHelper) prepareSchedulingData(ctx context.Context,
 	return result, errs
 }
 
-func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error {
+func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta1.Module,
+	targetedNodes []v1.Node) (controllerutil.OperationResult, error) {
 
 	var (
 		logger = log.FromContext(ctx)
@@ -376,12 +379,13 @@ func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta
 		images = append(images, mis)
 	}
 
-	if err := mrh.micAPI.CreateOrPatch(ctx, mod.Name, mod.Namespace, images, mod.Spec.ImageRepoSecret,
-		mod.Spec.ModuleLoader.Container.ImagePullPolicy, mod); err != nil {
+	opRes, err := mrh.micAPI.CreateOrPatch(ctx, mod.Name, mod.Namespace, images, mod.Spec.ImageRepoSecret,
+		mod.Spec.ModuleLoader.Container.ImagePullPolicy, mod)
+	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to apply %s/%s MIC: %v", mod.Namespace, mod.Name, err))
 	}
 
-	return errors.Join(errs...)
+	return opRes, errors.Join(errs...)
 }
 
 func (mrh *moduleReconcilerHelper) enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error {

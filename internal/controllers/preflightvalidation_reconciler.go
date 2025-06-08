@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -100,14 +101,16 @@ func (r *preflightValidationReconciler) Reconcile(ctx context.Context, pv *v1bet
 		return ctrl.Result{}, fmt.Errorf("failed to get modules' data: %v", err)
 	}
 
+	if micOpRes, err := r.helper.processPreflightValidation(ctx, modsWithMapping, pv); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to process the preflight validation: %v", err)
+	} else if micOpRes == controllerutil.OperationResultCreated {
+		log.Info("MIC was just created, waiting for its status to get updated")
+		return ctrl.Result{}, nil
+	}
+
 	err = r.helper.updateStatus(ctx, modsWithMapping, modsWithoutMapping, pv)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update PreflightValidation's status: %v", err)
-	}
-
-	err = r.helper.processPreflightValidation(ctx, modsWithMapping, pv)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to process the preflight validation: %v", err)
 	}
 
 	if r.preflightAPI.AllModulesVerified(pv) {
@@ -122,7 +125,8 @@ func (r *preflightValidationReconciler) Reconcile(ctx context.Context, pv *v1bet
 type preflightReconcilerHelper interface {
 	updateStatus(ctx context.Context, modsWithMapping []*api.ModuleLoaderData, modsWithoutMapping []types.NamespacedName, pv *v1beta2.PreflightValidation) error
 	getModulesData(ctx context.Context, pv *v1beta2.PreflightValidation) ([]*api.ModuleLoaderData, []types.NamespacedName, error)
-	processPreflightValidation(ctx context.Context, modsWithMapping []*api.ModuleLoaderData, pv *v1beta2.PreflightValidation) error
+	processPreflightValidation(ctx context.Context, modsWithMapping []*api.ModuleLoaderData,
+		pv *v1beta2.PreflightValidation) (controllerutil.OperationResult, error)
 }
 
 type preflightReconcilerHelperImpl struct {
@@ -214,8 +218,13 @@ func (p *preflightReconcilerHelperImpl) getModulesData(ctx context.Context, pv *
 	return mldsWithMapping, mldsWithoutMapping, nil
 }
 
-func (p *preflightReconcilerHelperImpl) processPreflightValidation(ctx context.Context, modsWithMapping []*api.ModuleLoaderData, pv *v1beta2.PreflightValidation) error {
+func (p *preflightReconcilerHelperImpl) processPreflightValidation(ctx context.Context, modsWithMapping []*api.ModuleLoaderData, pv *v1beta2.PreflightValidation) (controllerutil.OperationResult, error) {
 	errs := []error{}
+
+	var (
+		opRes controllerutil.OperationResult
+		err   error
+	)
 	for _, mod := range modsWithMapping {
 		status := p.preflightAPI.GetModuleStatus(pv, mod.Namespace, mod.Name)
 		if status == v1beta2.VerificationSuccess || status == v1beta2.VerificationFailure {
@@ -230,10 +239,12 @@ func (p *preflightReconcilerHelperImpl) processPreflightValidation(ctx context.C
 			RegistryTLS:   mod.RegistryTLS,
 		}
 		micName := mod.Name + "-preflight"
-		err := p.micAPI.CreateOrPatch(ctx, micName, mod.Namespace, []kmmv1beta1.ModuleImageSpec{micObjSpec}, mod.ImageRepoSecret, mod.ImagePullPolicy, pv)
+		// We only care about the last opRes as we want to make sure we give enough time for the MIC to be created
+		opRes, err = p.micAPI.CreateOrPatch(ctx, micName, mod.Namespace, []kmmv1beta1.ModuleImageSpec{micObjSpec},
+			mod.ImageRepoSecret, mod.ImagePullPolicy, pv)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to apply %s/%s MIC: %v", mod.Namespace, mod.Name, err))
 		}
 	}
-	return errors.Join(errs...)
+	return opRes, errors.Join(errs...)
 }
