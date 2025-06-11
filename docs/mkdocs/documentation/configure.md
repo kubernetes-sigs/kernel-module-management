@@ -40,7 +40,7 @@ Default value: `:8081`.
 Defines the duration for which successful build pods should be preserved before they are deleted.  
 Refer to the Go [`ParseDuration`](https://pkg.go.dev/time#ParseDuration) function documentation to understand valid
 values for this setting.  
-Default value: `0`.
+Default value: `0s`.
 
 #### `leaderElection.enabled`
 
