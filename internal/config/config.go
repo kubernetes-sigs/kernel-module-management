@@ -166,6 +166,7 @@ func (ch *configHelper) decodeStrictYAMLIntoConfig(yamlData []byte, config *Conf
 
 func (ch *configHelper) newDefaultConfig(isHubConfig bool) *Config {
 	leaderElectionResourceID := "kmm.sigs.x-k8s.io"
+	gcDelay, _ := time.ParseDuration("0s")
 	if isHubConfig {
 		leaderElectionResourceID = "kmm-hub.sigs.x-k8s.io"
 	}
@@ -185,6 +186,9 @@ func (ch *configHelper) newDefaultConfig(isHubConfig bool) *Config {
 			RunAsUser:        ptr.To[int64](0),
 			SELinuxType:      "spc_t",
 			FirmwareHostPath: ptr.To("/lib/firmware"),
+		},
+		Job: Job{
+			GCDelay: gcDelay,
 		},
 	}
 }
