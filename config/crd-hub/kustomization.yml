@@ -3,6 +3,8 @@ kind: Kustomization
 
 resources:
   - bases/hub.kmm.sigs.x-k8s.io_managedclustermodules.yaml
+  - bases/kmm.sigs.x-k8s.io_modulebuildsignconfigs.yaml
+  - bases/kmm.sigs.x-k8s.io_moduleimagesconfigs.yaml
 
 patches: []
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
