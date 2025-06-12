@@ -103,6 +103,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	$(CONTROLLER_GEN) webhook paths="./internal/webhook" output:webhook:artifacts:config=config/webhook
 	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./internal/controllers" output:rbac:artifacts:config=config/rbac
 	# Hub
+	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:artifacts:config=config/crd-hub/bases
 	$(CONTROLLER_GEN) crd paths="./api-hub/..." output:crd:artifacts:config=config/crd-hub/bases
 	$(CONTROLLER_GEN) webhook paths="./internal/webhook/hub" output:webhook:artifacts:config=config/webhook-hub
 	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./internal/controllers/hub" output:rbac:artifacts:config=config/rbac-hub
