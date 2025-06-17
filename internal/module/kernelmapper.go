@@ -149,7 +149,10 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 }
 
 func (kh *kernelMapperHelper) replaceTemplates(mld *api.ModuleLoaderData) error {
-	osConfigEnvVars := utils.KernelComponentsAsEnvVars(mld.KernelNormalizedVersion)
+	osConfigEnvVars, err := utils.KernelComponentsAsEnvVars(mld.KernelNormalizedVersion)
+	if err != nil {
+		return fmt.Errorf("failed to get kernel componnents as env variables, %v", err)
+	}
 	osConfigEnvVars = append(osConfigEnvVars, "MOD_NAME="+mld.Name, "MOD_NAMESPACE="+mld.Namespace)
 
 	replacedContainerImage, err := utils.ReplaceInTemplates(osConfigEnvVars, mld.ContainerImage)
@@ -205,9 +208,12 @@ func (kh *kernelMapperHelper) getRelevantSign(moduleSign *kmmv1beta1.Sign, mappi
 		signConfig.FilesToSign = append(signConfig.FilesToSign, mappingSign.FilesToSign...)
 	}
 
-	osConfigEnvVars := utils.KernelComponentsAsEnvVars(
+	osConfigEnvVars, err := utils.KernelComponentsAsEnvVars(
 		kernel.NormalizeVersion(kernelVersion),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kernel componnents as env variables, %v", err)
+	}
 	unsignedImage, err := utils.ReplaceInTemplates(osConfigEnvVars, signConfig.UnsignedImage)
 	if err != nil {
 		return nil, err

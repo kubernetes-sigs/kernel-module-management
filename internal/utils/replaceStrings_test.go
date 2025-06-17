@@ -17,8 +17,16 @@ var _ = Describe("KernelComponentsAsEnvVars", func() {
 			"KERNEL_Y=0",
 			"KERNEL_Z=15",
 		}
+		osConfigEnvVars, err := KernelComponentsAsEnvVars(kernelVersion)
+		Expect(osConfigEnvVars).To(Equal(expected))
+		Expect(err).ToNot(HaveOccurred())
+	})
 
-		Expect(KernelComponentsAsEnvVars(kernelVersion)).To(Equal(expected))
+	It("should fail due to invalid kernel version", func() {
+		const kernelVersion = "test"
+		osConfigEnvVars, err := KernelComponentsAsEnvVars(kernelVersion)
+		Expect(osConfigEnvVars).To(BeNil())
+		Expect(err).To(HaveOccurred())
 	})
 })
 
