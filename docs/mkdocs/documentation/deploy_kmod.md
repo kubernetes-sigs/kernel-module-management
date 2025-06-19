@@ -270,6 +270,10 @@ KMM will then create worker Pods where required to run `modprobe -r` and unload 
     KMM ships with a validating admission webhook that rejects the deletion of namespaces that contain at least one
     `Module` resource.
 
+### Kernel modules events on Nodes
+Due to an event anti-spam mechanism embedded in Kubernetes,
+some events may not necessarily be shown when loading or unloading kernel modules in quick succession.
+
 ## Security and permissions
 
 Loading kernel modules is a highly sensitive operation.
