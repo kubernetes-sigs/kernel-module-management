@@ -43,3 +43,23 @@ webhooks:
     resources:
     - modules
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-kmm-sigs-x-k8s-io-v1beta2-preflightvalidation
+  failurePolicy: Fail
+  name: vpreflightvalidation.kb.io
+  rules:
+  - apiGroups:
+    - kmm.sigs.x-k8s.io
+    apiVersions:
+    - v1beta2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - preflightvalidations
+  sideEffects: None

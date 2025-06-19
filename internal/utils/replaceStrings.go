@@ -14,10 +14,13 @@ const (
 	kernelVersionPatchIdx = 2
 )
 
-var kernelRegexp = regexp.MustCompile("[.,-]")
+var KernelRegexp = regexp.MustCompile("[.,-]")
 
-func KernelComponentsAsEnvVars(kernel string) []string {
-	osConfigFieldsList := kernelRegexp.Split(kernel, -1)
+func KernelComponentsAsEnvVars(kernel string) ([]string, error) {
+	osConfigFieldsList := KernelRegexp.Split(kernel, -1)
+	if len(osConfigFieldsList) < 3 {
+		return nil, fmt.Errorf("invalid kernel version %s: expected at least three components (major.minor.patch)", kernel)
+	}
 
 	envvars := []string{
 		"KERNEL_FULL_VERSION=" + kernel,
@@ -28,7 +31,7 @@ func KernelComponentsAsEnvVars(kernel string) []string {
 		"KERNEL_Z=" + osConfigFieldsList[kernelVersionPatchIdx],
 	}
 
-	return envvars
+	return envvars, nil
 }
 
 func ReplaceInTemplates(envvars []string, templates ...string) ([]string, error) {

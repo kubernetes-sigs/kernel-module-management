@@ -109,8 +109,9 @@ func main() {
 			cmd.FatalError(setupLogger, err, "unable to create conversion webhook", "name", "PreflightValidation/v1beta1")
 		}
 
-		if err = ctrl.NewWebhookManagedBy(mgr).For(&kmmv1beta2.PreflightValidation{}).Complete(); err != nil {
-			cmd.FatalError(setupLogger, err, "unable to create conversion webhook", "name", "PreflightValidation/v1beta2")
+		logger.Info("Enabling PreflightValidation webhook")
+		if err = webhook.NewPreflightValidationValidator(logger).SetupWebhookWithManager(mgr, &kmmv1beta2.PreflightValidation{}); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "PreflightValidationValidator")
 		}
 	}
 
