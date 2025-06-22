@@ -196,6 +196,7 @@ var _ = Describe("processImagesSpecs", func() {
 					Action: kmmv1beta1.BuildImage,
 				},
 			},
+			PushBuiltImage: true,
 		},
 	}
 

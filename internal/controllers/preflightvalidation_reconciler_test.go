@@ -275,10 +275,10 @@ var _ = Describe("processPreflightValidation", func() {
 			mockPreflight.EXPECT().GetModuleStatus(pv, "mld namespace2", "mld name2").Return(v1beta2.VerificationFailure),
 			mockPreflight.EXPECT().GetModuleStatus(pv, "mld namespace3", "mld name3").Return(v1beta2.VerificationInProgress),
 			mockMic.EXPECT().CreateOrPatch(ctx, "mld name3-preflight", "mld namespace3", []kmmv1beta1.ModuleImageSpec{expectedMic3},
-				nil, v1.PullPolicy(""), pv).Return(nil),
+				nil, v1.PullPolicy(""), pv.Spec.PushBuiltImage, pv).Return(nil),
 			mockPreflight.EXPECT().GetModuleStatus(pv, "mld namespace4", "mld name4").Return(""),
 			mockMic.EXPECT().CreateOrPatch(ctx, "mld name4-preflight", "mld namespace4", []kmmv1beta1.ModuleImageSpec{expectedMic4},
-				nil, v1.PullPolicy(""), pv).Return(nil),
+				nil, v1.PullPolicy(""), pv.Spec.PushBuiltImage, pv).Return(nil),
 		)
 
 		err := p.processPreflightValidation(ctx, modsWithMapping, pv)
