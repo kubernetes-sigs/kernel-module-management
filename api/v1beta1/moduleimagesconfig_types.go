@@ -72,6 +72,11 @@ type ModuleImagesConfigSpec struct {
 	// ImagePullPolicy defines the pull policy used for verifying the presence of the image
 	//+optional
 	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy"`
+
+	// Boolean flag that determines whether images built must also
+	// be pushed to a defined repository
+	// +optional
+	PushBuiltImage bool `json:"pushBuiltImage"`
 }
 
 type ModuleImageState struct {

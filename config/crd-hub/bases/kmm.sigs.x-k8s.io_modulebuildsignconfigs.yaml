@@ -250,6 +250,11 @@ spec:
                   - kernelVersion
                   type: object
                 type: array
+              pushBuiltImage:
+                description: |-
+                  Boolean flag that determines whether images built must also
+                  be pushed to a defined repository
+                type: boolean
             required:
             - images
             type: object
