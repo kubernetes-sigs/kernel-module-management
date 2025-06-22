@@ -55,6 +55,11 @@ type ModuleBuildSignConfigSpec struct {
 	// ImageRepoSecret contains pull secret for the image's repo, if needed
 	// +optional
 	ImageRepoSecret *v1.LocalObjectReference `json:"imageRepoSecret,omitempty"`
+
+	// Boolean flag that determines whether images built must also
+	// be pushed to a defined repository
+	// +optional
+	PushBuiltImage bool `json:"pushBuiltImage"`
 }
 
 // BuildSignImageState contains the status of the image that was requested to be built/signed
