@@ -56,7 +56,6 @@ Default value: `kmm.sigs.x-k8s.io` for KMM and `kmm-hub.sigs.x-k8s.io` for KMM-h
 #### `metrics.bindAddress`
 
 Determines the bind address for the metrics server.
-It will be defaulted to `:8080` if unspecified.
 Set this to "0" to disable the metrics server.  
 Default value: `0.0.0.0:8443`.
 
