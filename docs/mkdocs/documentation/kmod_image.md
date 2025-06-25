@@ -67,7 +67,7 @@ RUN depmod -b /opt ${KERNEL_FULL_VERSION}
 
 KMM is able to build kmod images in cluster.
 Build instructions must be provided using the `build` section of a kernel mapping.
-The `Dockerfile` for your container image should be copied into a `ConfigMap` object, under the `Dockerfile` key.
+The `Dockerfile` for your container image should be copied into a `ConfigMap` object, under the `dockerfile` key.
 The `ConfigMap` needs to be located in the same namespace as the `Module`.
 
 KMM will first check if the image name specified in the `containerImage` field exists.
