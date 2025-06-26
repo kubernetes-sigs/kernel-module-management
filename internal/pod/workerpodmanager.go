@@ -304,11 +304,11 @@ func (wpmi *workerPodManagerImpl) GetTolerationsAnnotation(p *v1.Pod) string {
 func (wpmi *workerPodManagerImpl) HashAnnotationDiffer(p1, p2 *v1.Pod) bool {
 
 	if p1 == nil && p2 == nil {
-		return true
+		return false
 	}
 
 	if (p1 == nil && p2 != nil) || (p1 != nil) && (p2 == nil) {
-		return false
+		return true
 	}
 
 	return p1.Annotations[hashAnnotationKey] != p2.Annotations[hashAnnotationKey]
