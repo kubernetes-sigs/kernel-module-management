@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+# operator-sdk run bundle<-upgrade> doesn't support local images and the image
+# has to be pushed to a remote registry.
+# When the command is run, operator-sdk checks the image twice. At first, it
+# validates that the image exists and then it creates a pod in the cluster
+# deploying the image, therefore, the image has to be accessed from both, the
+# running host and the minikube cluster.
+sudo echo "127.0.0.1 host.minikube.internal" | sudo tee -a /etc/hosts
+
+# Install OLM
+make operator-sdk
+./bin/operator-sdk olm install
+
+# It takes some time to the operatorhubio-catalog catalogsource to get to a
+# READY connection state, we need this to validate that the catalog is ready
+# before installing a bundle, otherwise we might get a race condition that will
+# resolved in the Subscription not being reconciled after the connecting is
+# ready
+timeout 3m bash -c 'until [ "$(kubectl -n olm get catalogsource/operatorhubio-catalog -o jsonpath={.status.connectionState.lastObservedState})" = "READY" ]; do sleep 5; done'
+
+# Deploy the current bundle
+kubectl -n olm patch svc/operatorhubio-catalog --type merge -p '{"spec":{"type": "NodePort"}}'
+catalog_url=$(minikube service operatorhubio-catalog -n olm --url | cut -d"/" -f3)
+latest_published_bundle=$(grpcurl -d '{"pkgName": "kernel-module-management-hub", "channelName": "alpha"}' -plaintext ${catalog_url} api.Registry/GetBundleForChannel | jq -r '.bundlePath')
+
+./bin/operator-sdk run bundle ${latest_published_bundle} \
+    --use-http \
+    --timeout 5m0s
+kubectl wait --for=condition=Available --timeout=1m deployment/kmm-operator-hub-controller
+
+# Build the new bundle
+make bundle-hub bundle-build bundle-push \
+    HUB_IMG=host.minikube.internal:5000/kmm/kmm-hub:local \
+    SIGNER_IMG=host.minikube.internal:5000/kmm/signimage:local \
+    WEBHOOK_IMG=host.minikube.internal:5000/kmm/webhook-server:local \
+    BUNDLE_IMG=localhost:5000/kmm/kmm-hub-bundle:local
+
+# Upgrade to the new bundle
+./bin/operator-sdk run bundle-upgrade host.minikube.internal:5000/kmm/kmm-hub-bundle:local \
+    --use-http \
+    --timeout 5m0s
+kubectl wait --for=condition=Available --timeout=1m \
+    deployment/kmm-operator-hub-controller \
+    deployment/kmm-operator-hub-webhook
+
