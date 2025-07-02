@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -102,7 +103,11 @@ func main() {
 
 	cfg, err := cg.GetConfig(ctx, userConfigMapName, operatorNamespace, false)
 	if err != nil {
-		cmd.FatalError(setupLogger, err, "failed to get kmm config")
+		if errors.Is(err, config.ErrCannotUseCustomConfig) {
+			setupLogger.Error(err, "failed to get kmm config")
+		} else {
+			cmd.FatalError(setupLogger, err, "failed to get kmm config")
+		}
 	}
 
 	options := cg.GetManagerOptionsFromConfig(cfg, scheme)
