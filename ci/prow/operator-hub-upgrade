@@ -21,6 +21,20 @@ make operator-sdk
 # ready
 timeout 3m bash -c 'until [ "$(kubectl -n olm get catalogsource/operatorhubio-catalog -o jsonpath={.status.connectionState.lastObservedState})" = "READY" ]; do sleep 5; done'
 
+# Install the `clusteradm` command
+curl -LO https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/v0.7.2/install.sh
+chmod +x install.sh
+./install.sh 0.7.2
+
+# Init OCM in the cluster
+clusteradm init --wait
+kubectl wait --for=condition=Available -n open-cluster-management deployment/cluster-manager
+kubectl wait --for=condition=Available --timeout=2m -n open-cluster-management-hub \
+    deployment/cluster-manager-placement-controller \
+    deployment/cluster-manager-registration-controller \
+    deployment/cluster-manager-registration-webhook \
+    deployment/cluster-manager-work-webhook
+
 # Deploy the current bundle
 kubectl -n olm patch svc/operatorhubio-catalog --type merge -p '{"spec":{"type": "NodePort"}}'
 catalog_url=$(minikube service operatorhubio-catalog -n olm --url | cut -d"/" -f3)
