@@ -53,6 +53,11 @@ type Build struct {
 	DockerfileConfigMap *v1.LocalObjectReference `json:"dockerfileConfigMap"`
 
 	// +optional
+	// DockerfileOCIArtifact specifies an OCI artifact that contains the dockerfile
+	// used to build the kernel module container image.
+	DockerfileOCIArtifact string `json:"dockerfileOCIArtifact"`
+
+	// +optional
 	// BaseImageRegistryTLS contains settings determining how to access registries of the base images in the build-process' Dockerfile.
 	BaseImageRegistryTLS TLSOptions `json:"baseImageRegistryTLS,omitempty"`
 

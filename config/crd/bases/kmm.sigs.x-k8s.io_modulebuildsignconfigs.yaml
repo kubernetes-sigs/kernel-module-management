@@ -118,6 +118,11 @@ spec:
                               type: string
                           type: object
                           x-kubernetes-map-type: atomic
+                        dockerfileOCIArtifact:
+                          description: |-
+                            DockerfileOCIArtifact specifies an OCI artifact that contains the dockerfile
+                            used to build the kernel module container image.
+                          type: string
                         kanikoParams:
                           description: KanikoParams is used to customize the building
                             process of the image.
