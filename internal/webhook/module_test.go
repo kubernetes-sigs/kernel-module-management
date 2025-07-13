@@ -18,8 +18,9 @@ package webhook
 
 import (
 	"context"
-	v1 "k8s.io/api/core/v1"
 	"strings"
+
+	v1 "k8s.io/api/core/v1"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
@@ -232,6 +233,25 @@ var _ = Describe("validateModuleLoaderContainerSpec", func() {
 		)
 	})
 
+	It("should fail when a kernel-mapping has invalid Build specification", func() {
+		containerSpec := kmmv1beta1.ModuleLoaderContainerSpec{
+			KernelMappings: []kmmv1beta1.KernelMapping{
+				{
+					Regexp:         "^valid-regexp$",
+					ContainerImage: "image-url",
+					Build: &kmmv1beta1.Build{
+						DockerfileOCIArtifact: "registry.example.com/dockerfile:latest",
+						DockerfileConfigMap:   &v1.LocalObjectReference{Name: "dockerfile-configmap"},
+					},
+				},
+			},
+		}
+
+		Expect(
+			validateModuleLoaderContainerSpec(containerSpec),
+		).To(HaveOccurred())
+	})
+
 	DescribeTable("should fail when InTreeModulesToRemove and InTreeModuleToRemove both defined",
 		func(inTreeModulesInContainer, inTreeModuleInContainer, inTreeModulesInKM, inTreeModuleInKM bool) {
 			containerSpec := kmmv1beta1.ModuleLoaderContainerSpec{}
@@ -260,6 +280,80 @@ var _ = Describe("validateModuleLoaderContainerSpec", func() {
 		Entry("InTreeModuleToRemove set in container spec, InTreeModulesToRemove set in kernel mapping", true, false, true, false),
 	)
 
+})
+
+var _ = Describe("validateModuleLoaderContainerBuildSpec", func() {
+	It("should return nil when build is nil", func() {
+		Expect(validateModuleLoaderContainerBuildSpec(nil)).NotTo(HaveOccurred())
+	})
+
+	It("should pass when only DockerfileOCIArtifact is set with valid image format", func() {
+		build := &kmmv1beta1.Build{
+			DockerfileOCIArtifact: "registry.example.com/dockerfile:latest",
+		}
+		Expect(validateModuleLoaderContainerBuildSpec(build)).NotTo(HaveOccurred())
+	})
+
+	It("should pass when only DockerfileConfigMap is set", func() {
+		build := &kmmv1beta1.Build{
+			DockerfileConfigMap: &v1.LocalObjectReference{
+				Name: "dockerfile-configmap",
+			},
+		}
+		Expect(validateModuleLoaderContainerBuildSpec(build)).NotTo(HaveOccurred())
+	})
+
+	It("should fail when both DockerfileOCIArtifact and DockerfileConfigMap are set", func() {
+		build := &kmmv1beta1.Build{
+			DockerfileOCIArtifact: "registry.example.com/dockerfile:latest",
+			DockerfileConfigMap: &v1.LocalObjectReference{
+				Name: "dockerfile-configmap",
+			},
+		}
+		Expect(validateModuleLoaderContainerBuildSpec(build)).To(
+			MatchError(ContainSubstring("only one of the Dockerfile fields: DockerfileOCIArtifact or DockerfileConfigMap can be defined")),
+		)
+	})
+
+	It("should fail when neither DockerfileOCIArtifact nor DockerfileConfigMap is set", func() {
+		build := &kmmv1beta1.Build{}
+		Expect(validateModuleLoaderContainerBuildSpec(build)).To(
+			MatchError(ContainSubstring("one of the Dockerfile fields: DockerfileOCIArtifact or DockerfileConfigMap must be defined")),
+		)
+	})
+
+	It("should fail when DockerfileOCIArtifact has invalid image format", func() {
+		build := &kmmv1beta1.Build{
+			DockerfileOCIArtifact: "invalid-image-format",
+		}
+		Expect(validateModuleLoaderContainerBuildSpec(build)).To(
+			MatchError(ContainSubstring("container image must explicitely set a tag or digest")),
+		)
+	})
+
+	It("should pass when DockerfileOCIArtifact has valid image format with tag", func() {
+		build := &kmmv1beta1.Build{
+			DockerfileOCIArtifact: "registry.example.com/dockerfile:v1.0.0",
+		}
+		Expect(validateModuleLoaderContainerBuildSpec(build)).NotTo(HaveOccurred())
+	})
+
+	It("should pass when DockerfileOCIArtifact has valid image format with digest", func() {
+		build := &kmmv1beta1.Build{
+			DockerfileOCIArtifact: "registry.example.com/dockerfile@sha256:1234567890abcdef",
+		}
+		Expect(validateModuleLoaderContainerBuildSpec(build)).NotTo(HaveOccurred())
+	})
+
+	It("should fail when DockerfileOCIArtifact is empty string and DockerfileConfigMap is nil", func() {
+		build := &kmmv1beta1.Build{
+			DockerfileOCIArtifact: "",
+			DockerfileConfigMap:   nil,
+		}
+		Expect(validateModuleLoaderContainerBuildSpec(build)).To(
+			MatchError(ContainSubstring("one of the Dockerfile fields: DockerfileOCIArtifact or DockerfileConfigMap must be defined")),
+		)
+	})
 })
 
 var _ = Describe("validateModprobe", func() {

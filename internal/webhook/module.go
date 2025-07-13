@@ -173,6 +173,30 @@ func validateModuleLoaderContainerSpec(container kmmv1beta1.ModuleLoaderContaine
 			(km.InTreeModuleToRemove != "" && container.InTreeModulesToRemove != nil) { //nolint:staticcheck
 			return fmt.Errorf("only one type if field (InTreeModuleToRemove or InTreeModulesToRemove) can be defined in KenrelMapping or Container")
 		}
+
+		if err := validateModuleLoaderContainerBuildSpec(km.Build); err != nil {
+			return fmt.Errorf("failed to validate kernelMappings[%d].build: %v", idx, err)
+		}
+	}
+
+	return validateModuleLoaderContainerBuildSpec(container.Build)
+}
+
+func validateModuleLoaderContainerBuildSpec(build *kmmv1beta1.Build) error {
+	if build == nil {
+		return nil
+	}
+
+	if build.DockerfileOCIArtifact != "" && build.DockerfileConfigMap != nil {
+		return fmt.Errorf("only one of the Dockerfile fields: DockerfileOCIArtifact or DockerfileConfigMap can be defined")
+	}
+
+	if build.DockerfileOCIArtifact == "" && build.DockerfileConfigMap == nil {
+		return fmt.Errorf("one of the Dockerfile fields: DockerfileOCIArtifact or DockerfileConfigMap must be defined")
+	}
+
+	if build.DockerfileOCIArtifact != "" {
+		return validateImageFormat(build.DockerfileOCIArtifact)
 	}
 
 	return nil
