@@ -87,6 +87,16 @@ rules:
   - patch
   - watch
 - apiGroups:
+  - shipwright.io
+  resources:
+  - buildruns
+  verbs:
+  - create
+  - delete
+  - list
+  - patch
+  - watch
+- apiGroups:
   - work.open-cluster-management.io
   resources:
   - manifestworks

@@ -127,3 +127,14 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - shipwright.io
+  resources:
+  - buildruns
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch
