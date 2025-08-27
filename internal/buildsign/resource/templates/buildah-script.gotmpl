@@ -1,0 +1,45 @@
+{{- /*gotype: github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/resource.BuildahScriptData */ -}}
+export IMAGE="{{ .DestinationImg }}"
+export PUSH_IMAGE="{{ if .PushImage }}true{{ else }}false{{ end }}"
+
+{{ if .IsBuild -}}
+echo "setting up build context"
+mkdir -p /tmp/build-context
+cp /workspace/Dockerfile /tmp/build-context/
+
+for secret_dir in /run/secrets/*/; do
+    if [ -d "$secret_dir" ]; then
+        for file in "$secret_dir"*; do
+            if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                cp -L "$file" "/tmp/build-context/$filename"
+            fi
+        done
+    fi
+done
+{{- else if .IsSign -}}
+echo "setting up build context with cert and key files"
+mkdir -p /tmp/build-context
+cp /workspace/Dockerfile /tmp/build-context/
+cp /run/secrets/cert/cert.pem /tmp/build-context/cert.pem
+cp /run/secrets/key/key.pem /tmp/build-context/key.pem
+{{- end }}
+
+echo "starting Buildah {{ .ActionDescription }} for $IMAGE"
+{{ .BuildCmd }} \
+  --tls-verify={{ if .TLSVerify }}true{{ else }}false{{ end }} \
+  --storage-driver=vfs \
+  -f /tmp/build-context/Dockerfile \
+  -t "$IMAGE" \
+  /tmp/build-context
+
+if [ "$PUSH_IMAGE" = "true" ]; then
+  echo "pushing {{ .PushDescription }} $IMAGE..."
+  buildah push \
+    --tls-verify={{ if .TLSVerify }}true{{ else }}false{{ end }} \
+    --storage-driver=vfs \
+    "$IMAGE" \
+    "docker://$IMAGE"
+else
+  echo "skipping push step (PUSH_IMAGE=$PUSH_IMAGE)"
+fi

@@ -23,9 +23,6 @@ spec:
               - name: build-secret
             dockerfileConfigMap:
               name: kmm-kmod-dockerfile
-            # Optional. If kanikoParams.tag is empty, the default value will be: 'latest'
-            kanikoParams:
-              tag: "debug"
           sign:
             certSecret:
               name: kmm-kmod-signing-cert

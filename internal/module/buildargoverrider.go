@@ -1,6 +1,9 @@
 package module
 
 import (
+	"fmt"
+	"strings"
+
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -10,6 +13,7 @@ import (
 
 type BuildArgOverrider interface {
 	ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, overrides ...kmmv1beta1.BuildArg) []kmmv1beta1.BuildArg
+	FormatBuildArgs(buildArgs []kmmv1beta1.BuildArg) string
 }
 
 type buildArgOverrider struct{}
@@ -41,4 +45,12 @@ func (c *buildArgOverrider) ApplyBuildArgOverrides(args []kmmv1beta1.BuildArg, o
 	}
 
 	return args
+}
+
+func (c *buildArgOverrider) FormatBuildArgs(buildArgs []kmmv1beta1.BuildArg) string {
+	args := []string{}
+	for _, ba := range buildArgs {
+		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", ba.Name, ba.Value))
+	}
+	return strings.Join(args, " ")
 }

@@ -56,3 +56,17 @@ func (mr *MockBuildArgOverriderMockRecorder) ApplyBuildArgOverrides(args any, ov
 	varargs := append([]any{args}, overrides...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBuildArgOverrides", reflect.TypeOf((*MockBuildArgOverrider)(nil).ApplyBuildArgOverrides), varargs...)
 }
+
+// FormatBuildArgs mocks base method.
+func (m *MockBuildArgOverrider) FormatBuildArgs(buildArgs []v1beta1.BuildArg) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FormatBuildArgs", buildArgs)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// FormatBuildArgs indicates an expected call of FormatBuildArgs.
+func (mr *MockBuildArgOverriderMockRecorder) FormatBuildArgs(buildArgs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FormatBuildArgs", reflect.TypeOf((*MockBuildArgOverrider)(nil).FormatBuildArgs), buildArgs)
+}

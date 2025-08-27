@@ -6,8 +6,9 @@ import (
 	"embed"
 	"fmt"
 	"os"
-	"strings"
 	"text/template"
+
+	"k8s.io/utils/ptr"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
@@ -27,18 +28,28 @@ type TemplateData struct {
 	UnsignedImage string
 }
 
+type BuildahScriptData struct {
+	DestinationImg    string
+	PushImage         bool
+	TLSVerify         bool
+	IsBuild           bool
+	IsSign            bool
+	BuildCmd          string
+	ActionDescription string
+	PushDescription   string
+}
+
 //go:embed templates
 var templateFS embed.FS
 
 var tmpl = template.Must(
-	template.ParseFS(templateFS, "templates/Dockerfile.gotmpl"),
+	template.ParseFS(templateFS, "templates/*.gotmpl"),
 )
 
-func (rm *resourceManager) buildSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) v1.PodSpec {
+func (rm *resourceManager) buildSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) (v1.PodSpec, error) {
 
 	buildConfig := mld.Build
 
-	args := containerArgs(mld, destinationImg, mld.Build.BaseImageRegistryTLS, pushImage)
 	overrides := []kmmv1beta1.BuildArg{
 		{Name: "KERNEL_VERSION", Value: mld.KernelVersion},
 		{Name: "KERNEL_FULL_VERSION", Value: mld.KernelVersion},
@@ -49,19 +60,14 @@ func (rm *resourceManager) buildSpec(mld *api.ModuleLoaderData, destinationImg s
 		buildConfig.BuildArgs,
 		overrides...,
 	)
-	for _, ba := range buildArgs {
-		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", ba.Name, ba.Value))
+	buildArgsStr := rm.buildArgOverrider.FormatBuildArgs(buildArgs)
+
+	args, err := buildContainerArgs(destinationImg, mld.Build.BaseImageRegistryTLS, pushImage, buildArgsStr)
+	if err != nil {
+		return v1.PodSpec{}, fmt.Errorf("failed to generate build container args: %v", err)
 	}
 
-	kanikoImage := os.Getenv("RELATED_IMAGE_BUILD")
-
-	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
-		if idx := strings.IndexAny(kanikoImage, "@:"); idx != -1 {
-			kanikoImage = kanikoImage[0:idx]
-		}
-
-		kanikoImage += ":" + buildConfig.KanikoParams.Tag
-	}
+	buildahImage := os.Getenv("RELATED_IMAGE_BUILD")
 
 	selector := mld.Selector
 	if len(mld.Build.Selector) != 0 {
@@ -74,29 +80,37 @@ func (rm *resourceManager) buildSpec(mld *api.ModuleLoaderData, destinationImg s
 		Containers: []v1.Container{
 			{
 				Args:         args,
-				Name:         "kaniko",
-				Image:        kanikoImage,
+				Command:      []string{"/bin/bash", "-c"},
+				Name:         "buildah-build",
+				Image:        buildahImage,
 				VolumeMounts: volumeMounts,
+				SecurityContext: &v1.SecurityContext{
+					Privileged: ptr.To(true),
+				},
 			},
 		},
 		RestartPolicy: v1.RestartPolicyNever,
 		Volumes:       volumes,
 		NodeSelector:  selector,
 		Tolerations:   mld.Tolerations,
-	}
+	}, nil
 }
 
-func signSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) v1.PodSpec {
+func signSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) (v1.PodSpec, error) {
 
 	signConfig := mld.Sign
-	args := containerArgs(mld, destinationImg, signConfig.UnsignedImageRegistryTLS, pushImage)
+	args, err := signContainerArgs(destinationImg, signConfig.UnsignedImageRegistryTLS, pushImage)
+	if err != nil {
+		return v1.PodSpec{}, fmt.Errorf("failed to generate sign container args: %v", err)
+	}
 	volumes, volumeMounts := makeSignResourceVolumesAndVolumeMounts(signConfig, mld.ImageRepoSecret)
 
 	return v1.PodSpec{
 		Containers: []v1.Container{
 			{
 				Args:         args,
-				Name:         "kaniko",
+				Command:      []string{"/bin/bash", "-c"},
+				Name:         "buildah-sign",
 				Image:        os.Getenv("RELATED_IMAGE_BUILD"),
 				VolumeMounts: volumeMounts,
 			},
@@ -105,36 +119,58 @@ func signSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) 
 		Volumes:       volumes,
 		NodeSelector:  mld.Selector,
 		Tolerations:   mld.Tolerations,
-	}
+	}, nil
 }
 
-func containerArgs(mld *api.ModuleLoaderData, destinationImg string,
-	tlsOptions kmmv1beta1.TLSOptions, pushImage bool) []string {
+// buildContainerArgs creates the script for building container images
+func buildContainerArgs(destinationImg string, tlsOptions kmmv1beta1.TLSOptions, pushImage bool, buildArgs string) ([]string, error) {
+	script, err := buildBuildahScript(destinationImg, tlsOptions, pushImage, buildArgs, kmmv1beta1.BuildImage)
+	if err != nil {
+		return nil, err
+	}
+	return []string{script}, nil
+}
 
-	args := []string{}
+// signContainerArgs creates the script for signing container images
+func signContainerArgs(destinationImg string, tlsOptions kmmv1beta1.TLSOptions, pushImage bool) ([]string, error) {
+	script, err := buildBuildahScript(destinationImg, tlsOptions, pushImage, "", kmmv1beta1.SignImage)
+	if err != nil {
+		return nil, err
+	}
+	return []string{script}, nil
+}
 
-	if pushImage {
-		args = append(args, "--destination", destinationImg)
-		if mld.RegistryTLS.Insecure {
-			args = append(args, "--insecure")
-		}
-		if mld.RegistryTLS.InsecureSkipTLSVerify {
-			args = append(args, "--skip-tls-verify")
-		}
-	} else {
-		args = append(args, "--no-push")
+// buildBuildahScript constructs the buildah script for build or sign operations
+func buildBuildahScript(destinationImg string, tlsOptions kmmv1beta1.TLSOptions, pushImage bool, buildArgs string, operation kmmv1beta1.BuildOrSignAction) (string, error) {
+	// Prepare template data
+	buildCmd := "buildah bud"
+	if buildArgs != "" && operation == kmmv1beta1.BuildImage {
+		buildCmd = fmt.Sprintf("buildah bud %s", buildArgs)
 	}
 
-	if tlsOptions.Insecure {
-		args = append(args, "--insecure-pull")
+	data := BuildahScriptData{
+		DestinationImg: destinationImg,
+		PushImage:      pushImage,
+		TLSVerify:      !(tlsOptions.InsecureSkipTLSVerify || tlsOptions.Insecure),
+		IsBuild:        operation == kmmv1beta1.BuildImage,
+		IsSign:         operation == kmmv1beta1.SignImage,
+		BuildCmd:       buildCmd,
+		ActionDescription: map[kmmv1beta1.BuildOrSignAction]string{
+			kmmv1beta1.BuildImage: "build",
+			kmmv1beta1.SignImage:  "build for signing",
+		}[operation],
+		PushDescription: map[kmmv1beta1.BuildOrSignAction]string{
+			kmmv1beta1.BuildImage: "image",
+			kmmv1beta1.SignImage:  "signed image",
+		}[operation],
 	}
 
-	if tlsOptions.InsecureSkipTLSVerify {
-		args = append(args, "--skip-tls-verify-pull")
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "buildah-script.gotmpl", data); err != nil {
+		return "", fmt.Errorf("failed to execute buildah script template: %v", err)
 	}
 
-	return args
-
+	return buf.String(), nil
 }
 
 func (rm *resourceManager) getBuildHashAnnotationValue(ctx context.Context, configMapName, namespace string,
@@ -267,7 +303,10 @@ func (rm *resourceManager) makeBuildTemplate(ctx context.Context, mld *api.Modul
 		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
 	}
 
-	buildSpec := rm.buildSpec(mld, containerImage, pushImage)
+	buildSpec, err := rm.buildSpec(mld, containerImage, pushImage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate build spec: %v", err)
+	}
 	buildSpecHash, err := rm.getBuildHashAnnotationValue(
 		ctx,
 		mld.Build.DockerfileConfigMap.Name,
@@ -325,7 +364,10 @@ func (rm *resourceManager) makeSignTemplate(ctx context.Context, mld *api.Module
 		return nil, fmt.Errorf("could not execute template: %v", err)
 	}
 
-	signSpec := signSpec(mld, mld.ContainerImage, pushImage)
+	signSpec, err := signSpec(mld, mld.ContainerImage, pushImage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate sign spec: %v", err)
+	}
 	signSpecHash, err := rm.getSignHashAnnotationValue(ctx, signConfig.KeySecret.Name,
 		signConfig.CertSecret.Name, mld.Namespace, buf.Bytes(), &signSpec)
 	if err != nil {

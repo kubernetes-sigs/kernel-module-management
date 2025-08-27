@@ -3,10 +3,13 @@ FROM {{ .UnsignedImage }} as source
 
 FROM {{ .SignImage }} AS signimage
 
+COPY cert.pem cert.pem
+COPY key.pem key.pem
+
 RUN mkdir -p /tmp/signroot
 {{ range .FilesToSign }}
 COPY --from=source {{ . }} /tmp/signroot{{ . }}
-RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot{{ . }}
+RUN /usr/local/bin/sign-file sha256 key.pem cert.pem /tmp/signroot{{ . }}
 {{- end }}
 
 FROM source

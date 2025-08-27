@@ -72,7 +72,7 @@ The `ConfigMap` needs to be located in the same namespace as the `Module`.
 
 KMM will first check if the image name specified in the `containerImage` field exists.
 If it does, the build will be skipped.
-Otherwise, KMM will create a Pod to build your image using [kaniko](https://github.com/GoogleContainerTools/kaniko).
+Otherwise, KMM will create a Pod to build your image using [buildah](https://buildah.io/).
 
 The following build arguments are automatically set by KMM:
 

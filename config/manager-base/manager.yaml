@@ -48,7 +48,7 @@ spec:
               fieldRef:
                 fieldPath: metadata.namespace
           - name: RELATED_IMAGE_BUILD
-            value: gcr.io/kaniko-project/executor:latest
+            value: quay.io/buildah/stable:latest
           - name: RELATED_IMAGE_SIGN
             value: signer
         securityContext:
