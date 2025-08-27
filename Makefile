@@ -268,7 +268,7 @@ operator-sdk:
 		set -e ;\
 		echo "Downloading ${OPERATOR_SDK}"; \
 		mkdir -p $(dir ${OPERATOR_SDK}) ;\
-		curl -Lo ${OPERATOR_SDK} 'https://github.com/operator-framework/operator-sdk/releases/download/v1.32.0/operator-sdk_linux_amd64'; \
+		curl -Lo ${OPERATOR_SDK} 'https://github.com/operator-framework/operator-sdk/releases/download/v1.41.1/operator-sdk_linux_amd64'; \
 		chmod +x ${OPERATOR_SDK}; \
 	fi
 
