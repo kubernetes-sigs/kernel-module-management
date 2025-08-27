@@ -9,6 +9,8 @@ import (
 	"strings"
 	"text/template"
 
+	"k8s.io/utils/ptr"
+
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -34,11 +36,18 @@ var tmpl = template.Must(
 	template.ParseFS(templateFS, "templates/Dockerfile.gotmpl"),
 )
 
+func formatBuildArgs(buildArgs []kmmv1beta1.BuildArg) string {
+	args := []string{}
+	for _, ba := range buildArgs {
+		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", ba.Name, ba.Value))
+	}
+	return strings.Join(args, " ")
+}
+
 func (rm *resourceManager) buildSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) v1.PodSpec {
 
 	buildConfig := mld.Build
 
-	args := containerArgs(mld, destinationImg, mld.Build.BaseImageRegistryTLS, pushImage)
 	overrides := []kmmv1beta1.BuildArg{
 		{Name: "KERNEL_VERSION", Value: mld.KernelVersion},
 		{Name: "KERNEL_FULL_VERSION", Value: mld.KernelVersion},
@@ -49,19 +58,11 @@ func (rm *resourceManager) buildSpec(mld *api.ModuleLoaderData, destinationImg s
 		buildConfig.BuildArgs,
 		overrides...,
 	)
-	for _, ba := range buildArgs {
-		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", ba.Name, ba.Value))
-	}
+	buildArgsStr := formatBuildArgs(buildArgs)
 
-	kanikoImage := os.Getenv("RELATED_IMAGE_BUILD")
+	args := buildContainerArgs(destinationImg, mld.Build.BaseImageRegistryTLS, pushImage, buildArgsStr)
 
-	if buildConfig.KanikoParams != nil && buildConfig.KanikoParams.Tag != "" {
-		if idx := strings.IndexAny(kanikoImage, "@:"); idx != -1 {
-			kanikoImage = kanikoImage[0:idx]
-		}
-
-		kanikoImage += ":" + buildConfig.KanikoParams.Tag
-	}
+	buildahImage := os.Getenv("RELATED_IMAGE_BUILD")
 
 	selector := mld.Selector
 	if len(mld.Build.Selector) != 0 {
@@ -74,9 +75,13 @@ func (rm *resourceManager) buildSpec(mld *api.ModuleLoaderData, destinationImg s
 		Containers: []v1.Container{
 			{
 				Args:         args,
-				Name:         "kaniko",
-				Image:        kanikoImage,
+				Command:      []string{"/bin/bash", "-c"},
+				Name:         "buildah-build",
+				Image:        buildahImage,
 				VolumeMounts: volumeMounts,
+				SecurityContext: &v1.SecurityContext{
+					Privileged: ptr.To(true),
+				},
 			},
 		},
 		RestartPolicy: v1.RestartPolicyNever,
@@ -89,14 +94,15 @@ func (rm *resourceManager) buildSpec(mld *api.ModuleLoaderData, destinationImg s
 func signSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) v1.PodSpec {
 
 	signConfig := mld.Sign
-	args := containerArgs(mld, destinationImg, signConfig.UnsignedImageRegistryTLS, pushImage)
+	args := signContainerArgs(destinationImg, signConfig.UnsignedImageRegistryTLS, pushImage)
 	volumes, volumeMounts := makeSignResourceVolumesAndVolumeMounts(signConfig, mld.ImageRepoSecret)
 
 	return v1.PodSpec{
 		Containers: []v1.Container{
 			{
 				Args:         args,
-				Name:         "kaniko",
+				Command:      []string{"/bin/bash", "-c"},
+				Name:         "buildah-sign",
 				Image:        os.Getenv("RELATED_IMAGE_BUILD"),
 				VolumeMounts: volumeMounts,
 			},
@@ -108,33 +114,91 @@ func signSpec(mld *api.ModuleLoaderData, destinationImg string, pushImage bool) 
 	}
 }
 
-func containerArgs(mld *api.ModuleLoaderData, destinationImg string,
-	tlsOptions kmmv1beta1.TLSOptions, pushImage bool) []string {
+type BuildOperation int
 
-	args := []string{}
+const (
+	Build BuildOperation = iota
+	Sign
+)
 
+// buildContainerArgs creates the script for building container images
+func buildContainerArgs(destinationImg string, tlsOptions kmmv1beta1.TLSOptions, pushImage bool, buildArgs string) []string {
+	script := buildBuildahScript(destinationImg, tlsOptions, pushImage, buildArgs, Build)
+	return []string{script}
+}
+
+// signContainerArgs creates the script for signing container images
+func signContainerArgs(destinationImg string, tlsOptions kmmv1beta1.TLSOptions, pushImage bool) []string {
+	script := buildBuildahScript(destinationImg, tlsOptions, pushImage, "", Sign)
+	return []string{script}
+}
+
+// buildBuildahScript constructs the buildah script for build or sign operations
+func buildBuildahScript(destinationImg string, tlsOptions kmmv1beta1.TLSOptions, pushImage bool, buildArgs string, operation BuildOperation) string {
+	tlsVerify := "true"
+	if tlsOptions.InsecureSkipTLSVerify || tlsOptions.Insecure {
+		tlsVerify = "false"
+	}
+
+	pushImageStr := "false"
 	if pushImage {
-		args = append(args, "--destination", destinationImg)
-		if mld.RegistryTLS.Insecure {
-			args = append(args, "--insecure")
-		}
-		if mld.RegistryTLS.InsecureSkipTLSVerify {
-			args = append(args, "--skip-tls-verify")
-		}
-	} else {
-		args = append(args, "--no-push")
+		pushImageStr = "true"
 	}
 
-	if tlsOptions.Insecure {
-		args = append(args, "--insecure-pull")
+	// Build the setup section based on operation type
+	setupSection := `echo "setting up build context"
+mkdir -p /tmp/build-context
+cp /workspace/Dockerfile /tmp/build-context/`
+
+	// If we do sign instead
+	if operation == Sign {
+		setupSection = `echo "setting up build context with cert and key files"
+mkdir -p /tmp/build-context
+cp /workspace/Dockerfile /tmp/build-context/
+cp /run/secrets/cert/cert.pem /tmp/build-context/cert.pem
+cp /run/secrets/key/key.pem /tmp/build-context/key.pem`
 	}
 
-	if tlsOptions.InsecureSkipTLSVerify {
-		args = append(args, "--skip-tls-verify-pull")
+	// Build command section
+	buildCmd := "buildah bud"
+	if buildArgs != "" && operation == Build {
+		buildCmd = fmt.Sprintf("buildah bud %s", buildArgs)
 	}
 
-	return args
+	actionDescription := "build"
+	pushDescription := "image"
+	if operation == Sign {
+		actionDescription = "build for signing"
+		pushDescription = "signed image"
+	}
 
+	script := fmt.Sprintf(`
+export IMAGE="%s"
+export PUSH_IMAGE="%s"
+
+%s
+
+echo "starting Buildah %s for $IMAGE"
+%s \
+  --tls-verify=%s \
+  --storage-driver=vfs \
+  -f /tmp/build-context/Dockerfile \
+  -t "$IMAGE" \
+  /tmp/build-context
+
+if [ "$PUSH_IMAGE" = "true" ]; then
+  echo "pushing %s $IMAGE..."
+  buildah push \
+    --tls-verify=%s \
+    --storage-driver=vfs \
+    "$IMAGE" \
+    "docker://$IMAGE"
+else
+  echo "skipping push step (PUSH_IMAGE=$PUSH_IMAGE)"
+fi
+`, destinationImg, pushImageStr, setupSection, actionDescription, buildCmd, tlsVerify, pushDescription, tlsVerify)
+
+	return script
 }
 
 func (rm *resourceManager) getBuildHashAnnotationValue(ctx context.Context, configMapName, namespace string,
