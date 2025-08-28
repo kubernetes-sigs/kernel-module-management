@@ -127,15 +127,40 @@ var _ = Describe("makeBuildTemplate", func() {
 				Containers: []v1.Container{
 					{
 						Args: []string{
-							"--destination", image,
-							"--build-arg", "name1=value1",
-							"--build-arg", "KERNEL_VERSION=" + kernelVersion,
-							"--build-arg", "KERNEL_FULL_VERSION=" + kernelVersion,
-							"--build-arg", "MOD_NAME=" + moduleName,
-							"--build-arg", "MOD_NAMESPACE=" + namespace,
+							fmt.Sprintf(`
+export IMAGE="%s"
+export PUSH_IMAGE="true"
+
+echo "setting up build context"
+mkdir -p /tmp/build-context
+cp /workspace/Dockerfile /tmp/build-context/
+
+echo "starting Buildah build for $IMAGE"
+buildah bud --build-arg name1=value1 --build-arg KERNEL_VERSION=%s --build-arg KERNEL_FULL_VERSION=%s --build-arg MOD_NAME=%s --build-arg MOD_NAMESPACE=%s \
+  --tls-verify=true \
+  --storage-driver=vfs \
+  -f /tmp/build-context/Dockerfile \
+  -t "$IMAGE" \
+  /tmp/build-context
+
+if [ "$PUSH_IMAGE" = "true" ]; then
+  echo "pushing image $IMAGE..."
+  buildah push \
+    --tls-verify=true \
+    --storage-driver=vfs \
+    "$IMAGE" \
+    "docker://$IMAGE"
+else
+  echo "skipping push step (PUSH_IMAGE=$PUSH_IMAGE)"
+fi
+`, image, kernelVersion, kernelVersion, moduleName, namespace),
 						},
-						Name:  "kaniko",
-						Image: kanikoImage,
+						Command: []string{"/bin/bash", "-c"},
+						Name:    "buildah-build",
+						Image:   kanikoImage,
+						SecurityContext: &v1.SecurityContext{
+							Privileged: ptr.To(true),
+						},
 						VolumeMounts: []v1.VolumeMount{
 							{
 								Name:      "dockerfile",
@@ -200,7 +225,7 @@ var _ = Describe("makeBuildTemplate", func() {
 					v1.VolumeMount{
 						Name:      "secret-pull-push-secret",
 						ReadOnly:  true,
-						MountPath: "/kaniko/.docker",
+						MountPath: "/root/.docker",
 					},
 				)
 
@@ -285,7 +310,7 @@ var _ = Describe("makeBuildTemplate", func() {
 		),
 	)
 
-	DescribeTable("should set correct kaniko flags", func(tls *kmmv1beta1.TLSOptions, b *kmmv1beta1.Build, kanikoFlag string, pushImage bool) {
+	DescribeTable("should set correct buildah flags", func(tls *kmmv1beta1.TLSOptions, b *kmmv1beta1.Build, expectedContent string, pushImage bool) {
 		ctx := context.Background()
 
 		mld := api.ModuleLoaderData{
@@ -314,12 +339,12 @@ var _ = Describe("makeBuildTemplate", func() {
 		Expect(ok).To(BeTrue())
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actualPod.Spec.Containers[0].Args).To(ContainElement(kanikoFlag))
+		Expect(actualPod.Spec.Containers[0].Args[0]).To(ContainSubstring(expectedContent))
 
 		if pushImage {
-			Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--destination"))
+			Expect(actualPod.Spec.Containers[0].Args[0]).To(ContainSubstring("PUSH_IMAGE=\"true\""))
 		} else {
-			Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--no-push"))
+			Expect(actualPod.Spec.Containers[0].Args[0]).To(ContainSubstring("PUSH_IMAGE=\"false\""))
 		}
 	},
 		Entry(
@@ -329,7 +354,7 @@ var _ = Describe("makeBuildTemplate", func() {
 				BaseImageRegistryTLS: kmmv1beta1.TLSOptions{Insecure: true},
 				DockerfileConfigMap:  &dockerfileConfigMap,
 			},
-			"--insecure-pull",
+			"--tls-verify=false",
 			false,
 		),
 		Entry(
@@ -339,30 +364,29 @@ var _ = Describe("makeBuildTemplate", func() {
 				BaseImageRegistryTLS: kmmv1beta1.TLSOptions{InsecureSkipTLSVerify: true},
 				DockerfileConfigMap:  &dockerfileConfigMap,
 			},
-			"--skip-tls-verify-pull",
+			"--tls-verify=false",
 			false,
 		),
 		Entry(
 			"RegistryTLS.Insecure",
 			&kmmv1beta1.TLSOptions{Insecure: true},
 			&kmmv1beta1.Build{DockerfileConfigMap: &dockerfileConfigMap},
-			"--insecure",
+			"--tls-verify=true",
 			true,
 		),
 		Entry(
 			"RegistryTLS.InsecureSkipTLSVerify",
 			&kmmv1beta1.TLSOptions{InsecureSkipTLSVerify: true},
 			&kmmv1beta1.Build{DockerfileConfigMap: &dockerfileConfigMap},
-			"--skip-tls-verify",
+			"--tls-verify=true",
 			true,
 		),
 	)
 
-	It("use a custom given tag", func() {
-		const customTag = "some-tag"
+	It("use the build image from environment", func() {
 		ctx := context.Background()
 
-		GinkgoT().Setenv(relatedImageEnvVar, "some-build-image:original-tag")
+		GinkgoT().Setenv(relatedImageEnvVar, "some-build-image:some-tag")
 
 		mld := api.ModuleLoaderData{
 			Name:      mod.Name,
@@ -371,7 +395,6 @@ var _ = Describe("makeBuildTemplate", func() {
 			Build: &kmmv1beta1.Build{
 				BuildArgs:           buildArgs,
 				DockerfileConfigMap: &dockerfileConfigMap,
-				KanikoParams:        &kmmv1beta1.KanikoParams{Tag: customTag},
 			},
 			ContainerImage:          image,
 			RegistryTLS:             &kmmv1beta1.TLSOptions{},
@@ -394,7 +417,7 @@ var _ = Describe("makeBuildTemplate", func() {
 		Expect(ok).To(BeTrue())
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actualPod.Spec.Containers[0].Image).To(Equal("some-build-image:" + customTag))
+		Expect(actualPod.Spec.Containers[0].Image).To(Equal("some-build-image:some-tag"))
 	})
 
 	It("should add the kmm_unsigned suffix to the target image if sign is defined", func() {
@@ -432,8 +455,7 @@ var _ = Describe("makeBuildTemplate", func() {
 		Expect(ok).To(BeTrue())
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--destination"))
-		Expect(actualPod.Spec.Containers[0].Args).To(ContainElement(expectedImageName))
+		Expect(actualPod.Spec.Containers[0].Args[0]).To(ContainSubstring(expectedImageName))
 	})
 })
 
@@ -452,12 +474,15 @@ var _ = Describe("makeSignTemplate", func() {
 
 FROM some-sign-image:some-tag AS signimage
 
+COPY cert.pem cert.pem
+COPY key.pem key.pem
+
 RUN mkdir -p /tmp/signroot
 
 COPY --from=source /modules/simple-kmod.ko /tmp/signroot/modules/simple-kmod.ko
-RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-kmod.ko
+RUN /usr/local/bin/sign-file sha256 key.pem cert.pem /tmp/signroot/modules/simple-kmod.ko
 COPY --from=source /modules/simple-procfs-kmod.ko /tmp/signroot/modules/simple-procfs-kmod.ko
-RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-procfs-kmod.ko
+RUN /usr/local/bin/sign-file sha256 key.pem cert.pem /tmp/signroot/modules/simple-procfs-kmod.ko
 
 FROM source
 
@@ -579,9 +604,40 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{
 					{
-						Name:  "kaniko",
-						Image: buildImage,
-						Args:  []string{"--destination", signedImage},
+						Name:    "buildah-sign",
+						Image:   buildImage,
+						Command: []string{"/bin/bash", "-c"},
+						Args: []string{
+							fmt.Sprintf(`
+export IMAGE="%s"
+export PUSH_IMAGE="true"
+
+echo "setting up build context with cert and key files"
+mkdir -p /tmp/build-context
+cp /workspace/Dockerfile /tmp/build-context/
+cp /run/secrets/cert/cert.pem /tmp/build-context/cert.pem
+cp /run/secrets/key/key.pem /tmp/build-context/key.pem
+
+echo "starting Buildah build for signing for $IMAGE"
+buildah bud \
+  --tls-verify=true \
+  --storage-driver=vfs \
+  -f /tmp/build-context/Dockerfile \
+  -t "$IMAGE" \
+  /tmp/build-context
+
+if [ "$PUSH_IMAGE" = "true" ]; then
+  echo "pushing signed image $IMAGE..."
+  buildah push \
+    --tls-verify=true \
+    --storage-driver=vfs \
+    "$IMAGE" \
+    "docker://$IMAGE"
+else
+  echo "skipping push step (PUSH_IMAGE=$PUSH_IMAGE)"
+fi
+`, signedImage),
+						},
 						VolumeMounts: []v1.VolumeMount{
 							certMount,
 							secretMount,
@@ -623,7 +679,7 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 					v1.VolumeMount{
 						Name:      "secret-pull-push-secret",
 						ReadOnly:  true,
-						MountPath: "/kaniko/.docker",
+						MountPath: "/root/.docker",
 					},
 				)
 
@@ -698,7 +754,7 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		),
 	)
 
-	DescribeTable("should set correct kmod-signer flags", func(filelist []string, pushImage bool) {
+	DescribeTable("should set correct buildah flags", func(filelist []string, pushImage bool) {
 		ctx := context.Background()
 		mld.Sign = &kmmv1beta1.Sign{
 			UnsignedImage: signedImage,
@@ -730,9 +786,9 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		Expect(ok).To(BeTrue())
 
 		if pushImage {
-			Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--destination"))
+			Expect(actualPod.Spec.Containers[0].Args[0]).To(ContainSubstring("PUSH_IMAGE=\"true\""))
 		} else {
-			Expect(actualPod.Spec.Containers[0].Args).To(ContainElement("--no-push"))
+			Expect(actualPod.Spec.Containers[0].Args[0]).To(ContainSubstring("PUSH_IMAGE=\"false\""))
 		}
 
 	},
@@ -758,8 +814,8 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		),
 	)
 
-	DescribeTable("should set correct kmod-signer TLS flags", func(kmRegistryTLS,
-		unsignedImageRegistryTLS kmmv1beta1.TLSOptions, expectedFlag string) {
+	DescribeTable("should set correct buildah TLS flags", func(kmRegistryTLS,
+		unsignedImageRegistryTLS kmmv1beta1.TLSOptions, expectedContent string) {
 		ctx := context.Background()
 		mld.Sign = &kmmv1beta1.Sign{
 			UnsignedImage:            signedImage,
@@ -788,39 +844,39 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 		Expect(err).NotTo(HaveOccurred())
 		actualPod, ok := actual.(*v1.Pod)
 		Expect(ok).To(BeTrue())
-		Expect(actualPod.Spec.Containers[0].Args).To(ContainElement(expectedFlag))
+		Expect(actualPod.Spec.Containers[0].Args[0]).To(ContainSubstring(expectedContent))
 	},
 		Entry(
-			"filelist and push",
+			"registry insecure",
 			kmmv1beta1.TLSOptions{
 				Insecure: true,
 			},
 			kmmv1beta1.TLSOptions{},
-			"--insecure",
+			"--tls-verify=true",
 		),
 		Entry(
-			"filelist and push",
+			"registry skip tls verify",
 			kmmv1beta1.TLSOptions{
 				InsecureSkipTLSVerify: true,
 			},
 			kmmv1beta1.TLSOptions{},
-			"--skip-tls-verify",
+			"--tls-verify=true",
 		),
 		Entry(
-			"filelist and push",
+			"unsigned image insecure",
 			kmmv1beta1.TLSOptions{},
 			kmmv1beta1.TLSOptions{
 				Insecure: true,
 			},
-			"--insecure-pull",
+			"--tls-verify=false",
 		),
 		Entry(
-			"filelist and push",
+			"unsigned image skip tls verify",
 			kmmv1beta1.TLSOptions{},
 			kmmv1beta1.TLSOptions{
 				InsecureSkipTLSVerify: true,
 			},
-			"--skip-tls-verify-pull",
+			"--tls-verify=false",
 		),
 	)
 })

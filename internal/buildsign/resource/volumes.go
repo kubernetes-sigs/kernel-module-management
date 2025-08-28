@@ -81,7 +81,7 @@ func makeBuildResourceVolumesAndVolumeMounts(buildConfig kmmv1beta1.Build,
 			v1.VolumeMount{
 				Name:      "secret-" + imageRepoSecret.Name,
 				ReadOnly:  true,
-				MountPath: "/kaniko/.docker",
+				MountPath: "/root/.docker",
 			},
 		)
 	}
@@ -176,12 +176,11 @@ func makeSignResourceVolumesAndVolumeMounts(signConfig *kmmv1beta1.Sign,
 			},
 		)
 
-		volumeMounts = append(
-			volumeMounts,
+		volumeMounts = append(volumeMounts,
 			v1.VolumeMount{
 				Name:      "secret-" + imageRepoSecret.Name,
 				ReadOnly:  true,
-				MountPath: "/kaniko/.docker",
+				MountPath: "/root/.docker",
 			},
 		)
 	}
