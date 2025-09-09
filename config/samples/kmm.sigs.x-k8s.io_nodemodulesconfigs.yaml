@@ -1,0 +1,17 @@
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: NodeModulesConfig
+metadata:
+  name: nodemodulesconfig-sample
+spec:
+  modules:
+  - name: my-kmod
+    namespace: default
+    serviceAccountName: kmm-operator-controller
+    config:
+      kernelVersion: 4.18.0-372.32.1.el8_6.x86_64
+      containerImage: quay.io/myorg/my-kernel-module:latest
+      imagePullPolicy: IfNotPresent
+      insecurePull: false
+      modprobe:
+        moduleName: my_kmod
+        dirName: /opt

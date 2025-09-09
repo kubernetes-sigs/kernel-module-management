@@ -86,7 +86,7 @@ type NodeModulesConfigStatus struct {
 
 // NodeModulesConfig keeps spec and state of the KMM modules on a node.
 // +kubebuilder:resource:path=nodemodulesconfigs,scope=Cluster,shortName=nmc
-// +operator-sdk:csv:customresourcedefinitions:displayName="Node Modules Config"
+// +operator-sdk:csv:customresourcedefinitions:displayName="Node Modules Config (internal)"
 type NodeModulesConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

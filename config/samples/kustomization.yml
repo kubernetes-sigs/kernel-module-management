@@ -5,4 +5,8 @@ kind: Kustomization
 resources:
   - kmm.sigs.x-k8s.io_modules.yaml
   - kmm.sigs.x-k8s.io_preflightvalidations.yaml
+  - kmm.sigs.x-k8s.io_v1beta2_preflightvalidations.yaml
+  - kmm.sigs.x-k8s.io_modulebuildsignconfigs.yaml
+  - kmm.sigs.x-k8s.io_moduleimagesconfigs.yaml
+  - kmm.sigs.x-k8s.io_nodemodulesconfigs.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

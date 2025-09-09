@@ -20,8 +20,9 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: PreflightValidation initiates a preflight validations for all
-          Modules on the current Kubernetes cluster.
+        description: |-
+          PreflightValidation initiates a preflight validations for all Modules on the current Kubernetes cluster.
+          Deprecated in favor of v1beta2.
         properties:
           apiVersion:
             description: |-

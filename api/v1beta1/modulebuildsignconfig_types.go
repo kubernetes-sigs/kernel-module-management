@@ -84,7 +84,7 @@ type ModuleBuildSignConfigStatus struct {
 
 // ModuleBuildSignConfig keeps the request for images' build/sign for a KMM Module.
 // +kubebuilder:resource:path=modulebuildsignconfigs,scope=Namespaced,shortName=mbsc
-// +operator-sdk:csv:customresourcedefinitions:displayName="Module Build Sign Config"
+// +operator-sdk:csv:customresourcedefinitions:displayName="Module Build Sign Config (internal)"
 type ModuleBuildSignConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
