@@ -99,7 +99,7 @@ type ModuleImagesConfigStatus struct {
 
 // ModuleImagesConfig keeps the request for images' state for a KMM Module.
 // +kubebuilder:resource:path=moduleimagesconfigs,scope=Namespaced,shortName=mic
-// +operator-sdk:csv:customresourcedefinitions:displayName="Module Images Config"
+// +operator-sdk:csv:customresourcedefinitions:displayName="Module Images Config (internal)"
 type ModuleImagesConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

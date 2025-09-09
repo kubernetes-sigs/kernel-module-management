@@ -1,0 +1,13 @@
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: ModuleBuildSignConfig
+metadata:
+  name: modulebuildsignconfig-sample
+spec:
+  images:
+  - image: quay.io/myorg/my-kernel-module:latest
+    kernelVersion: 4.18.0-372.32.1.el8_6.x86_64
+    action: BuildImage
+    build:
+      dockerfileConfigMap:
+        name: my-dockerfile-configmap
+  pushBuiltImage: true

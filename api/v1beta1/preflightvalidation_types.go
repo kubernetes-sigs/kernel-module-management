@@ -55,11 +55,11 @@ type PreflightValidationStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +operator-sdk:csv:customresourcedefinitions:displayName="Preflight Validation (deprecated)"
 // PreflightValidation initiates a preflight validations for all Modules on the current Kubernetes cluster.
+// Deprecated in favor of v1beta2.
 // +kubebuilder:resource:path=preflightvalidations,scope=Cluster,shortName=pfv
 // +kubebuilder:deprecatedversion
-// +operator-sdk:csv:customresourcedefinitions:displayName="Preflight Validation"
 type PreflightValidation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

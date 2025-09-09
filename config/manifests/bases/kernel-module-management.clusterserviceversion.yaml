@@ -12,14 +12,39 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: ModuleBuildSignConfig keeps the request for images' build/sign
+        for a KMM Module.
+      displayName: Module Build Sign Config (internal)
+      kind: ModuleBuildSignConfig
+      name: modulebuildsignconfigs.kmm.sigs.x-k8s.io
+      version: v1beta1
+    - description: ModuleImagesConfig keeps the request for images' state for a KMM
+        Module.
+      displayName: Module Images Config (internal)
+      kind: ModuleImagesConfig
+      name: moduleimagesconfigs.kmm.sigs.x-k8s.io
+      version: v1beta1
     - description: Module describes how to load a module on different kernel versions
       displayName: Module
       kind: Module
       name: modules.kmm.sigs.x-k8s.io
       version: v1beta1
+    - description: NodeModulesConfig keeps spec and state of the KMM modules on a
+        node.
+      displayName: Node Modules Config (internal)
+      kind: NodeModulesConfig
+      name: nodemodulesconfigs.kmm.sigs.x-k8s.io
+      version: v1beta1
     - description: PreflightValidation initiates a preflight validations for all Modules
         on the current Kubernetes cluster.
       displayName: Preflight Validation
+      kind: PreflightValidation
+      name: preflightvalidations.kmm.sigs.x-k8s.io
+      version: v1beta2
+    - description: |-
+        PreflightValidation initiates a preflight validations for all Modules on the current Kubernetes cluster.
+        Deprecated in favor of v1beta2.
+      displayName: Preflight Validation (deprecated)
       kind: PreflightValidation
       name: preflightvalidations.kmm.sigs.x-k8s.io
       version: v1beta1
