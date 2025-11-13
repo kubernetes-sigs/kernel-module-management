@@ -70,6 +70,7 @@ func (h *helper) SetModuleConfig(
 	foundEntry.ImageRepoSecret = mld.ImageRepoSecret
 	foundEntry.ServiceAccountName = saName
 	foundEntry.Tolerations = mld.Tolerations
+	foundEntry.Version = mld.ModuleVersion
 
 	return nil
 }
