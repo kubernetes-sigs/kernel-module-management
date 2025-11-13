@@ -186,8 +186,8 @@ var _ = Describe("UpdateLabels", func() {
 				Labels: map[string]string{},
 			},
 		}
-		loaded := []string{firstloadedKernelModuleReadyNodeLabel}
-		unloaded := []string{unloadedKernelModuleReadyNodeLabel}
+		loaded := map[string]string{firstloadedKernelModuleReadyNodeLabel: ""}
+		unloaded := map[string]string{unloadedKernelModuleReadyNodeLabel: ""}
 
 		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
@@ -202,8 +202,8 @@ var _ = Describe("UpdateLabels", func() {
 				Labels: map[string]string{},
 			},
 		}
-		loaded := []string{firstloadedKernelModuleReadyNodeLabel}
-		unloaded := []string{unloadedKernelModuleReadyNodeLabel}
+		loaded := map[string]string{firstloadedKernelModuleReadyNodeLabel: ""}
+		unloaded := map[string]string{unloadedKernelModuleReadyNodeLabel: ""}
 
 		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
 
@@ -329,7 +329,7 @@ var _ = Describe("removeLabels", func() {
 	})
 
 	It("Should remove labels", func() {
-		labels := []string{firstloadedKernelModuleReadyNodeLabel}
+		labels := map[string]string{firstloadedKernelModuleReadyNodeLabel: ""}
 		removeLabels(&node, labels)
 		Expect(node.Labels).ToNot(HaveKey(firstloadedKernelModuleReadyNodeLabel))
 	})

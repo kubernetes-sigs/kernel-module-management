@@ -192,10 +192,10 @@ func (mr *MocklabelPreparationHelperMockRecorder) addEqualLabels(nodeModuleReady
 }
 
 // getDeprecatedKernelModuleReadyLabels mocks base method.
-func (m *MocklabelPreparationHelper) getDeprecatedKernelModuleReadyLabels(node v1.Node) sets.Set[string] {
+func (m *MocklabelPreparationHelper) getDeprecatedKernelModuleReadyLabels(node v1.Node) map[string]string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getDeprecatedKernelModuleReadyLabels", node)
-	ret0, _ := ret[0].(sets.Set[string])
+	ret0, _ := ret[0].(map[string]string)
 	return ret0
 }
 
@@ -245,6 +245,20 @@ func (m *MocklabelPreparationHelper) getStatusLabelsAndTheirConfigs(nmc *v1beta1
 func (mr *MocklabelPreparationHelperMockRecorder) getStatusLabelsAndTheirConfigs(nmc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getStatusLabelsAndTheirConfigs", reflect.TypeOf((*MocklabelPreparationHelper)(nil).getStatusLabelsAndTheirConfigs), nmc)
+}
+
+// getStatusVersions mocks base method.
+func (m *MocklabelPreparationHelper) getStatusVersions(nmc *v1beta1.NodeModulesConfig) map[types.NamespacedName]string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getStatusVersions", nmc)
+	ret0, _ := ret[0].(map[types.NamespacedName]string)
+	return ret0
+}
+
+// getStatusVersions indicates an expected call of getStatusVersions.
+func (mr *MocklabelPreparationHelperMockRecorder) getStatusVersions(nmc any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getStatusVersions", reflect.TypeOf((*MocklabelPreparationHelper)(nil).getStatusVersions), nmc)
 }
 
 // removeOrphanedLabels mocks base method.
