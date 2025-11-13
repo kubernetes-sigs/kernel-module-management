@@ -41,27 +41,29 @@ type WorkerPodManager interface {
 	GetConfigAnnotation(p *v1.Pod) string
 	HashAnnotationDiffer(p1, p2 *v1.Pod) bool
 	GetTolerationsAnnotation(p *v1.Pod) string
+	GetModuleVersionAnnotation(p *v1.Pod) string
 }
 
 const (
 	NodeModulesConfigFinalizer = "kmm.node.kubernetes.io/nodemodulesconfig-reconciler"
 	WorkerContainerName        = "worker"
 
-	volMountPointConfig      = "/etc/kmm-worker"
-	configFileName           = "config.yaml"
-	configFullPath           = volMountPointConfig + "/" + configFileName
-	volNameConfig            = "config"
-	sharedFilesDir           = "/tmp"
-	volNameTmp               = "tmp"
-	volumeNameConfig         = "config"
-	initContainerName        = "image-extractor"
-	modulesOrderKey          = "kmm.node.kubernetes.io/modules-order"
-	workerActionLoad         = "Load"
-	workerActionUnload       = "Unload"
-	actionLabelKey           = "kmm.node.kubernetes.io/worker-action"
-	configAnnotationKey      = "kmm.node.kubernetes.io/worker-config"
-	hashAnnotationKey        = "kmm.node.kubernetes.io/worker-hash"
-	tolerationsAnnotationKey = "kmm.node.kubernetes.io/worker-tolerations"
+	volMountPointConfig        = "/etc/kmm-worker"
+	configFileName             = "config.yaml"
+	configFullPath             = volMountPointConfig + "/" + configFileName
+	volNameConfig              = "config"
+	sharedFilesDir             = "/tmp"
+	volNameTmp                 = "tmp"
+	volumeNameConfig           = "config"
+	initContainerName          = "image-extractor"
+	modulesOrderKey            = "kmm.node.kubernetes.io/modules-order"
+	workerActionLoad           = "Load"
+	workerActionUnload         = "Unload"
+	actionLabelKey             = "kmm.node.kubernetes.io/worker-action"
+	configAnnotationKey        = "kmm.node.kubernetes.io/worker-config"
+	hashAnnotationKey          = "kmm.node.kubernetes.io/worker-hash"
+	tolerationsAnnotationKey   = "kmm.node.kubernetes.io/worker-tolerations"
+	moduleVersionAnnotationKey = "kmm.node.kubernetes.io/worker-module-version"
 )
 
 var (
@@ -201,6 +203,8 @@ func (wpmi *workerPodManagerImpl) LoaderPodTemplate(ctx context.Context, nmc cli
 		return nil, fmt.Errorf("could not set worker tolerations: %v", err)
 	}
 
+	setWorkerModuleVersionAnnotation(pod, nms.Version)
+
 	if err = setWorkerSecurityContext(pod, wpmi.workerCfg, privileged); err != nil {
 		return nil, fmt.Errorf("could not set the worker Pod as privileged: %v", err)
 	}
@@ -292,6 +296,7 @@ func (wpmi *workerPodManagerImpl) GetConfigAnnotation(p *v1.Pod) string {
 
 	return p.Annotations[configAnnotationKey]
 }
+
 func (wpmi *workerPodManagerImpl) GetTolerationsAnnotation(p *v1.Pod) string {
 
 	if p == nil {
@@ -299,6 +304,15 @@ func (wpmi *workerPodManagerImpl) GetTolerationsAnnotation(p *v1.Pod) string {
 	}
 
 	return p.Annotations[tolerationsAnnotationKey]
+}
+
+func (wpmi *workerPodManagerImpl) GetModuleVersionAnnotation(p *v1.Pod) string {
+
+	if p == nil {
+		return ""
+	}
+
+	return p.Annotations[moduleVersionAnnotationKey]
 }
 
 func (wpmi *workerPodManagerImpl) HashAnnotationDiffer(p1, p2 *v1.Pod) bool {
@@ -481,6 +495,12 @@ func setWorkerTolerationsAnnotation(pod *v1.Pod, tolerations []v1.Toleration) er
 	}
 
 	return nil
+}
+
+func setWorkerModuleVersionAnnotation(pod *v1.Pod, moduleVersion string) {
+	if moduleVersion != "" {
+		meta.SetAnnotation(pod, moduleVersionAnnotationKey, moduleVersion)
+	}
 }
 
 func setWorkerSofdepConfig(pod *v1.Pod, modulesLoadingOrder []string) error {

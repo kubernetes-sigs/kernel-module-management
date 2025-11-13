@@ -15,7 +15,7 @@ type Node interface {
 	IsNodeSchedulable(node *v1.Node, tolerations []v1.Toleration) bool
 	GetNodesListBySelector(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) ([]v1.Node, error)
 	GetNumTargetedNodes(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) (int, error)
-	UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error
+	UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved map[string]string) error
 	IsNodeRebooted(node *v1.Node, statusBootId string) bool
 }
 
@@ -72,7 +72,7 @@ func (n *node) GetNumTargetedNodes(ctx context.Context, selector map[string]stri
 	return len(targetedNode), nil
 }
 
-func (n *node) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error {
+func (n *node) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved map[string]string) error {
 	patchFrom := client.MergeFrom(node.DeepCopy())
 
 	addLabels(node, toBeAdded)
@@ -95,18 +95,18 @@ func (n *node) IsNodeRebooted(node *v1.Node, statusBootId string) bool {
 	return false
 }
 
-func addLabels(node *v1.Node, labels []string) {
-	for _, label := range labels {
+func addLabels(node *v1.Node, labels map[string]string) {
+	for label, value := range labels {
 		meta.SetLabel(
 			node,
 			label,
-			"",
+			value,
 		)
 	}
 }
 
-func removeLabels(node *v1.Node, labels []string) {
-	for _, label := range labels {
+func removeLabels(node *v1.Node, labels map[string]string) {
+	for label := range labels {
 		meta.RemoveLabel(
 			node,
 			label,

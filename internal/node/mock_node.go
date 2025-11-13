@@ -98,7 +98,7 @@ func (mr *MockNodeMockRecorder) IsNodeSchedulable(node, tolerations any) *gomock
 }
 
 // UpdateLabels mocks base method.
-func (m *MockNode) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved []string) error {
+func (m *MockNode) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved map[string]string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLabels", ctx, node, toBeAdded, toBeRemoved)
 	ret0, _ := ret[0].(error)

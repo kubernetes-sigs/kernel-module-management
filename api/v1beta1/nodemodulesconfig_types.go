@@ -44,6 +44,9 @@ type ModuleItem struct {
 	//+optional
 	// tolerations define which tolerations should be added for every load/unload pod running on the node
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+	//+optional
+	// Version is the version of the kernel module that should be loaded
+	Version string `json:"version,omitempty"`
 }
 
 type NodeModuleSpec struct {
