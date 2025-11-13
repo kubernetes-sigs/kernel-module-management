@@ -50,6 +50,12 @@ Steps 3, 4 and 5 are then unified into one step: update the
 `kmm.node.kubernetes.io/version-module.<module-namespace>.<module-name>` label value to new `$moduleVersion` as set in
 the `Module`.
 
+### Indicator that the new version is ready to be used
+
+The operator will label the node with a "version.ready" label to indicate that the new version of the kernel module is loaded
+and ready to be used:
+`kmm.node.kubernetes.io/<module-namespace>.<module-name>.version.ready=<module-version>`
+
 ## Implementation details
 
 ### Components
