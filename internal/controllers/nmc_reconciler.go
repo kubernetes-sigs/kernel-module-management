@@ -102,7 +102,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 	}
 
 	errs := make([]error, 0, len(nmcObj.Spec.Modules)+len(nmcObj.Status.Modules))
-	var readyLabelsToRemove []string
+	readyLabelsToRemove := make(map[string]string)
 	for _, mod := range nmcObj.Spec.Modules {
 		moduleNameKey := mod.Namespace + "/" + mod.Name
 
@@ -110,7 +110,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 
 		// skipping handling NMC spec module until node is ready
 		if !r.nodeAPI.IsNodeSchedulable(&node, mod.Tolerations) {
-			readyLabelsToRemove = append(readyLabelsToRemove, utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name))
+			readyLabelsToRemove[utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name)] = ""
 			delete(statusMap, moduleNameKey)
 			continue
 		}
@@ -141,7 +141,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 	}
 
 	// removing label of loaded kmods
-	if readyLabelsToRemove != nil {
+	if len(readyLabelsToRemove) != 0 {
 		if err := r.nodeAPI.UpdateLabels(ctx, &node, nil, readyLabelsToRemove); err != nil {
 			return ctrl.Result{}, fmt.Errorf("could remove node %s labels: %v", node.Name, err)
 		}
@@ -574,6 +574,8 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 
 			status.BootId = node.Status.NodeInfo.BootID
 
+			status.Version = h.podManager.GetModuleVersionAnnotation(&p)
+
 			nmc.SetModuleStatus(&nmcObj.Status.Modules, *status)
 
 			podsToDelete = append(podsToDelete, p)
@@ -599,63 +601,6 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 	return errors.Join(errs...)
 }
 
-type labelPreparationHelper interface {
-	getDeprecatedKernelModuleReadyLabels(node v1.Node) sets.Set[string]
-	getNodeKernelModuleReadyLabels(node v1.Node) sets.Set[types.NamespacedName]
-	getSpecLabelsAndTheirConfigs(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]kmmv1beta1.ModuleConfig
-	getStatusLabelsAndTheirConfigs(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]kmmv1beta1.ModuleConfig
-	addEqualLabels(nodeModuleReadyLabels sets.Set[types.NamespacedName],
-		specLabels, statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig) []types.NamespacedName
-	removeOrphanedLabels(nodeModuleReadyLabels sets.Set[types.NamespacedName],
-		specLabels, statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig) []types.NamespacedName
-}
-type labelPreparationHelperImpl struct{}
-
-func newLabelPreparationHelper() labelPreparationHelper {
-	return &labelPreparationHelperImpl{}
-}
-
-func (lph *labelPreparationHelperImpl) getNodeKernelModuleReadyLabels(node v1.Node) sets.Set[types.NamespacedName] {
-	nodeModuleReadyLabels := sets.New[types.NamespacedName]()
-
-	for label := range node.GetLabels() {
-		if ok, namespace, name := utils.IsKernelModuleReadyNodeLabel(label); ok {
-			nodeModuleReadyLabels.Insert(types.NamespacedName{Namespace: namespace, Name: name})
-		}
-	}
-	return nodeModuleReadyLabels
-}
-
-func (lph *labelPreparationHelperImpl) getDeprecatedKernelModuleReadyLabels(node v1.Node) sets.Set[string] {
-	deprecatedNodeModuleReadyLabels := sets.New[string]()
-
-	for label := range node.GetLabels() {
-		if utils.IsDeprecatedKernelModuleReadyNodeLabel(label) {
-			deprecatedNodeModuleReadyLabels.Insert(label)
-		}
-	}
-	return deprecatedNodeModuleReadyLabels
-}
-
-func (lph *labelPreparationHelperImpl) getSpecLabelsAndTheirConfigs(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]kmmv1beta1.ModuleConfig {
-	specLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
-
-	for _, module := range nmc.Spec.Modules {
-		specLabels[types.NamespacedName{Namespace: module.Namespace, Name: module.Name}] = module.Config
-	}
-	return specLabels
-}
-
-func (lph *labelPreparationHelperImpl) getStatusLabelsAndTheirConfigs(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]kmmv1beta1.ModuleConfig {
-	statusLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
-
-	for _, module := range nmc.Status.Modules {
-		label := types.NamespacedName{Namespace: module.Namespace, Name: module.Name}
-		statusLabels[label] = module.Config
-	}
-	return statusLabels
-}
-
 func (h *nmcReconcilerHelperImpl) UpdateNodeLabels(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, node *v1.Node) ([]types.NamespacedName, []types.NamespacedName, error) {
 
 	// get all the kernel module ready labels of the node
@@ -668,20 +613,30 @@ func (h *nmcReconcilerHelperImpl) UpdateNodeLabels(ctx context.Context, nmc *kmm
 	// get status labels and their config
 	statusLabels := h.lph.getStatusLabelsAndTheirConfigs(nmc)
 
+	// get the versions per the name/namespace of the module
+	statusVersions := h.lph.getStatusVersions(nmc)
+
 	// label in node but not in spec or status - should be removed
 	nsnLabelsToBeRemoved := h.lph.removeOrphanedLabels(nodeModuleReadyLabels, specLabels, statusLabels)
 
 	// label in spec and status and config equal - should be added
 	nsnLabelsToBeLoaded := h.lph.addEqualLabels(nodeModuleReadyLabels, specLabels, statusLabels)
 
-	var loadedLabels []string
-	unloadedLabels := deprecatedNodeModuleReadyLabels.UnsortedList()
+	loadedLabels := make(map[string]string)
+	unloadedLabels := deprecatedNodeModuleReadyLabels
 
 	for _, label := range nsnLabelsToBeRemoved {
-		unloadedLabels = append(unloadedLabels, utils.GetKernelModuleReadyNodeLabel(label.Namespace, label.Name))
+		unloadedLabels[utils.GetKernelModuleReadyNodeLabel(label.Namespace, label.Name)] = ""
+		// unload the kernel ready version label also. if it does not exists, that's ok, the code won't fail.It also means
+		// that the version label will not be in labelsToAdd, since status and spec are missing
+		unloadedLabels[utils.GetKernelModuleVersionReadyNodeLabel(label.Namespace, label.Name)] = ""
 	}
+
 	for _, label := range nsnLabelsToBeLoaded {
-		loadedLabels = append(loadedLabels, utils.GetKernelModuleReadyNodeLabel(label.Namespace, label.Name))
+		loadedLabels[utils.GetKernelModuleReadyNodeLabel(label.Namespace, label.Name)] = ""
+		if version, ok := statusVersions[label]; ok {
+			loadedLabels[utils.GetKernelModuleVersionReadyNodeLabel(label.Namespace, label.Name)] = version
+		}
 	}
 
 	if err := h.nodeAPI.UpdateLabels(ctx, node, loadedLabels, unloadedLabels); err != nil {
@@ -712,6 +667,75 @@ func (h *nmcReconcilerHelperImpl) RecordEvents(node *v1.Node, loadedModules, unl
 			nsn.String(),
 		)
 	}
+}
+
+type labelPreparationHelper interface {
+	getDeprecatedKernelModuleReadyLabels(node v1.Node) map[string]string
+	getNodeKernelModuleReadyLabels(node v1.Node) sets.Set[types.NamespacedName]
+	getSpecLabelsAndTheirConfigs(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]kmmv1beta1.ModuleConfig
+	getStatusLabelsAndTheirConfigs(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]kmmv1beta1.ModuleConfig
+	getStatusVersions(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]string
+	addEqualLabels(nodeModuleReadyLabels sets.Set[types.NamespacedName],
+		specLabels, statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig) []types.NamespacedName
+	removeOrphanedLabels(nodeModuleReadyLabels sets.Set[types.NamespacedName],
+		specLabels, statusLabels map[types.NamespacedName]kmmv1beta1.ModuleConfig) []types.NamespacedName
+}
+type labelPreparationHelperImpl struct{}
+
+func newLabelPreparationHelper() labelPreparationHelper {
+	return &labelPreparationHelperImpl{}
+}
+
+func (lph *labelPreparationHelperImpl) getNodeKernelModuleReadyLabels(node v1.Node) sets.Set[types.NamespacedName] {
+	nodeModuleReadyLabels := sets.New[types.NamespacedName]()
+
+	for label := range node.GetLabels() {
+		if ok, namespace, name := utils.IsKernelModuleReadyNodeLabel(label); ok {
+			nodeModuleReadyLabels.Insert(types.NamespacedName{Namespace: namespace, Name: name})
+		}
+	}
+	return nodeModuleReadyLabels
+}
+
+func (lph *labelPreparationHelperImpl) getDeprecatedKernelModuleReadyLabels(node v1.Node) map[string]string {
+	deprecatedLabels := make(map[string]string)
+
+	for key, val := range node.GetLabels() {
+		if utils.IsDeprecatedKernelModuleReadyNodeLabel(key) {
+			deprecatedLabels[key] = val
+		}
+	}
+	return deprecatedLabels
+}
+
+func (lph *labelPreparationHelperImpl) getSpecLabelsAndTheirConfigs(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]kmmv1beta1.ModuleConfig {
+	specLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
+
+	for _, module := range nmc.Spec.Modules {
+		specLabels[types.NamespacedName{Namespace: module.Namespace, Name: module.Name}] = module.Config
+	}
+	return specLabels
+}
+
+func (lph *labelPreparationHelperImpl) getStatusLabelsAndTheirConfigs(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]kmmv1beta1.ModuleConfig {
+	statusLabels := make(map[types.NamespacedName]kmmv1beta1.ModuleConfig)
+
+	for _, module := range nmc.Status.Modules {
+		label := types.NamespacedName{Namespace: module.Namespace, Name: module.Name}
+		statusLabels[label] = module.Config
+	}
+	return statusLabels
+}
+
+func (lph *labelPreparationHelperImpl) getStatusVersions(nmc *kmmv1beta1.NodeModulesConfig) map[types.NamespacedName]string {
+	versions := make(map[types.NamespacedName]string)
+
+	for _, module := range nmc.Status.Modules {
+		if module.Version != "" {
+			versions[types.NamespacedName{Namespace: module.Namespace, Name: module.Name}] = module.Version
+		}
+	}
+	return versions
 }
 
 func (lph *labelPreparationHelperImpl) removeOrphanedLabels(nodeModuleReadyLabels sets.Set[types.NamespacedName],
