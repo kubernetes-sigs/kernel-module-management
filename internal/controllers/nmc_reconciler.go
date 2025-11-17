@@ -111,6 +111,7 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		// skipping handling NMC spec module until node is ready
 		if !r.nodeAPI.IsNodeSchedulable(&node, mod.Tolerations) {
 			readyLabelsToRemove[utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name)] = ""
+			readyLabelsToRemove[utils.GetKernelModuleVersionReadyNodeLabel(mod.Namespace, mod.Name)] = ""
 			delete(statusMap, moduleNameKey)
 			continue
 		}
