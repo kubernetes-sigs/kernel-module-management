@@ -9,7 +9,7 @@ spec:
     serviceAccountName: kmm-operator-controller
     config:
       kernelVersion: 4.18.0-372.32.1.el8_6.x86_64
-      containerImage: quay.io/myorg/my-kernel-module:latest
+      containerImage: <kmod container image URL>
       imagePullPolicy: IfNotPresent
       insecurePull: false
       modprobe:

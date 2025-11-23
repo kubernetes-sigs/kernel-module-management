@@ -4,7 +4,7 @@ metadata:
   name: modulebuildsignconfig-sample
 spec:
   images:
-  - image: quay.io/myorg/my-kernel-module:latest
+  - image: <kmod container image URL>
     kernelVersion: 4.18.0-372.32.1.el8_6.x86_64
     action: BuildImage
     build:
