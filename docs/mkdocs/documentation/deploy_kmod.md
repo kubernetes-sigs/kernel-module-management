@@ -14,6 +14,11 @@ on the target node(s) to run the necessary action.
 The operator monitors the outcome of those Pods and records that information.
 It uses it to label `Node` objects when the module was successfully loaded, and to run the device plugin (if
 configured).
+The label can be found in the node's label with the following format:
+```
+kmm.node.kubernetes.io/<namespace>.<modulename>.ready
+```
+but it is strongly recommended to use `GetKernelModuleReadyNodeLabel` function from the `labels` package in order to construct the correct label
 
 ### Worker Pods
 
