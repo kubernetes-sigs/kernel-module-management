@@ -70,6 +70,14 @@ func (r *micReconciler) Reconcile(ctx context.Context, micObj *kmmv1beta1.Module
 		return res, nil
 	}
 
+	triggerChanged, err := r.micReconHelper.handleImageRebuildTriggerGeneration(ctx, micObj)
+	if err != nil {
+		return res, fmt.Errorf("failed to handle ImageRebuildTriggerGeneration for MIC %s: %v", micObj.Name, err)
+	}
+	if triggerChanged {
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	pods, err := r.imagePullerAPI.ListPullPods(ctx, micObj.Name, micObj.Namespace)
 	if err != nil {
 		return res, fmt.Errorf("failed to get the image pods for mic %s: %v", micObj.Name, err)
@@ -94,6 +102,7 @@ func (r *micReconciler) Reconcile(ctx context.Context, micObj *kmmv1beta1.Module
 
 //go:generate mockgen -source=mic_reconciler.go -package=controllers -destination=mock_mic_reconciler.go micReconcilerHelper
 type micReconcilerHelper interface {
+	handleImageRebuildTriggerGeneration(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig) (bool, error)
 	updateStatusByPullPods(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig, pods []v1.Pod) error
 	updateStatusByMBSC(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig) error
 	processImagesSpecs(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig, pullPods []v1.Pod) error
@@ -120,6 +129,38 @@ func newMICReconcilerHelper(client client.Client,
 		micHelper:      micAPI,
 		scheme:         scheme,
 	}
+}
+
+func (mrhi *micReconcilerHelperImpl) handleImageRebuildTriggerGeneration(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig) (bool, error) {
+	logger := ctrl.LoggerFrom(ctx).WithValues("mic name", micObj.Name)
+
+	specTrigger := micObj.Spec.ImageRebuildTriggerGeneration
+	statusTrigger := micObj.Status.ImageRebuildTriggerGeneration
+
+	// Compare *int pointers: both nil, or both non-nil and equal values
+	if (specTrigger == nil && statusTrigger == nil) ||
+		(specTrigger != nil && statusTrigger != nil && *specTrigger == *statusTrigger) {
+		return false, nil
+	}
+
+	logger.Info("ImageRebuildTriggerGeneration changed, clearing all image statuses to trigger rebuild",
+		"old", statusTrigger, "new", specTrigger)
+
+	if err := mrhi.mbscHelper.Delete(ctx, micObj.Name, micObj.Namespace); err != nil {
+		return false, fmt.Errorf("failed to delete MBSC after ImageRebuildTriggerGeneration change: %v", err)
+	}
+
+	patchFrom := client.MergeFrom(micObj.DeepCopy())
+
+	// Clearing all image statuses
+	micObj.Status.ImagesStates = []kmmv1beta1.ModuleImageState{}
+	micObj.Status.ImageRebuildTriggerGeneration = specTrigger
+
+	if err := mrhi.client.Status().Patch(ctx, micObj, patchFrom); err != nil {
+		return false, fmt.Errorf("failed to patch MIC status after ImageRebuildTriggerGeneration change: %v", err)
+	}
+
+	return true, nil
 }
 
 func (mrhi *micReconcilerHelperImpl) updateStatusByPullPods(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig, pods []v1.Pod) error {

@@ -40,6 +40,21 @@ func (m *MockmicReconcilerHelper) EXPECT() *MockmicReconcilerHelperMockRecorder 
 	return m.recorder
 }
 
+// handleImageRebuildTriggerGeneration mocks base method.
+func (m *MockmicReconcilerHelper) handleImageRebuildTriggerGeneration(ctx context.Context, micObj *v1beta1.ModuleImagesConfig) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "handleImageRebuildTriggerGeneration", ctx, micObj)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// handleImageRebuildTriggerGeneration indicates an expected call of handleImageRebuildTriggerGeneration.
+func (mr *MockmicReconcilerHelperMockRecorder) handleImageRebuildTriggerGeneration(ctx, micObj any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleImageRebuildTriggerGeneration", reflect.TypeOf((*MockmicReconcilerHelper)(nil).handleImageRebuildTriggerGeneration), ctx, micObj)
+}
+
 // processImagesSpecs mocks base method.
 func (m *MockmicReconcilerHelper) processImagesSpecs(ctx context.Context, micObj *v1beta1.ModuleImagesConfig, pullPods []v1.Pod) error {
 	m.ctrl.T.Helper()

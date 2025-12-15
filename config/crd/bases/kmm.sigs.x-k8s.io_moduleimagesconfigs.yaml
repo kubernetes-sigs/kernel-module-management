@@ -49,6 +49,11 @@ spec:
                 description: ImagePullPolicy defines the pull policy used for verifying
                   the presence of the image
                 type: string
+              imageRebuildTriggerGeneration:
+                description: |-
+                  ImageRebuildTriggerGeneration is an optional counter that, when incremented, triggers a re-verification
+                  and potential rebuild of all module images. Propagated from Module.spec.imageRebuildTriggerGeneration.
+                type: integer
               imageRepoSecret:
                 description: ImageRepoSecret contains pull secret for the image's
                   repo, if needed
@@ -260,6 +265,12 @@ spec:
               ModuleImagesConfigStatus describes the status of the images that need to be verified (defined in the spec)
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
             properties:
+              imageRebuildTriggerGeneration:
+                description: |-
+                  ImageRebuildTriggerGeneration contains the last value of spec.imageRebuildTriggerGeneration that was applied.
+                  When spec.imageRebuildTriggerGeneration differs from this value, all image statuses will be cleared
+                  to trigger re-verification and potential rebuilds.
+                type: integer
               imagesStates:
                 items:
                   properties:

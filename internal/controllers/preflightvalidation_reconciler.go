@@ -231,7 +231,7 @@ func (p *preflightReconcilerHelperImpl) processPreflightValidation(ctx context.C
 		}
 		micName := mod.Name + "-preflight"
 		err := p.micAPI.CreateOrPatch(ctx, micName, mod.Namespace, []kmmv1beta1.ModuleImageSpec{micObjSpec},
-			mod.ImageRepoSecret, mod.ImagePullPolicy, pv.Spec.PushBuiltImage, pv)
+			mod.ImageRepoSecret, mod.ImagePullPolicy, pv.Spec.PushBuiltImage, nil, pv)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to apply %s/%s MIC: %v", mod.Namespace, mod.Name, err))
 		}

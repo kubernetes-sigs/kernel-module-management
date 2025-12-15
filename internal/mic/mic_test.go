@@ -45,7 +45,7 @@ var _ = Describe("CreateOrPatch", func() {
 
 		mockClient.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
 
-		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, []v1beta1.ModuleImageSpec{}, nil, "", false, &kmmv1beta1.Module{})
+		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, []v1beta1.ModuleImageSpec{}, nil, "", false, nil, &kmmv1beta1.Module{})
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed to create or patch"))
@@ -81,7 +81,7 @@ var _ = Describe("CreateOrPatch", func() {
 			},
 		}
 
-		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, images, imageRepoSecret, "", true, owner)
+		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, images, imageRepoSecret, "", true, nil, owner)
 
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -128,7 +128,7 @@ var _ = Describe("CreateOrPatch", func() {
 			},
 		}
 
-		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, images, nil, v1.PullIfNotPresent, true, owner)
+		err := micAPI.CreateOrPatch(ctx, micName, micNamespace, images, nil, v1.PullIfNotPresent, true, nil, owner)
 
 		Expect(err).NotTo(HaveOccurred())
 	})

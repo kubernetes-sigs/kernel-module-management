@@ -40,7 +40,7 @@ import (
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=create;delete;get;list;patch;watch
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch
-//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modulebuildsignconfigs,verbs=get;list;watch;update;patch;create
+//+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modulebuildsignconfigs,verbs=get;list;watch;update;patch;create;delete
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modulebuildsignconfigs/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=moduleimagesconfigs,verbs=get;list;watch;patch;create;delete
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=moduleimagesconfigs/status,verbs=get;update;patch
@@ -377,7 +377,7 @@ func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta
 	}
 
 	if err := mrh.micAPI.CreateOrPatch(ctx, mod.Name, mod.Namespace, images, mod.Spec.ImageRepoSecret,
-		mod.Spec.ModuleLoader.Container.ImagePullPolicy, true, mod); err != nil {
+		mod.Spec.ModuleLoader.Container.ImagePullPolicy, true, mod.Spec.ImageRebuildTriggerGeneration, mod); err != nil {
 		errs = append(errs, fmt.Errorf("failed to apply %s/%s MIC: %v", mod.Namespace, mod.Name, err))
 	}
 
