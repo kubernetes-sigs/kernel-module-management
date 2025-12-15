@@ -77,6 +77,11 @@ type ModuleImagesConfigSpec struct {
 	// be pushed to a defined repository
 	// +optional
 	PushBuiltImage bool `json:"pushBuiltImage"`
+
+	// ImageRebuildTriggerGeneration is an optional counter that, when incremented, triggers a re-verification
+	// and potential rebuild of all module images. Propagated from Module.spec.imageRebuildTriggerGeneration.
+	// +optional
+	ImageRebuildTriggerGeneration *int `json:"imageRebuildTriggerGeneration,omitempty"`
 }
 
 type ModuleImageState struct {
@@ -92,6 +97,12 @@ type ModuleImageState struct {
 // +kubebuilder:validation:Required
 type ModuleImagesConfigStatus struct {
 	ImagesStates []ModuleImageState `json:"imagesStates"`
+
+	// ImageRebuildTriggerGeneration contains the last value of spec.imageRebuildTriggerGeneration that was applied.
+	// When spec.imageRebuildTriggerGeneration differs from this value, all image statuses will be cleared
+	// to trigger re-verification and potential rebuilds.
+	// +optional
+	ImageRebuildTriggerGeneration *int `json:"imageRebuildTriggerGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -50,6 +50,9 @@ var _ = Describe("MicReconciler_Reconcile", func() {
 		returnedError := errors.New("some error")
 		expectedErr := returnedError
 		pullPods := []v1.Pod{}
+
+		mockMicReconHelper.EXPECT().handleImageRebuildTriggerGeneration(ctx, &testMic).Return(false, nil)
+
 		if listPullPodsError {
 			mockImagePuller.EXPECT().ListPullPods(ctx, "some name", "some namespace").Return(nil, returnedError)
 			goto executeTestFunction
@@ -88,6 +91,191 @@ var _ = Describe("MicReconciler_Reconcile", func() {
 		Entry("processImagesSpecs failed", false, false, false, true),
 		Entry("everything worked", false, false, false, false),
 	)
+
+	It("should return error if handleImageRebuildTriggerGeneration fails", func() {
+		mockMicReconHelper.EXPECT().handleImageRebuildTriggerGeneration(ctx, &testMic).Return(false, errors.New("trigger error"))
+
+		res, err := mr.Reconcile(ctx, &testMic)
+
+		Expect(res).To(Equal(reconcile.Result{}))
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to handle ImageRebuildTriggerGeneration"))
+	})
+
+	It("should requeue immediately if trigger changed", func() {
+		mockMicReconHelper.EXPECT().handleImageRebuildTriggerGeneration(ctx, &testMic).Return(true, nil)
+
+		res, err := mr.Reconcile(ctx, &testMic)
+
+		Expect(err).To(BeNil())
+		Expect(res.Requeue).To(BeTrue())
+	})
+})
+
+var _ = Describe("handleImageRebuildTriggerGeneration", func() {
+	var (
+		ctrl         *gomock.Controller
+		clnt         *client.MockClient
+		statusWriter *client.MockStatusWriter
+		mbscHelper   *mbsc.MockMBSC
+		mrh          micReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		statusWriter = client.NewMockStatusWriter(ctrl)
+		mbscHelper = mbsc.NewMockMBSC(ctrl)
+		mrh = newMICReconcilerHelper(clnt, nil, nil, mbscHelper, nil)
+	})
+
+	ctx := context.Background()
+
+	It("should return false when spec and status triggers are the same", func() {
+		triggerValue := 1
+		testMic := kmmv1beta1.ModuleImagesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-mic", Namespace: "test-ns"},
+			Spec: kmmv1beta1.ModuleImagesConfigSpec{
+				ImageRebuildTriggerGeneration: &triggerValue,
+			},
+			Status: kmmv1beta1.ModuleImagesConfigStatus{
+				ImageRebuildTriggerGeneration: &triggerValue,
+				ImagesStates:                  []kmmv1beta1.ModuleImageState{},
+			},
+		}
+
+		changed, err := mrh.handleImageRebuildTriggerGeneration(ctx, &testMic)
+
+		Expect(err).To(BeNil())
+		Expect(changed).To(BeFalse())
+	})
+
+	It("should return false when both triggers are nil", func() {
+		testMic := kmmv1beta1.ModuleImagesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-mic", Namespace: "test-ns"},
+			Spec: kmmv1beta1.ModuleImagesConfigSpec{
+				ImageRebuildTriggerGeneration: nil,
+			},
+			Status: kmmv1beta1.ModuleImagesConfigStatus{
+				ImageRebuildTriggerGeneration: nil,
+				ImagesStates:                  []kmmv1beta1.ModuleImageState{},
+			},
+		}
+
+		changed, err := mrh.handleImageRebuildTriggerGeneration(ctx, &testMic)
+
+		Expect(err).To(BeNil())
+		Expect(changed).To(BeFalse())
+	})
+
+	It("should delete MBSC, clear status, and return true when trigger changes from nil to value", func() {
+		triggerValue := 1
+		testMic := kmmv1beta1.ModuleImagesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-mic", Namespace: "test-ns"},
+			Spec: kmmv1beta1.ModuleImagesConfigSpec{
+				ImageRebuildTriggerGeneration: &triggerValue,
+			},
+			Status: kmmv1beta1.ModuleImagesConfigStatus{
+				ImageRebuildTriggerGeneration: nil,
+				ImagesStates: []kmmv1beta1.ModuleImageState{
+					{Image: "image1", Status: kmmv1beta1.ImageExists},
+					{Image: "image2", Status: kmmv1beta1.ImageExists},
+				},
+			},
+		}
+
+		gomock.InOrder(
+			mbscHelper.EXPECT().Delete(ctx, "test-mic", "test-ns").Return(nil),
+			clnt.EXPECT().Status().Return(statusWriter),
+			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()).Return(nil),
+		)
+
+		changed, err := mrh.handleImageRebuildTriggerGeneration(ctx, &testMic)
+
+		Expect(err).To(BeNil())
+		Expect(changed).To(BeTrue())
+		// Verify status was cleared
+		Expect(testMic.Status.ImagesStates).To(BeEmpty())
+		Expect(*testMic.Status.ImageRebuildTriggerGeneration).To(Equal(1))
+	})
+
+	It("should delete MBSC, clear status, and return true when trigger changes to a new value", func() {
+		oldTriggerValue := 1
+		newTriggerValue := 2
+		testMic := kmmv1beta1.ModuleImagesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-mic", Namespace: "test-ns"},
+			Spec: kmmv1beta1.ModuleImagesConfigSpec{
+				ImageRebuildTriggerGeneration: &newTriggerValue,
+			},
+			Status: kmmv1beta1.ModuleImagesConfigStatus{
+				ImageRebuildTriggerGeneration: &oldTriggerValue,
+				ImagesStates: []kmmv1beta1.ModuleImageState{
+					{Image: "image1", Status: kmmv1beta1.ImageExists},
+				},
+			},
+		}
+
+		gomock.InOrder(
+			mbscHelper.EXPECT().Delete(ctx, "test-mic", "test-ns").Return(nil),
+			clnt.EXPECT().Status().Return(statusWriter),
+			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()).Return(nil),
+		)
+
+		changed, err := mrh.handleImageRebuildTriggerGeneration(ctx, &testMic)
+
+		Expect(err).To(BeNil())
+		Expect(changed).To(BeTrue())
+		Expect(testMic.Status.ImagesStates).To(BeEmpty())
+		Expect(*testMic.Status.ImageRebuildTriggerGeneration).To(Equal(2))
+	})
+
+	It("should return error when MBSC delete fails", func() {
+		triggerValue := 1
+		testMic := kmmv1beta1.ModuleImagesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-mic", Namespace: "test-ns"},
+			Spec: kmmv1beta1.ModuleImagesConfigSpec{
+				ImageRebuildTriggerGeneration: &triggerValue,
+			},
+			Status: kmmv1beta1.ModuleImagesConfigStatus{
+				ImageRebuildTriggerGeneration: nil,
+				ImagesStates:                  []kmmv1beta1.ModuleImageState{},
+			},
+		}
+
+		mbscHelper.EXPECT().Delete(ctx, "test-mic", "test-ns").Return(errors.New("delete failed"))
+
+		changed, err := mrh.handleImageRebuildTriggerGeneration(ctx, &testMic)
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to delete MBSC"))
+		Expect(changed).To(BeFalse())
+	})
+
+	It("should return error when status patch fails", func() {
+		triggerValue := 1
+		testMic := kmmv1beta1.ModuleImagesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-mic", Namespace: "test-ns"},
+			Spec: kmmv1beta1.ModuleImagesConfigSpec{
+				ImageRebuildTriggerGeneration: &triggerValue,
+			},
+			Status: kmmv1beta1.ModuleImagesConfigStatus{
+				ImageRebuildTriggerGeneration: nil,
+				ImagesStates:                  []kmmv1beta1.ModuleImageState{},
+			},
+		}
+
+		gomock.InOrder(
+			mbscHelper.EXPECT().Delete(ctx, "test-mic", "test-ns").Return(nil),
+			clnt.EXPECT().Status().Return(statusWriter),
+			statusWriter.EXPECT().Patch(ctx, &testMic, gomock.Any()).Return(errors.New("patch failed")),
+		)
+
+		changed, err := mrh.handleImageRebuildTriggerGeneration(ctx, &testMic)
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to patch MIC status"))
+		Expect(changed).To(BeFalse())
+	})
 })
 
 var _ = Describe("updateStatusByPullPods", func() {

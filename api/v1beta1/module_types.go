@@ -337,6 +337,12 @@ type ModuleSpec struct {
 	// If specified, the pod's tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+
+	// ImageRebuildTriggerGeneration is an optional counter that can be incremented to trigger a rebuild of the module images.
+	// When this value changes (compared to the value stored in status), KMM will re-verify and potentially rebuild
+	// all module images.
+	// +optional
+	ImageRebuildTriggerGeneration *int `json:"imageRebuildTriggerGeneration,omitempty"`
 }
 
 // DaemonSetStatus contains the status for a daemonset deployed during
@@ -357,6 +363,10 @@ type ModuleStatus struct {
 	DevicePlugin DaemonSetStatus `json:"devicePlugin,omitempty"`
 	// ModuleLoader contains the status of the ModuleLoader daemonset
 	ModuleLoader DaemonSetStatus `json:"moduleLoader,omitempty"`
+	// ImageRebuildTriggerGeneration contains the last value of spec.imageRebuildTriggerGeneration that was applied.
+	// When this differs from spec.imageRebuildTriggerGeneration, all module images will be re-verified and potentially rebuilt.
+	// +optional
+	ImageRebuildTriggerGeneration *int `json:"imageRebuildTriggerGeneration,omitempty"`
 }
 
 //+kubebuilder:object:root=true

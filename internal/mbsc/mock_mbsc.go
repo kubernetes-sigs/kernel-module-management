@@ -53,6 +53,20 @@ func (mr *MockMBSCMockRecorder) CreateOrPatch(ctx, micObj, moduleImageSpec, acti
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrPatch", reflect.TypeOf((*MockMBSC)(nil).CreateOrPatch), ctx, micObj, moduleImageSpec, action)
 }
 
+// Delete mocks base method.
+func (m *MockMBSC) Delete(ctx context.Context, name, namespace string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", ctx, name, namespace)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockMBSCMockRecorder) Delete(ctx, name, namespace any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockMBSC)(nil).Delete), ctx, name, namespace)
+}
+
 // Get mocks base method.
 func (m *MockMBSC) Get(ctx context.Context, name, namespace string) (*v1beta1.ModuleBuildSignConfig, error) {
 	m.ctrl.T.Helper()

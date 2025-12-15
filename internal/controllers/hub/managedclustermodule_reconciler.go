@@ -231,7 +231,7 @@ func (rh *managedClusterModuleReconcilerHelper) setMicAsDesired(ctx context.Cont
 	micName := mcm.Name + "-" + clusterName
 	micNamespace := rh.clusterAPI.GetDefaultArtifactsNamespace()
 	if err := rh.micAPI.CreateOrPatch(ctx, micName, micNamespace, images, mcm.Spec.ModuleSpec.ImageRepoSecret,
-		mcm.Spec.ModuleSpec.ModuleLoader.Container.ImagePullPolicy, true, mcm); err != nil {
+		mcm.Spec.ModuleSpec.ModuleLoader.Container.ImagePullPolicy, true, mcm.Spec.ModuleSpec.ImageRebuildTriggerGeneration, mcm); err != nil {
 		return fmt.Errorf("failed to createOrPatch MIC %s: %v", micName, err)
 	}
 

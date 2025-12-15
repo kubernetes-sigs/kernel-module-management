@@ -17,6 +17,7 @@ import (
 
 type MBSC interface {
 	Get(ctx context.Context, name, namespace string) (*kmmv1beta1.ModuleBuildSignConfig, error)
+	Delete(ctx context.Context, name, namespace string) error
 	CreateOrPatch(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig,
 		moduleImageSpec *kmmv1beta1.ModuleImageSpec, action kmmv1beta1.BuildOrSignAction) error
 	GetImageSpec(mbscObj *kmmv1beta1.ModuleBuildSignConfig, image string) *kmmv1beta1.ModuleBuildSignSpec
@@ -46,6 +47,17 @@ func (m *mbsc) Get(ctx context.Context, name, namespace string) (*kmmv1beta1.Mod
 		return nil, fmt.Errorf("failed to get ModuleBuildSignConfig object %s/%s: %v", namespace, name, err)
 	}
 	return &mbsc, nil
+}
+
+func (m *mbsc) Delete(ctx context.Context, name, namespace string) error {
+	mbsc := kmmv1beta1.ModuleBuildSignConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	err := m.client.Delete(ctx, &mbsc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete ModuleBuildSignConfig object %s/%s: %v", namespace, name, err)
+	}
+	return nil
 }
 
 func (m *mbsc) CreateOrPatch(ctx context.Context, micObj *kmmv1beta1.ModuleImagesConfig,
