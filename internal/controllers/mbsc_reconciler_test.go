@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -211,6 +212,57 @@ var _ = Describe("processImagesSpecs", func() {
 
 		err := mrh.processImagesSpecs(ctx, &testMBSC)
 		Expect(err).To(HaveOccurred())
+	})
+})
+
+var _ = Describe("createMLD", func() {
+	It("should copy tolerations from MBSC spec", func() {
+		tolerations := []v1.Toleration{
+			{
+				Key:      "test-key",
+				Operator: v1.TolerationOpEqual,
+				Value:    "test-value",
+				Effect:   v1.TaintEffectNoSchedule,
+			},
+		}
+		mbscObj := &kmmv1beta1.ModuleBuildSignConfig{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-mbsc",
+				Namespace: "test-namespace",
+			},
+			Spec: kmmv1beta1.ModuleBuildSignConfigSpec{
+				Tolerations: tolerations,
+			},
+		}
+		imageSpec := &kmmv1beta1.ModuleImageSpec{
+			Image:         "test-image:latest",
+			KernelVersion: "5.15.0",
+		}
+
+		mld := createMLD(mbscObj, imageSpec)
+
+		Expect(mld.Tolerations).To(Equal(tolerations))
+		Expect(mld.Name).To(Equal("test-mbsc"))
+		Expect(mld.Namespace).To(Equal("test-namespace"))
+		Expect(mld.ContainerImage).To(Equal("test-image:latest"))
+		Expect(mld.KernelVersion).To(Equal("5.15.0"))
+	})
+
+	It("should handle nil tolerations", func() {
+		mbscObj := &kmmv1beta1.ModuleBuildSignConfig{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-mbsc",
+				Namespace: "test-namespace",
+			},
+			Spec: kmmv1beta1.ModuleBuildSignConfigSpec{},
+		}
+		imageSpec := &kmmv1beta1.ModuleImageSpec{
+			Image: "test-image:latest",
+		}
+
+		mld := createMLD(mbscObj, imageSpec)
+
+		Expect(mld.Tolerations).To(BeNil())
 	})
 })
 

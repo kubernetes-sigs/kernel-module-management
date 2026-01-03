@@ -60,6 +60,10 @@ type ModuleBuildSignConfigSpec struct {
 	// be pushed to a defined repository
 	// +optional
 	PushBuiltImage bool `json:"pushBuiltImage"`
+
+	// Tolerations specifies the tolerations for build/sign pods.
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
 
 // BuildSignImageState contains the status of the image that was requested to be built/signed

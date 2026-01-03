@@ -82,6 +82,10 @@ type ModuleImagesConfigSpec struct {
 	// and potential rebuild of all module images. Propagated from Module.spec.imageRebuildTriggerGeneration.
 	// +optional
 	ImageRebuildTriggerGeneration *int `json:"imageRebuildTriggerGeneration,omitempty"`
+
+	// Tolerations specifies the tolerations for build/sign pods.
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
 
 type ModuleImageState struct {
