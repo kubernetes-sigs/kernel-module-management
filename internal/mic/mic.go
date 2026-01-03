@@ -20,7 +20,7 @@ import (
 type MIC interface {
 	CreateOrPatch(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
 		imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, pushBuiltImage bool,
-		imageRebuildTriggerGeneration *int, owner metav1.Object) error
+		imageRebuildTriggerGeneration *int, tolerations []v1.Toleration, owner metav1.Object) error
 	Get(ctx context.Context, name, ns string) (*kmmv1beta1.ModuleImagesConfig, error)
 	GetModuleImageSpec(micObj *kmmv1beta1.ModuleImagesConfig, image string) *kmmv1beta1.ModuleImageSpec
 	SetImageStatus(micObj *kmmv1beta1.ModuleImagesConfig, image string, status kmmv1beta1.ImageState)
@@ -42,7 +42,7 @@ func New(client client.Client, scheme *runtime.Scheme) MIC {
 
 func (mici *micImpl) CreateOrPatch(ctx context.Context, name, ns string, images []kmmv1beta1.ModuleImageSpec,
 	imageRepoSecret *v1.LocalObjectReference, pullPolicy v1.PullPolicy, pushBuiltImage bool,
-	imageRebuildTriggerGeneration *int, owner metav1.Object) error {
+	imageRebuildTriggerGeneration *int, tolerations []v1.Toleration, owner metav1.Object) error {
 
 	logger := log.FromContext(ctx)
 
@@ -63,6 +63,7 @@ func (mici *micImpl) CreateOrPatch(ctx context.Context, name, ns string, images 
 			ImagePullPolicy:               pullPolicy,
 			PushBuiltImage:                pushBuiltImage,
 			ImageRebuildTriggerGeneration: imageRebuildTriggerGeneration,
+			Tolerations:                   tolerations,
 		}
 
 		return controllerutil.SetControllerReference(owner, mic, mici.scheme)

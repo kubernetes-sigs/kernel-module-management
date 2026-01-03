@@ -70,6 +70,7 @@ func (m *mbsc) CreateOrPatch(ctx context.Context, micObj *kmmv1beta1.ModuleImage
 		setModuleImageSpec(mbscObj, moduleImageSpec, action)
 		mbscObj.Spec.ImageRepoSecret = micObj.Spec.ImageRepoSecret
 		mbscObj.Spec.PushBuiltImage = micObj.Spec.PushBuiltImage
+		mbscObj.Spec.Tolerations = micObj.Spec.Tolerations
 		return controllerutil.SetControllerReference(micObj, mbscObj, m.scheme)
 	})
 	return err

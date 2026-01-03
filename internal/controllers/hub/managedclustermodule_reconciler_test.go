@@ -462,7 +462,7 @@ var _ = Describe("managedClusterModuleReconcilerHelperAPI_setMicAsDesired", func
 		gomock.InOrder(
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[0]).Return(&api.ModuleLoaderData{}, nil),
 			mockClusterAPI.EXPECT().GetDefaultArtifactsNamespace().Return(defaultNs),
-			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, gomock.Any(), nil, v1.PullPolicy(""), true, mcm.Spec.ModuleSpec.ImageRebuildTriggerGeneration, mcm).
+			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, gomock.Any(), nil, v1.PullPolicy(""), true, mcm.Spec.ModuleSpec.ImageRebuildTriggerGeneration, gomock.Any(), mcm).
 				Return(errors.New("some error")),
 		)
 
@@ -500,7 +500,7 @@ var _ = Describe("managedClusterModuleReconcilerHelperAPI_setMicAsDesired", func
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[0]).Return(nil, module.ErrNoMatchingKernelMapping),
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[1]).Return(expectedMLD, nil),
 			mockClusterAPI.EXPECT().GetDefaultArtifactsNamespace().Return(defaultNs),
-			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, expectedImages, gomock.Any(), v1.PullPolicy(""), true, mcm.Spec.ModuleSpec.ImageRebuildTriggerGeneration, mcm).Return(nil),
+			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, expectedImages, gomock.Any(), v1.PullPolicy(""), true, mcm.Spec.ModuleSpec.ImageRebuildTriggerGeneration, gomock.Any(), mcm).Return(nil),
 		)
 
 		err := mcmReconHelperAPI.setMicAsDesired(ctx, mcm, clusterName, kernelVersions)
@@ -546,7 +546,7 @@ var _ = Describe("managedClusterModuleReconcilerHelperAPI_setMicAsDesired", func
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[0]).Return(expectedMLDs[0], nil),
 			mockClusterAPI.EXPECT().GetModuleLoaderDataForKernel(mcm, kernelVersions[1]).Return(expectedMLDs[1], nil),
 			mockClusterAPI.EXPECT().GetDefaultArtifactsNamespace().Return(defaultNs),
-			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, expectedImages, gomock.Any(), v1.PullPolicy(""), true, mcm.Spec.ModuleSpec.ImageRebuildTriggerGeneration, mcm).Return(nil),
+			mockMIC.EXPECT().CreateOrPatch(ctx, micName, defaultNs, expectedImages, gomock.Any(), v1.PullPolicy(""), true, mcm.Spec.ModuleSpec.ImageRebuildTriggerGeneration, gomock.Any(), mcm).Return(nil),
 		)
 
 		err := mcmReconHelperAPI.setMicAsDesired(ctx, mcm, clusterName, kernelVersions)
