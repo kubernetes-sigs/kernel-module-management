@@ -120,7 +120,11 @@ func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
 		return nil, fmt.Errorf("failed to validate kernel mappings: %v", err)
 	}
 
-	return nil, validateModprobe(mod.Spec.ModuleLoader.Container.Modprobe)
+	if err := validateModprobe(mod.Spec.ModuleLoader.Container.Modprobe); err != nil {
+		return nil, err
+	}
+
+	return nil, validateFilesToSign(mod.Spec.ModuleLoader.Container)
 }
 
 func validateImageFormat(img string) error {
@@ -178,7 +182,16 @@ func validateModuleLoaderContainerSpec(container kmmv1beta1.ModuleLoaderContaine
 	return nil
 }
 
+var forbiddenDirNames = []string{"/bin"}
+
 func validateModprobe(modprobe kmmv1beta1.ModprobeSpec) error {
+	// Validate DirName is not a forbidden system directory
+	for _, forbidden := range forbiddenDirNames {
+		if modprobe.DirName == forbidden || strings.HasPrefix(modprobe.DirName, forbidden+"/") {
+			return fmt.Errorf("dirName %q is not allowed; system directories %v cannot be used as they would overwrite critical binaries in the sign image", modprobe.DirName, forbiddenDirNames)
+		}
+	}
+
 	moduleName := modprobe.ModuleName
 	moduleNameDefined := moduleName != ""
 	rawLoadArgsDefined := modprobe.RawArgs != nil && len(modprobe.RawArgs.Load) > 0
@@ -213,6 +226,29 @@ func validateModprobe(modprobe kmmv1beta1.ModprobeSpec) error {
 			}
 
 			s.Insert(modName)
+		}
+	}
+
+	return nil
+}
+
+func validateFilesToSign(container kmmv1beta1.ModuleLoaderContainerSpec) error {
+	dirName := container.Modprobe.DirName
+	if dirName == "" {
+		dirName = "/opt" // default value
+	}
+
+	for idx, km := range container.KernelMappings {
+		if km.Sign == nil {
+			continue
+		} else if len(km.Sign.FilesToSign) == 0 {
+			return fmt.Errorf("filesToSign is required when Sign is set at kernelMappings[%d]", idx)
+		}
+
+		for _, filePath := range km.Sign.FilesToSign {
+			if !strings.HasPrefix(filePath, dirName+"/") {
+				return fmt.Errorf("filesToSign[%q] at kernelMappings[%d] must be under dirName %q", filePath, idx, dirName)
+			}
 		}
 	}
 
