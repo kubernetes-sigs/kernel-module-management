@@ -87,7 +87,13 @@ type Sign struct {
 	CertSecret *v1.LocalObjectReference `json:"certSecret"`
 
 	// +optional
-	// paths inside the image for the kernel modules to sign (if ommited all kmods are signed)
+	// Paths inside the image for the kernel modules to sign.
+	// Supports explicit paths and glob patterns including:
+	// - Single asterisk (*): matches any characters in a single path segment (for example /opt/lib/modules/*.ko)
+	// - Double asterisk (**): matches any characters across path segments (for example /opt/**/*.ko)
+	// - Question mark (?): matches a single character (for example /opt/lib/modules/module.k?)
+	// - Character class ([]): matches any character in the set (for example /opt/lib/modules/[a-z]*.ko)
+	// Glob patterns search within /opt, /lib, and /usr directories.
 	FilesToSign []string `json:"filesToSign,omitempty"`
 }
 

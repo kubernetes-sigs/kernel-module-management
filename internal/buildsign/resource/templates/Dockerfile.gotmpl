@@ -1,15 +1,43 @@
-{{- /*gotype: github.com/rh-ecosystem-edge/kernel-module-management/internal/sign/pod.TemplateData */ -}}
+{{- /*gotype: github.com/kubernetes-sigs/kernel-module-management/internal/buildsign/resource.TemplateData */ -}}
 FROM {{ .UnsignedImage }} as source
+{{- if .UseGlobPatterns }}
+
+# An intermediate stage to safely extract directories, handles missing directories.
+FROM source AS source-extract
+RUN mkdir -p /export && \
+    (cp -r /opt /export/opt 2>/dev/null || mkdir -p /export/opt) && \
+    (cp -r /lib /export/lib 2>/dev/null || mkdir -p /export/lib) && \
+    (cp -r /usr /export/usr 2>/dev/null || mkdir -p /export/usr)
+{{- end }}
 
 FROM {{ .SignImage }} AS signimage
 
 RUN mkdir -p /tmp/signroot
+{{- if .UseGlobPatterns }}
+
+COPY --from=source-extract /export /tmp/source
+RUN set -e; \
+{{- range .FilesToSign }}
+    find /tmp/source -type f -path '/tmp/source{{ . }}' | while read -r kmod; do \
+      dest="/tmp/signroot${kmod#/tmp/source}"; \
+      mkdir -p "$(dirname "$dest")"; \
+      cp "$kmod" "$dest"; \
+      /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem "$dest"; \
+    done; \
+{{- end }}
+    true
+{{- else }}
 {{ range .FilesToSign }}
 COPY --from=source {{ . }} /tmp/signroot{{ . }}
 RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot{{ . }}
 {{- end }}
+{{- end }}
 
 FROM source
+{{- if .UseGlobPatterns }}
+COPY --from=signimage /tmp/signroot/ /
+{{- else }}
 {{ range .FilesToSign }}
 COPY --from=signimage /tmp/signroot{{ . }} {{ . }}
+{{- end }}
 {{- end }}
