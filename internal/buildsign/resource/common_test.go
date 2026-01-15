@@ -465,18 +465,16 @@ var _ = Describe("makeSignTemplate", func() {
 		dockerfile = `FROM my.registry/my/image as source
 
 FROM some-sign-image:some-tag AS signimage
-
-RUN mkdir -p /tmp/signroot
-
-COPY --from=source /modules/simple-kmod.ko /tmp/signroot/modules/simple-kmod.ko
-RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-kmod.ko
-COPY --from=source /modules/simple-procfs-kmod.ko /tmp/signroot/modules/simple-procfs-kmod.ko
-RUN /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem /tmp/signroot/modules/simple-procfs-kmod.ko
+COPY --from=source /modules /opt/modules
+RUN for file in /opt/modules/simple-kmod.ko; do \
+      [ -e "${file}" ] && /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem "${file}"; \
+    done
+RUN for file in /opt/modules/simple-procfs-kmod.ko; do \
+      [ -e "${file}" ] && /usr/local/bin/sign-file sha256 /run/secrets/key/key.pem /run/secrets/cert/cert.pem "${file}"; \
+    done
 
 FROM source
-
-COPY --from=signimage /tmp/signroot/modules/simple-kmod.ko /modules/simple-kmod.ko
-COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simple-procfs-kmod.ko
+COPY --from=signimage /opt/modules /modules
 `
 	)
 
@@ -513,6 +511,9 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			},
 			KernelVersion:           kernelVersion,
 			KernelNormalizedVersion: kernelVersion,
+			Modprobe: kmmv1beta1.ModprobeSpec{
+				DirName: "/modules",
+			},
 		}
 	})
 
@@ -752,22 +753,12 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 	},
 		Entry(
 			"filelist and push",
-			[]string{"simple-kmod", "complicated-kmod"},
+			[]string{"/lib/modules/simple-kmod.ko", "/lib/modules/complicated-kmod.ko"},
 			true,
 		),
 		Entry(
 			"filelist and no push",
-			[]string{"simple-kmod", "complicated-kmod"},
-			false,
-		),
-		Entry(
-			"all kmods and push",
-			[]string{},
-			true,
-		),
-		Entry(
-			"all kmods and dont push",
-			[]string{},
+			[]string{"/lib/modules/simple-kmod.ko", "/lib/modules/complicated-kmod.ko"},
 			false,
 		),
 	)
@@ -780,6 +771,7 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			UnsignedImageRegistryTLS: unsignedImageRegistryTLS,
 			KeySecret:                &v1.LocalObjectReference{Name: "securebootkey"},
 			CertSecret:               &v1.LocalObjectReference{Name: "securebootcert"},
+			FilesToSign:              []string{"/lib/modules/test.ko"},
 		}
 		mld.RegistryTLS = &kmRegistryTLS
 
@@ -835,6 +827,73 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 				InsecureSkipTLSVerify: true,
 			},
 			"--skip-tls-verify-pull",
+		),
+	)
+
+	DescribeTable("should generate correct Dockerfile for signing",
+		func(filesToSign []string, expectedSubstrings []string, unexpectedSubstrings []string) {
+			GinkgoT().Setenv("RELATED_IMAGE_BUILD", buildImage)
+			GinkgoT().Setenv("RELATED_IMAGE_SIGN", "some-sign-image:some-tag")
+
+			ctx := context.Background()
+			mld.Sign = &kmmv1beta1.Sign{
+				UnsignedImage: unsignedImage,
+				KeySecret:     &v1.LocalObjectReference{Name: "securebootkey"},
+				CertSecret:    &v1.LocalObjectReference{Name: "securebootcert"},
+				FilesToSign:   filesToSign,
+			}
+			mld.ContainerImage = signedImage
+			mld.RegistryTLS = &kmmv1beta1.TLSOptions{}
+
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, types.NamespacedName{Name: mld.Sign.KeySecret.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+						secret.Data = privateSignData
+						return nil
+					},
+				),
+				clnt.EXPECT().Get(ctx, types.NamespacedName{Name: mld.Sign.CertSecret.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+						secret.Data = publicSignData
+						return nil
+					},
+				),
+			)
+
+			actual, err := rm.makeSignTemplate(ctx, &mld, mld.Owner, true)
+			Expect(err).NotTo(HaveOccurred())
+			actualPod, ok := actual.(*v1.Pod)
+			Expect(ok).To(BeTrue())
+
+			dockerfile := actualPod.Annotations["dockerfile"]
+			for _, expected := range expectedSubstrings {
+				Expect(dockerfile).To(ContainSubstring(expected))
+			}
+			for _, unexpected := range unexpectedSubstrings {
+				Expect(dockerfile).NotTo(ContainSubstring(unexpected))
+			}
+		},
+		Entry(
+			"sign explicit paths",
+			[]string{"/modules/test.ko"},
+			[]string{
+				"COPY --from=source /modules /opt/modules",
+				"for file in /opt/modules/test.ko; do",
+				"/usr/local/bin/sign-file sha256",
+				"COPY --from=signimage /opt/modules /modules",
+			},
+			[]string{"source-extract", "find /tmp/source"},
+		),
+		Entry(
+			"sign multiple paths",
+			[]string{"/modules/a.ko", "/modules/b.ko"},
+			[]string{
+				"COPY --from=source /modules /opt/modules",
+				"for file in /opt/modules/a.ko; do",
+				"for file in /opt/modules/b.ko; do",
+				"COPY --from=signimage /opt/modules /modules",
+			},
+			[]string{"source-extract"},
 		),
 	)
 })

@@ -185,6 +185,7 @@ spec:
       container:
         modprobe:
           moduleName: mod-example
+          dirName: /bin
         imagePullPolicy: Always
         kernelMappings:
         - regexp: '^.+$'
