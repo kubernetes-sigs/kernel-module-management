@@ -87,7 +87,8 @@ type Sign struct {
 	CertSecret *v1.LocalObjectReference `json:"certSecret"`
 
 	// +optional
-	// paths inside the image for the kernel modules to sign (if ommited all kmods are signed)
+	// Paths inside the image for the kernel modules to sign.
+	// Full path to explicit files are required or any globs supported by the `Ash` shell
 	FilesToSign []string `json:"filesToSign,omitempty"`
 }
 

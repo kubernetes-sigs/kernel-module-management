@@ -2731,8 +2731,9 @@ spec:
                                   type: object
                                   x-kubernetes-map-type: atomic
                                 filesToSign:
-                                  description: paths inside the image for the kernel
-                                    modules to sign (if ommited all kmods are signed)
+                                  description: |-
+                                    Paths inside the image for the kernel modules to sign.
+                                    Full path to explicit files are required or any globs supported by the `Ash` shell
                                   items:
                                     type: string
                                   type: array
@@ -2898,8 +2899,9 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                           filesToSign:
-                            description: paths inside the image for the kernel modules
-                              to sign (if ommited all kmods are signed)
+                            description: |-
+                              Paths inside the image for the kernel modules to sign.
+                              Full path to explicit files are required or any globs supported by the `Ash` shell
                             items:
                               type: string
                             type: array

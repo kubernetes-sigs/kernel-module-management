@@ -120,7 +120,11 @@ func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
 		return nil, fmt.Errorf("failed to validate kernel mappings: %v", err)
 	}
 
-	return nil, validateModprobe(mod.Spec.ModuleLoader.Container.Modprobe)
+	if err := validateModprobe(mod.Spec.ModuleLoader.Container.Modprobe); err != nil {
+		return nil, fmt.Errorf("failed to validate modprobe: %v", err)
+	}
+
+	return nil, validateFilesToSign(mod.Spec.ModuleLoader.Container)
 }
 
 func validateImageFormat(img string) error {
@@ -213,6 +217,39 @@ func validateModprobe(modprobe kmmv1beta1.ModprobeSpec) error {
 			}
 
 			s.Insert(modName)
+		}
+	}
+
+	return nil
+}
+
+func validateSignSection(sign *kmmv1beta1.Sign, dirName string) error {
+	if sign == nil {
+		return nil
+	}
+	if len(sign.FilesToSign) == 0 {
+		return fmt.Errorf("filesToSign is required when Sign is set")
+	}
+	for _, filePath := range sign.FilesToSign {
+		if !strings.HasPrefix(filePath, dirName+"/") {
+			return fmt.Errorf("filesToSign[%q] must be under dirName %q", filePath, dirName)
+		}
+	}
+	return nil
+}
+
+func validateFilesToSign(container kmmv1beta1.ModuleLoaderContainerSpec) error {
+	dirName := container.Modprobe.DirName
+
+	// Validate global Sign section
+	if err := validateSignSection(container.Sign, dirName); err != nil {
+		return fmt.Errorf("global Sign: %v", err)
+	}
+
+	// Validate Sign section in each kernelMapping
+	for idx, km := range container.KernelMappings {
+		if err := validateSignSection(km.Sign, dirName); err != nil {
+			return fmt.Errorf("kernelMappings[%d].Sign: %v", idx, err)
 		}
 	}
 

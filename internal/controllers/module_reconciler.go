@@ -372,6 +372,7 @@ func (mrh *moduleReconcilerHelper) handleMIC(ctx context.Context, mod *kmmv1beta
 			Build:         mld.Build,
 			Sign:          mld.Sign,
 			RegistryTLS:   mld.RegistryTLS,
+			DirName:       mld.Modprobe.DirName,
 		}
 		images = append(images, mis)
 	}
