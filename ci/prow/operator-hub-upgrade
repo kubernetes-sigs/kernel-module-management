@@ -14,12 +14,35 @@ sudo echo "127.0.0.1 host.minikube.internal" | sudo tee -a /etc/hosts
 make operator-sdk
 ./bin/operator-sdk olm install
 
-# It takes some time to the operatorhubio-catalog catalogsource to get to a
-# READY connection state, we need this to validate that the catalog is ready
-# before installing a bundle, otherwise we might get a race condition that will
-# resolved in the Subscription not being reconciled after the connecting is
-# ready
-timeout 3m bash -c 'until [ "$(kubectl -n olm get catalogsource/operatorhubio-catalog -o jsonpath={.status.connectionState.lastObservedState})" = "READY" ]; do sleep 5; done'
+# It takes some time for the operatorhubio-catalog catalogsource to get to a
+# READY connection state. The catalog can oscillate between READY and
+# TRANSIENT_FAILURE, so we wait for it to be stable (consecutive READY states)
+# before proceeding. This prevents race conditions where the catalog becomes
+# unavailable between our readiness check and the actual bundle installation.
+wait_for_operatorhubio_catalog_to_be_ready() {
+  echo "Waiting for operatorhubio-catalog to stabilize"
+  timeout 5m bash -c '
+    stable_count=0
+    required_stable=6  # 6 consecutive checks
+
+    while [ "$stable_count" -lt "$required_stable" ]; do
+      state=$(kubectl -n olm get catalogsource/operatorhubio-catalog -o jsonpath="{.status.connectionState.lastObservedState}" 2>/dev/null || echo "UNAVAILABLE")
+      if [ "$state" = "READY" ]; then
+        stable_count=$((stable_count + 1))
+        echo "Catalog READY ($stable_count/$required_stable)"
+      else
+        if [ "$stable_count" -gt 0 ]; then
+          echo "Catalog state: $state - resetting stability counter"
+        else
+          echo "Catalog state: $state - waiting"
+        fi
+        stable_count=0
+      fi
+      sleep 5
+    done
+  '
+  echo "Catalog is stabilized"
+}
 
 # Install the `clusteradm` command
 curl -LO https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/v0.7.2/install.sh
@@ -34,6 +57,9 @@ kubectl wait --for=condition=Available --timeout=2m -n open-cluster-management-h
     deployment/cluster-manager-registration-controller \
     deployment/cluster-manager-registration-webhook \
     deployment/cluster-manager-work-webhook
+
+# Wait for catalog to be stable before querying it
+wait_for_operatorhubio_catalog_to_be_ready
 
 # Deploy the current bundle
 kubectl -n olm patch svc/operatorhubio-catalog --type merge -p '{"spec":{"type": "NodePort"}}'
