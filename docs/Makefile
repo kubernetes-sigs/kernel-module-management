@@ -6,7 +6,7 @@ diagrams:
 	cd mkdocs/developer && $(MAKE)
 
 build:
-	mkdocs build
+	python -m mkdocs build
 
 clean:
 	cd mkdocs/developer && $(MAKE) clean
