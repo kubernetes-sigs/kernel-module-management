@@ -142,6 +142,11 @@ var _ = Describe("makeBuildTemplate", func() {
 								ReadOnly:  true,
 								MountPath: "/workspace",
 							},
+							{
+								Name:      "lib-modules",
+								ReadOnly:  true,
+								MountPath: "/host/lib/modules",
+							},
 						},
 					},
 				},
@@ -159,6 +164,15 @@ var _ = Describe("makeBuildTemplate", func() {
 										Path: "Dockerfile",
 									},
 								},
+							},
+						},
+					},
+					{
+						Name: "lib-modules",
+						VolumeSource: v1.VolumeSource{
+							HostPath: &v1.HostPathVolumeSource{
+								Path: "/lib/modules",
+								Type: ptr.To(v1.HostPathDirectory),
 							},
 						},
 					},

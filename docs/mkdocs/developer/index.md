@@ -36,7 +36,7 @@ spec:
     image: some-image
   moduleLoader: # is a Container spec
     # This container will not be privileged by default.
-    # It will mount /lib/modules and /usr/lib/modules automatically.
+    # It will mount /lib/modules automatically.
     name: overwritten-anyway
     image: overwritten-anyway
     securityContext:

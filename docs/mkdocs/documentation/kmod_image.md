@@ -119,16 +119,20 @@ Once the image is built, KMM proceeds with the `Module` reconciliation.
 ### Depending on in-tree kernel modules
 
 Some kernel modules depend on other kernel modules shipped with the node's distribution.
-To avoid copying those dependencies into the kmod image, KMM mounts `/usr/lib/modules` into both the build and the
-worker Pod's filesystems.  
-By creating a symlink from `/opt/usr/lib/modules/[kernel-version]/[symlink-name]` to
-`/usr/lib/modules/[kernel-version]`, `depmod` can use the in-tree kmods on the building node's filesystem to resolve
+To avoid copying those dependencies into the kmod image, KMM mounts the host's `/lib/modules`
+directory into Pod filesystems:
+
+- **Build Pods**: mounted at `/host/lib/modules`
+- **Worker Pods**: mounted at both `/lib/modules` and `/host/lib/modules`
+
+By creating a symlink from `/opt/lib/modules/[kernel-version]/[symlink-name]` to
+`/host/lib/modules/[kernel-version]`, `depmod` can use the in-tree kmods on the building node's filesystem to resolve
 dependencies.
 At runtime, the worker Pod extracts the entire image, including the `[symlink-name]` symbolic link.
-That link points to `/usr/lib/modules/[kernel-version]` in the worker Pod, which is mounted from the node's filesystem.
+That link points to `/host/lib/modules/[kernel-version]` in the worker Pod, which is mounted from the node's filesystem.
 `modprobe` can then follow that link and load the in-tree dependencies as needed.
 
-In the example below, we use `host` as the symbolic link name under `/opt/usr/lib/modules/[kernel-version]`:
+In the example below, we use `host` as the symbolic link name under `/opt/lib/modules/[kernel-version]`:
 
 ```dockerfile
 FROM ubuntu as builder
@@ -146,8 +150,8 @@ RUN apt-get update && apt-get install -y kmod
 COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_a.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/
 COPY --from=builder /usr/src/kernel-module-management/ci/kmm-kmod/kmm_ci_b.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/
 
-# Create the symbolic link
-RUN ln -s /lib/modules/${KERNEL_FULL_VERSION} /opt/lib/modules/${KERNEL_FULL_VERSION}/host
+# Create the symbolic link to host modules (mounted at /host/lib/modules by KMM)
+RUN ln -s /host/lib/modules/${KERNEL_FULL_VERSION} /opt/lib/modules/${KERNEL_FULL_VERSION}/host
 
 RUN depmod -b /opt ${KERNEL_FULL_VERSION}
 ```
@@ -156,5 +160,5 @@ RUN depmod -b /opt ${KERNEL_FULL_VERSION}
     `depmod` will generate dependency files based on the kernel modules present on the node that runs the kmod image
     build.  
     On the node on which KMM loads the kernel modules, `modprobe` will expect the files to be present under
-    `/usr/lib/modules/[kernel-version]`, and the same filesystem layout.  
+    `/host/lib/modules/[kernel-version]`, and the same filesystem layout.  
     It is highly recommended that the build and the target nodes share the same distribution and release.

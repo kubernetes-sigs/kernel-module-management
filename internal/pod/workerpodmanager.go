@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/cmd/util/podcmd"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -332,11 +333,8 @@ func (wpmi *workerPodManagerImpl) baseWorkerPod(ctx context.Context, nmc client.
 	moduleConfig *kmmv1beta1.ModuleConfig) (*v1.Pod, error) {
 
 	const (
-		volNameLibModules    = "lib-modules"
-		volNameUsrLibModules = "usr-lib-modules"
+		volNameLibModules = "lib-modules"
 	)
-
-	hostPathDirectory := v1.HostPathDirectory
 
 	volumes := []v1.Volume{
 		{
@@ -359,16 +357,7 @@ func (wpmi *workerPodManagerImpl) baseWorkerPod(ctx context.Context, nmc client.
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{
 					Path: "/lib/modules",
-					Type: &hostPathDirectory,
-				},
-			},
-		},
-		{
-			Name: volNameUsrLibModules,
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
-					Path: "/usr/lib/modules",
-					Type: &hostPathDirectory,
+					Type: ptr.To(v1.HostPathDirectory),
 				},
 			},
 		},
@@ -392,8 +381,8 @@ func (wpmi *workerPodManagerImpl) baseWorkerPod(ctx context.Context, nmc client.
 			ReadOnly:  true,
 		},
 		{
-			Name:      volNameUsrLibModules,
-			MountPath: "/usr/lib/modules",
+			Name:      volNameLibModules,
+			MountPath: "/host/lib/modules",
 			ReadOnly:  true,
 		},
 		{
