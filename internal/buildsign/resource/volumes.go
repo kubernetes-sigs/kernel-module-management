@@ -6,6 +6,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 )
 
 func makeBuildResourceVolumesAndVolumeMounts(buildConfig kmmv1beta1.Build,
@@ -23,6 +24,15 @@ func makeBuildResourceVolumesAndVolumeMounts(buildConfig kmmv1beta1.Build,
 							Path: "Dockerfile",
 						},
 					},
+				},
+			},
+		},
+		{
+			Name: "lib-modules",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/lib/modules",
+					Type: ptr.To(v1.HostPathDirectory),
 				},
 			},
 		},
@@ -45,6 +55,11 @@ func makeBuildResourceVolumesAndVolumeMounts(buildConfig kmmv1beta1.Build,
 			Name:      dockerfileVolumeName,
 			ReadOnly:  true,
 			MountPath: "/workspace",
+		},
+		{
+			Name:      "lib-modules",
+			ReadOnly:  true,
+			MountPath: "/host/lib/modules",
 		},
 	}
 
