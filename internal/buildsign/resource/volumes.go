@@ -11,6 +11,8 @@ import (
 func makeBuildResourceVolumesAndVolumeMounts(buildConfig kmmv1beta1.Build,
 	imageRepoSecret *v1.LocalObjectReference) ([]v1.Volume, []v1.VolumeMount) {
 
+	hostPathDirectory := v1.HostPathDirectory
+
 	volumes := []v1.Volume{
 		{
 			Name: dockerfileVolumeName,
@@ -23,6 +25,15 @@ func makeBuildResourceVolumesAndVolumeMounts(buildConfig kmmv1beta1.Build,
 							Path: "Dockerfile",
 						},
 					},
+				},
+			},
+		},
+		{
+			Name: "lib-modules",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/lib/modules",
+					Type: &hostPathDirectory,
 				},
 			},
 		},
@@ -45,6 +56,11 @@ func makeBuildResourceVolumesAndVolumeMounts(buildConfig kmmv1beta1.Build,
 			Name:      dockerfileVolumeName,
 			ReadOnly:  true,
 			MountPath: "/workspace",
+		},
+		{
+			Name:      "lib-modules",
+			ReadOnly:  true,
+			MountPath: "/host/lib/modules",
 		},
 	}
 
