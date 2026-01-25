@@ -203,6 +203,7 @@ var _ = Describe("prepareModuleLoaderData", func() {
 			ImagePullPolicy:         mod.Spec.ModuleLoader.Container.ImagePullPolicy,
 			KernelVersion:           kernelVersion,
 			KernelNormalizedVersion: kernelVersion,
+			Tolerations:             InternalTolerations,
 		}
 
 		if buildExistsInMapping {
@@ -266,6 +267,7 @@ var _ = Describe("prepareModuleLoaderData", func() {
 			ImagePullPolicy:         mod.Spec.ModuleLoader.Container.ImagePullPolicy,
 			KernelVersion:           kernelVersion,
 			KernelNormalizedVersion: kernelVersion,
+			Tolerations:             InternalTolerations,
 		}
 		mld.RegistryTLS = &mod.Spec.ModuleLoader.Container.RegistryTLS
 		mld.ContainerImage = mod.Spec.ModuleLoader.Container.ContainerImage

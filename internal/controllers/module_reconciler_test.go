@@ -119,10 +119,10 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		}
 		mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil)
 		if c.getNodesError {
-			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(nil, returnedError)
+			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, module.InternalTolerations).Return(nil, returnedError)
 			goto executeTestFunction
 		}
-		mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(targetedNodes, nil)
+		mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, module.InternalTolerations).Return(targetedNodes, nil)
 		if c.handleMICError {
 			mockReconHelper.EXPECT().handleMIC(ctx, mod, targetedNodes).Return(returnedError)
 			goto executeTestFunction
@@ -182,7 +182,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
 			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
-			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(targetedNodes, nil),
+			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, module.InternalTolerations).Return(targetedNodes, nil),
 			mockReconHelper.EXPECT().handleMIC(ctx, mod, targetedNodes).Return(nil),
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),
@@ -201,7 +201,7 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
 			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
-			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, nil).Return(targetedNodes, nil),
+			mn.EXPECT().GetNodesListBySelector(ctx, mod.Spec.Selector, module.InternalTolerations).Return(targetedNodes, nil),
 			mockReconHelper.EXPECT().handleMIC(ctx, mod, targetedNodes).Return(nil),
 			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil),
 			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(nmcMLDConfigs, nil),

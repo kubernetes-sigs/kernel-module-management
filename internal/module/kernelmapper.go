@@ -138,7 +138,7 @@ func (kh *kernelMapperHelper) prepareModuleLoaderData(mapping *kmmv1beta1.Kernel
 	mld.Namespace = mod.Namespace
 	mld.ImageRepoSecret = mod.Spec.ImageRepoSecret
 	mld.Selector = mod.Spec.Selector
-	mld.Tolerations = mod.Spec.Tolerations
+	mld.Tolerations = append(mod.Spec.Tolerations, InternalTolerations...)
 	mld.ServiceAccountName = mod.Spec.ModuleLoader.ServiceAccountName
 	mld.Modprobe = mod.Spec.ModuleLoader.Container.Modprobe
 	mld.ModuleVersion = mod.Spec.ModuleLoader.Container.Version
