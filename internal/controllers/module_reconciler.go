@@ -120,7 +120,7 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 	}
 
 	// get nodes targeted by selector
-	targetedNodes, err := mr.nodeAPI.GetNodesListBySelector(ctx, mod.Spec.Selector, mod.Spec.Tolerations)
+	targetedNodes, err := mr.nodeAPI.GetNodesListBySelector(ctx, mod.Spec.Selector, append(mod.Spec.Tolerations, module.InternalTolerations...))
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get list of nodes by selector: %v", err)
 	}
