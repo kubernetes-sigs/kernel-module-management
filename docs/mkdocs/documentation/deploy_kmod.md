@@ -115,6 +115,39 @@ spec:
 The worker Pod will first try to unload the in-tree `mod_b` before loading `mod_a` from the kmod image.  
 When the worker Pod is terminated and `mod_a` is unloaded, `mod_b` will not be loaded again.
 
+### Forcing module image rebuilds
+
+When KMM builds a kmod image in-cluster, it first checks if the target image already exists in the registry.
+If it does, the build is skipped.
+However, in some situations the images may no longer exist in the registry even though KMM believes they do.
+This can happen when using an image registry with ephemeral storage: registry contents are lost on restart, node drain,
+or rollout, but KMM still believes the images exist and attempts to use them, causing failures on the nodes.
+
+To force KMM to re-verify image existence and rebuild images if necessary, set or change the
+`.spec.imageRebuildTriggerGeneration` field in the `Module` resource:
+
+```yaml
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: Module
+metadata:
+  name: my-kmod
+spec:
+  imageRebuildTriggerGeneration: 1  # Change this value, or set it if it is not set, to trigger a rebuild
+  moduleLoader:
+    # ...
+```
+
+When KMM detects that the value of `.spec.imageRebuildTriggerGeneration` differs from the value stored in
+`.status.imageRebuildTriggerGeneration`, it will:
+
+1. re-verify image existence for all kernel mappings;
+2. trigger builds for images that need to be rebuilt.
+
+After the rebuild process completes, KMM updates `.status.imageRebuildTriggerGeneration` to match the spec value.
+
+!!! note
+    This field is optional. If not set, KMM behaves as before and only builds images that do not exist in the registry.
+
 ### Supporting Modules without OOT kmods
 In some cases, there is a need to configure the KMM Module to avoid loading an out-of-tree kernel module and
 instead use the in-tree one, running only the device plugin.
@@ -238,6 +271,10 @@ spec:
 
   imageRepoSecret:  # Optional. Used to pull kmod and device plugin images
     name: secret-name
+
+  # Optional. Change this value to force KMM to re-verify and potentially rebuild all module images.
+  # See "Forcing module image rebuilds" section for details.
+  imageRebuildTriggerGeneration: 1
 
   selector:
     node-role.kubernetes.io/worker: ""
