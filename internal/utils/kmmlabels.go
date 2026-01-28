@@ -2,15 +2,17 @@ package utils
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"regexp"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 )
 
-var reKernelModuleReadyLabel = regexp.MustCompile(`^kmm\.node\.kubernetes\.io/([a-zA-Z0-9-]+)\.([a-zA-Z0-9-]+)\.ready$`)
+var reKernelModuleReadyLabel = regexp.MustCompile(`^kmm\.node\.kubernetes\.io/([a-zA-Z0-9-]+)\.([a-zA-Z0-9-\.]+)\.ready$`)
+var reKernelModuleVersionReadyLabel = regexp.MustCompile(`^kmm\.node\.kubernetes\.io/([a-zA-Z0-9-]+)\.([a-zA-Z0-9-\.]+)\.version\.ready$`)
 var reDeprecatedKernelModuleReadyLabel = regexp.MustCompile(`^kmm\.node\.kubernetes\.io/[a-zA-Z0-9-]+\.ready$`)
 
 func GetModuleVersionLabelName(namespace, name string) string {
@@ -88,7 +90,20 @@ func IsDeprecatedKernelModuleReadyNodeLabel(label string) bool {
 	return reDeprecatedKernelModuleReadyLabel.MatchString(label)
 }
 
+func IsKernelModuleVersionReadyNodeLabel(label string) bool {
+	return reKernelModuleVersionReadyLabel.MatchString(label)
+}
+
 func IsKernelModuleReadyNodeLabel(label string) (bool, string, string) {
+
+	if IsDeprecatedKernelModuleReadyNodeLabel(label) {
+		return false, "", ""
+	}
+
+	if IsKernelModuleVersionReadyNodeLabel(label) {
+		return false, "", ""
+	}
+
 	matches := reKernelModuleReadyLabel.FindStringSubmatch(label)
 
 	if len(matches) != 3 {

@@ -65,6 +65,23 @@ var _ = Describe("IsDeprecatedKernelModuleReadyNodeLabel", func() {
 	)
 })
 
+var _ = Describe("IsKernelModuleVersionReadyNodeLabel", func() {
+	DescribeTable(
+		"should work as expected",
+		func(input string, expected bool) {
+			Expect(
+				IsKernelModuleVersionReadyNodeLabel(input),
+			).To(
+				Equal(expected),
+			)
+		},
+		Entry(nil, "kmm.node.kubernetes.io/ns.name.version.ready", true),
+		Entry(nil, "kmm.node.kubernetes.io/ns.dot.in.name.version.ready", true),
+		Entry(nil, "kmm.node.kubernetes.io/ns.name.ready", false),
+		Entry(nil, "kmm.node.kubernetes.io/ns.dot.in.name.ready", false),
+	)
+})
+
 var _ = Describe("IsKernelModuleReadyNodeLabel", func() {
 	DescribeTable(
 		"should work as expected",
@@ -90,5 +107,8 @@ var _ = Describe("IsKernelModuleReadyNodeLabel", func() {
 		Entry(nil, "a.b.read", false, "", ""),
 		Entry(nil, "kmm.node.kubernetes.io/a.b.ready", true, "a", "b"),
 		Entry(nil, "kmm.node.kubernetes.io/a1-2b.c3-4d.ready", true, "a1-2b", "c3-4d"),
+		Entry(nil, "kmm.node.kubernetes.io/ns.dot.in.name.ready", true, "ns", "dot.in.name"),
+		Entry(nil, "kmm.node.kubernetes.io/ns.name.version.ready", false, "", ""),
+		Entry(nil, "kmm.node.kubernetes.io/ns.dot.in.name.version.ready", false, "", ""),
 	)
 })
