@@ -47,6 +47,8 @@ metadata:
 spec:
   moduleSpec:
     # Contains moduleLoader and devicePlugin sections, just like in a Module resource.
+    # Optional. Change this value to force image re-verification and rebuilds.
+    imageRebuildTriggerGeneration: 1
     selector:
       node-wants-my-mcm: 'true'  # Selects nodes within the ManagedCluster.
 
