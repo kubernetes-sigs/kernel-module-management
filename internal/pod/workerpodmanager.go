@@ -332,8 +332,7 @@ func (wpmi *workerPodManagerImpl) baseWorkerPod(ctx context.Context, nmc client.
 	moduleConfig *kmmv1beta1.ModuleConfig) (*v1.Pod, error) {
 
 	const (
-		volNameLibModules    = "lib-modules"
-		volNameUsrLibModules = "usr-lib-modules"
+		volNameLibModules = "lib-modules"
 	)
 
 	hostPathDirectory := v1.HostPathDirectory
@@ -364,15 +363,6 @@ func (wpmi *workerPodManagerImpl) baseWorkerPod(ctx context.Context, nmc client.
 			},
 		},
 		{
-			Name: volNameUsrLibModules,
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
-					Path: "/usr/lib/modules",
-					Type: &hostPathDirectory,
-				},
-			},
-		},
-		{
 			Name: volNameTmp,
 			VolumeSource: v1.VolumeSource{
 				EmptyDir: &v1.EmptyDirVolumeSource{},
@@ -392,8 +382,8 @@ func (wpmi *workerPodManagerImpl) baseWorkerPod(ctx context.Context, nmc client.
 			ReadOnly:  true,
 		},
 		{
-			Name:      volNameUsrLibModules,
-			MountPath: "/usr/lib/modules",
+			Name:      volNameLibModules,
+			MountPath: "/host/lib/modules",
 			ReadOnly:  true,
 		},
 		{

@@ -433,7 +433,6 @@ func getBaseWorkerPod(subcommand string, owner ctrlclient.Object, firmwareHostPa
 
 	const (
 		volNameLibModules     = "lib-modules"
-		volNameUsrLibModules  = "usr-lib-modules"
 		volNameVarLibFirmware = "lib-firmware"
 	)
 
@@ -552,8 +551,8 @@ cp -R /firmware-path/* /tmp/firmware-path;
 							ReadOnly:  true,
 						},
 						{
-							Name:      volNameUsrLibModules,
-							MountPath: "/usr/lib/modules",
+							Name:      volNameLibModules,
+							MountPath: "/host/lib/modules",
 							ReadOnly:  true,
 						},
 						{
@@ -593,15 +592,6 @@ cp -R /firmware-path/* /tmp/firmware-path;
 					VolumeSource: v1.VolumeSource{
 						HostPath: &v1.HostPathVolumeSource{
 							Path: "/lib/modules",
-							Type: &hostPathDirectory,
-						},
-					},
-				},
-				{
-					Name: volNameUsrLibModules,
-					VolumeSource: v1.VolumeSource{
-						HostPath: &v1.HostPathVolumeSource{
-							Path: "/usr/lib/modules",
 							Type: &hostPathDirectory,
 						},
 					},
