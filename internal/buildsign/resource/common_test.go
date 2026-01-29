@@ -823,6 +823,61 @@ COPY --from=signimage /tmp/signroot/modules/simple-procfs-kmod.ko /modules/simpl
 			"--skip-tls-verify-pull",
 		),
 	)
+
+	DescribeTable("should generate correct Dockerfile for different signing modes",
+		func(filesToSign []string, expectedSubstring string, unexpectedSubstring string) {
+			GinkgoT().Setenv("RELATED_IMAGE_BUILD", buildImage)
+			GinkgoT().Setenv("RELATED_IMAGE_SIGN", "some-sign-image:some-tag")
+
+			ctx := context.Background()
+			mld.Sign = &kmmv1beta1.Sign{
+				UnsignedImage: unsignedImage,
+				KeySecret:     &v1.LocalObjectReference{Name: "securebootkey"},
+				CertSecret:    &v1.LocalObjectReference{Name: "securebootcert"},
+				FilesToSign:   filesToSign,
+			}
+			mld.ContainerImage = signedImage
+			mld.RegistryTLS = &kmmv1beta1.TLSOptions{}
+
+			gomock.InOrder(
+				clnt.EXPECT().Get(ctx, types.NamespacedName{Name: mld.Sign.KeySecret.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+						secret.Data = privateSignData
+						return nil
+					},
+				),
+				clnt.EXPECT().Get(ctx, types.NamespacedName{Name: mld.Sign.CertSecret.Name, Namespace: mld.Namespace}, gomock.Any()).DoAndReturn(
+					func(_ interface{}, _ interface{}, secret *v1.Secret, _ ...ctrlclient.GetOption) error {
+						secret.Data = publicSignData
+						return nil
+					},
+				),
+			)
+
+			actual, err := rm.makeSignTemplate(ctx, &mld, mld.Owner, true)
+			Expect(err).NotTo(HaveOccurred())
+			actualPod, ok := actual.(*v1.Pod)
+			Expect(ok).To(BeTrue())
+
+			dockerfile := actualPod.Annotations["dockerfile"]
+			Expect(dockerfile).To(ContainSubstring(expectedSubstring))
+			if unexpectedSubstring != "" {
+				Expect(dockerfile).NotTo(ContainSubstring(unexpectedSubstring))
+			}
+		},
+		Entry(
+			"sign with glob patterns",
+			[]string{"/opt/lib/modules/**/*.ko"},
+			"find /tmp/source -type f -path '/tmp/source/opt/lib/modules/**/*.ko'",
+			"COPY --from=source /",
+		),
+		Entry(
+			"sign explicit paths",
+			[]string{"/modules/test.ko"},
+			"COPY --from=source /modules/test.ko /tmp/signroot/modules/test.ko",
+			"source-extract",
+		),
+	)
 })
 var _ = Describe("resourceLabels", func() {
 
@@ -842,4 +897,17 @@ var _ = Describe("resourceLabels", func() {
 		labels := resourceLabels(mod.Name, "targetKernel", "podType")
 		Expect(labels).To(Equal(expected))
 	})
+})
+
+var _ = Describe("hasGlobPatterns", func() {
+	DescribeTable("should detect if any path has glob patterns",
+		func(paths []string, expected bool) {
+			Expect(hasGlobPatterns(paths)).To(Equal(expected))
+		},
+		Entry("empty slice", []string{}, false),
+		Entry("all explicit paths", []string{"/a/b.ko", "/c/d.ko"}, false),
+		Entry("one glob pattern", []string{"/a/b.ko", "/c/*.ko"}, true),
+		Entry("all glob patterns", []string{"/a/**/*.ko", "/c/*.ko"}, true),
+		Entry("mixed with question mark", []string{"/a/b.ko", "/c/?.ko"}, true),
+	)
 })

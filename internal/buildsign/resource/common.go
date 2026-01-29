@@ -22,9 +22,20 @@ import (
 )
 
 type TemplateData struct {
-	FilesToSign   []string
-	SignImage     string
-	UnsignedImage string
+	FilesToSign     []string
+	SignImage       string
+	UnsignedImage   string
+	UseGlobPatterns bool
+}
+
+// hasGlobPatterns checks if any path in the slice contains glob/wildcard characters
+func hasGlobPatterns(paths []string) bool {
+	for _, p := range paths {
+		if strings.ContainsAny(p, "*?[") {
+			return true
+		}
+	}
+	return false
 }
 
 //go:embed templates
@@ -304,8 +315,9 @@ func (rm *resourceManager) makeSignTemplate(ctx context.Context, mld *api.Module
 	var buf bytes.Buffer
 
 	td := TemplateData{
-		FilesToSign: mld.Sign.FilesToSign,
-		SignImage:   os.Getenv("RELATED_IMAGE_SIGN"),
+		FilesToSign:     mld.Sign.FilesToSign,
+		SignImage:       os.Getenv("RELATED_IMAGE_SIGN"),
+		UseGlobPatterns: hasGlobPatterns(mld.Sign.FilesToSign),
 	}
 
 	imageToSign := ""
