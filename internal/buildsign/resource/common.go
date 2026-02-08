@@ -25,6 +25,7 @@ type TemplateData struct {
 	FilesToSign   []string
 	SignImage     string
 	UnsignedImage string
+	DirName       string
 }
 
 //go:embed templates
@@ -306,6 +307,7 @@ func (rm *resourceManager) makeSignTemplate(ctx context.Context, mld *api.Module
 	td := TemplateData{
 		FilesToSign: mld.Sign.FilesToSign,
 		SignImage:   os.Getenv("RELATED_IMAGE_SIGN"),
+		DirName:     mld.Modprobe.DirName,
 	}
 
 	imageToSign := ""

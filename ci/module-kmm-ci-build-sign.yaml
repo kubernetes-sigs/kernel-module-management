@@ -34,6 +34,6 @@ spec:
             unsignedImageRegistryTLS:
               insecure: true
             filesToSign:
-              - /opt/lib/modules/${KERNEL_FULL_VERSION}/kmm_ci_a.ko
+              - /opt/lib/modules/${KERNEL_FULL_VERSION}/kmm_ci_?.ko
   selector:
     kubernetes.io/hostname: minikube

@@ -228,6 +228,7 @@ func (p *preflightReconcilerHelperImpl) processPreflightValidation(ctx context.C
 			Build:         mod.Build,
 			Sign:          mod.Sign,
 			RegistryTLS:   mod.RegistryTLS,
+			DirName:       mod.Modprobe.DirName,
 		}
 		micName := mod.Name + "-preflight"
 		err := p.micAPI.CreateOrPatch(ctx, micName, mod.Namespace, []kmmv1beta1.ModuleImageSpec{micObjSpec},

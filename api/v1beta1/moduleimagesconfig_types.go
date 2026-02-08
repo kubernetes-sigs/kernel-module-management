@@ -57,6 +57,11 @@ type ModuleImageSpec struct {
 	// +optional
 	// RegistryTLS set the TLS configs for accessing the registry of the image.
 	RegistryTLS *TLSOptions `json:"registryTLS,omitempty"`
+
+	// +optional
+	// DirName is the root directory for modules, used during signing.
+	// +kubebuilder:default=/opt
+	DirName string `json:"dirName,omitempty"`
 }
 
 // ModuleImagesConfigSpec describes the images of the Module whose status needs to be verified

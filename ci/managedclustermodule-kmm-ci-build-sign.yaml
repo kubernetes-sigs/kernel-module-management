@@ -168,9 +168,11 @@ data:
   dockerfile: |
     FROM busybox
 
-    RUN unlink /bin/modprobe
-    RUN printf "#!/usr/bin/env sh\nbusybox true" > /bin/modprobe
-    RUN chmod +x /bin/modprobe
+    RUN mkdir -p /opt/lib/modules && \
+        echo "dummy module for signing test" > /opt/lib/modules/mod-example.ko && \
+        unlink /bin/modprobe && \
+        printf "#!/usr/bin/env sh\nbusybox true" > /bin/modprobe && \
+        chmod +x /bin/modprobe
 ---
 apiVersion: hub.kmm.sigs.x-k8s.io/v1beta1
 kind: ManagedClusterModule
@@ -204,6 +206,6 @@ spec:
             unsignedImageRegistryTLS:
               insecure: true
             filesToSign:
-              - /bin/getconf
+              - /opt/lib/modules/mod-example.ko
     selector:
       node-role.kubernetes.io/worker: ""

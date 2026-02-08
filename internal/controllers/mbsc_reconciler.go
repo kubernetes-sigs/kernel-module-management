@@ -188,5 +188,6 @@ func createMLD(mbscObj *kmmv1beta1.ModuleBuildSignConfig, imageSpec *kmmv1beta1.
 		ImageRepoSecret:         mbscObj.Spec.ImageRepoSecret,
 		RegistryTLS:             imageSpec.RegistryTLS,
 		Tolerations:             mbscObj.Spec.Tolerations,
+		Modprobe:                kmmv1beta1.ModprobeSpec{DirName: imageSpec.DirName},
 	}
 }
