@@ -240,6 +240,7 @@ spec:
               name: cert-secret  # Required
             keySecret:
               name: key-secret  # Required
+            # Required when sign is set. Use absolute paths or Ash shell absolute globs (e.g. /opt/lib/modules/<kernel-version>/*.ko), see Secure Boot docs.
             filesToSign:
               - /opt/lib/modules/${KERNEL_FULL_VERSION}/my-kmod.ko
           registryTLS:

@@ -99,6 +99,21 @@ The YAML below will add the public/private key-pair as secrets with the required
 It will then pull down the `unsignedImage` image, open it up, sign the kernel modules listed in `filesToSign`, add them
 back and push the resulting image as `containerImage`.
 
+## Specifying files to sign (filesToSign)
+
+When the `sign` section is set, `filesToSign` is **required**. You can specify either:
+
+- **Explicit full paths** — One or more absolute paths to kernel module files (`.ko`) inside the image, for example:
+  - `/opt/lib/modules/${KERNEL_FULL_VERSION}/my-kmod.ko`
+- **Glob patterns** — Any pattern supported by the **Ash shell** (used in the sign container). The shell expands each
+  entry at sign time, so you can match multiple modules with a single entry. Examples:
+  - `/opt/lib/modules/${KERNEL_FULL_VERSION}/*.ko` — sign all `.ko` files in that directory
+  - `/opt/lib/modules/${KERNEL_FULL_VERSION}/kmm_ci_?.ko` — sign modules matching that pattern (e.g. `kmm_ci_a.ko`, `kmm_ci_b.ko`)
+  - `/opt/lib/modules/${KERNEL_FULL_VERSION}/driver-[abc].ko` — sign `driver-a.ko`, `driver-b.ko`, or `driver-c.ko`
+  - `/opt/lib/modules/${KERNEL_FULL_VERSION}/mod-[0-9].ko` — sign `mod-0.ko` through `mod-9.ko`
+
+All paths in `filesToSign` must be under the directory defined by **`dirName`** in the same `moduleLoader.container.modprobe` (default `/opt`).
+
 KMM should then load the signed kmods onto all the nodes with that match the selector.
 The kmods should be successfully loaded on any nodes that have the public key in their MOK database, and any nodes that
 are not secure-boot enabled (which will just ignore the signature).
@@ -134,7 +149,7 @@ spec:
               name: <private key secret name>
             certSecret: # a secret holding the public secureboot key with the key 'cert'
               name: <certificate secret name>
-            filesToSign: # full path within the unsignedImage container to the kmod(s) to sign
+            filesToSign: # full path(s) or Ash shell glob(s) under dirName, see "Specifying files to sign" above
               - /opt/lib/modules/4.18.0-348.2.1.el8_5.x86_64/kmm_ci_a.ko
   imageRepoSecret:
     # the name of a secret containing credentials to pull unsignedImage and push containerImage to the registry
