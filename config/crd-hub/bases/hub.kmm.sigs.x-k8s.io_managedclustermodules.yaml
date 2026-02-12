@@ -49,6 +49,13 @@ spec:
                       DevicePlugin allows overriding some properties of the container that deploys the device plugin on the node.
                       Name is ignored and is set automatically by the KMM Operator.
                     properties:
+                      automountServiceAccountToken:
+                        description: |-
+                          AutomountServiceAccountToken is used to disable the auto-mounting of the projected volume
+                          into device plugin pod. This volume includes as files: SA token, CAs' file etc'
+                          setting AutomountServiceAccountToken to false, will disale auto-mounting, and will allow user to mount
+                          whatever configmaps and tokens he deems necessary for the device plugin application
+                        type: boolean
                       container:
                         properties:
                           args:

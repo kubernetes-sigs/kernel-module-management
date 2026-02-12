@@ -313,6 +313,12 @@ type DevicePluginSpec struct {
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	Volumes []v1.Volume `json:"volumes,omitempty"`
+
+	// AutomountServiceAccountToken is used to disable the auto-mounting of the projected volume
+	// into device plugin pod. This volume includes as files: SA token, CAs' file etc'
+	// setting AutomountServiceAccountToken to false, will disale auto-mounting, and will allow user to mount
+	// whatever configmaps and tokens he deems necessary for the device plugin application
+	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
 }
 
 // ModuleSpec describes how the KMM operator should deploy a Module on those nodes that need it.
