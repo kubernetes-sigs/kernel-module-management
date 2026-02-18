@@ -184,7 +184,7 @@ jobs:
           grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
 
       - name: Cache binaries needed by Makefile
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ./bin
           key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
@@ -254,7 +254,7 @@ jobs:
           grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
 
       - name: Cache binaries needed by Makefile
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ./bin
           key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
@@ -327,7 +327,7 @@ jobs:
           grep 'VERSION_ID=' /etc/os-release >> "$GITHUB_ENV"
 
       - name: Cache binaries needed by Makefile
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ./bin
           key: ${{ runner.os }}-${{ env.ID }}-${{ env.VERSION_ID }}-bin-${{ env.GO_VERSION }}-${{ hashFiles('Makefile') }}
