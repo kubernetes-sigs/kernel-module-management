@@ -47,6 +47,16 @@ successful loading. For those devices, the indication is the appearance of the d
 For those cases, using an init-container looping over files verification instead of adding that verification to the device-plugin
 image is preferable for debuggability and code re-usage reasons.
 
+K8s automatically mounts the SA token and root CAs into the /var/run/secrets/kubernetes.io/serviceaccount of the
+device-plugin pods using projected volumes.
+As a result, mounting/overriding additional files into that directory is not allowed.
+In some cases, users may want to use additional custom CAs or tokens for the device plugin but k8s won't allow mounting
+them to the same path unless the auto-mount is disable.
+In such cases, the `module.spec.devicePlugin.automountServiceAccountToken` field can be set to false to disable the auto-mounting
+into device plugin pod, and allow users to mount what they need for the device plugin application.
+!!! note
+    In this case, it is the user's responsibility to mount the necessary tokens and CAs into the device plugin pods, otherwise the device plugin may not work properly.
+
 ## `Module` CRD
 
 The `Module` Custom Resource Definition represents a kernel module that should be loaded on all or select nodes in the
