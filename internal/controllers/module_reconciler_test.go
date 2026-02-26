@@ -987,6 +987,7 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 		mrh          *moduleReconcilerHelper
 		helper       *nmc.MockHelper
 		statusWriter *client.MockStatusWriter
+		mockMicAPI   *mic.MockMIC
 	)
 
 	BeforeEach(func() {
@@ -995,13 +996,14 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 		clnt = client.NewMockClient(ctrl)
 		helper = nmc.NewMockHelper(ctrl)
 		statusWriter = client.NewMockStatusWriter(ctrl)
+		mockMicAPI = mic.NewMockMIC(ctrl)
 		mod = kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "modName",
 				Namespace: "modNamespace",
 			},
 		}
-		mrh = &moduleReconcilerHelper{client: clnt, nmcHelper: helper}
+		mrh = &moduleReconcilerHelper{client: clnt, nmcHelper: helper, micAPI: mockMicAPI}
 	})
 
 	It("faled to get configured NMCs", func() {
@@ -1027,6 +1029,7 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 				},
 			),
 			helper.EXPECT().GetModuleSpecEntry(&nmc1, mod.Namespace, mod.Name).Return(nil, 0),
+			mockMicAPI.EXPECT().Get(ctx, mod.Name, mod.Namespace).Return(&kmmv1beta1.ModuleImagesConfig{}, nil),
 			clnt.EXPECT().Status().Return(statusWriter),
 			statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any()),
 		)
@@ -1076,6 +1079,7 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 		} else {
 			helper.EXPECT().GetModuleStatusEntry(&nmc1, mod.Namespace, mod.Name).Return(nil)
 		}
+		mockMicAPI.EXPECT().Get(ctx, mod.Name, mod.Namespace).Return(&kmmv1beta1.ModuleImagesConfig{}, nil)
 		clnt.EXPECT().Status().Return(statusWriter)
 		statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any())
 
@@ -1113,12 +1117,78 @@ var _ = Describe("moduleUpdateWorkerPodsStatus", func() {
 			),
 			helper.EXPECT().GetModuleSpecEntry(&nmc1, mod.Namespace, mod.Name).Return(&nmcModuleSpec, 0),
 			helper.EXPECT().GetModuleStatusEntry(&nmc1, mod.Namespace, mod.Name).Return(&nmcModuleStatus),
+			mockMicAPI.EXPECT().Get(ctx, mod.Name, mod.Namespace).Return(&kmmv1beta1.ModuleImagesConfig{}, nil),
 			clnt.EXPECT().Status().Return(statusWriter),
 			statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any()),
 		)
 
 		err := mrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should propagate MIC status.ImageRebuildTriggerGeneration to Module status", func() {
+		micTriggerValue := 3
+		micObj := &kmmv1beta1.ModuleImagesConfig{
+			Status: kmmv1beta1.ModuleImagesConfigStatus{
+				ImageRebuildTriggerGeneration: &micTriggerValue,
+			},
+		}
+
+		nmc1 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc1"},
+		}
+		targetedNodes := []v1.Node{{}, {}}
+		expectedMod := mod.DeepCopy()
+		expectedMod.Status.ModuleLoader.NodesMatchingSelectorNumber = int32(2)
+		expectedMod.Status.ModuleLoader.DesiredNumber = int32(1)
+		expectedMod.Status.ModuleLoader.AvailableNumber = int32(0)
+		expectedMod.Status.ImageRebuildTriggerGeneration = &micTriggerValue
+
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.NodeModulesConfig{nmc1}
+					return nil
+				},
+			),
+			helper.EXPECT().GetModuleSpecEntry(&nmc1, mod.Namespace, mod.Name).Return(nil, 0),
+			mockMicAPI.EXPECT().Get(ctx, mod.Name, mod.Namespace).Return(micObj, nil),
+			clnt.EXPECT().Status().Return(statusWriter),
+			statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any()),
+		)
+
+		err := mrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mod.Status.ImageRebuildTriggerGeneration).NotTo(BeNil())
+		Expect(*mod.Status.ImageRebuildTriggerGeneration).To(Equal(micTriggerValue))
+	})
+
+	It("should not fail if MIC Get returns an error", func() {
+		nmc1 := kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "nmc1"},
+		}
+		targetedNodes := []v1.Node{{}}
+		expectedMod := mod.DeepCopy()
+		expectedMod.Status.ModuleLoader.NodesMatchingSelectorNumber = int32(1)
+		expectedMod.Status.ModuleLoader.DesiredNumber = int32(1)
+		expectedMod.Status.ModuleLoader.AvailableNumber = int32(0)
+
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, list *kmmv1beta1.NodeModulesConfigList, _ ...interface{}) error {
+					list.Items = []kmmv1beta1.NodeModulesConfig{nmc1}
+					return nil
+				},
+			),
+			helper.EXPECT().GetModuleSpecEntry(&nmc1, mod.Namespace, mod.Name).Return(nil, 0),
+			mockMicAPI.EXPECT().Get(ctx, mod.Name, mod.Namespace).Return(nil, fmt.Errorf("mic not found")),
+			clnt.EXPECT().Status().Return(statusWriter),
+			statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any()),
+		)
+
+		err := mrh.moduleUpdateWorkerPodsStatus(ctx, &mod, targetedNodes)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mod.Status.ImageRebuildTriggerGeneration).To(BeNil())
 	})
 
 })
