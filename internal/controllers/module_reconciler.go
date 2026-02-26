@@ -493,6 +493,13 @@ func (mrh *moduleReconcilerHelper) moduleUpdateWorkerPodsStatus(ctx context.Cont
 	mod.Status.ModuleLoader.DesiredNumber = int32(len(nmcs))
 	mod.Status.ModuleLoader.AvailableNumber = int32(numAvailable)
 
+	micObj, err := mrh.micAPI.Get(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		logger.Info("Could not get MIC to update ImageRebuildTriggerGeneration status, skipping", "error", err)
+	} else {
+		mod.Status.ImageRebuildTriggerGeneration = micObj.Status.ImageRebuildTriggerGeneration
+	}
+
 	return mrh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
 }
 
