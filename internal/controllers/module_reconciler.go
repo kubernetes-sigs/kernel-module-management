@@ -18,6 +18,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -148,7 +149,7 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 		errs = append(errs, err)
 	}
 
-	err = mr.reconHelper.moduleUpdateWorkerPodsStatus(ctx, mod, targetedNodes)
+	err = mr.reconHelper.updateModuleStatus(ctx, mod, targetedNodes)
 	errs = append(errs, err)
 
 	err = errors.Join(errs...)
@@ -191,7 +192,7 @@ type moduleReconcilerHelperAPI interface {
 	prepareSchedulingData(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node, currentNMCs sets.Set[string]) (map[string]schedulingData, []error)
 	enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error
 	disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error
-	moduleUpdateWorkerPodsStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error
+	updateModuleStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error
 }
 
 type moduleReconcilerHelper struct {
@@ -463,7 +464,27 @@ func (mrh *moduleReconcilerHelper) removeModuleFromNMC(ctx context.Context, nmcO
 	return nil
 }
 
-func (mrh *moduleReconcilerHelper) moduleUpdateWorkerPodsStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error {
+func (mrh *moduleReconcilerHelper) updateModuleStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error {
+	unmodifiedMod := mod.DeepCopy()
+
+	var errs []error
+
+	if err := mrh.updateModuleLoaderStatus(ctx, mod, targetedNodes); err != nil {
+		errs = append(errs, fmt.Errorf("failed to update module loader status for module %s/%s: %v", mod.Namespace, mod.Name, err))
+	}
+
+	if err := mrh.updateImageRebuildTriggerGenerationStatus(ctx, mod); err != nil {
+		errs = append(errs, fmt.Errorf("failed to update ImageRebuildTriggerGeneration status for module %s/%s: %v", mod.Namespace, mod.Name, err))
+	}
+
+	if err := mrh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod)); err != nil {
+		errs = append(errs, fmt.Errorf("failed to patch module status for module %s/%s: %v", mod.Namespace, mod.Name, err))
+	}
+
+	return errors.Join(errs...)
+}
+
+func (mrh *moduleReconcilerHelper) updateModuleLoaderStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error {
 	logger := log.FromContext(ctx)
 	// get nmcs with configured
 	nmcs, err := mrh.getNMCsForModule(ctx, mod)
@@ -487,20 +508,27 @@ func (mrh *moduleReconcilerHelper) moduleUpdateWorkerPodsStatus(ctx context.Cont
 		}
 	}
 
-	unmodifiedMod := mod.DeepCopy()
-
 	mod.Status.ModuleLoader.NodesMatchingSelectorNumber = int32(len(targetedNodes))
 	mod.Status.ModuleLoader.DesiredNumber = int32(len(nmcs))
 	mod.Status.ModuleLoader.AvailableNumber = int32(numAvailable)
 
+	return nil
+}
+
+func (mrh *moduleReconcilerHelper) updateImageRebuildTriggerGenerationStatus(ctx context.Context, mod *kmmv1beta1.Module) error {
+	logger := log.FromContext(ctx)
+
 	micObj, err := mrh.micAPI.Get(ctx, mod.Name, mod.Namespace)
 	if err != nil {
-		logger.Info("Could not get MIC to update ImageRebuildTriggerGeneration status, skipping", "error", err)
-	} else {
-		mod.Status.ImageRebuildTriggerGeneration = micObj.Status.ImageRebuildTriggerGeneration
+		if apierrors.IsNotFound(err) {
+			logger.Info("MIC not found, skipping ImageRebuildTriggerGeneration status update")
+			return nil
+		}
+		return fmt.Errorf("failed to get MIC %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
 
-	return mrh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
+	mod.Status.ImageRebuildTriggerGeneration = micObj.Status.ImageRebuildTriggerGeneration
+	return nil
 }
 
 type namespaceLabeler interface {
