@@ -19,7 +19,7 @@ kubectl -n cert-manager wait --for=condition=Available deployment \
 
 Install KMM.
 ```shell
-kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default
+kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default?ref=release-2.6
 ```
 
 ## Documentation and lab
