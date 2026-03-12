@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Build the image
         run: make docker-build IMG=kmm:local
@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Build the image
         run: make docker-build-hub HUB_IMG=kmm-hub:local
@@ -60,7 +60,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Build the image
         run:  make signimage-build SIGNER_IMG=kmm-signimage:local
@@ -83,7 +83,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Build the image
         run:  make workerimage-build WORKER_IMG=kmm-worker:local
@@ -106,7 +106,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Build the image
         run: make webhookimage-build WEBHOOK_IMG=kmm-webhook-server:local
@@ -149,7 +149,7 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Create the minikube cluster
         uses: ./.github/actions/create-minikube-cluster
@@ -218,7 +218,7 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Create the minikube cluster
         uses: ./.github/actions/create-minikube-cluster
@@ -294,7 +294,7 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Create the minikube cluster
         uses: ./.github/actions/create-minikube-cluster
