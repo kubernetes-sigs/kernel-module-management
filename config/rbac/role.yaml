@@ -5,36 +5,6 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - apps
-  resources:
-  - daemonsets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
-  - cluster.open-cluster-management.io
-  resources:
-  - clusterclaims
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-- apiGroups:
-  - cluster.open-cluster-management.io
-  resourceNames:
-  - kernel-versions.kmm.node.kubernetes.io
-  resources:
-  - clusterclaims
-  verbs:
-  - delete
-  - patch
-  - update
-- apiGroups:
   - ""
   resources:
   - configmaps
@@ -65,6 +35,36 @@ rules:
   - list
   - patch
   - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - cluster.open-cluster-management.io
+  resources:
+  - clusterclaims
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cluster.open-cluster-management.io
+  resourceNames:
+  - kernel-versions.kmm.node.kubernetes.io
+  resources:
+  - clusterclaims
+  verbs:
+  - delete
+  - patch
+  - update
 - apiGroups:
   - kmm.sigs.x-k8s.io
   resources:

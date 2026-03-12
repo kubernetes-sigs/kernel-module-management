@@ -5,14 +5,6 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - cluster.open-cluster-management.io
-  resources:
-  - managedclusters
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
   - ""
   resources:
   - configmaps
@@ -30,6 +22,14 @@ rules:
   - delete
   - list
   - patch
+  - watch
+- apiGroups:
+  - cluster.open-cluster-management.io
+  resources:
+  - managedclusters
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - hub.kmm.sigs.x-k8s.io
