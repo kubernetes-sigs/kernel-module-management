@@ -21,7 +21,6 @@ limitations under the License.
 package v1beta1
 
 import (
-	"github.com/kubernetes-sigs/kernel-module-management/api/v1beta2"
 	"k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -969,7 +968,7 @@ func (in *PreflightValidation) DeepCopyInto(out *PreflightValidation) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
-	out.Spec = in.Spec
+	in.Spec.DeepCopyInto(&out.Spec)
 	in.Status.DeepCopyInto(&out.Status)
 }
 
@@ -1028,15 +1027,15 @@ func (in *PreflightValidationStatus) DeepCopyInto(out *PreflightValidationStatus
 	*out = *in
 	if in.CRStatuses != nil {
 		in, out := &in.CRStatuses, &out.CRStatuses
-		*out = make(map[string]*v1beta2.CRBaseStatus, len(*in))
+		*out = make(map[string]*CRStatus, len(*in))
 		for key, val := range *in {
-			var outVal *v1beta2.CRBaseStatus
+			var outVal *CRStatus
 			if val == nil {
 				(*out)[key] = nil
 			} else {
 				inVal := (*in)[key]
 				in, out := &inVal, &outVal
-				*out = new(v1beta2.CRBaseStatus)
+				*out = new(CRStatus)
 				(*in).DeepCopyInto(*out)
 			}
 			(*out)[key] = outVal
