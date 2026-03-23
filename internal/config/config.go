@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"context"
 	"github.com/go-logr/logr"
-	"golang.org/x/net/context"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"

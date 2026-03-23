@@ -5,12 +5,12 @@ import (
 	"os"
 	"time"
 
+	"context"
 	"github.com/go-logr/logr"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
-	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
