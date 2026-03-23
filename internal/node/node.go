@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -33,7 +34,7 @@ func (n *node) IsNodeSchedulable(node *v1.Node, tolerations []v1.Toleration) boo
 	for _, taint := range node.Spec.Taints {
 		toleranceFound := false
 		for _, toleration := range tolerations {
-			if toleration.ToleratesTaint(&taint) {
+			if toleration.ToleratesTaint(klog.Background(), &taint, false) {
 				toleranceFound = true
 				break
 			}
