@@ -163,19 +163,11 @@ spec:
 The YAML below should build a new container image using the
 [source code from the repo](https://github.com/kubernetes-sigs/kernel-module-management/tree/main/ci/kmm-kmod) (this
 kernel module does nothing useful but provides a good example).
-The image produced is saved back in the registry with a temporary name, and this temporary image is then signed using
-the parameters in the `sign` section.
 
-The temporary image name is based on the final image name and is set to be
-`<containerImage>:<tag>-<namespace>_<module name>_kmm_unsigned`.
-
-For example, given the YAML below KMM would build an image named
-`quay.io/chrisp262/minimal-driver:final-default_example-module_kmm_unsigned` containing the build but unsigned kmods,
-and push it to the registry.
-Then it would create a second image, `quay.io/chrisp262/minimal-driver:final` containing the signed kmods.
-It is this second image that will be loaded by the DaemonSet and will deploy the kmods to the cluster nodes.
-
-Once it is signed the temporary image can be safely deleted from the registry (it will be rebuilt if needed).
+The build pod pushes the unsigned image directly to `containerImage`.
+The sign pod then reads from that same image, signs the kernel modules in place, and overwrites `containerImage` with
+the signed result.
+The image loaded by the DaemonSet onto cluster nodes is the final signed image at `containerImage`.
 
 
 ## Example
