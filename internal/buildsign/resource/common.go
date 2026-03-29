@@ -261,14 +261,7 @@ func (rm *resourceManager) getResources(ctx context.Context, namespace string, l
 func (rm *resourceManager) makeBuildTemplate(ctx context.Context, mld *api.ModuleLoaderData, owner metav1.Object,
 	pushImage bool) (metav1.Object, error) {
 
-	// if build AND sign are specified, then we will build an intermediate image
-	// and let sign produce the one specified in its targetImage
-	containerImage := mld.ContainerImage
-	if module.ShouldBeSigned(mld) {
-		containerImage = module.IntermediateImageName(mld.Name, mld.Namespace, containerImage)
-	}
-
-	buildSpec := rm.buildSpec(mld, containerImage, pushImage)
+	buildSpec := rm.buildSpec(mld, mld.ContainerImage, pushImage)
 	buildSpecHash, err := rm.getBuildHashAnnotationValue(
 		ctx,
 		mld.Build.DockerfileConfigMap.Name,
@@ -312,7 +305,7 @@ func (rm *resourceManager) makeSignTemplate(ctx context.Context, mld *api.Module
 
 	imageToSign := ""
 	if module.ShouldBeBuilt(mld) {
-		imageToSign = module.IntermediateImageName(mld.Name, mld.Namespace, mld.ContainerImage)
+		imageToSign = mld.ContainerImage
 	}
 
 	if imageToSign != "" {
