@@ -35,19 +35,8 @@ func AppendToTag(name string, tag string) string {
 	return name + separator + tag
 }
 
-// IntermediateImageName returns the image name of the pre-signed module image name
-func IntermediateImageName(name, namespace, targetImage string) string {
-	return AppendToTag(targetImage, namespace+"_"+name+"_kmm_unsigned")
-}
-
 // ShouldBeBuilt indicates whether the specified ModuleLoaderData of the
 // Module should be built or not.
 func ShouldBeBuilt(mld *api.ModuleLoaderData) bool {
 	return mld.Build != nil
-}
-
-// ShouldBeSigned indicates whether the specified ModuleLoaderData of the
-// Module should be signed or not.
-func ShouldBeSigned(mld *api.ModuleLoaderData) bool {
-	return mld.Sign != nil
 }

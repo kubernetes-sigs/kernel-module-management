@@ -28,13 +28,3 @@ var _ = Describe("AppendToTag", func() {
 		)
 	})
 })
-
-var _ = Describe("IntermediateImageName", func() {
-	It("should add the kmm_unsigned suffix to the target image name", func() {
-		Expect(
-			IntermediateImageName("module-name", "test-namespace", "some-image-name"),
-		).To(
-			Equal("some-image-name:test-namespace_module-name_kmm_unsigned"),
-		)
-	})
-})
