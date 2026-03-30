@@ -303,13 +303,8 @@ func (rm *resourceManager) makeSignTemplate(ctx context.Context, mld *api.Module
 		DirName:     mld.Modprobe.DirName,
 	}
 
-	imageToSign := ""
 	if module.ShouldBeBuilt(mld) {
-		imageToSign = mld.ContainerImage
-	}
-
-	if imageToSign != "" {
-		td.UnsignedImage = imageToSign
+		td.UnsignedImage = mld.ContainerImage
 	} else if signConfig.UnsignedImage != "" {
 		td.UnsignedImage = signConfig.UnsignedImage
 	} else {
