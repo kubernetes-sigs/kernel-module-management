@@ -41,8 +41,3 @@ func ShouldBeBuilt(mld *api.ModuleLoaderData) bool {
 	return mld.Build != nil
 }
 
-// ShouldBeSigned indicates whether the specified ModuleLoaderData of the
-// Module should be signed or not.
-func ShouldBeSigned(mld *api.ModuleLoaderData) bool {
-	return mld.Sign != nil
-}
