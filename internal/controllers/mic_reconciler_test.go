@@ -488,11 +488,11 @@ var _ = Describe("updateStatusByMBSC", func() {
 			Expect(err).To(BeNil())
 		},
 		Entry("sign config does not exists, action Build, status Failed", false, kmmv1beta1.BuildImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageDoesNotExist),
-		Entry("sign config does not exists, action Sign, status Failed", false, kmmv1beta1.SignImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageDoesNotExist),
+		Entry("sign config does not exists, action Sign, status Failed", false, kmmv1beta1.SignImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageNeedsSigning),
 		Entry("sign config does not exists, action Build, status Succeeded", false, kmmv1beta1.BuildImage, kmmv1beta1.ActionSuccess, kmmv1beta1.ImageExists),
 		Entry("sign config does not exists, action Sign, status Succeeded", false, kmmv1beta1.SignImage, kmmv1beta1.ActionSuccess, kmmv1beta1.ImageExists),
 		Entry("sign config exists, action Build, status Failed", true, kmmv1beta1.BuildImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageDoesNotExist),
-		Entry("sign config exists, action Sign, status Failed", true, kmmv1beta1.SignImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageDoesNotExist),
+		Entry("sign config exists, action Sign, status Failed", true, kmmv1beta1.SignImage, kmmv1beta1.ActionFailure, kmmv1beta1.ImageNeedsSigning),
 		Entry("sign config exists, action Build, status Succeeded", true, kmmv1beta1.BuildImage, kmmv1beta1.ActionSuccess, kmmv1beta1.ImageNeedsSigning),
 		Entry("sign config exists, action Sign, status Succeeded", true, kmmv1beta1.SignImage, kmmv1beta1.ActionSuccess, kmmv1beta1.ImageExists),
 	)

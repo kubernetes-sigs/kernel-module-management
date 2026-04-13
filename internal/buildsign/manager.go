@@ -110,6 +110,20 @@ func (m *manager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushImage
 		if err != nil {
 			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete %s resource %s: %v", action, resource.GetName(), err)))
 		}
+		return nil
+	}
+
+	resourceStatus, err := m.resourceManager.GetResourceStatus(resource)
+	if err != nil {
+		return fmt.Errorf("could not get %s resource status: %v", action, err)
+	}
+
+	if resourceStatus == StatusFailed {
+		logger.Info("Resource failed, deleting to allow retry", "name", resource.GetName(), "action", action)
+		err = m.resourceManager.DeleteResource(ctx, resource)
+		if err != nil {
+			logger.Info(utils.WarnString(fmt.Sprintf("failed to delete %s resource %s: %v", action, resource.GetName(), err)))
+		}
 	}
 
 	return nil

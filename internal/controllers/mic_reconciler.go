@@ -245,9 +245,13 @@ func (mrhi *micReconcilerHelperImpl) updateStatusByMBSC(ctx context.Context, mic
 		mbscAction := mbscImageState.Action
 
 		switch {
+		case mbscStatus == kmmv1beta1.ActionFailure && mbscAction == kmmv1beta1.SignImage:
+			// sign failed - do not rebuild, retry sign only
+			logger.Info("mbsc sign status failed, updating mic image to NeedsSigning")
+			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageNeedsSigning)
 		case mbscStatus == kmmv1beta1.ActionFailure:
-			// any failure (build or sign) - image does not exists
-			logger.Info("mbsc status failed, updating mic image to DoesNotExist")
+			// build failed - image does not exist, trigger rebuild
+			logger.Info("mbsc build status failed, updating mic image to DoesNotExist")
 			mrhi.micHelper.SetImageStatus(micObj, mbscImageState.Image, kmmv1beta1.ImageDoesNotExist)
 		case mbscStatus == kmmv1beta1.ActionSuccess && mbscAction == kmmv1beta1.SignImage:
 			// sign action succeeded - image exists, nothing more to do
