@@ -230,55 +230,56 @@ var _ = Describe("Sync", func() {
 		Expect(err).To(BeNil())
 	})
 
-	DescribeTable("check good flow", func(buildAction, podExists, podChanged, podFailed, pushImage bool) {
-		testPodTemplate := v1.Pod{}
-		existingTestPod := v1.Pod{}
-		testAction := kmmv1beta1.BuildImage
-		if !buildAction {
-			testAction = kmmv1beta1.SignImage
-		}
+	DescribeTable("check good flow",
+		func(buildAction, podExists, podChanged, podFailed, pushImage bool) {
+			testPodTemplate := v1.Pod{}
+			existingTestPod := v1.Pod{}
+			testAction := kmmv1beta1.BuildImage
+			if !buildAction {
+				testAction = kmmv1beta1.SignImage
+			}
 
-		if buildAction {
-			mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, pushImage, kmmv1beta1.BuildImage).
-				Return(&testPodTemplate, nil)
-		} else {
-			mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, pushImage, kmmv1beta1.SignImage).
-				Return(&testPodTemplate, nil)
-		}
-		var getPodError error
-		if !podExists {
-			getPodError = ErrNoMatchingBuildSignResource
-		}
-		mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
-			testAction, &testMBSC).Return(&existingTestPod, getPodError)
-		if !podExists {
-			mockResourceManager.EXPECT().CreateResource(ctx, &testPodTemplate).Return(nil)
-			goto executeTestFunction
-		}
-		mockResourceManager.EXPECT().IsResourceChanged(&existingTestPod, &testPodTemplate).Return(podChanged, nil)
-		if podChanged {
-			mockResourceManager.EXPECT().DeleteResource(ctx, &existingTestPod).Return(nil)
-			goto executeTestFunction
-		}
-		if podFailed {
-			mockResourceManager.EXPECT().GetResourceStatus(&existingTestPod).Return(StatusFailed, nil)
-			mockResourceManager.EXPECT().DeleteResource(ctx, &existingTestPod).Return(nil)
-		} else {
-			mockResourceManager.EXPECT().GetResourceStatus(&existingTestPod).Return(StatusCompleted, nil)
-		}
+			if buildAction {
+				mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, pushImage, kmmv1beta1.BuildImage).
+					Return(&testPodTemplate, nil)
+			} else {
+				mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, pushImage, kmmv1beta1.SignImage).
+					Return(&testPodTemplate, nil)
+			}
 
-	executeTestFunction:
-		err := mgr.Sync(ctx, testMLD, pushImage, testAction, &testMBSC)
-		Expect(err).To(BeNil())
-	},
-		Entry("action build, build pod does not exists", true, false, false, false, true),
-		Entry("action sign, sign pod does not exists", false, false, false, false, false),
-		Entry("action build, build pod exists, pod has not changed, pod not failed", true, true, false, false, true),
-		Entry("action sign, sign pod exists, pod has not changed, pod not failed", false, true, false, false, false),
-		Entry("action build, build pod exists, pod has changed", true, true, true, false, false),
-		Entry("action sign, sign pod exists, pod has changed", false, true, true, false, false),
-		Entry("action build, build pod exists, pod has not changed, pod failed", true, true, false, true, true),
-		Entry("action sign, sign pod exists, pod has not changed, pod failed", false, true, false, true, false),
+			var getPodError error
+			if !podExists {
+				getPodError = ErrNoMatchingBuildSignResource
+			}
+			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				testAction, &testMBSC).Return(&existingTestPod, getPodError)
+
+			if !podExists {
+				mockResourceManager.EXPECT().CreateResource(ctx, &testPodTemplate).Return(nil)
+			} else {
+				mockResourceManager.EXPECT().IsResourceChanged(&existingTestPod, &testPodTemplate).Return(podChanged, nil)
+				if podChanged {
+					mockResourceManager.EXPECT().DeleteResource(ctx, &existingTestPod).Return(nil)
+				} else if podFailed {
+					mockResourceManager.EXPECT().GetResourceStatus(&existingTestPod).Return(StatusFailed, nil)
+					mockResourceManager.EXPECT().DeleteResource(ctx, &existingTestPod).Return(nil)
+				} else {
+					mockResourceManager.EXPECT().GetResourceStatus(&existingTestPod).Return(StatusCompleted, nil)
+				}
+			}
+
+			err := mgr.Sync(ctx, testMLD, pushImage, testAction, &testMBSC)
+			Expect(err).To(BeNil())
+		},
+		// buildAction, podExists, podChanged, podFailed, pushImage
+		Entry("action build, build pod does not exist", true, false, false, false, true),
+		Entry("action sign, sign pod does not exist", false, false, false, false, false),
+		Entry("action build, build pod exists, not changed, not failed", true, true, false, false, true),
+		Entry("action sign, sign pod exists, not changed, not failed", false, true, false, false, false),
+		Entry("action build, build pod exists, changed", true, true, true, false, false),
+		Entry("action sign, sign pod exists, changed", false, true, true, false, false),
+		Entry("action build, build pod exists, not changed, pod failed", true, true, false, true, true),
+		Entry("action sign, sign pod exists, not changed, pod failed", false, true, false, true, false),
 	)
 })
 
