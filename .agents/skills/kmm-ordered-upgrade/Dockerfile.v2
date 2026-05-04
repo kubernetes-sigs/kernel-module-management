@@ -1,0 +1,5 @@
+FROM alpine:latest
+ARG KERNEL_VERSION
+RUN apk add --no-cache kmod
+COPY kmm_ci_b.ko /opt/lib/modules/${KERNEL_VERSION}/
+RUN depmod -b /opt
