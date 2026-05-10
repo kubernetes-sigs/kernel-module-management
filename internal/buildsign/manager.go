@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,7 +41,7 @@ func NewManager(client client.Client, resourceManager ResourceManager, scheme *r
 func (m *manager) GetStatus(ctx context.Context, name, namespace, kernelVersion string,
 	action kmmv1beta1.BuildOrSignAction, owner metav1.Object) (kmmv1beta1.BuildOrSignStatus, error) {
 
-	normalizedKernel := kernel.NormalizeVersion(kernelVersion)
+	normalizedKernel := kernel.DNSSafeKernelVersion(kernelVersion)
 	foundResource, err := m.resourceManager.GetResourceByKernel(ctx, name, namespace, normalizedKernel, action, owner)
 	if err != nil {
 		if !errors.Is(err, ErrNoMatchingBuildSignResource) {
@@ -92,6 +93,10 @@ func (m *manager) Sync(ctx context.Context, mld *api.ModuleLoaderData, pushImage
 		logger.Info("Creating resource")
 		err = m.resourceManager.CreateResource(ctx, resourceTemplate)
 		if err != nil {
+			if k8serrors.IsAlreadyExists(err) {
+				logger.Info("Resource already exists, skipping creation (likely the client cache didn't update yet)")
+				return nil
+			}
 			return fmt.Errorf("could not create resource: %v", err)
 		}
 

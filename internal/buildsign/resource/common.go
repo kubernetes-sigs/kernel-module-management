@@ -281,11 +281,11 @@ func (rm *resourceManager) makeBuildTemplate(ctx context.Context, mld *api.Modul
 
 	build := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: mld.Name + "-build-",
-			Namespace:    mld.Namespace,
-			Labels:       resourceLabels(mld.Name, mld.KernelNormalizedVersion, kmmv1beta1.BuildImage),
-			Annotations:  map[string]string{constants.ResourceHashAnnotation: fmt.Sprintf("%d", buildSpecHash)},
-			Finalizers:   []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
+			Name:        mld.Name + "-build-" + mld.KernelNormalizedVersion,
+			Namespace:   mld.Namespace,
+			Labels:      resourceLabels(mld.Name, mld.KernelNormalizedVersion, kmmv1beta1.BuildImage),
+			Annotations: map[string]string{constants.ResourceHashAnnotation: fmt.Sprintf("%d", buildSpecHash)},
+			Finalizers:  []string{constants.GCDelayFinalizer, constants.JobEventFinalizer},
 		},
 		Spec: buildSpec,
 	}
@@ -336,9 +336,9 @@ func (rm *resourceManager) makeSignTemplate(ctx context.Context, mld *api.Module
 
 	sign := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: mld.Name + "-sign-",
-			Namespace:    mld.Namespace,
-			Labels:       resourceLabels(mld.Name, mld.KernelNormalizedVersion, kmmv1beta1.SignImage),
+			Name:      mld.Name + "-sign-" + mld.KernelNormalizedVersion,
+			Namespace: mld.Namespace,
+			Labels:    resourceLabels(mld.Name, mld.KernelNormalizedVersion, kmmv1beta1.SignImage),
 			Annotations: map[string]string{
 				constants.ResourceHashAnnotation: fmt.Sprintf("%d", signSpecHash),
 				dockerfileAnnotationKey:          buf.String(),

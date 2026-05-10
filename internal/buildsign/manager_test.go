@@ -8,7 +8,9 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
@@ -41,7 +43,7 @@ var _ = Describe("GetStatus", func() {
 	testMBSC := kmmv1beta1.ModuleBuildSignConfig{}
 
 	It("failed flow, GetResourceByKernel fails", func() {
-		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
+		normalizedKernel := kernel.DNSSafeKernelVersion(kernelVersion)
 		mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
 			kmmv1beta1.BuildImage, &testMBSC).
 			Return(nil, fmt.Errorf("some error"))
@@ -52,7 +54,7 @@ var _ = Describe("GetStatus", func() {
 	})
 
 	It("GetResourceByKernel returns pod does not exists", func() {
-		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
+		normalizedKernel := kernel.DNSSafeKernelVersion(kernelVersion)
 		mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
 			kmmv1beta1.BuildImage, &testMBSC).
 			Return(nil, ErrNoMatchingBuildSignResource)
@@ -64,7 +66,7 @@ var _ = Describe("GetStatus", func() {
 
 	It("failed flow, GetResourceStatus fails", func() {
 		foundPod := v1.Pod{}
-		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
+		normalizedKernel := kernel.DNSSafeKernelVersion(kernelVersion)
 		gomock.InOrder(
 			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
 				kmmv1beta1.BuildImage, &testMBSC).
@@ -79,7 +81,7 @@ var _ = Describe("GetStatus", func() {
 
 	DescribeTable("check good flow and returned statuses", func(podStatus Status, expectedStatus kmmv1beta1.BuildOrSignStatus) {
 		foundPod := v1.Pod{}
-		normalizedKernel := kernel.NormalizeVersion(kernelVersion)
+		normalizedKernel := kernel.DNSSafeKernelVersion(kernelVersion)
 		gomock.InOrder(
 			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, normalizedKernel,
 				kmmv1beta1.BuildImage, &testMBSC).
@@ -164,6 +166,22 @@ var _ = Describe("Sync", func() {
 		)
 		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("should treat AlreadyExists as success when creating a resource", func() {
+		testTemplate := v1.Pod{}
+		alreadyExistsErr := k8serrors.NewAlreadyExists(
+			schema.GroupResource{Group: "", Resource: "pods"}, "test-pod")
+		gomock.InOrder(
+			mockResourceManager.EXPECT().MakeResourceTemplate(ctx, testMLD, &testMBSC, true, kmmv1beta1.BuildImage).
+				Return(&testTemplate, nil),
+			mockResourceManager.EXPECT().GetResourceByKernel(ctx, mbscName, mbscNamespace, kernelVersion,
+				kmmv1beta1.BuildImage, &testMBSC).
+				Return(nil, ErrNoMatchingBuildSignResource),
+			mockResourceManager.EXPECT().CreateResource(ctx, &testTemplate).Return(alreadyExistsErr),
+		)
+		err := mgr.Sync(ctx, testMLD, true, kmmv1beta1.BuildImage, &testMBSC)
+		Expect(err).To(BeNil())
 	})
 
 	It("IsResourceChanged failed", func() {
