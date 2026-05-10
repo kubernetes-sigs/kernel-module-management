@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// ModuleLoaderData contains all the data needed for succesfull execution of
+// ModuleLoaderData contains all the data needed for successful execution of
 // Build,Sign, ModuleLoader flow per specific kernel. It is constructed at the begining
 // of the Reconciliation loop flow.It contains all the data after merging/resolving all the
 // definitions (Build/Sign configuration from KM or from Container, ContainerImage etc').
