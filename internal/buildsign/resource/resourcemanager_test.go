@@ -97,7 +97,7 @@ var _ = Describe("GetResourceByKernel", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should fails if more then 1 pod exists", func() {
+	It("should return error if more than 1 pod exists", func() {
 		ctx := context.Background()
 
 		mod := kmmv1beta1.Module{
@@ -134,9 +134,11 @@ var _ = Describe("GetResourceByKernel", func() {
 			},
 		)
 
-		_, err = rm.GetResourceByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "resourceType", &mod)
+		pod, err := rm.GetResourceByKernel(ctx, mod.Name, mod.Namespace, "targetKernel", "resourceType", &mod)
 
 		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("expected 0 or 1"))
+		Expect(pod).To(BeNil())
 	})
 	It("more then 1 pod exists, but only one is owned by the module", func() {
 		ctx := context.Background()

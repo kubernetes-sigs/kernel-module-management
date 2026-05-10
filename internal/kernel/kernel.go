@@ -13,3 +13,9 @@ func replaceInvalidChar(r rune) rune {
 func NormalizeVersion(version string) string {
 	return strings.Map(replaceInvalidChar, version)
 }
+
+func DNSSafeKernelVersion(version string) string {
+	normalizedVersion := NormalizeVersion(version)
+	dns := strings.NewReplacer("_", "-", ".", "-").Replace(strings.ToLower(normalizedVersion))
+	return strings.Trim(dns, "-")
+}

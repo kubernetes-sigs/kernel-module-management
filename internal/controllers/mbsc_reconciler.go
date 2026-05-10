@@ -184,7 +184,7 @@ func createMLD(mbscObj *kmmv1beta1.ModuleBuildSignConfig, imageSpec *kmmv1beta1.
 		Sign:                    imageSpec.Sign,
 		Owner:                   mbscObj,
 		KernelVersion:           imageSpec.KernelVersion,
-		KernelNormalizedVersion: kernel.NormalizeVersion(imageSpec.KernelVersion),
+		KernelNormalizedVersion: kernel.DNSSafeKernelVersion(imageSpec.KernelVersion),
 		ImageRepoSecret:         mbscObj.Spec.ImageRepoSecret,
 		RegistryTLS:             imageSpec.RegistryTLS,
 		Tolerations:             mbscObj.Spec.Tolerations,
