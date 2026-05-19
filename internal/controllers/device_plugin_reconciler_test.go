@@ -577,8 +577,10 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 		mod := kmmv1beta1.Module{
 			Spec: kmmv1beta1.ModuleSpec{
 				DevicePlugin: &kmmv1beta1.DevicePluginSpec{
-					Container: kmmv1beta1.DevicePluginContainerSpec{Image: devicePluginImage},
-					Volumes:   []v1.Volume{vol},
+					PluginSpec: kmmv1beta1.PluginSpec{
+						Container: kmmv1beta1.PluginContainerSpec{Image: devicePluginImage},
+						Volumes:   []v1.Volume{vol},
+					},
 				},
 			},
 		}
@@ -606,8 +608,10 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 					},
 				},
 				DevicePlugin: &kmmv1beta1.DevicePluginSpec{
-					Container: kmmv1beta1.DevicePluginContainerSpec{Image: devicePluginImage},
-					Volumes:   []v1.Volume{vol},
+					PluginSpec: kmmv1beta1.PluginSpec{
+						Container: kmmv1beta1.PluginContainerSpec{Image: devicePluginImage},
+						Volumes:   []v1.Volume{vol},
+					},
 				},
 			},
 		}
@@ -698,19 +702,21 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 				Spec: kmmv1beta1.ModuleSpec{
 					ModuleLoader: moduleLoader,
 					DevicePlugin: &kmmv1beta1.DevicePluginSpec{
-						InitContainer: initContainer,
-						Container: kmmv1beta1.DevicePluginContainerSpec{
-							Args:            args,
-							Command:         command,
-							Env:             env,
-							Image:           devicePluginImage,
-							ImagePullPolicy: ipp,
-							Resources:       resources,
-							VolumeMounts:    []v1.VolumeMount{dpVolMount},
+						PluginSpec: kmmv1beta1.PluginSpec{
+							InitContainer: initContainer,
+							Container: kmmv1beta1.PluginContainerSpec{
+								Args:            args,
+								Command:         command,
+								Env:             env,
+								Image:           devicePluginImage,
+								ImagePullPolicy: ipp,
+								Resources:       resources,
+								VolumeMounts:    []v1.VolumeMount{dpVolMount},
+							},
+							ServiceAccountName:           serviceAccountName,
+							Volumes:                      []v1.Volume{dpVol},
+							AutomountServiceAccountToken: ptr.To(false),
 						},
-						ServiceAccountName:           serviceAccountName,
-						Volumes:                      []v1.Volume{dpVol},
-						AutomountServiceAccountToken: ptr.To(false),
 					},
 					ImageRepoSecret: &repoSecret,
 					Selector:        map[string]string{"has-feature-x": "true"},

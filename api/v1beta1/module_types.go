@@ -18,6 +18,7 @@ package v1beta1
 
 import (
 	v1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -248,7 +249,8 @@ type ModuleLoaderSpec struct {
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
-type DevicePluginContainerSpec struct {
+// PluginContainerSpec defines common container properties shared between DevicePlugin and DRA plugins.
+type PluginContainerSpec struct {
 	// Entrypoint array. Not executed within a shell.
 	// The container image's ENTRYPOINT is used if this is not provided.
 	// Variable references $(VAR_NAME) are expanded using the container's environment. If a variable
@@ -278,7 +280,7 @@ type DevicePluginContainerSpec struct {
 	// +patchStrategy=merge
 	Env []v1.EnvVar `json:"env,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,7,rep,name=env"`
 
-	// Image is the name of the container image that the device plugin container will run.
+	// Image is the name of the container image that the plugin container will run.
 	Image string `json:"image"`
 
 	// Image pull policy.
@@ -300,33 +302,75 @@ type DevicePluginContainerSpec struct {
 	VolumeMounts []v1.VolumeMount `json:"volumeMounts,omitempty"`
 }
 
-type DevicePluginSpec struct {
-	Container DevicePluginContainerSpec `json:"container"`
+// DevicePluginContainerSpec is an alias kept for backward compatibility.
+type DevicePluginContainerSpec = PluginContainerSpec
+
+// PluginSpec defines common pod-level properties shared between DevicePlugin and DRA plugin specs.
+type PluginSpec struct {
+	// Container holds the properties for the plugin container.
+	Container PluginContainerSpec `json:"container"`
 
 	// +optional
-	// InitContainer allows defines the init container that will be used by the device plugin
-	InitContainer *DevicePluginContainerSpec `json:"initContainer,omitempty"`
+	// InitContainer defines the init container that will be used by the plugin.
+	InitContainer *PluginContainerSpec `json:"initContainer,omitempty"`
 
 	// +optional
 	// ServiceAccountName is the name of the ServiceAccount to use to run this pod.
 	// More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
+	// +optional
 	Volumes []v1.Volume `json:"volumes,omitempty"`
 
 	// AutomountServiceAccountToken is used to disable the auto-mounting of the projected volume
-	// into device plugin pod. This volume includes as files: SA token, CAs' file etc'
-	// setting AutomountServiceAccountToken to false, will disale auto-mounting, and will allow user to mount
-	// whatever configmaps and tokens he deems necessary for the device plugin application
+	// into the plugin pod. This volume includes as files: SA token, CAs' file etc'
+	// setting AutomountServiceAccountToken to false, will disable auto-mounting, and will allow user to mount
+	// whatever configmaps and tokens he deems necessary for the plugin application
+	// +optional
 	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
 }
 
+type DevicePluginSpec struct {
+	PluginSpec `json:",inline"`
+}
+
+// DRADeviceClass defines a DeviceClass to be created and managed by KMM.
+type DRADeviceClass struct {
+	// Name of the DeviceClass to create. DeviceClasses are cluster-scoped.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Spec is the upstream DeviceClassSpec applied to the created DeviceClass.
+	Spec resourcev1.DeviceClassSpec `json:"spec"`
+}
+
+type DRASpec struct {
+	PluginSpec `json:",inline"`
+
+	// DriverName is the DRA driver name that will be registered with kubelet.
+	// Must be a DNS subdomain (e.g. "dra.example.com").
+	// +kubebuilder:validation:MinLength=1
+	DriverName string `json:"driverName"`
+
+	// +optional
+	// DeviceClasses is a list of DeviceClass resources to create for this driver.
+	// Each entry creates a cluster-scoped DeviceClass with the given name and spec.
+	// DeviceClasses are cleaned up when the Module is deleted or removed from this list.
+	DeviceClasses []DRADeviceClass `json:"deviceClasses,omitempty"`
+}
+
 // ModuleSpec describes how the KMM operator should deploy a Module on those nodes that need it.
+// +kubebuilder:validation:XValidation:rule="!(has(self.devicePlugin) && has(self.dra))",message="devicePlugin and dra cannot both be set"
 type ModuleSpec struct {
 	// DevicePlugin allows overriding some properties of the container that deploys the device plugin on the node.
 	// Name is ignored and is set automatically by the KMM Operator.
 	// +optional
 	DevicePlugin *DevicePluginSpec `json:"devicePlugin"`
+
+	// DRA allows deploying a DRA (Dynamic Resource Allocation) kubelet plugin on nodes where the module is loaded.
+	// The vendor-supplied container image must implement the DRA kubelet plugin gRPC interface.
+	// +optional
+	DRA *DRASpec `json:"dra,omitempty"`
 
 	// ModuleLoader allows overriding some properties of the container that loads the kernel module on the node.
 	// Name and image are ignored and are set automatically by the KMM Operator.
@@ -368,6 +412,9 @@ type ModuleStatus struct {
 	// DevicePlugin contains the status of the Device Plugin daemonset
 	// if it was deployed during reconciliation
 	DevicePlugin DaemonSetStatus `json:"devicePlugin,omitempty"`
+	// DRA contains the status of the DRA plugin daemonset
+	// if it was deployed during reconciliation
+	DRA DaemonSetStatus `json:"dra,omitempty"`
 	// ModuleLoader contains the status of the ModuleLoader daemonset
 	ModuleLoader DaemonSetStatus `json:"moduleLoader,omitempty"`
 	// ImageRebuildTriggerGeneration contains the last value of spec.imageRebuildTriggerGeneration that was applied.
