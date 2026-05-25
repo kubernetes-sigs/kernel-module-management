@@ -141,6 +141,19 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 		}
 	}
 
+	// Fix drain deadlock: when the Module reconciler removes the NMC spec before the NMC
+	// reconciler processes the node-taint change, orphan statuses get unloader pods but the
+	// kmm-ready label stays (removeOrphanedLabels requires status to be absent). This keeps
+	// the device plugin DaemonSet pod running and holding the device file, deadlocking the
+	// unloader. Remove kmm-ready labels for orphan statuses on unschedulable nodes so the
+	// device plugin terminates and the unloader can eventually succeed.
+	for _, status := range statusMap {
+		if !r.nodeAPI.IsNodeSchedulable(&node, status.Tolerations) {
+			readyLabelsToRemove[utils.GetKernelModuleReadyNodeLabel(status.Namespace, status.Name)] = ""
+			readyLabelsToRemove[utils.GetKernelModuleVersionReadyNodeLabel(status.Namespace, status.Name)] = ""
+		}
+	}
+
 	// removing label of loaded kmods
 	if len(readyLabelsToRemove) != 0 {
 		if err := r.nodeAPI.UpdateLabels(ctx, &node, nil, readyLabelsToRemove); err != nil {

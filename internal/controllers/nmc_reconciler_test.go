@@ -236,6 +236,75 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 		Expect(node).ToNot(Equal(expectedNode))
 	})
 
+	It("should remove kmod labels for orphan statuses on unschedulable node to prevent drain deadlock", func() {
+		const (
+			modNamespace = "test-ns"
+			modName      = "test-module"
+		)
+
+		orphanStatus := kmmv1beta1.NodeModuleStatus{
+			ModuleItem: kmmv1beta1.ModuleItem{
+				Namespace: modNamespace,
+				Name:      modName,
+			},
+			Config: kmmv1beta1.ModuleConfig{
+				KernelVersion: "5.14.0",
+			},
+		}
+
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			Spec:       kmmv1beta1.NodeModulesConfigSpec{},
+			Status: kmmv1beta1.NodeModulesConfigStatus{
+				Modules: []kmmv1beta1.NodeModuleStatus{orphanStatus},
+			},
+		}
+
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					kmodReadyLabel:   "",
+					labelNotToRemove: "",
+				},
+			},
+			Spec: v1.NodeSpec{
+				Taints: []v1.Taint{
+					{
+						Key:    "node.kubernetes.io/unschedulable",
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				},
+			},
+		}
+
+		contextWithValueMatch := gomock.AssignableToTypeOf(
+			reflect.TypeOf((*context.Context)(nil)).Elem(),
+		)
+
+		gomock.InOrder(
+			kubeClient.
+				EXPECT().
+				Get(ctx, nmcNsn, &kmmv1beta1.NodeModulesConfig{}).
+				Do(func(_ context.Context, _ types.NamespacedName, kubeNmc ctrlclient.Object, _ ...ctrlclient.Options) {
+					*kubeNmc.(*kmmv1beta1.NodeModulesConfig) = *nmc
+				}),
+			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Name: nmc.Name}, &v1.Node{}).DoAndReturn(
+				func(_ context.Context, _ types.NamespacedName, fetchedNode *v1.Node, _ ...ctrlclient.Options) error {
+					*fetchedNode = node
+					return nil
+				},
+			),
+			wh.EXPECT().SyncStatus(ctx, nmc, &node),
+			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &orphanStatus, &node),
+			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
+			nm.EXPECT().UpdateLabels(ctx, &node, nil, map[string]string{kmodReadyLabel: "", kmodVersionReadyLabel: ""}).Return(nil),
+		)
+
+		res, err := r.Reconcile(ctx, req)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(BeZero())
+	})
+
 	It("should process spec entries and orphan statuses", func() {
 		const (
 			mod0Name = "mod0"
@@ -304,6 +373,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec1, nil, &node),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2, &node),
+			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc),
 			wh.EXPECT().GarbageCollectWorkerPods(ctx, nmc),
 			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(loaded, unloaded, err),
@@ -384,6 +454,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().ProcessModuleSpec(contextWithValueMatch, nmc, &spec0, &status0, &node).Return(errors.New(errorMeassge)),
 			wh.EXPECT().ProcessUnconfiguredModuleStatus(contextWithValueMatch, nmc, &status2, &node).Return(errors.New(errorMeassge)),
+			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(true),
 			wh.EXPECT().GarbageCollectInUseLabels(ctx, nmc).Return(errors.New(errorMeassge)),
 			wh.EXPECT().GarbageCollectWorkerPods(ctx, nmc).Return(errors.New(errorMeassge)),
 			wh.EXPECT().UpdateNodeLabels(ctx, nmc, &node).Return(nil, nil, errors.New(errorMeassge)),
