@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"strings"
@@ -1047,5 +1048,47 @@ var _ = Describe("devicePluginReconcilerHelper_handleDevicePluginTargetLabels", 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("node1"))
 		Expect(err.Error()).NotTo(ContainSubstring("node2"))
+	})
+})
+var _ = Describe("DevicePluginSpec backward compatibility", func() {
+	It("should serialize JSON with the same field names as before the type refactoring", func() {
+		spec := kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{
+				Image:   "quay.io/example/plugin:v1",
+				Command: []string{"/bin/plugin"},
+			},
+			ServiceAccountName:           "dp-sa",
+			Volumes:                      []v1.Volume{{Name: "sock", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}}},
+			AutomountServiceAccountToken: ptr.To(false),
+		}
+
+		data, err := json.Marshal(spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		var raw map[string]interface{}
+		Expect(json.Unmarshal(data, &raw)).To(Succeed())
+
+		Expect(raw).To(HaveKey("container"))
+		Expect(raw).To(HaveKey("serviceAccountName"))
+		Expect(raw).To(HaveKey("volumes"))
+		Expect(raw).To(HaveKey("automountServiceAccountToken"))
+		Expect(raw).NotTo(HaveKey("CommonSpec"))
+	})
+
+	It("should allow accessing CommonSpec fields directly on DevicePluginSpec", func() {
+		spec := kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{
+				Image:   "quay.io/example/plugin:v1",
+				Command: []string{"/bin/plugin"},
+			},
+			ServiceAccountName:           "dp-sa",
+			Volumes:                      []v1.Volume{{Name: "sock", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}}},
+			AutomountServiceAccountToken: ptr.To(false),
+		}
+
+		Expect(spec.Container.Image).To(Equal("quay.io/example/plugin:v1"))
+		Expect(spec.ServiceAccountName).To(Equal("dp-sa"))
+		Expect(spec.Volumes).To(HaveLen(1))
+		Expect(*spec.AutomountServiceAccountToken).To(BeFalse())
 	})
 })
