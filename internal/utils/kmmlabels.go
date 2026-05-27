@@ -86,6 +86,10 @@ func GetDevicePluginNodeLabel(namespace, moduleName string) string {
 	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-ready", namespace, moduleName)
 }
 
+func GetDevicePluginTargetNodeLabel(namespace, moduleName string) string {
+	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-target", namespace, moduleName)
+}
+
 func IsDeprecatedKernelModuleReadyNodeLabel(label string) bool {
 	return reDeprecatedKernelModuleReadyLabel.MatchString(label)
 }

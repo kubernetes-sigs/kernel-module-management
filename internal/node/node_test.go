@@ -60,7 +60,53 @@ var _ = Describe("IsNodeSchedulable", func() {
 	})
 })
 
-var _ = Describe("GetNodesListBySelector", func() {
+var _ = Describe("GetAllNodesBySelector", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		mn   Node
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mn = NewNode(clnt)
+	})
+
+	It("should return error when list fails", func() {
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		nodes, err := mn.GetAllNodesBySelector(context.Background(), map[string]string{})
+
+		Expect(err).To(HaveOccurred())
+		Expect(nodes).To(BeNil())
+	})
+
+	It("should return all nodes regardless of schedulability", func() {
+		node1 := v1.Node{
+			Spec: v1.NodeSpec{
+				Taints: []v1.Taint{
+					{Effect: v1.TaintEffectNoSchedule},
+				},
+			},
+		}
+		node2 := v1.Node{}
+
+		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+				list.Items = []v1.Node{node1, node2}
+				return nil
+			},
+		)
+
+		nodes, err := mn.GetAllNodesBySelector(context.Background(), map[string]string{"key": "value"})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nodes).To(Equal([]v1.Node{node1, node2}))
+	})
+})
+
+var _ = Describe("GetSchedulableNodesBySelector", func() {
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
@@ -76,7 +122,7 @@ var _ = Describe("GetNodesListBySelector", func() {
 	It("list failed", func() {
 		clnt.EXPECT().List(context.Background(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
 
-		nodes, err := mn.GetNodesListBySelector(context.Background(), map[string]string{}, nil)
+		nodes, err := mn.GetSchedulableNodesBySelector(context.Background(), map[string]string{}, nil)
 
 		Expect(err).To(HaveOccurred())
 		Expect(nodes).To(BeNil())
@@ -108,7 +154,7 @@ var _ = Describe("GetNodesListBySelector", func() {
 				return nil
 			},
 		)
-		nodes, err := mn.GetNodesListBySelector(context.Background(), map[string]string{}, nil)
+		nodes, err := mn.GetSchedulableNodesBySelector(context.Background(), map[string]string{}, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(nodes).To(Equal([]v1.Node{node2, node3}))
@@ -142,7 +188,7 @@ var _ = Describe("GetNodesListBySelector", func() {
 				return nil
 			},
 		)
-		nodes, err := mn.GetNodesListBySelector(context.Background(),
+		nodes, err := mn.GetSchedulableNodesBySelector(context.Background(),
 			map[string]string{},
 			[]v1.Toleration{
 				{

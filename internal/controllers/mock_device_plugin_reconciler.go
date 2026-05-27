@@ -83,6 +83,20 @@ func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) handleDevicePlugin(ct
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDevicePlugin", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).handleDevicePlugin), ctx, mod, existingDevicePluginDS)
 }
 
+// handleDevicePluginTargetLabels mocks base method.
+func (m *MockdevicePluginReconcilerHelperAPI) handleDevicePluginTargetLabels(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "handleDevicePluginTargetLabels", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// handleDevicePluginTargetLabels indicates an expected call of handleDevicePluginTargetLabels.
+func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) handleDevicePluginTargetLabels(ctx, mod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDevicePluginTargetLabels", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).handleDevicePluginTargetLabels), ctx, mod)
+}
+
 // handleModuleDeletion mocks base method.
 func (m *MockdevicePluginReconcilerHelperAPI) handleModuleDeletion(ctx context.Context, existingDevicePluginDS []v1.DaemonSet) error {
 	m.ctrl.T.Helper()
@@ -109,6 +123,20 @@ func (m *MockdevicePluginReconcilerHelperAPI) moduleUpdateDevicePluginStatus(ctx
 func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) moduleUpdateDevicePluginStatus(ctx, mod, existingDevicePluginDS any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "moduleUpdateDevicePluginStatus", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).moduleUpdateDevicePluginStatus), ctx, mod, existingDevicePluginDS)
+}
+
+// removeDevicePluginTargetLabels mocks base method.
+func (m *MockdevicePluginReconcilerHelperAPI) removeDevicePluginTargetLabels(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "removeDevicePluginTargetLabels", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// removeDevicePluginTargetLabels indicates an expected call of removeDevicePluginTargetLabels.
+func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) removeDevicePluginTargetLabels(ctx, mod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "removeDevicePluginTargetLabels", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).removeDevicePluginTargetLabels), ctx, mod)
 }
 
 // setKMMOMetrics mocks base method.

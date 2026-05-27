@@ -20,13 +20,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"strings"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -34,8 +34,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -73,6 +75,11 @@ func (r *DevicePluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kmmv1beta1.Module{}).
 		Owns(&appsv1.DaemonSet{}).
+		Watches(
+			&v1.Node{},
+			handler.EnqueueRequestsFromMapFunc(r.filter.FindModulesForNode),
+			builder.WithPredicates(filter.DevicePluginReconcilerNodePredicate()),
+		).
 		Named(DevicePluginReconcilerName).
 		Complete(
 			reconcile.AsReconciler[*kmmv1beta1.Module](r.client, r),
@@ -90,11 +97,18 @@ func (r *DevicePluginReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.
 	}
 
 	if mod.GetDeletionTimestamp() != nil {
+		if err = r.reconHelperAPI.removeDevicePluginTargetLabels(ctx, mod); err != nil {
+			return ctrl.Result{}, fmt.Errorf("could not remove device-plugin-target labels on deletion: %v", err)
+		}
 		err = r.reconHelperAPI.handleModuleDeletion(ctx, existingDevicePluginDS)
 		return ctrl.Result{}, err
 	}
 
 	r.reconHelperAPI.setKMMOMetrics(ctx)
+
+	if err = r.reconHelperAPI.handleDevicePluginTargetLabels(ctx, mod); err != nil {
+		return res, fmt.Errorf("could not reconcile device-plugin-target labels: %v", err)
+	}
 
 	err = r.reconHelperAPI.handleDevicePlugin(ctx, mod, existingDevicePluginDS)
 	if err != nil {
@@ -122,6 +136,8 @@ func (r *DevicePluginReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.
 type devicePluginReconcilerHelperAPI interface {
 	setKMMOMetrics(ctx context.Context)
 	handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingDevicePluginDS []appsv1.DaemonSet) error
+	handleDevicePluginTargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
+	removeDevicePluginTargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
 	garbageCollect(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) error
 	handleModuleDeletion(ctx context.Context, existingDevicePluginDS []appsv1.DaemonSet) error
 	moduleUpdateDevicePluginStatus(ctx context.Context, mod *kmmv1beta1.Module, existingDevicePluginDS []appsv1.DaemonSet) error
@@ -193,6 +209,57 @@ func (dprh *devicePluginReconcilerHelper) handleDevicePlugin(ctx context.Context
 	}
 
 	return err
+}
+
+// handleDevicePluginTargetLabels ensures the device-plugin-target label is present on schedulable
+// nodes targeted by the Module, and removed from unschedulable nodes.
+// This enables the device plugin DaemonSet to be evicted from draining nodes.
+func (dprh *devicePluginReconcilerHelper) handleDevicePluginTargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
+	if mod.Spec.DevicePlugin == nil {
+		return nil
+	}
+
+	targetLabel := utils.GetDevicePluginTargetNodeLabel(mod.Namespace, mod.Name)
+
+	nodes, err := dprh.nodeAPI.GetAllNodesBySelector(ctx, mod.Spec.Selector)
+	if err != nil {
+		return fmt.Errorf("could not list nodes targeted by module: %v", err)
+	}
+
+	var errs []error
+	for i := range nodes {
+		node := &nodes[i]
+		if dprh.nodeAPI.IsNodeSchedulable(node, mod.Spec.Tolerations) {
+			if err := dprh.nodeAPI.UpdateLabels(ctx, node, map[string]string{targetLabel: ""}, nil); err != nil {
+				errs = append(errs, fmt.Errorf("could not add device-plugin-target label to node %s: %v", node.Name, err))
+			}
+		} else {
+			if err := dprh.nodeAPI.UpdateLabels(ctx, node, nil, map[string]string{targetLabel: ""}); err != nil {
+				errs = append(errs, fmt.Errorf("could not remove device-plugin-target label from node %s: %v", node.Name, err))
+			}
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func (dprh *devicePluginReconcilerHelper) removeDevicePluginTargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
+	targetLabel := utils.GetDevicePluginTargetNodeLabel(mod.Namespace, mod.Name)
+
+	nodes, err := dprh.nodeAPI.GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""})
+	if err != nil {
+		return fmt.Errorf("could not list nodes with device-plugin-target label: %v", err)
+	}
+
+	var errs []error
+	for i := range nodes {
+		node := &nodes[i]
+		if err := dprh.nodeAPI.UpdateLabels(ctx, node, nil, map[string]string{targetLabel: ""}); err != nil {
+			errs = append(errs, fmt.Errorf("could not remove device-plugin-target label from node %s: %v", node.Name, err))
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 func (dprh *devicePluginReconcilerHelper) garbageCollect(ctx context.Context,
@@ -401,7 +468,10 @@ func generatePodContainerSpec(containerSpec *kmmv1beta1.DevicePluginContainerSpe
 
 func generateDevicePluginLabelsAndSelector(mod *kmmv1beta1.Module) (map[string]string, map[string]string) {
 	labels := map[string]string{constants.ModuleNameLabel: mod.Name}
-	nodeSelector := map[string]string{utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name): ""}
+	nodeSelector := map[string]string{
+		utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name):  "",
+		utils.GetDevicePluginTargetNodeLabel(mod.Namespace, mod.Name): "",
+	}
 
 	if mod.Spec.ModuleLoader != nil && mod.Spec.ModuleLoader.Container.Version != "" {
 		versionLabel := utils.GetDevicePluginVersionLabelName(mod.Namespace, mod.Name)

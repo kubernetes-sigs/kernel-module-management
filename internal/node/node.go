@@ -14,7 +14,8 @@ import (
 
 type Node interface {
 	IsNodeSchedulable(node *v1.Node, tolerations []v1.Toleration) bool
-	GetNodesListBySelector(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) ([]v1.Node, error)
+	GetAllNodesBySelector(ctx context.Context, selector map[string]string) ([]v1.Node, error)
+	GetSchedulableNodesBySelector(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) ([]v1.Node, error)
 	GetNumTargetedNodes(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) (int, error)
 	UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved map[string]string) error
 	IsNodeRebooted(node *v1.Node, statusBootId string) bool
@@ -46,7 +47,7 @@ func (n *node) IsNodeSchedulable(node *v1.Node, tolerations []v1.Toleration) boo
 	return true
 }
 
-func (n *node) GetNodesListBySelector(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) ([]v1.Node, error) {
+func (n *node) GetAllNodesBySelector(ctx context.Context, selector map[string]string) ([]v1.Node, error) {
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("Listing nodes", "selector", selector)
 
@@ -55,18 +56,26 @@ func (n *node) GetNodesListBySelector(ctx context.Context, selector map[string]s
 	if err := n.client.List(ctx, &selectedNodes, opt); err != nil {
 		return nil, fmt.Errorf("could not list nodes: %v", err)
 	}
-	nodes := make([]v1.Node, 0, len(selectedNodes.Items))
+	return selectedNodes.Items, nil
+}
 
-	for _, node := range selectedNodes.Items {
-		if n.IsNodeSchedulable(&node, tolerations) {
-			nodes = append(nodes, node)
+func (n *node) GetSchedulableNodesBySelector(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) ([]v1.Node, error) {
+	allNodes, err := n.GetAllNodesBySelector(ctx, selector)
+	if err != nil {
+		return nil, fmt.Errorf("could not get all nodes by selector: %v", err)
+	}
+
+	nodes := make([]v1.Node, 0, len(allNodes))
+	for i := range allNodes {
+		if n.IsNodeSchedulable(&allNodes[i], tolerations) {
+			nodes = append(nodes, allNodes[i])
 		}
 	}
 	return nodes, nil
 }
 
 func (n *node) GetNumTargetedNodes(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) (int, error) {
-	targetedNode, err := n.GetNodesListBySelector(ctx, selector, tolerations)
+	targetedNode, err := n.GetSchedulableNodesBySelector(ctx, selector, tolerations)
 	if err != nil {
 		return 0, fmt.Errorf("could not list nodes: %v", err)
 	}
