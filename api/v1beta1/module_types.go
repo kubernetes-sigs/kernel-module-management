@@ -248,7 +248,7 @@ type ModuleLoaderSpec struct {
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
-type DevicePluginContainerSpec struct {
+type CommonContainerSpec struct {
 	// Entrypoint array. Not executed within a shell.
 	// The container image's ENTRYPOINT is used if this is not provided.
 	// Variable references $(VAR_NAME) are expanded using the container's environment. If a variable
@@ -299,6 +299,9 @@ type DevicePluginContainerSpec struct {
 	// +optional
 	VolumeMounts []v1.VolumeMount `json:"volumeMounts,omitempty"`
 }
+
+// DevicePluginContainerSpec is a backward-compatible alias for CommonContainerSpec.
+type DevicePluginContainerSpec = CommonContainerSpec
 
 type DevicePluginSpec struct {
 	Container DevicePluginContainerSpec `json:"container"`
