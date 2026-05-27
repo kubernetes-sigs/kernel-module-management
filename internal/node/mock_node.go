@@ -39,19 +39,19 @@ func (m *MockNode) EXPECT() *MockNodeMockRecorder {
 	return m.recorder
 }
 
-// GetNodesListBySelector mocks base method.
-func (m *MockNode) GetNodesListBySelector(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) ([]v1.Node, error) {
+// GetAllNodesBySelector mocks base method.
+func (m *MockNode) GetAllNodesBySelector(ctx context.Context, selector map[string]string) ([]v1.Node, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNodesListBySelector", ctx, selector, tolerations)
+	ret := m.ctrl.Call(m, "GetAllNodesBySelector", ctx, selector)
 	ret0, _ := ret[0].([]v1.Node)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetNodesListBySelector indicates an expected call of GetNodesListBySelector.
-func (mr *MockNodeMockRecorder) GetNodesListBySelector(ctx, selector, tolerations any) *gomock.Call {
+// GetAllNodesBySelector indicates an expected call of GetAllNodesBySelector.
+func (mr *MockNodeMockRecorder) GetAllNodesBySelector(ctx, selector any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodesListBySelector", reflect.TypeOf((*MockNode)(nil).GetNodesListBySelector), ctx, selector, tolerations)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllNodesBySelector", reflect.TypeOf((*MockNode)(nil).GetAllNodesBySelector), ctx, selector)
 }
 
 // GetNumTargetedNodes mocks base method.
@@ -67,6 +67,21 @@ func (m *MockNode) GetNumTargetedNodes(ctx context.Context, selector map[string]
 func (mr *MockNodeMockRecorder) GetNumTargetedNodes(ctx, selector, tolerations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNumTargetedNodes", reflect.TypeOf((*MockNode)(nil).GetNumTargetedNodes), ctx, selector, tolerations)
+}
+
+// GetSchedulableNodesBySelector mocks base method.
+func (m *MockNode) GetSchedulableNodesBySelector(ctx context.Context, selector map[string]string, tolerations []v1.Toleration) ([]v1.Node, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSchedulableNodesBySelector", ctx, selector, tolerations)
+	ret0, _ := ret[0].([]v1.Node)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSchedulableNodesBySelector indicates an expected call of GetSchedulableNodesBySelector.
+func (mr *MockNodeMockRecorder) GetSchedulableNodesBySelector(ctx, selector, tolerations any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSchedulableNodesBySelector", reflect.TypeOf((*MockNode)(nil).GetSchedulableNodesBySelector), ctx, selector, tolerations)
 }
 
 // IsNodeRebooted mocks base method.
