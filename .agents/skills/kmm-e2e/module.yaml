@@ -1,0 +1,37 @@
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: Module
+metadata:
+  name: kmm-ci
+spec:
+  moduleLoader:
+    container:
+      inTreeModulesToRemove:
+        - dummy
+      modprobe:
+        moduleName: kmm_ci_a
+        modulesLoadingOrder: [kmm_ci_a, kmm_ci_b]
+      kernelMappings:
+        - regexp: '^.+$'
+          containerImage: host.minikube.internal:5000/$MOD_NAMESPACE/$MOD_NAME-${BASE_TAG}:$KERNEL_FULL_VERSION
+          registryTLS:
+            insecure: true
+          build:
+            baseImageRegistryTLS:
+              insecure: true
+            secrets:
+              - name: build-secret
+            dockerfileConfigMap:
+              name: kmm-kmod-dockerfile
+            kanikoParams:
+              tag: "debug"
+          sign:
+            certSecret:
+              name: kmm-kmod-signing-cert
+            keySecret:
+              name: kmm-kmod-signing-key
+            unsignedImageRegistryTLS:
+              insecure: true
+            filesToSign:
+              - /opt/lib/modules/${KERNEL_FULL_VERSION}/kmm_ci_?.ko
+  selector:
+    kubernetes.io/hostname: minikube-m02
