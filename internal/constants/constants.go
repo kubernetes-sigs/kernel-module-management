@@ -25,6 +25,8 @@ const (
 	PrivateSignDataKey             = "key"
 
 	ModuleLoaderRoleLabelValue = "module-loader"
+	DevicePluginRoleLabelValue = "device-plugin"
+	DRARoleLabelValue          = "dra"
 
 	OperatorNamespaceEnvVar = "OPERATOR_NAMESPACE"
 )
