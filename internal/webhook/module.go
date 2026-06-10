@@ -20,15 +20,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"regexp"
-	"strings"
 
 	"github.com/go-logr/logr"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -36,12 +41,54 @@ import (
 // maxCombinedLength is the maximum combined length of Module name and namespace when the version field is set.
 const maxCombinedLength = 40
 
-type ModuleValidator struct {
-	logger logr.Logger
+var kubeVersionRe = regexp.MustCompile(`^v?(\d+)\.(\d+)`)
+
+// KubeVersion holds the parsed major and minor version of a Kubernetes cluster.
+type KubeVersion struct {
+	Major int
+	Minor int
 }
 
-func NewModuleValidator(logger logr.Logger) *ModuleValidator {
-	return &ModuleValidator{logger: logger}
+type ModuleValidator struct {
+	logger      logr.Logger
+	kubeVersion KubeVersion
+}
+
+func NewModuleValidator(logger logr.Logger, kubeVersion KubeVersion) *ModuleValidator {
+	return &ModuleValidator{logger: logger, kubeVersion: kubeVersion}
+}
+
+// DiscoverKubeVersion queries the Kubernetes API server and returns its version.
+func DiscoverKubeVersion(cfg *rest.Config) (KubeVersion, error) {
+	discClient, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return KubeVersion{}, fmt.Errorf("failed to create discovery client: %v", err)
+	}
+
+	serverVersion, err := discClient.ServerVersion()
+	if err != nil {
+		return KubeVersion{}, fmt.Errorf("failed to query Kubernetes server version: %v", err)
+	}
+
+	return parseKubeVersion(serverVersion.GitVersion)
+}
+
+// parseKubeVersion extracts the major and minor version from a Kubernetes
+// GitVersion string such as "v1.34.0" or "v1.34.0+k3s1".
+func parseKubeVersion(gitVersion string) (KubeVersion, error) {
+	m := kubeVersionRe.FindStringSubmatch(gitVersion)
+	if m == nil {
+		return KubeVersion{}, fmt.Errorf("cannot parse Kubernetes version from %q", gitVersion)
+	}
+	major, err := strconv.Atoi(m[1])
+	if err != nil {
+		return KubeVersion{}, fmt.Errorf("cannot parse Kubernetes major version from %q: %v", gitVersion, err)
+	}
+	minor, err := strconv.Atoi(m[2])
+	if err != nil {
+		return KubeVersion{}, fmt.Errorf("cannot parse Kubernetes minor version from %q: %v", gitVersion, err)
+	}
+	return KubeVersion{Major: major, Minor: minor}, nil
 }
 
 func (m *ModuleValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
@@ -64,7 +111,7 @@ func (m *ModuleValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 
 	m.logger.Info("Validating Module creation", "name", mod.Name, "namespace", mod.Namespace)
 
-	return validateModule(mod)
+	return validateModule(mod, m.kubeVersion)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
@@ -88,7 +135,7 @@ func (m *ModuleValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 		}
 	}
 
-	return validateModule(newMod)
+	return validateModule(newMod, m.kubeVersion)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
@@ -96,7 +143,7 @@ func (m *ModuleValidator) ValidateDelete(ctx context.Context, obj runtime.Object
 	return nil, NotImplemented
 }
 
-func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
+func validateModule(mod *kmmv1beta1.Module, kubeVersion KubeVersion) (admission.Warnings, error) {
 	nameLength := len(mod.Name + mod.Namespace)
 
 	if nameLength > maxCombinedLength {
@@ -109,6 +156,10 @@ func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
 
 	if err := validateTolerations(mod.Spec.Tolerations); err != nil {
 		return nil, fmt.Errorf("failed to validate Module's tolerations: %v", err)
+	}
+
+	if err := validateDRA(mod, kubeVersion); err != nil {
+		return nil, fmt.Errorf("failed to validate DRA: %v", err)
 	}
 
 	if mod.Spec.ModuleLoader == nil {
@@ -125,6 +176,46 @@ func validateModule(mod *kmmv1beta1.Module) (admission.Warnings, error) {
 	}
 
 	return nil, validateFilesToSign(mod.Spec.ModuleLoader.Container)
+}
+
+func validateDRA(mod *kmmv1beta1.Module, kubeVersion KubeVersion) error {
+	if mod.Spec.DRA == nil {
+		return nil
+	}
+
+	if kubeVersion.Major < constants.MinKubeMajorForDRA || (kubeVersion.Major == constants.MinKubeMajorForDRA && kubeVersion.Minor < constants.MinKubeMinorForDRA) {
+		return fmt.Errorf(
+			"spec.dra requires Kubernetes %d.%d or later; current cluster version is %d.%d",
+			constants.MinKubeMajorForDRA, constants.MinKubeMinorForDRA, kubeVersion.Major, kubeVersion.Minor,
+		)
+	}
+
+	driverName := mod.Spec.DRA.DriverName
+	if driverName == "" {
+		return errors.New("spec.dra.driverName is required")
+	}
+
+	if errs := validation.IsDNS1123Subdomain(driverName); len(errs) > 0 {
+		return fmt.Errorf("spec.dra.driverName %q is not a valid DNS subdomain: %s", driverName, strings.Join(errs, "; "))
+	}
+
+	seen := sets.New[string]()
+	for i, dc := range mod.Spec.DRA.DeviceClasses {
+		if dc.Name == "" {
+			return fmt.Errorf("spec.dra.deviceClasses[%d].name is required", i)
+		}
+
+		if errs := validation.IsDNS1123Subdomain(dc.Name); len(errs) > 0 {
+			return fmt.Errorf("spec.dra.deviceClasses[%d].name %q is not a valid DNS subdomain: %s", i, dc.Name, strings.Join(errs, "; "))
+		}
+
+		if seen.Has(dc.Name) {
+			return fmt.Errorf("spec.dra.deviceClasses[%d].name %q is a duplicate", i, dc.Name)
+		}
+		seen.Insert(dc.Name)
+	}
+
+	return nil
 }
 
 func validateImageFormat(img string) error {

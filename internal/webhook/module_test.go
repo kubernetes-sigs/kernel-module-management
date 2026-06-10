@@ -53,7 +53,7 @@ var (
 		},
 	}
 
-	moduleWebhook = NewModuleValidator(GinkgoLogr)
+	moduleWebhook = NewModuleValidator(GinkgoLogr, KubeVersion{Major: 1, Minor: 34})
 )
 
 var _ = Describe("maxCombinedLength", func() {
@@ -411,7 +411,7 @@ var _ = Describe("validateModule", func() {
 			mod.Name = name
 			mod.Namespace = ns
 
-			_, err := validateModule(&mod)
+			_, err := validateModule(&mod, KubeVersion{Major: 1, Minor: 34})
 			exp := Expect(err)
 
 			if errExpected {
@@ -426,7 +426,7 @@ var _ = Describe("validateModule", func() {
 	It("should pass when moduleLoader is not defined", func() {
 		mod := validModule
 		mod.Spec.ModuleLoader = nil
-		_, err := validateModule(&mod)
+		_, err := validateModule(&mod, KubeVersion{Major: 1, Minor: 34})
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
@@ -696,5 +696,135 @@ var _ = Describe("validateTolerations", func() {
 
 		err := validateTolerations(tolerations)
 		Expect(err).To(Not(HaveOccurred()))
+	})
+})
+
+var _ = Describe("parseKubeVersion", func() {
+	DescribeTable(
+		"should parse valid version strings",
+		func(gitVersion string, expectedMajor, expectedMinor int) {
+			kv, err := parseKubeVersion(gitVersion)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(kv.Major).To(Equal(expectedMajor))
+			Expect(kv.Minor).To(Equal(expectedMinor))
+		},
+		Entry("standard version", "v1.34.0", 1, 34),
+		Entry("with build metadata", "v1.34.0+k3s1", 1, 34),
+		Entry("pre-release version", "v1.33.0-alpha.1", 1, 33),
+		Entry("higher minor", "v1.35.1", 1, 35),
+		Entry("without v prefix", "1.34.0", 1, 34),
+		Entry("hypothetical k8s 2.0", "v2.0.0", 2, 0),
+		Entry("hypothetical k8s 2.5", "v2.5.3", 2, 5),
+	)
+
+	DescribeTable(
+		"should return error for invalid strings",
+		func(gitVersion string) {
+			_, err := parseKubeVersion(gitVersion)
+			Expect(err).To(HaveOccurred())
+		},
+		Entry("empty string", ""),
+		Entry("garbage", "invalid"),
+		Entry("no minor", "v1"),
+	)
+})
+
+var _ = Describe("validateDRA", func() {
+	validDRASpec := func() *kmmv1beta1.DRASpec {
+		return &kmmv1beta1.DRASpec{
+			DriverName: "example.com",
+			Container: kmmv1beta1.CommonContainerSpec{
+				Image: "driver:latest",
+			},
+		}
+	}
+
+	minValidKubeVersion := KubeVersion{Major: 1, Minor: 34}
+
+	It("should be a no-op when spec.dra is nil", func() {
+		mod := &kmmv1beta1.Module{}
+		Expect(validateDRA(mod, minValidKubeVersion)).NotTo(HaveOccurred())
+	})
+
+	DescribeTable(
+		"Kubernetes version gate",
+		func(kv KubeVersion, shouldFail bool) {
+			mod := &kmmv1beta1.Module{
+				Spec: kmmv1beta1.ModuleSpec{
+					DRA: validDRASpec(),
+				},
+			}
+			err := validateDRA(mod, kv)
+			if shouldFail {
+				Expect(err).To(MatchError(ContainSubstring("requires Kubernetes")))
+			} else {
+				Expect(err).NotTo(HaveOccurred())
+			}
+		},
+		Entry("k8s 1.33 rejects", KubeVersion{Major: 1, Minor: 33}, true),
+		Entry("k8s 1.34 accepts", KubeVersion{Major: 1, Minor: 34}, false),
+		Entry("k8s 1.35 accepts", KubeVersion{Major: 1, Minor: 35}, false),
+		Entry("k8s 2.0 accepts (future major)", KubeVersion{Major: 2, Minor: 0}, false),
+		Entry("k8s 0.99 rejects (old major)", KubeVersion{Major: 0, Minor: 99}, true),
+	)
+
+	It("should reject empty driverName", func() {
+		dra := validDRASpec()
+		dra.DriverName = ""
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).To(MatchError(ContainSubstring("driverName is required")))
+	})
+
+	It("should reject invalid driverName", func() {
+		dra := validDRASpec()
+		dra.DriverName = "INVALID_NAME!"
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).To(MatchError(ContainSubstring("not a valid DNS subdomain")))
+	})
+
+	It("should accept valid driverName", func() {
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: validDRASpec()},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).NotTo(HaveOccurred())
+	})
+
+	It("should reject duplicate deviceClasses names", func() {
+		dra := validDRASpec()
+		dra.DeviceClasses = []kmmv1beta1.DeviceClassSpec{
+			{Name: "gpu"},
+			{Name: "gpu"},
+		}
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).To(MatchError(ContainSubstring("duplicate")))
+	})
+
+	It("should reject invalid deviceClasses name", func() {
+		dra := validDRASpec()
+		dra.DeviceClasses = []kmmv1beta1.DeviceClassSpec{
+			{Name: "INVALID!"},
+		}
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).To(MatchError(ContainSubstring("not a valid DNS subdomain")))
+	})
+
+	It("should accept valid deviceClasses", func() {
+		dra := validDRASpec()
+		dra.DeviceClasses = []kmmv1beta1.DeviceClassSpec{
+			{Name: "gpu"},
+			{Name: "fpga"},
+		}
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).NotTo(HaveOccurred())
 	})
 })

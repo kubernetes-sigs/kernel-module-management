@@ -75,15 +75,24 @@ func main() {
 	options := cg.GetManagerOptionsFromConfig(cfg, scheme)
 	options.LeaderElection = false
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
+	restCfg := ctrl.GetConfigOrDie()
+
+	mgr, err := ctrl.NewManager(restCfg, options)
 	if err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create manager")
 	}
 
+	kubeVersion, err := webhook.DiscoverKubeVersion(restCfg)
+	if err != nil {
+		cmd.FatalError(setupLogger, err, "unable to discover Kubernetes version")
+	}
+
+	setupLogger.Info("Detected Kubernetes version", "major", kubeVersion.Major, "minor", kubeVersion.Minor)
+
 	if enableModule {
 		logger.Info("Enabling Module webhook")
 
-		if err = webhook.NewModuleValidator(logger).SetupWebhookWithManager(mgr); err != nil {
+		if err = webhook.NewModuleValidator(logger, kubeVersion).SetupWebhookWithManager(mgr); err != nil {
 			cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "ModuleValidator")
 		}
 	}
@@ -91,7 +100,7 @@ func main() {
 	if enableManagedClusterModule {
 		logger.Info("Enabling ManagedClusterModule webhook")
 
-		if err = hub.NewManagedClusterModuleValidator(logger).SetupWebhookWithManager(mgr); err != nil {
+		if err = hub.NewManagedClusterModuleValidator(logger, kubeVersion).SetupWebhookWithManager(mgr); err != nil {
 			cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "ManagedClusterModuleValidator")
 		}
 	}

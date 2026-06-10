@@ -29,4 +29,7 @@ const (
 	DRARoleLabelValue          = "dra"
 
 	OperatorNamespaceEnvVar = "OPERATOR_NAMESPACE"
+
+	MinKubeMajorForDRA = 1
+	MinKubeMinorForDRA = 34
 )
