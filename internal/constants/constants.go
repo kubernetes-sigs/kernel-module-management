@@ -2,6 +2,7 @@ package constants
 
 const (
 	ModuleNameLabel        = "kmm.node.kubernetes.io/module.name"
+	ModuleNamespaceLabel   = "kmm.node.kubernetes.io/module.namespace"
 	NodeLabelerFinalizer   = "kmm.node.kubernetes.io/node-labeler"
 	TargetKernelTarget     = "kmm.node.kubernetes.io/target-kernel"
 	ResourceType           = "kmm.node.kubernetes.io/resource-type"

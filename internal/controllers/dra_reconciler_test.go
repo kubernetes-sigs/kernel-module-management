@@ -31,6 +31,7 @@ import (
 	"go.uber.org/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,7 +69,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 
 	ctx := context.Background()
 
-	DescribeTable("check error flows", func(getDSError, handleDRAError bool) {
+	DescribeTable("check error flows", func(getDSError, getDCError, handleDRAError, handleDCError bool) {
 		draDS := []appsv1.DaemonSet{{}}
 		returnedError := fmt.Errorf("some error")
 		if getDSError {
@@ -76,11 +77,21 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil)
+		if getDCError {
+			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, returnedError)
+			goto executeTestFunction
+		}
+		mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil)
 		if handleDRAError {
 			mockReconHelper.EXPECT().handleDRA(ctx, mod, draDS).Return(returnedError)
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().handleDRA(ctx, mod, draDS).Return(nil)
+		if handleDCError {
+			mockReconHelper.EXPECT().handleDeviceClasses(ctx, mod, []resourcev1.DeviceClass(nil)).Return(returnedError)
+			goto executeTestFunction
+		}
+		mockReconHelper.EXPECT().handleDeviceClasses(ctx, mod, []resourcev1.DeviceClass(nil)).Return(nil)
 		mockReconHelper.EXPECT().moduleUpdateDRAStatus(ctx, mod, draDS).Return(returnedError)
 
 	executeTestFunction:
@@ -90,16 +101,20 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 
 	},
-		Entry("getModuleDRADaemonSets failed", true, false),
-		Entry("handleDRA failed", false, true),
-		Entry("moduleUpdateDRAStatus failed", false, false),
+		Entry("getModuleDRADaemonSets failed", true, false, false, false),
+		Entry("getModuleDeviceClasses failed", false, true, false, false),
+		Entry("handleDRA failed", false, false, true, false),
+		Entry("handleDeviceClasses failed", false, false, false, true),
+		Entry("moduleUpdateDRAStatus failed", false, false, false, false),
 	)
 
 	It("Good flow", func() {
 		draDS := []appsv1.DaemonSet{{}}
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
+			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().handleDRA(ctx, mod, draDS).Return(nil),
+			mockReconHelper.EXPECT().handleDeviceClasses(ctx, mod, []resourcev1.DeviceClass(nil)).Return(nil),
 			mockReconHelper.EXPECT().moduleUpdateDRAStatus(ctx, mod, draDS).Return(nil),
 		)
 
@@ -112,21 +127,24 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 	It("module deletion flow", func() {
 		mod.SetDeletionTimestamp(&metav1.Time{})
 		draDS := []appsv1.DaemonSet{{}}
+		existingDCs := []resourcev1.DeviceClass{{ObjectMeta: metav1.ObjectMeta{Name: "gpu"}}}
 
 		By("good flow")
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
-			mockReconHelper.EXPECT().deleteDRADaemonSets(ctx, draDS).Return(nil),
+			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(existingDCs, nil),
+			mockReconHelper.EXPECT().deleteDRAResources(ctx, draDS, existingDCs).Return(nil),
 		)
 
 		res, err := dr.Reconcile(ctx, mod)
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 
-		By("error flow - deleteDRADaemonSets fails")
+		By("error flow - deleteDRAResources fails")
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
-			mockReconHelper.EXPECT().deleteDRADaemonSets(ctx, draDS).Return(fmt.Errorf("some error")),
+			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(existingDCs, nil),
+			mockReconHelper.EXPECT().deleteDRAResources(ctx, draDS, existingDCs).Return(fmt.Errorf("some error")),
 		)
 
 		res, err = dr.Reconcile(ctx, mod)
@@ -134,10 +152,11 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("no-op when spec.dra is nil and no existing DaemonSets", func() {
+	It("no-op when spec.dra is nil and no existing DaemonSets or DeviceClasses", func() {
 		mod.Spec.DRA = nil
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
+			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().clearDRAStatus(ctx, mod).Return(nil),
 		)
 
@@ -147,13 +166,15 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("cleanup when spec.dra is nil but existing DaemonSets present", func() {
+	It("cleanup when spec.dra is nil but existing DaemonSets and DeviceClasses present", func() {
 		mod.Spec.DRA = nil
 		draDS := []appsv1.DaemonSet{{}}
+		existingDCs := []resourcev1.DeviceClass{{ObjectMeta: metav1.ObjectMeta{Name: "gpu"}}}
 
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
-			mockReconHelper.EXPECT().deleteDRADaemonSets(ctx, draDS).Return(nil),
+			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(existingDCs, nil),
+			mockReconHelper.EXPECT().deleteDRAResources(ctx, draDS, existingDCs).Return(nil),
 			mockReconHelper.EXPECT().clearDRAStatus(ctx, mod).Return(nil),
 		)
 
@@ -168,6 +189,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
+			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().clearDRAStatus(ctx, mod).Return(fmt.Errorf("some error")),
 		)
 
@@ -266,39 +288,6 @@ var _ = Describe("DRAReconciler_handleDRA", func() {
 		err := drh.handleDRA(ctx, &mod, []appsv1.DaemonSet{existingDS})
 
 		Expect(err).NotTo(HaveOccurred())
-	})
-})
-
-var _ = Describe("DRAReconciler_deleteDRADaemonSets", func() {
-	var (
-		ctrl *gomock.Controller
-		clnt *client.MockClient
-		drh  draReconcilerHelper
-	)
-
-	BeforeEach(func() {
-		ctrl = gomock.NewController(GinkgoT())
-		clnt = client.NewMockClient(ctrl)
-		drh = draReconcilerHelper{
-			client: clnt,
-		}
-	})
-
-	existingDRADS := []appsv1.DaemonSet{{}}
-	ctx := context.Background()
-
-	It("good flow", func() {
-		clnt.EXPECT().Delete(ctx, &existingDRADS[0]).Return(nil)
-
-		err := drh.deleteDRADaemonSets(ctx, existingDRADS)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	It("error flow", func() {
-		clnt.EXPECT().Delete(ctx, &existingDRADS[0]).Return(fmt.Errorf("some error"))
-
-		err := drh.deleteDRADaemonSets(ctx, existingDRADS)
-		Expect(err).To(HaveOccurred())
 	})
 })
 
@@ -764,5 +753,327 @@ var _ = Describe("DRAReconciler_getModuleDRADaemonSets", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(dsList).To(Equal([]appsv1.DaemonSet{ds1, ds2}))
+	})
+})
+
+var _ = Describe("DRAReconciler_getModuleDeviceClasses", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		drh  draReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		drh = draReconcilerHelper{
+			client: clnt,
+		}
+	})
+
+	ctx := context.Background()
+
+	It("should return error when list fails", func() {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		dcList, err := drh.getModuleDeviceClasses(ctx, "name", "namespace")
+
+		Expect(err).To(HaveOccurred())
+		Expect(dcList).To(BeNil())
+	})
+
+	It("should return DeviceClasses matching ownership labels", func() {
+		dc1 := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "gpu",
+				Labels: map[string]string{
+					constants.ModuleNameLabel:      "my-module",
+					constants.ModuleNamespaceLabel: "my-ns",
+				},
+			},
+		}
+		dc2 := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "fpga",
+				Labels: map[string]string{
+					constants.ModuleNameLabel:      "my-module",
+					constants.ModuleNamespaceLabel: "my-ns",
+				},
+			},
+		}
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *resourcev1.DeviceClassList, _ ...interface{}) error {
+				list.Items = []resourcev1.DeviceClass{dc1, dc2}
+				return nil
+			},
+		)
+
+		dcList, err := drh.getModuleDeviceClasses(ctx, "my-module", "my-ns")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(dcList).To(Equal([]resourcev1.DeviceClass{dc1, dc2}))
+	})
+})
+
+var _ = Describe("DRAReconciler_handleDeviceClasses", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		drh  draReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		drh = draReconcilerHelper{
+			client: clnt,
+		}
+	})
+
+	ctx := context.Background()
+
+	It("should be a no-op when DRA is nil", func() {
+		mod := kmmv1beta1.Module{}
+		err := drh.handleDeviceClasses(ctx, &mod, nil)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should create a DeviceClass when desired but not existing", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-mod", Namespace: "my-ns"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DeviceClasses: []kmmv1beta1.DeviceClassSpec{
+						{Name: "gpu"},
+					},
+				},
+			},
+		}
+
+		clnt.EXPECT().Create(ctx, gomock.Any()).DoAndReturn(
+			func(_ context.Context, dc *resourcev1.DeviceClass, _ ...ctrlclient.CreateOption) error {
+				Expect(dc.Name).To(Equal("gpu"))
+				Expect(dc.Labels[constants.ModuleNameLabel]).To(Equal("my-mod"))
+				Expect(dc.Labels[constants.ModuleNamespaceLabel]).To(Equal("my-ns"))
+				return nil
+			},
+		)
+
+		err := drh.handleDeviceClasses(ctx, &mod, nil)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should patch an existing DeviceClass when spec differs", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-mod", Namespace: "my-ns"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DeviceClasses: []kmmv1beta1.DeviceClassSpec{
+						{
+							Name: "gpu",
+							Selectors: []resourcev1.DeviceSelector{
+								{CEL: &resourcev1.CELDeviceSelector{Expression: "device.driver == 'nvidia'"}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		existingDC := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "gpu",
+				Labels: map[string]string{
+					constants.ModuleNameLabel:      "my-mod",
+					constants.ModuleNamespaceLabel: "my-ns",
+				},
+			},
+			Spec: resourcev1.DeviceClassSpec{},
+		}
+
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, dc *resourcev1.DeviceClass, _ ctrlclient.Patch, _ ...ctrlclient.PatchOption) error {
+				Expect(dc.Name).To(Equal("gpu"))
+				Expect(dc.Spec.Selectors).To(HaveLen(1))
+				return nil
+			},
+		)
+
+		err := drh.handleDeviceClasses(ctx, &mod, []resourcev1.DeviceClass{existingDC})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should delete DeviceClasses not in the desired list", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-mod", Namespace: "my-ns"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DeviceClasses: []kmmv1beta1.DeviceClassSpec{},
+				},
+			},
+		}
+
+		extraDC := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "stale-dc",
+				Labels: map[string]string{
+					constants.ModuleNameLabel:      "my-mod",
+					constants.ModuleNamespaceLabel: "my-ns",
+				},
+			},
+		}
+
+		clnt.EXPECT().Delete(ctx, &extraDC).Return(nil)
+
+		err := drh.handleDeviceClasses(ctx, &mod, []resourcev1.DeviceClass{extraDC})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should return error on create failure", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-mod", Namespace: "my-ns"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DeviceClasses: []kmmv1beta1.DeviceClassSpec{
+						{Name: "gpu"},
+					},
+				},
+			},
+		}
+
+		clnt.EXPECT().Create(ctx, gomock.Any()).Return(fmt.Errorf("create failed"))
+
+		err := drh.handleDeviceClasses(ctx, &mod, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("create failed"))
+	})
+
+	It("should return error on patch failure", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-mod", Namespace: "my-ns"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DeviceClasses: []kmmv1beta1.DeviceClassSpec{
+						{Name: "gpu"},
+					},
+				},
+			},
+		}
+
+		existingDC := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "gpu",
+				Labels: map[string]string{
+					constants.ModuleNameLabel:      "my-mod",
+					constants.ModuleNamespaceLabel: "my-ns",
+				},
+			},
+		}
+
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("patch failed"))
+
+		err := drh.handleDeviceClasses(ctx, &mod, []resourcev1.DeviceClass{existingDC})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("patch failed"))
+	})
+
+	It("should return error on delete failure for extras", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-mod", Namespace: "my-ns"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DeviceClasses: []kmmv1beta1.DeviceClassSpec{},
+				},
+			},
+		}
+
+		extraDC := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "stale-dc",
+				Labels: map[string]string{
+					constants.ModuleNameLabel:      "my-mod",
+					constants.ModuleNamespaceLabel: "my-ns",
+				},
+			},
+		}
+
+		clnt.EXPECT().Delete(ctx, &extraDC).Return(fmt.Errorf("delete failed"))
+
+		err := drh.handleDeviceClasses(ctx, &mod, []resourcev1.DeviceClass{extraDC})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("delete failed"))
+	})
+
+	It("should be a no-op when no desired and no existing DeviceClasses", func() {
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-mod", Namespace: "my-ns"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DeviceClasses: []kmmv1beta1.DeviceClassSpec{},
+				},
+			},
+		}
+
+		err := drh.handleDeviceClasses(ctx, &mod, nil)
+		Expect(err).NotTo(HaveOccurred())
+	})
+})
+
+var _ = Describe("DRAReconciler_deleteDRAResources", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		drh  draReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		drh = draReconcilerHelper{
+			client: clnt,
+		}
+	})
+
+	ctx := context.Background()
+
+	It("should return nil when both lists are empty", func() {
+		err := drh.deleteDRAResources(ctx, nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should delete all DaemonSets and DeviceClasses", func() {
+		ds := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "ds1", Namespace: "ns"}}
+		dc := resourcev1.DeviceClass{ObjectMeta: metav1.ObjectMeta{Name: "dc1"}}
+
+		clnt.EXPECT().Delete(ctx, &ds).Return(nil)
+		clnt.EXPECT().Delete(ctx, &dc).Return(nil)
+
+		err := drh.deleteDRAResources(ctx, []appsv1.DaemonSet{ds}, []resourcev1.DeviceClass{dc})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should return joined error on partial failure", func() {
+		ds := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "ds1", Namespace: "ns"}}
+		dc := resourcev1.DeviceClass{ObjectMeta: metav1.ObjectMeta{Name: "dc1"}}
+
+		clnt.EXPECT().Delete(ctx, &ds).Return(fmt.Errorf("ds delete failed"))
+		clnt.EXPECT().Delete(ctx, &dc).Return(nil)
+
+		err := drh.deleteDRAResources(ctx, []appsv1.DaemonSet{ds}, []resourcev1.DeviceClass{dc})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("ds1"))
+	})
+
+	It("should aggregate errors from both DaemonSets and DeviceClasses", func() {
+		ds := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "ds1", Namespace: "ns"}}
+		dc := resourcev1.DeviceClass{ObjectMeta: metav1.ObjectMeta{Name: "dc1"}}
+
+		clnt.EXPECT().Delete(ctx, &ds).Return(fmt.Errorf("ds error"))
+		clnt.EXPECT().Delete(ctx, &dc).Return(fmt.Errorf("dc error"))
+
+		err := drh.deleteDRAResources(ctx, []appsv1.DaemonSet{ds}, []resourcev1.DeviceClass{dc})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("ds1"))
+		Expect(err.Error()).To(ContainSubstring("dc1"))
 	})
 })

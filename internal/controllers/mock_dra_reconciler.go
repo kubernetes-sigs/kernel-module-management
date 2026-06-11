@@ -15,6 +15,7 @@ import (
 	v1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/apps/v1"
+	v10 "k8s.io/api/resource/v1"
 )
 
 // MockdraReconcilerHelperAPI is a mock of draReconcilerHelperAPI interface.
@@ -54,18 +55,18 @@ func (mr *MockdraReconcilerHelperAPIMockRecorder) clearDRAStatus(ctx, mod any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "clearDRAStatus", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).clearDRAStatus), ctx, mod)
 }
 
-// deleteDRADaemonSets mocks base method.
-func (m *MockdraReconcilerHelperAPI) deleteDRADaemonSets(ctx context.Context, existingDRADS []v1.DaemonSet) error {
+// deleteDRAResources mocks base method.
+func (m *MockdraReconcilerHelperAPI) deleteDRAResources(ctx context.Context, daemonSets []v1.DaemonSet, deviceClasses []v10.DeviceClass) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "deleteDRADaemonSets", ctx, existingDRADS)
+	ret := m.ctrl.Call(m, "deleteDRAResources", ctx, daemonSets, deviceClasses)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// deleteDRADaemonSets indicates an expected call of deleteDRADaemonSets.
-func (mr *MockdraReconcilerHelperAPIMockRecorder) deleteDRADaemonSets(ctx, existingDRADS any) *gomock.Call {
+// deleteDRAResources indicates an expected call of deleteDRAResources.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) deleteDRAResources(ctx, daemonSets, deviceClasses any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "deleteDRADaemonSets", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).deleteDRADaemonSets), ctx, existingDRADS)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "deleteDRAResources", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).deleteDRAResources), ctx, daemonSets, deviceClasses)
 }
 
 // getModuleDRADaemonSets mocks base method.
@@ -83,6 +84,21 @@ func (mr *MockdraReconcilerHelperAPIMockRecorder) getModuleDRADaemonSets(ctx, na
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getModuleDRADaemonSets", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).getModuleDRADaemonSets), ctx, name, namespace)
 }
 
+// getModuleDeviceClasses mocks base method.
+func (m *MockdraReconcilerHelperAPI) getModuleDeviceClasses(ctx context.Context, name, namespace string) ([]v10.DeviceClass, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getModuleDeviceClasses", ctx, name, namespace)
+	ret0, _ := ret[0].([]v10.DeviceClass)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// getModuleDeviceClasses indicates an expected call of getModuleDeviceClasses.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) getModuleDeviceClasses(ctx, name, namespace any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getModuleDeviceClasses", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).getModuleDeviceClasses), ctx, name, namespace)
+}
+
 // handleDRA mocks base method.
 func (m *MockdraReconcilerHelperAPI) handleDRA(ctx context.Context, mod *v1beta1.Module, existingDRADS []v1.DaemonSet) error {
 	m.ctrl.T.Helper()
@@ -95,6 +111,20 @@ func (m *MockdraReconcilerHelperAPI) handleDRA(ctx context.Context, mod *v1beta1
 func (mr *MockdraReconcilerHelperAPIMockRecorder) handleDRA(ctx, mod, existingDRADS any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDRA", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).handleDRA), ctx, mod, existingDRADS)
+}
+
+// handleDeviceClasses mocks base method.
+func (m *MockdraReconcilerHelperAPI) handleDeviceClasses(ctx context.Context, mod *v1beta1.Module, existingDCs []v10.DeviceClass) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "handleDeviceClasses", ctx, mod, existingDCs)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// handleDeviceClasses indicates an expected call of handleDeviceClasses.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) handleDeviceClasses(ctx, mod, existingDCs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDeviceClasses", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).handleDeviceClasses), ctx, mod, existingDCs)
 }
 
 // moduleUpdateDRAStatus mocks base method.
