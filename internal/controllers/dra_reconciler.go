@@ -27,6 +27,8 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -82,16 +84,18 @@ func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (
 		return res, fmt.Errorf("could not get DRA DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
 	}
 
+	existingDCs, err := r.reconHelperAPI.getModuleDeviceClasses(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		return res, fmt.Errorf("could not get DeviceClasses for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
+	}
+
 	if mod.GetDeletionTimestamp() != nil {
-		err = r.reconHelperAPI.deleteDRADaemonSets(ctx, existingDRADS)
-		return ctrl.Result{}, err
+		return ctrl.Result{}, r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace)
 	}
 
 	if mod.Spec.DRA == nil {
-		if len(existingDRADS) > 0 {
-			if err = r.reconHelperAPI.deleteDRADaemonSets(ctx, existingDRADS); err != nil {
-				return ctrl.Result{}, err
-			}
+		if err = r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace); err != nil {
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, r.reconHelperAPI.clearDRAStatus(ctx, mod)
 	}
@@ -99,6 +103,11 @@ func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (
 	err = r.reconHelperAPI.handleDRA(ctx, mod, existingDRADS)
 	if err != nil {
 		return res, fmt.Errorf("could not handle DRA: %v", err)
+	}
+
+	err = r.reconHelperAPI.handleDeviceClasses(ctx, mod, existingDCs)
+	if err != nil {
+		return res, fmt.Errorf("could not handle DeviceClasses: %v", err)
 	}
 
 	err = r.reconHelperAPI.moduleUpdateDRAStatus(ctx, mod, existingDRADS)
@@ -116,9 +125,11 @@ func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (
 type draReconcilerHelperAPI interface {
 	getModuleDRADaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	handleDRA(ctx context.Context, mod *kmmv1beta1.Module, existingDRADS []appsv1.DaemonSet) error
-	deleteDRADaemonSets(ctx context.Context, existingDRADS []appsv1.DaemonSet) error
+	deleteDRAResources(ctx context.Context, moduleName, moduleNamespace string) error
 	moduleUpdateDRAStatus(ctx context.Context, mod *kmmv1beta1.Module, existingDRADS []appsv1.DaemonSet) error
 	clearDRAStatus(ctx context.Context, mod *kmmv1beta1.Module) error
+	getModuleDeviceClasses(ctx context.Context, name, namespace string) ([]resourcev1.DeviceClass, error)
+	handleDeviceClasses(ctx context.Context, mod *kmmv1beta1.Module, existingDCs []resourcev1.DeviceClass) error
 }
 
 type draReconcilerHelper struct {
@@ -183,14 +194,32 @@ func (drh *draReconcilerHelper) handleDRA(ctx context.Context, mod *kmmv1beta1.M
 	return err
 }
 
-func (drh *draReconcilerHelper) deleteDRADaemonSets(ctx context.Context, existingDRADS []appsv1.DaemonSet) error {
-	for _, ds := range existingDRADS {
-		err := drh.client.Delete(ctx, &ds)
-		if err != nil {
-			return fmt.Errorf("failed to delete DRA DaemonSet %s/%s: %v", ds.Namespace, ds.Name, err)
-		}
+// deleteDRAResources deletes all DRA-owned DaemonSets and DeviceClasses using label-based bulk deletion.
+func (drh *draReconcilerHelper) deleteDRAResources(ctx context.Context, moduleName, moduleNamespace string) error {
+	var errs []error
+
+	dsDeleteOpts := []client.DeleteAllOfOption{
+		client.MatchingLabels{
+			constants.ModuleNameLabel: moduleName,
+			constants.DaemonSetRole:   constants.DRARoleLabelValue,
+		},
+		client.InNamespace(moduleNamespace),
 	}
-	return nil
+	if err := drh.client.DeleteAllOf(ctx, &appsv1.DaemonSet{}, dsDeleteOpts...); err != nil {
+		errs = append(errs, fmt.Errorf("failed to delete DRA DaemonSets for module %s/%s: %v", moduleNamespace, moduleName, err))
+	}
+
+	dcDeleteOpts := []client.DeleteAllOfOption{
+		client.MatchingLabels{
+			constants.ModuleNameLabel:      moduleName,
+			constants.ModuleNamespaceLabel: moduleNamespace,
+		},
+	}
+	if err := drh.client.DeleteAllOf(ctx, &resourcev1.DeviceClass{}, dcDeleteOpts...); err != nil {
+		errs = append(errs, fmt.Errorf("failed to delete DeviceClasses for module %s/%s: %v", moduleNamespace, moduleName, err))
+	}
+
+	return errors.Join(errs...)
 }
 
 func (drh *draReconcilerHelper) moduleUpdateDRAStatus(ctx context.Context,
@@ -231,6 +260,75 @@ func (drh *draReconcilerHelper) clearDRAStatus(ctx context.Context, mod *kmmv1be
 	mod.Status.DRA = kmmv1beta1.DaemonSetStatus{}
 
 	return drh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
+}
+
+func (drh *draReconcilerHelper) getModuleDeviceClasses(ctx context.Context, name, namespace string) ([]resourcev1.DeviceClass, error) {
+	dcList := resourcev1.DeviceClassList{}
+	opts := []client.ListOption{
+		client.MatchingLabels(map[string]string{
+			constants.ModuleNameLabel:      name,
+			constants.ModuleNamespaceLabel: namespace,
+		}),
+	}
+	if err := drh.client.List(ctx, &dcList, opts...); err != nil {
+		return nil, fmt.Errorf("could not list DeviceClasses: %v", err)
+	}
+
+	return dcList.Items, nil
+}
+
+// handleDeviceClasses reconciles cluster-scoped DeviceClass resources to match the desired state
+// declared in mod.Spec.DRA.DeviceClasses. It performs declarative convergence:
+//   - DeviceClasses present in the spec but missing from the cluster are created.
+//   - DeviceClasses present in both are patched to reflect the current spec (drift correction).
+//   - DeviceClasses present in the cluster but absent from the spec are deleted (stale cleanup).
+func (drh *draReconcilerHelper) handleDeviceClasses(ctx context.Context, mod *kmmv1beta1.Module, existingDCs []resourcev1.DeviceClass) error {
+	if mod.Spec.DRA == nil {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+
+	existingByName := make(map[string]resourcev1.DeviceClass, len(existingDCs))
+	for _, dc := range existingDCs {
+		existingByName[dc.Name] = dc
+	}
+
+	var errs []error
+
+	// Create missing or patch existing DeviceClasses to match the desired spec.
+	for _, desired := range mod.Spec.DRA.DeviceClasses {
+		dc := &resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{Name: desired.Name},
+		}
+		opRes, err := controllerutil.CreateOrPatch(ctx, drh.client, dc, func() error {
+			if dc.Labels == nil {
+				dc.Labels = make(map[string]string)
+			}
+			dc.Labels[constants.ModuleNameLabel] = mod.Name
+			dc.Labels[constants.ModuleNamespaceLabel] = mod.Namespace
+			dc.Spec.Selectors = desired.Selectors
+			dc.Spec.Config = desired.Config
+			return nil
+		})
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to create or patch DeviceClass %s: %v", desired.Name, err))
+		} else {
+			logger.Info("Reconciled DeviceClass", "name", desired.Name, "result", opRes)
+		}
+		delete(existingByName, desired.Name)
+	}
+
+	// Delete DeviceClasses that exist in the cluster but are no longer in the desired spec.
+	for name, dc := range existingByName {
+		if deleteErr := drh.client.Delete(ctx, &dc); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
+			errs = append(errs, fmt.Errorf("failed to delete DeviceClass %s: %v", name, deleteErr))
+		} else {
+			logger.Info("Deleted extra DeviceClass", "name", name)
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 type draDaemonSetCreator interface {
