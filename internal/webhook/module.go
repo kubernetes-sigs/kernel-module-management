@@ -51,10 +51,10 @@ type KubeVersion struct {
 
 type ModuleValidator struct {
 	logger      logr.Logger
-	kubeVersion KubeVersion
+	kubeVersion *KubeVersion
 }
 
-func NewModuleValidator(logger logr.Logger, kubeVersion KubeVersion) *ModuleValidator {
+func NewModuleValidator(logger logr.Logger, kubeVersion *KubeVersion) *ModuleValidator {
 	return &ModuleValidator{logger: logger, kubeVersion: kubeVersion}
 }
 
@@ -143,7 +143,7 @@ func (m *ModuleValidator) ValidateDelete(ctx context.Context, obj runtime.Object
 	return nil, NotImplemented
 }
 
-func validateModule(mod *kmmv1beta1.Module, kubeVersion KubeVersion) (admission.Warnings, error) {
+func validateModule(mod *kmmv1beta1.Module, kubeVersion *KubeVersion) (admission.Warnings, error) {
 	nameLength := len(mod.Name + mod.Namespace)
 
 	if nameLength > maxCombinedLength {
@@ -178,16 +178,20 @@ func validateModule(mod *kmmv1beta1.Module, kubeVersion KubeVersion) (admission.
 	return nil, validateFilesToSign(mod.Spec.ModuleLoader.Container)
 }
 
-func validateDRA(mod *kmmv1beta1.Module, kubeVersion KubeVersion) error {
+func validateDRA(mod *kmmv1beta1.Module, kubeVersion *KubeVersion) error {
 	if mod.Spec.DRA == nil {
 		return nil
 	}
 
-	if kubeVersion.Major < constants.MinKubeMajorForDRA || (kubeVersion.Major == constants.MinKubeMajorForDRA && kubeVersion.Minor < constants.MinKubeMinorForDRA) {
-		return fmt.Errorf(
-			"spec.dra requires Kubernetes %d.%d or later; current cluster version is %d.%d",
-			constants.MinKubeMajorForDRA, constants.MinKubeMinorForDRA, kubeVersion.Major, kubeVersion.Minor,
-		)
+	// Skip version gating when kubeVersion is nil (e.g. hub webhook validating
+	// a ManagedClusterModule — the spoke's own webhook will enforce its version).
+	if kubeVersion != nil {
+		if kubeVersion.Major < constants.MinKubeMajorForDRA || (kubeVersion.Major == constants.MinKubeMajorForDRA && kubeVersion.Minor < constants.MinKubeMinorForDRA) {
+			return fmt.Errorf(
+				"spec.dra requires Kubernetes %d.%d or later; current cluster version is %d.%d",
+				constants.MinKubeMajorForDRA, constants.MinKubeMinorForDRA, kubeVersion.Major, kubeVersion.Minor,
+			)
+		}
 	}
 
 	driverName := mod.Spec.DRA.DriverName

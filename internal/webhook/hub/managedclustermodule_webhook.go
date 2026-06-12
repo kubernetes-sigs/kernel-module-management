@@ -34,7 +34,7 @@ type ManagedClusterModuleValidator struct {
 	m      admission.CustomValidator
 }
 
-func NewManagedClusterModuleValidator(logger logr.Logger, kubeVersion webhook.KubeVersion) *ManagedClusterModuleValidator {
+func NewManagedClusterModuleValidator(logger logr.Logger, kubeVersion *webhook.KubeVersion) *ManagedClusterModuleValidator {
 	return &ManagedClusterModuleValidator{
 		logger: logger,
 		m:      webhook.NewModuleValidator(logger, kubeVersion),
