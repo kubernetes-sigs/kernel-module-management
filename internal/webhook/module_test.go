@@ -53,7 +53,7 @@ var (
 		},
 	}
 
-	moduleWebhook = NewModuleValidator(GinkgoLogr, KubeVersion{Major: 1, Minor: 34})
+	moduleWebhook = NewModuleValidator(GinkgoLogr, &KubeVersion{Major: 1, Minor: 34})
 )
 
 var _ = Describe("maxCombinedLength", func() {
@@ -411,7 +411,7 @@ var _ = Describe("validateModule", func() {
 			mod.Name = name
 			mod.Namespace = ns
 
-			_, err := validateModule(&mod, KubeVersion{Major: 1, Minor: 34})
+			_, err := validateModule(&mod, &KubeVersion{Major: 1, Minor: 34})
 			exp := Expect(err)
 
 			if errExpected {
@@ -426,7 +426,7 @@ var _ = Describe("validateModule", func() {
 	It("should pass when moduleLoader is not defined", func() {
 		mod := validModule
 		mod.Spec.ModuleLoader = nil
-		_, err := validateModule(&mod, KubeVersion{Major: 1, Minor: 34})
+		_, err := validateModule(&mod, &KubeVersion{Major: 1, Minor: 34})
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
@@ -739,7 +739,7 @@ var _ = Describe("validateDRA", func() {
 		}
 	}
 
-	minValidKubeVersion := KubeVersion{Major: 1, Minor: 34}
+	minValidKubeVersion := &KubeVersion{Major: 1, Minor: 34}
 
 	It("should be a no-op when spec.dra is nil", func() {
 		mod := &kmmv1beta1.Module{}
@@ -748,7 +748,7 @@ var _ = Describe("validateDRA", func() {
 
 	DescribeTable(
 		"Kubernetes version gate",
-		func(kv KubeVersion, shouldFail bool) {
+		func(kv *KubeVersion, shouldFail bool) {
 			mod := &kmmv1beta1.Module{
 				Spec: kmmv1beta1.ModuleSpec{
 					DRA: validDRASpec(),
@@ -761,11 +761,12 @@ var _ = Describe("validateDRA", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 		},
-		Entry("k8s 1.33 rejects", KubeVersion{Major: 1, Minor: 33}, true),
-		Entry("k8s 1.34 accepts", KubeVersion{Major: 1, Minor: 34}, false),
-		Entry("k8s 1.35 accepts", KubeVersion{Major: 1, Minor: 35}, false),
-		Entry("k8s 2.0 accepts (future major)", KubeVersion{Major: 2, Minor: 0}, false),
-		Entry("k8s 0.99 rejects (old major)", KubeVersion{Major: 0, Minor: 99}, true),
+		Entry("k8s 1.33 rejects", &KubeVersion{Major: 1, Minor: 33}, true),
+		Entry("k8s 1.34 accepts", &KubeVersion{Major: 1, Minor: 34}, false),
+		Entry("k8s 1.35 accepts", &KubeVersion{Major: 1, Minor: 35}, false),
+		Entry("k8s 2.0 accepts (future major)", &KubeVersion{Major: 2, Minor: 0}, false),
+		Entry("k8s 0.99 rejects (old major)", &KubeVersion{Major: 0, Minor: 99}, true),
+		Entry("nil version skips gate (hub webhook)", nil, false),
 	)
 
 	It("should reject empty driverName", func() {
