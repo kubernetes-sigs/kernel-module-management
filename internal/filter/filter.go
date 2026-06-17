@@ -28,6 +28,18 @@ func HasLabel(label string) predicate.Predicate {
 	})
 }
 
+func DeviceClassToModuleReconcileRequest(_ context.Context, obj client.Object) []reconcile.Request {
+	labels := obj.GetLabels()
+	modName := labels[constants.ModuleNameLabel]
+	modNs := labels[constants.ModuleNamespaceLabel]
+	if modName == "" || modNs == "" {
+		return nil
+	}
+	return []reconcile.Request{
+		{NamespacedName: types.NamespacedName{Name: modName, Namespace: modNs}},
+	}
+}
+
 var skipDeletions predicate.Predicate = predicate.Funcs{
 	DeleteFunc: func(_ event.DeleteEvent) bool { return false },
 }
