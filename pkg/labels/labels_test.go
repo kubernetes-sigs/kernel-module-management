@@ -16,6 +16,11 @@ var _ = Describe("GetModuleReadyAndDevicePluginReadyLabels", func() {
 		Expect(res).To(Equal("kmm.node.kubernetes.io/some-namespace.some-module.device-plugin-ready"))
 	})
 
+	It("dra ready label", func() {
+		res := GetDRANodeLabel("some-namespace", "some-module")
+		Expect(res).To(Equal("kmm.node.kubernetes.io/some-namespace.some-module.dra-ready"))
+	})
+
 	It("module version label", func() {
 		res := GetModuleVersionLabelName("some-namespace", "some-module")
 		Expect(res).To(Equal("kmm.node.kubernetes.io/version-module.some-namespace.some-module"))

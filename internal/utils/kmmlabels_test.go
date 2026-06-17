@@ -26,6 +26,13 @@ var _ = Describe("GetDevicePluginVersionLabelName", func() {
 	})
 })
 
+var _ = Describe("GetDRANodeLabel", func() {
+	It("should work as expected", func() {
+		res := GetDRANodeLabel("some-namespace", "some-name")
+		Expect(res).To(Equal("kmm.node.kubernetes.io/some-namespace.some-name.dra-ready"))
+	})
+})
+
 var _ = Describe("GetNamespaceNameFromVersionLabel", func() {
 	DescribeTable("should return correct name and namespace",
 		func(versionLabel, expectedNamespace, expectedName string, expectsErr bool) {
