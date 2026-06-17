@@ -42,6 +42,7 @@ rules:
   verbs:
   - create
   - delete
+  - deletecollection
   - get
   - list
   - patch
@@ -117,3 +118,16 @@ rules:
   - nodemodulesconfigs/status
   verbs:
   - patch
+- apiGroups:
+  - resource.k8s.io
+  resources:
+  - deviceclasses
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
