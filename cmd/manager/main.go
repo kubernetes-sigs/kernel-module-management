@@ -166,8 +166,8 @@ func main() {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.NodeModulesConfigReconcilerName)
 	}
 
-	if err = controllers.NewDevicePluginPodReconciler(client).SetupWithManager(mgr); err != nil {
-		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.DevicePluginPodReconcilerName)
+	if err = controllers.NewPodNodeLabelReconciler(client).SetupWithManager(mgr); err != nil {
+		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PodNodeLabelReconcilerName)
 	}
 
 	if err = controllers.NewDRAReconciler(client, nodeAPI, scheme).SetupWithManager(mgr); err != nil {
