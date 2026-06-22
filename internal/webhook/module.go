@@ -40,7 +40,8 @@ import (
 )
 
 // maxCombinedLength is the maximum combined length of Module name and namespace when the version field is set.
-const maxCombinedLength = 40
+// 63 (max label key length after slash) - len("version-schedule-plugin.") = 38
+const maxCombinedLength = 38
 
 var kubeVersionRe = regexp.MustCompile(`^v?(\d+)\.(\d+)`)
 

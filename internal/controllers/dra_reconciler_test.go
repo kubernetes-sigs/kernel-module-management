@@ -69,7 +69,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 
 	ctx := context.Background()
 
-	DescribeTable("check error flows", func(getDSError, getDCError, handleDRAError, handleDCError bool) {
+	DescribeTable("check error flows", func(getDSError, getDCError, handleDRAError, gcError, handleDCError bool) {
 		draDS := []appsv1.DaemonSet{{}}
 		returnedError := fmt.Errorf("some error")
 		if getDSError {
@@ -87,6 +87,11 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().handleDRA(ctx, mod, draDS).Return(nil)
+		if gcError {
+			mockReconHelper.EXPECT().garbageCollectDRADaemonSets(ctx, mod, draDS).Return(returnedError)
+			goto executeTestFunction
+		}
+		mockReconHelper.EXPECT().garbageCollectDRADaemonSets(ctx, mod, draDS).Return(nil)
 		if handleDCError {
 			mockReconHelper.EXPECT().handleDeviceClasses(ctx, mod, []resourcev1.DeviceClass(nil)).Return(returnedError)
 			goto executeTestFunction
@@ -101,11 +106,12 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 
 	},
-		Entry("getModuleDRADaemonSets failed", true, false, false, false),
-		Entry("getModuleDeviceClasses failed", false, true, false, false),
-		Entry("handleDRA failed", false, false, true, false),
-		Entry("handleDeviceClasses failed", false, false, false, true),
-		Entry("moduleUpdateDRAStatus failed", false, false, false, false),
+		Entry("getModuleDRADaemonSets failed", true, false, false, false, false),
+		Entry("getModuleDeviceClasses failed", false, true, false, false, false),
+		Entry("handleDRA failed", false, false, true, false, false),
+		Entry("garbageCollectDRADaemonSets failed", false, false, false, true, false),
+		Entry("handleDeviceClasses failed", false, false, false, false, true),
+		Entry("moduleUpdateDRAStatus failed", false, false, false, false, false),
 	)
 
 	It("Good flow", func() {
@@ -114,6 +120,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
 			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().handleDRA(ctx, mod, draDS).Return(nil),
+			mockReconHelper.EXPECT().garbageCollectDRADaemonSets(ctx, mod, draDS).Return(nil),
 			mockReconHelper.EXPECT().handleDeviceClasses(ctx, mod, []resourcev1.DeviceClass(nil)).Return(nil),
 			mockReconHelper.EXPECT().moduleUpdateDRAStatus(ctx, mod, draDS).Return(nil),
 		)
@@ -699,6 +706,149 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 		Entry("without init container", false),
 		Entry("with init container", true),
 	)
+
+	It("should include the version-dra label in the DaemonSet labels and node selector when version is set", func() {
+		mod := kmmv1beta1.Module{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: kmmv1beta1.GroupVersion.String(),
+				Kind:       "Module",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      draModuleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
+					Container: kmmv1beta1.ModuleLoaderContainerSpec{
+						Version: "1",
+						Modprobe: kmmv1beta1.ModprobeSpec{
+							ModuleName: "test-mod",
+						},
+						KernelMappings: []kmmv1beta1.KernelMapping{
+							{Regexp: "^.+$", ContainerImage: "some-image"},
+						},
+					},
+				},
+				DRA: &kmmv1beta1.DRASpec{
+					Container: kmmv1beta1.CommonContainerSpec{
+						Image: draImage,
+					},
+					DriverName: "test.driver",
+				},
+			},
+		}
+
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-ds",
+				Namespace: namespace,
+			},
+		}
+
+		err := dsc.setDRAAsDesired(context.Background(), &ds, &mod)
+		Expect(err).NotTo(HaveOccurred())
+
+		versionLabel := utils.GetSchedulePluginVersionLabelName(namespace, draModuleName)
+
+		Expect(ds.Labels).To(HaveKeyWithValue(versionLabel, "1"))
+		Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(versionLabel, "1"))
+		Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(
+			utils.GetKernelModuleReadyNodeLabel(namespace, draModuleName), "",
+		))
+	})
+})
+
+var _ = Describe("DRAReconciler_garbageCollectDRADaemonSets", func() {
+	const currentModuleVersion = "current"
+
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		drh  draReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		drh = draReconcilerHelper{client: clnt}
+	})
+
+	mod := &kmmv1beta1.Module{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "moduleName",
+			Namespace: "namespace",
+		},
+		Spec: kmmv1beta1.ModuleSpec{
+			ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{
+				Container: kmmv1beta1.ModuleLoaderContainerSpec{
+					Version: currentModuleVersion,
+				},
+			},
+		},
+	}
+	schedulePluginVersionLabel := utils.GetSchedulePluginVersionLabelName(mod.Namespace, mod.Name)
+
+	DescribeTable("DRA GC", func(formerDSExists bool, formerDesired int) {
+		currentDS := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "dra-current",
+				Namespace: "namespace",
+				Labels: map[string]string{
+					schedulePluginVersionLabel: currentModuleVersion,
+					constants.ModuleNameLabel:  mod.Name,
+				},
+			},
+		}
+		formerDS := &appsv1.DaemonSet{}
+
+		existingDS := []appsv1.DaemonSet{currentDS}
+		if formerDSExists {
+			formerDS = currentDS.DeepCopy()
+			formerDS.SetName("dra-former")
+			formerDS.Labels[schedulePluginVersionLabel] = "former"
+			formerDS.Status.DesiredNumberScheduled = int32(formerDesired)
+			existingDS = append(existingDS, *formerDS)
+		}
+		if formerDSExists && formerDesired == 0 {
+			clnt.EXPECT().Delete(context.Background(), formerDS).Return(nil)
+		}
+
+		err := drh.garbageCollectDRADaemonSets(context.Background(), mod, existingDS)
+		Expect(err).NotTo(HaveOccurred())
+	},
+		Entry("no former DS to delete", false, 0),
+		Entry("former DS with zero desired — deleted", true, 0),
+		Entry("former DS still has desired pods — kept", true, 1),
+	)
+
+	It("should return an error if a deletion failed", func() {
+		deleteDS := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "dra-old",
+				Namespace: "namespace",
+				Labels:    map[string]string{constants.ModuleNameLabel: mod.Name, schedulePluginVersionLabel: "formerVersion"},
+			},
+		}
+		clnt.EXPECT().Delete(context.Background(), &deleteDS).Return(fmt.Errorf("some error"))
+
+		err := drh.garbageCollectDRADaemonSets(context.Background(), mod, []appsv1.DaemonSet{deleteDS})
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should pass if moduleLoader is not defined", func() {
+		modWithoutModuleLoader := mod.DeepCopy()
+		modWithoutModuleLoader.Spec.ModuleLoader = nil
+		oldDS := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "dra-old",
+				Namespace: "namespace",
+				Labels:    map[string]string{constants.ModuleNameLabel: mod.Name, schedulePluginVersionLabel: "formerVersion"},
+			},
+		}
+
+		err := drh.garbageCollectDRADaemonSets(context.Background(), modWithoutModuleLoader, []appsv1.DaemonSet{oldDS})
+		Expect(err).ToNot(HaveOccurred())
+	})
 })
 
 var _ = Describe("DRAReconciler_getModuleDRADaemonSets", func() {

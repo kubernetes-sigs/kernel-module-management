@@ -113,6 +113,11 @@ func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (
 		return res, fmt.Errorf("could not handle DRA: %v", err)
 	}
 
+	err = r.reconHelperAPI.garbageCollectDRADaemonSets(ctx, mod, existingDRADS)
+	if err != nil {
+		return res, fmt.Errorf("failed to run DRA garbage collection: %v", err)
+	}
+
 	err = r.reconHelperAPI.handleDeviceClasses(ctx, mod, existingDCs)
 	if err != nil {
 		return res, fmt.Errorf("could not handle DeviceClasses: %v", err)
@@ -133,6 +138,7 @@ func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (
 type draReconcilerHelperAPI interface {
 	getModuleDRADaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	handleDRA(ctx context.Context, mod *kmmv1beta1.Module, existingDRADS []appsv1.DaemonSet) error
+	garbageCollectDRADaemonSets(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) error
 	deleteDRAResources(ctx context.Context, moduleName, moduleNamespace string) error
 	moduleUpdateDRAStatus(ctx context.Context, mod *kmmv1beta1.Module, existingDRADS []appsv1.DaemonSet) error
 	clearDRAStatus(ctx context.Context, mod *kmmv1beta1.Module) error
@@ -181,11 +187,9 @@ func (drh *draReconcilerHelper) handleDRA(ctx context.Context, mod *kmmv1beta1.M
 
 	logger := log.FromContext(ctx)
 
-	var ds *appsv1.DaemonSet
-	if len(existingDRADS) > 0 {
-		ds = &existingDRADS[0]
-	} else {
-		logger.Info("creating new DRA DaemonSet")
+	ds, version := getExistingDRADSFromVersion(existingDRADS, mod.Namespace, mod.Name, mod.Spec.ModuleLoader)
+	if ds == nil {
+		logger.Info("creating new DRA DaemonSet", "version", version)
 		ds = &appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, GenerateName: mod.Name + "-dra-"},
 		}
@@ -200,6 +204,51 @@ func (drh *draReconcilerHelper) handleDRA(ctx context.Context, mod *kmmv1beta1.M
 	}
 
 	return err
+}
+
+func (drh *draReconcilerHelper) garbageCollectDRADaemonSets(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) error {
+	if mod.Spec.ModuleLoader == nil {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+	deleted := make([]string, 0)
+	for _, ds := range existingDS {
+		if isOlderVersionUnusedDRADaemonSet(&ds, mod.Namespace, mod.Spec.ModuleLoader.Container.Version) {
+			deleted = append(deleted, ds.Name)
+			if err := drh.client.Delete(ctx, &ds); err != nil {
+				return fmt.Errorf("could not delete DRA DaemonSet %s: %v", ds.Name, err)
+			}
+		}
+	}
+
+	logger.Info("garbage-collected DRA DaemonSets", "names", deleted)
+	return nil
+}
+
+func getExistingDRADSFromVersion(existingDS []appsv1.DaemonSet,
+	moduleNamespace string,
+	moduleName string,
+	moduleLoader *kmmv1beta1.ModuleLoaderSpec) (*appsv1.DaemonSet, string) {
+	version := ""
+	if moduleLoader != nil {
+		version = moduleLoader.Container.Version
+	}
+
+	versionLabel := utils.GetSchedulePluginVersionLabelName(moduleNamespace, moduleName)
+	for _, ds := range existingDS {
+		dsModuleVersion := ds.GetLabels()[versionLabel]
+		if dsModuleVersion == version {
+			return &ds, version
+		}
+	}
+	return nil, version
+}
+
+func isOlderVersionUnusedDRADaemonSet(ds *appsv1.DaemonSet, moduleNamespace, moduleVersion string) bool {
+	moduleName := ds.Labels[constants.ModuleNameLabel]
+	versionLabel := utils.GetSchedulePluginVersionLabelName(moduleNamespace, moduleName)
+	return ds.Labels[versionLabel] != moduleVersion && ds.Status.DesiredNumberScheduled == 0
 }
 
 // deleteDRAResources deletes all DRA-owned DaemonSets and DeviceClasses using label-based bulk deletion.
@@ -401,6 +450,12 @@ func (dsci *draDaemonSetCreatorImpl) setDRAAsDesired(
 
 	nodeSelector := map[string]string{
 		utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name): "",
+	}
+
+	if mod.Spec.ModuleLoader != nil && mod.Spec.ModuleLoader.Container.Version != "" {
+		versionLabel := utils.GetSchedulePluginVersionLabelName(mod.Namespace, mod.Name)
+		standardLabels[versionLabel] = mod.Spec.ModuleLoader.Container.Version
+		nodeSelector[versionLabel] = mod.Spec.ModuleLoader.Container.Version
 	}
 
 	ds.SetLabels(

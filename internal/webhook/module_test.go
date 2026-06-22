@@ -68,7 +68,7 @@ var _ = Describe("maxCombinedLength", func() {
 			baseLength = l
 		}
 
-		if l := getLengthAfterSlash(utils.GetDevicePluginVersionLabelName("", "")); l > baseLength {
+		if l := getLengthAfterSlash(utils.GetSchedulePluginVersionLabelName("", "")); l > baseLength {
 			baseLength = l
 		}
 

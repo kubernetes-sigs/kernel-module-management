@@ -316,7 +316,7 @@ var _ = Describe("DevicePluginReconciler_garbageCollect", func() {
 			},
 		},
 	}
-	devicePluginVersionLabel := utils.GetDevicePluginVersionLabelName(mod.Namespace, mod.Name)
+	schedulePluginVersionLabel := utils.GetSchedulePluginVersionLabelName(mod.Namespace, mod.Name)
 
 	DescribeTable("device-plugin GC", func(devicePluginFormerLabel bool, devicePluginFormerDesired int) {
 		devicePluginDS := appsv1.DaemonSet{
@@ -324,8 +324,8 @@ var _ = Describe("DevicePluginReconciler_garbageCollect", func() {
 				Name:      "devicePlugin",
 				Namespace: "namespace",
 				Labels: map[string]string{
-					devicePluginVersionLabel:  currentModuleVersion,
-					constants.ModuleNameLabel: mod.Name,
+					schedulePluginVersionLabel: currentModuleVersion,
+					constants.ModuleNameLabel:  mod.Name,
 				},
 			},
 		}
@@ -335,7 +335,7 @@ var _ = Describe("DevicePluginReconciler_garbageCollect", func() {
 		if devicePluginFormerLabel {
 			devicePluginFormerVersionDS = devicePluginDS.DeepCopy()
 			devicePluginFormerVersionDS.SetName("devicePluginFormer")
-			devicePluginFormerVersionDS.Labels[devicePluginVersionLabel] = "former label"
+			devicePluginFormerVersionDS.Labels[schedulePluginVersionLabel] = "former label"
 			devicePluginFormerVersionDS.Status.DesiredNumberScheduled = int32(devicePluginFormerDesired)
 			existingDS = append(existingDS, *devicePluginFormerVersionDS)
 		}
@@ -357,7 +357,7 @@ var _ = Describe("DevicePluginReconciler_garbageCollect", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "devicePlugin",
 				Namespace: "namespace",
-				Labels:    map[string]string{constants.ModuleNameLabel: mod.Name, devicePluginVersionLabel: "formerVersion"},
+				Labels:    map[string]string{constants.ModuleNameLabel: mod.Name, schedulePluginVersionLabel: "formerVersion"},
 			},
 		}
 		clnt.EXPECT().Delete(context.Background(), &deleteDS).Return(fmt.Errorf("some error"))
@@ -375,7 +375,7 @@ var _ = Describe("DevicePluginReconciler_garbageCollect", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "devicePlugin",
 				Namespace: "namespace",
-				Labels:    map[string]string{constants.ModuleNameLabel: mod.Name, devicePluginVersionLabel: "formerVersion"},
+				Labels:    map[string]string{constants.ModuleNameLabel: mod.Name, schedulePluginVersionLabel: "formerVersion"},
 			},
 		}
 
@@ -738,7 +738,7 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 		err := dsc.setDevicePluginAsDesired(context.Background(), &ds, &mod)
 
 		Expect(err).NotTo(HaveOccurred())
-		versionLabel := utils.GetDevicePluginVersionLabelName(namespace, moduleName)
+		versionLabel := utils.GetSchedulePluginVersionLabelName(namespace, moduleName)
 		Expect(ds.GetLabels()).Should(HaveKeyWithValue(versionLabel, "some version"))
 	})
 
@@ -968,7 +968,7 @@ var _ = Describe("DevicePluginReconciler_getExistingDSFromVersion", func() {
 	)
 
 	devicePluginLabels := map[string]string{
-		utils.GetDevicePluginVersionLabelName(moduleNamespace, moduleName): moduleVersion,
+		utils.GetSchedulePluginVersionLabelName(moduleNamespace, moduleName): moduleVersion,
 	}
 
 	ds := appsv1.DaemonSet{
