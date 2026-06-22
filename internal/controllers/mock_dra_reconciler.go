@@ -69,6 +69,20 @@ func (mr *MockdraReconcilerHelperAPIMockRecorder) deleteDRAResources(ctx, module
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "deleteDRAResources", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).deleteDRAResources), ctx, moduleName, moduleNamespace)
 }
 
+// garbageCollectDRADaemonSets mocks base method.
+func (m *MockdraReconcilerHelperAPI) garbageCollectDRADaemonSets(ctx context.Context, mod *v1beta1.Module, existingDS []v1.DaemonSet) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "garbageCollectDRADaemonSets", ctx, mod, existingDS)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// garbageCollectDRADaemonSets indicates an expected call of garbageCollectDRADaemonSets.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) garbageCollectDRADaemonSets(ctx, mod, existingDS any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "garbageCollectDRADaemonSets", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).garbageCollectDRADaemonSets), ctx, mod, existingDS)
+}
+
 // getModuleDRADaemonSets mocks base method.
 func (m *MockdraReconcilerHelperAPI) getModuleDRADaemonSets(ctx context.Context, name, namespace string) ([]v1.DaemonSet, error) {
 	m.ctrl.T.Helper()

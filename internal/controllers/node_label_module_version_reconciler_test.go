@@ -41,22 +41,22 @@ var _ = Describe("Reconcile", func() {
 	ctx := context.Background()
 	nodeLabels := map[string]string{"some label": "some label value"}
 
-	DescribeTable("reconciler flow", func(getMLPodsError, upDateNodeLabelsErrors, requeue bool) {
+	DescribeTable("reconciler flow", func(getSchedulePluginPodsError, upDateNodeLabelsErrors, requeue bool) {
 		labelsPerModules := map[string]*modulesVersionLabels{
-			"moduleNameNamespace": &modulesVersionLabels{name: "name", namespace: "namespace"},
+			"moduleNameNamespace": {name: "name", namespace: "namespace"},
 		}
-		devicePluginPods := []v1.Pod{v1.Pod{}}
+		schedulePluginPods := []v1.Pod{{}}
 		loadedKernelModules := []types.NamespacedName{{Name: "some name", Namespace: "some namespace"}}
 		reconcileLabelsResult := &reconcileLabelsResult{requeue: requeue}
 		expectedRes := ctrl.Result{Requeue: requeue}
 		mockHelper.EXPECT().getLabelsPerModules(ctx, nodeLabels).Return(labelsPerModules)
-		if getMLPodsError {
-			mockHelper.EXPECT().getDevicePluginPods(ctx, nodeName).Return(nil, fmt.Errorf("some error"))
+		if getSchedulePluginPodsError {
+			mockHelper.EXPECT().getSchedulePluginPods(ctx, nodeName).Return(nil, fmt.Errorf("some error"))
 			goto executeTestFunction
 		}
-		mockHelper.EXPECT().getDevicePluginPods(ctx, nodeName).Return(devicePluginPods, nil)
+		mockHelper.EXPECT().getSchedulePluginPods(ctx, nodeName).Return(schedulePluginPods, nil)
 		mockHelper.EXPECT().getLoadedKernelModules(nodeLabels).Return(loadedKernelModules)
-		mockHelper.EXPECT().reconcileLabels(labelsPerModules, devicePluginPods, loadedKernelModules).Return(reconcileLabelsResult)
+		mockHelper.EXPECT().reconcileLabels(labelsPerModules, schedulePluginPods, loadedKernelModules).Return(reconcileLabelsResult)
 		if upDateNodeLabelsErrors {
 			mockHelper.EXPECT().updateNodeLabels(ctx, nodeName, reconcileLabelsResult).Return(fmt.Errorf("some error"))
 			goto executeTestFunction
@@ -71,7 +71,7 @@ var _ = Describe("Reconcile", func() {
 		}
 
 		res, err := nlmvr.Reconcile(ctx, &node)
-		if upDateNodeLabelsErrors || getMLPodsError {
+		if upDateNodeLabelsErrors || getSchedulePluginPodsError {
 			Expect(err).To(HaveOccurred())
 		} else {
 			Expect(err).ToNot(HaveOccurred())
@@ -80,7 +80,7 @@ var _ = Describe("Reconcile", func() {
 	},
 		Entry("good flow, no requeue", false, false, false),
 		Entry("good flow, with requeue", false, false, true),
-		Entry("get module loader pods failed", true, false, false),
+		Entry("get schedule plugin pods failed", true, false, false),
 		Entry("update node labels failed", false, true, false),
 	)
 })
@@ -97,36 +97,46 @@ var _ = Describe("getLabelsPerModules", func() {
 	nodeLabels := map[string]string{
 		"some label 1": "some value1",
 		"some label 2": "",
-		"beta.kmm.node.kubernetes.io/version-worker-pod.namespace1.module1":    "1",
-		"beta.kmm.node.kubernetes.io/version-device-plugin.namespace1.module1": "1",
-		"kmm.node.kubernetes.io/version-module.namespace1.module1":             "1",
-		"beta.kmm.node.kubernetes.io/version-worker-pod.namespace2.module2":    "3",
-		"kmm.node.kubernetes.io/version-module.namespace2.module2":             "3",
-		"beta.kmm.node.kubernetes.io/version-device-plugin.namespace3.module3": "4",
-		"kmm.node.kubernetes.io/version-module.namespace5.module5":             "10",
+		"beta.kmm.node.kubernetes.io/version-worker-pod.namespace1.module1":      "1",
+		"beta.kmm.node.kubernetes.io/version-schedule-plugin.namespace1.module1": "1",
+		"kmm.node.kubernetes.io/version-module.namespace1.module1":               "1",
+		"beta.kmm.node.kubernetes.io/version-worker-pod.namespace2.module2":      "3",
+		"kmm.node.kubernetes.io/version-module.namespace2.module2":               "3",
+		"beta.kmm.node.kubernetes.io/version-schedule-plugin.namespace3.module3": "4",
+		"kmm.node.kubernetes.io/version-module.namespace5.module5":               "10",
+		"beta.kmm.node.kubernetes.io/version-schedule-plugin.namespace4.module4": "5",
+		"beta.kmm.node.kubernetes.io/version-worker-pod.namespace4.module4":      "5",
+		"kmm.node.kubernetes.io/version-module.namespace4.module4":               "5",
 	}
 
 	It("normal flow", func() {
 		expectedRes := map[string]*modulesVersionLabels{
-			"namespace1-module1": &modulesVersionLabels{
-				name:                     "module1",
-				namespace:                "namespace1",
-				moduleVersionLabel:       "1",
-				workerPodVersionLabel:    "1",
-				devicePluginVersionLabel: "1",
+			"namespace1-module1": {
+				name:                       "module1",
+				namespace:                  "namespace1",
+				moduleVersionLabel:         "1",
+				workerPodVersionLabel:      "1",
+				schedulePluginVersionLabel: "1",
 			},
-			"namespace2-module2": &modulesVersionLabels{
+			"namespace2-module2": {
 				name:                  "module2",
 				namespace:             "namespace2",
 				moduleVersionLabel:    "3",
 				workerPodVersionLabel: "3",
 			},
-			"namespace3-module3": &modulesVersionLabels{
-				name:                     "module3",
-				namespace:                "namespace3",
-				devicePluginVersionLabel: "4",
+			"namespace3-module3": {
+				name:                       "module3",
+				namespace:                  "namespace3",
+				schedulePluginVersionLabel: "4",
 			},
-			"namespace5-module5": &modulesVersionLabels{
+			"namespace4-module4": {
+				name:                       "module4",
+				namespace:                  "namespace4",
+				moduleVersionLabel:         "5",
+				workerPodVersionLabel:      "5",
+				schedulePluginVersionLabel: "5",
+			},
+			"namespace5-module5": {
 				name:               "module5",
 				namespace:          "namespace5",
 				moduleVersionLabel: "10",
@@ -141,7 +151,7 @@ var _ = Describe("getLabelsPerModules", func() {
 	})
 })
 
-var _ = Describe("getDevicePluginPods", func() {
+var _ = Describe("getSchedulePluginPods", func() {
 	const (
 		nodeName = "node-name"
 	)
@@ -162,45 +172,30 @@ var _ = Describe("getDevicePluginPods", func() {
 	It("good flow", func() {
 		pod1 := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{constants.ModuleNameLabel: "module name"},
-				OwnerReferences: []metav1.OwnerReference{
-					{
-						Kind: "some kind",
-					},
-					{
-						Kind: "DaemonSet",
-					},
+				Labels: map[string]string{
+					constants.ModuleNameLabel: "module name",
+					constants.DaemonSetRole:   constants.DevicePluginRoleLabelValue,
 				},
 			},
 		}
-		pod2 := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{constants.ModuleNameLabel: "other module name"},
-			},
-		}
 
-		fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
-		labelSelector := client.HasLabels{constants.ModuleNameLabel}
-		kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).DoAndReturn(
+		kubeClient.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ interface{}, list *v1.PodList, _ ...interface{}) error {
 				list.Items = append(list.Items, pod1)
-				list.Items = append(list.Items, pod2)
 				return nil
 			},
 		)
 
-		res, err := helper.getDevicePluginPods(ctx, nodeName)
+		res, err := helper.getSchedulePluginPods(ctx, nodeName)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(len(res)).To(Equal(1))
 		Expect(res[0]).To(Equal(pod1))
 	})
 
 	It("error flow", func() {
-		fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
-		labelSelector := client.HasLabels{constants.ModuleNameLabel}
-		kubeClient.EXPECT().List(ctx, gomock.Any(), labelSelector, fieldSelector).Return(fmt.Errorf("some error"))
+		kubeClient.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
 
-		res, err := helper.getDevicePluginPods(ctx, nodeName)
+		res, err := helper.getSchedulePluginPods(ctx, nodeName)
 		Expect(err).To(HaveOccurred())
 		Expect(res).To(BeNil())
 	})
@@ -208,14 +203,14 @@ var _ = Describe("getDevicePluginPods", func() {
 })
 
 var _ = Describe("getLabelAndAction", func() {
-	DescribeTable("reconciler flow", func(moduleVersionValue, workerPodVersionValue, devicePluginVersionValue string,
+	DescribeTable("should return correct label and action", func(moduleVersionValue, workerPodVersionValue, schedulePluginVersionValue string,
 		expectedLabelFunc func(string, string) string, expectedLabelValue, expectedAction string) {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       moduleVersionValue,
-			workerPodVersionLabel:    workerPodVersionValue,
-			devicePluginVersionLabel: devicePluginVersionValue,
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         moduleVersionValue,
+			workerPodVersionLabel:      workerPodVersionValue,
+			schedulePluginVersionLabel: schedulePluginVersionValue,
 		}
 		expectedLabel := ""
 		if expectedLabelFunc != nil {
@@ -229,13 +224,13 @@ var _ = Describe("getLabelAndAction", func() {
 		Expect(action).To(Equal(expectedAction))
 	},
 		Entry("all labels present with the same label", "1", "1", "1", nil, "", noneAction),
-		Entry("module version missing, worker pod present, device plugin present", "", "1", "1", utils.GetDevicePluginVersionLabelName, "", deleteAction),
-		Entry("module version missing, worker pod present, device plugin missing", "", "1", "", utils.GetWorkerPodVersionLabelName, "", deleteAction),
+		Entry("module version missing, worker pod present, schedule plugin present", "", "1", "1", utils.GetSchedulePluginVersionLabelName, "", deleteAction),
+		Entry("module version missing, worker pod present, schedule plugin missing", "", "1", "", utils.GetWorkerPodVersionLabelName, "", deleteAction),
 		Entry("all labels missing", "", "", "", nil, "", noneAction),
-		Entry("module version present, worker pod missing, device plugin missing", "1", "", "", utils.GetWorkerPodVersionLabelName, "1", addAction),
-		Entry("module version present, worker pod present, device plugin missing", "1", "1", "", utils.GetDevicePluginVersionLabelName, "1", addAction),
-		Entry("module version present, worker pod different, device plugin different", "2", "1", "1", utils.GetDevicePluginVersionLabelName, "", deleteAction),
-		Entry("module version present, worker pod different, device plugin missing", "2", "1", "", utils.GetWorkerPodVersionLabelName, "", deleteAction),
+		Entry("module version present, worker pod missing, schedule plugin missing", "1", "", "", utils.GetWorkerPodVersionLabelName, "1", addAction),
+		Entry("module version present, worker pod present, schedule plugin missing", "1", "1", "", utils.GetSchedulePluginVersionLabelName, "1", addAction),
+		Entry("module version present, worker pod different, schedule plugin different", "2", "1", "1", utils.GetSchedulePluginVersionLabelName, "", deleteAction),
+		Entry("module version present, worker pod different, schedule plugin missing", "2", "1", "", utils.GetWorkerPodVersionLabelName, "", deleteAction),
 	)
 })
 
@@ -252,29 +247,29 @@ var _ = Describe("reconcileLabels", func() {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "moduleNamespace"},
 	}
 
-	It("delete device-plugin label, device plugin pod not present", func() {
+	It("delete schedule plugin label, schedule plugin pod not present", func() {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       "",
-			workerPodVersionLabel:    "1",
-			devicePluginVersionLabel: "1",
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         "",
+			workerPodVersionLabel:      "1",
+			schedulePluginVersionLabel: "1",
 		}
 
 		res := helper.reconcileLabels(map[string]*modulesVersionLabels{"key": moduleLabels}, []v1.Pod{pod}, nil)
 
 		Expect(res.requeue).To(BeFalse())
 		Expect(len(res.labelsToAdd)).To(Equal(0))
-		Expect(res.labelsToDelete).To(Equal([]string{utils.GetDevicePluginVersionLabelName("moduleNamespace", "moduleName")}))
+		Expect(res.labelsToDelete).To(Equal([]string{utils.GetSchedulePluginVersionLabelName("moduleNamespace", "moduleName")}))
 	})
 
-	It("delete worker pod label, device plugin pod not present", func() {
+	It("delete worker pod label, schedule plugin pod not present", func() {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       "",
-			workerPodVersionLabel:    "1",
-			devicePluginVersionLabel: "",
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         "",
+			workerPodVersionLabel:      "1",
+			schedulePluginVersionLabel: "",
 		}
 
 		res := helper.reconcileLabels(map[string]*modulesVersionLabels{"key": moduleLabels}, []v1.Pod{pod}, nil)
@@ -284,30 +279,30 @@ var _ = Describe("reconcileLabels", func() {
 		Expect(res.labelsToDelete).To(Equal([]string{utils.GetWorkerPodVersionLabelName("moduleNamespace", "moduleName")}))
 	})
 
-	It("delete device-plugin label, device plugin pod present", func() {
+	It("delete schedule plugin label, schedule plugin pod present", func() {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       "",
-			workerPodVersionLabel:    "1",
-			devicePluginVersionLabel: "1",
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         "",
+			workerPodVersionLabel:      "1",
+			schedulePluginVersionLabel: "1",
 		}
 		pod.SetLabels(map[string]string{constants.ModuleNameLabel: "moduleName"})
 
 		res := helper.reconcileLabels(map[string]*modulesVersionLabels{"key": moduleLabels}, []v1.Pod{pod}, nil)
 
 		Expect(res.requeue).To(BeFalse())
-		Expect(res.labelsToDelete).To(Equal([]string{utils.GetDevicePluginVersionLabelName("moduleNamespace", "moduleName")}))
+		Expect(res.labelsToDelete).To(Equal([]string{utils.GetSchedulePluginVersionLabelName("moduleNamespace", "moduleName")}))
 		Expect(len(res.labelsToAdd)).To(Equal(0))
 	})
 
-	It("delete worker pod label,device plugin pod present", func() {
+	It("delete worker pod label, schedule plugin pod present", func() {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       "",
-			workerPodVersionLabel:    "1",
-			devicePluginVersionLabel: "",
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         "",
+			workerPodVersionLabel:      "1",
+			schedulePluginVersionLabel: "",
 		}
 		pod.SetLabels(map[string]string{constants.ModuleNameLabel: "moduleName"})
 
@@ -320,11 +315,11 @@ var _ = Describe("reconcileLabels", func() {
 
 	It("add worker pod label, kernel module is not loaded", func() {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       "1",
-			workerPodVersionLabel:    "",
-			devicePluginVersionLabel: "",
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         "1",
+			workerPodVersionLabel:      "",
+			schedulePluginVersionLabel: "",
 		}
 
 		res := helper.reconcileLabels(map[string]*modulesVersionLabels{"key": moduleLabels}, []v1.Pod{pod}, nil)
@@ -336,11 +331,11 @@ var _ = Describe("reconcileLabels", func() {
 
 	It("add worker pod label, kernel module is loaded", func() {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       "1",
-			workerPodVersionLabel:    "",
-			devicePluginVersionLabel: "",
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         "1",
+			workerPodVersionLabel:      "",
+			schedulePluginVersionLabel: "",
 		}
 
 		loadedKernelModules := []types.NamespacedName{{Name: "moduleName", Namespace: "moduleNamespace"}}
@@ -352,29 +347,29 @@ var _ = Describe("reconcileLabels", func() {
 		Expect(len(res.labelsToAdd)).To(Equal(0))
 	})
 
-	It("add device-plugin label, kernel module is not loaded", func() {
+	It("add schedule plugin label, kernel module is not loaded", func() {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       "1",
-			workerPodVersionLabel:    "1",
-			devicePluginVersionLabel: "",
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         "1",
+			workerPodVersionLabel:      "1",
+			schedulePluginVersionLabel: "",
 		}
 
 		res := helper.reconcileLabels(map[string]*modulesVersionLabels{"key": moduleLabels}, []v1.Pod{pod}, nil)
 
 		Expect(res.requeue).To(BeFalse())
-		Expect(res.labelsToAdd).To(Equal(map[string]string{utils.GetDevicePluginVersionLabelName("moduleNamespace", "moduleName"): "1"}))
+		Expect(res.labelsToAdd).To(Equal(map[string]string{utils.GetSchedulePluginVersionLabelName("moduleNamespace", "moduleName"): "1"}))
 		Expect(len(res.labelsToDelete)).To(Equal(0))
 	})
 
-	It("add device-plugin label, kernel module is loaded", func() {
+	It("add schedule plugin label, kernel module is loaded", func() {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       "1",
-			workerPodVersionLabel:    "1",
-			devicePluginVersionLabel: "",
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         "1",
+			workerPodVersionLabel:      "1",
+			schedulePluginVersionLabel: "",
 		}
 
 		loadedKernelModules := []types.NamespacedName{{Name: "moduleName", Namespace: "moduleNamespace"}}
@@ -382,17 +377,17 @@ var _ = Describe("reconcileLabels", func() {
 		res := helper.reconcileLabels(map[string]*modulesVersionLabels{"key": moduleLabels}, []v1.Pod{pod}, loadedKernelModules)
 
 		Expect(res.requeue).To(BeFalse())
-		Expect(res.labelsToAdd).To(Equal(map[string]string{utils.GetDevicePluginVersionLabelName("moduleNamespace", "moduleName"): "1"}))
+		Expect(res.labelsToAdd).To(Equal(map[string]string{utils.GetSchedulePluginVersionLabelName("moduleNamespace", "moduleName"): "1"}))
 		Expect(len(res.labelsToDelete)).To(Equal(0))
 	})
 
 	It("no label needs to be added due to none action", func() {
 		moduleLabels := &modulesVersionLabels{
-			name:                     "moduleName",
-			namespace:                "moduleNamespace",
-			moduleVersionLabel:       "1",
-			workerPodVersionLabel:    "1",
-			devicePluginVersionLabel: "1",
+			name:                       "moduleName",
+			namespace:                  "moduleNamespace",
+			moduleVersionLabel:         "1",
+			workerPodVersionLabel:      "1",
+			schedulePluginVersionLabel: "1",
 		}
 		pod := v1.Pod{}
 		pod.Namespace = "moduleNamespace"
@@ -406,7 +401,7 @@ var _ = Describe("reconcileLabels", func() {
 	})
 })
 
-var _ = Describe("reconcileLabels", func() {
+var _ = Describe("updateNodeLabels", func() {
 	var (
 		kubeClient *mock_client.MockClient
 		helper     nodeLabelModuleVersionHelperAPI

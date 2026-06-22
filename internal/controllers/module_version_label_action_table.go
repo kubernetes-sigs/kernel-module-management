@@ -13,9 +13,9 @@ const (
 )
 
 type labelActionKey struct {
-	module       string
-	workerPod    string
-	devicePlugin string
+	module         string
+	workerPod      string
+	schedulePlugin string
 }
 
 type labelAction struct {
@@ -24,43 +24,43 @@ type labelAction struct {
 }
 
 var labelActionTable = map[labelActionKey]labelAction{
-	labelActionKey{
-		module:       labelMissing,
-		workerPod:    labelMissing,
-		devicePlugin: labelMissing}: labelAction{getLabelName: nil, action: noneAction},
+	{
+		module:         labelMissing,
+		workerPod:      labelMissing,
+		schedulePlugin: labelMissing}: {getLabelName: nil, action: noneAction},
 
-	labelActionKey{
-		module:       labelMissing,
-		workerPod:    labelPresent,
-		devicePlugin: labelPresent}: labelAction{getLabelName: utils.GetDevicePluginVersionLabelName, action: deleteAction},
+	{
+		module:         labelMissing,
+		workerPod:      labelPresent,
+		schedulePlugin: labelPresent}: {getLabelName: utils.GetSchedulePluginVersionLabelName, action: deleteAction},
 
-	labelActionKey{
-		module:       labelMissing,
-		workerPod:    labelPresent,
-		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetWorkerPodVersionLabelName, action: deleteAction},
+	{
+		module:         labelMissing,
+		workerPod:      labelPresent,
+		schedulePlugin: labelMissing}: {getLabelName: utils.GetWorkerPodVersionLabelName, action: deleteAction},
 
-	labelActionKey{
-		module:       labelPresent,
-		workerPod:    labelMissing,
-		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetWorkerPodVersionLabelName, action: addAction},
+	{
+		module:         labelPresent,
+		workerPod:      labelMissing,
+		schedulePlugin: labelMissing}: {getLabelName: utils.GetWorkerPodVersionLabelName, action: addAction},
 
-	labelActionKey{
-		module:       labelPresent,
-		workerPod:    labelPresent,
-		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetDevicePluginVersionLabelName, action: addAction},
+	{
+		module:         labelPresent,
+		workerPod:      labelPresent,
+		schedulePlugin: labelMissing}: {getLabelName: utils.GetSchedulePluginVersionLabelName, action: addAction},
 
-	labelActionKey{
-		module:       labelPresent,
-		workerPod:    labelPresent,
-		devicePlugin: labelPresent}: labelAction{getLabelName: nil, action: noneAction},
+	{
+		module:         labelPresent,
+		workerPod:      labelPresent,
+		schedulePlugin: labelPresent}: {getLabelName: nil, action: noneAction},
 
-	labelActionKey{
-		module:       labelPresent,
-		workerPod:    labelDifferent,
-		devicePlugin: labelDifferent}: labelAction{getLabelName: utils.GetDevicePluginVersionLabelName, action: deleteAction},
+	{
+		module:         labelPresent,
+		workerPod:      labelDifferent,
+		schedulePlugin: labelDifferent}: {getLabelName: utils.GetSchedulePluginVersionLabelName, action: deleteAction},
 
-	labelActionKey{
-		module:       labelPresent,
-		workerPod:    labelDifferent,
-		devicePlugin: labelMissing}: labelAction{getLabelName: utils.GetWorkerPodVersionLabelName, action: deleteAction},
+	{
+		module:         labelPresent,
+		workerPod:      labelDifferent,
+		schedulePlugin: labelMissing}: {getLabelName: utils.GetWorkerPodVersionLabelName, action: deleteAction},
 }

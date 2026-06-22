@@ -9,6 +9,8 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,13 +18,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// this struct contains all the version labels related to a specific Module
 type modulesVersionLabels struct {
-	name                     string
-	namespace                string
-	moduleVersionLabel       string
-	workerPodVersionLabel    string
-	devicePluginVersionLabel string
+	name                       string
+	namespace                  string
+	moduleVersionLabel         string
+	workerPodVersionLabel      string
+	schedulePluginVersionLabel string
 }
 
 const (
@@ -50,14 +51,14 @@ func NewNodeLabelModuleVersionReconciler(client client.Client) *NodeLabelModuleV
 func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, node *v1.Node) (ctrl.Result, error) {
 	modulesVersionLabels := nlmvr.helperAPI.getLabelsPerModules(ctx, node.Labels)
 
-	devicePluginPods, err := nlmvr.helperAPI.getDevicePluginPods(ctx, node.Name)
+	schedulePluginPods, err := nlmvr.helperAPI.getSchedulePluginPods(ctx, node.Name)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("could get device plugin pods for the node %s: %v", node.Name, err)
+		return ctrl.Result{}, fmt.Errorf("could not get schedule plugin pods for the node %s: %v", node.Name, err)
 	}
 
 	loadedKernelModules := nlmvr.helperAPI.getLoadedKernelModules(node.GetLabels())
 
-	reconLabelsRes := nlmvr.helperAPI.reconcileLabels(modulesVersionLabels, devicePluginPods, loadedKernelModules)
+	reconLabelsRes := nlmvr.helperAPI.reconcileLabels(modulesVersionLabels, schedulePluginPods, loadedKernelModules)
 
 	logger := log.FromContext(ctx).WithValues("node name", node.Name)
 	logLabelsUpdateData(logger, reconLabelsRes)
@@ -74,9 +75,9 @@ func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, no
 
 type nodeLabelModuleVersionHelperAPI interface {
 	getLabelsPerModules(ctx context.Context, nodeLabels map[string]string) map[string]*modulesVersionLabels
-	getDevicePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error)
+	getSchedulePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error)
 	getLoadedKernelModules(labels map[string]string) []types.NamespacedName
-	reconcileLabels(modulesLabels map[string]*modulesVersionLabels, devicePluginPods []v1.Pod, kernelModuleReadyLabels []types.NamespacedName) *reconcileLabelsResult
+	reconcileLabels(modulesLabels map[string]*modulesVersionLabels, schedulePluginPods []v1.Pod, kernelModuleReadyLabels []types.NamespacedName) *reconcileLabelsResult
 	updateNodeLabels(ctx context.Context, nodeName string, reconLabelsRes *reconcileLabelsResult) error
 }
 
@@ -109,8 +110,8 @@ func (nlmvha *nodeLabelModuleVersionHelper) getLabelsPerModules(ctx context.Cont
 				labelsPerModule[mapKey].moduleVersionLabel = value
 			case utils.IsWorkerPodVersionLabel(key):
 				labelsPerModule[mapKey].workerPodVersionLabel = value
-			case utils.IsDevicePluginVersionLabel(key):
-				labelsPerModule[mapKey].devicePluginVersionLabel = value
+			case utils.IsSchedulePluginVersionLabel(key):
+				labelsPerModule[mapKey].schedulePluginVersionLabel = value
 			}
 		}
 	}
@@ -118,25 +119,26 @@ func (nlmvha *nodeLabelModuleVersionHelper) getLabelsPerModules(ctx context.Cont
 	return labelsPerModule
 }
 
-func (nlmvha *nodeLabelModuleVersionHelper) getDevicePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error) {
-	var kmmPodsList v1.PodList
-	fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
-	labelSelector := client.HasLabels{constants.ModuleNameLabel}
-	err := nlmvha.client.List(ctx, &kmmPodsList, labelSelector, fieldSelector)
+func (nlmvha *nodeLabelModuleVersionHelper) getSchedulePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error) {
+	req, err := labels.NewRequirement(
+		constants.DaemonSetRole,
+		selection.In,
+		[]string{constants.DevicePluginRoleLabelValue, constants.DRARoleLabelValue},
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get list of all device plugin pods for on node %s: %v", nodeName, err)
+		return nil, fmt.Errorf("failed to create label requirement: %v", err)
 	}
 
-	devicePluginPods := make([]v1.Pod, 0, len(kmmPodsList.Items))
-	for _, pod := range kmmPodsList.Items {
-		for _, ownerReference := range pod.ObjectMeta.OwnerReferences {
-			if ownerReference.Kind == "DaemonSet" {
-				devicePluginPods = append(devicePluginPods, pod)
-				break
-			}
-		}
+	var podsList v1.PodList
+	err = nlmvha.client.List(ctx, &podsList,
+		client.HasLabels{constants.ModuleNameLabel},
+		client.MatchingFields{"spec.nodeName": nodeName},
+		client.MatchingLabelsSelector{Selector: labels.NewSelector().Add(*req)},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get list of schedule plugin pods on node %s: %v", nodeName, err)
 	}
-	return devicePluginPods, nil
+	return podsList.Items, nil
 }
 
 func (nlmvha *nodeLabelModuleVersionHelper) getLoadedKernelModules(nodeLabels map[string]string) []types.NamespacedName {
@@ -174,7 +176,7 @@ func (nlmvha *nodeLabelModuleVersionHelper) updateNodeLabels(ctx context.Context
 }
 
 func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[string]*modulesVersionLabels,
-	devicePluginPods []v1.Pod,
+	schedulePluginPods []v1.Pod,
 	loadedKernelModules []types.NamespacedName) *reconcileLabelsResult {
 
 	reconRes := reconcileLabelsResult{
@@ -185,7 +187,7 @@ func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[st
 		label, labelValue, action := getLabelAndAction(moduleLabels)
 		switch action {
 		case deleteAction:
-			if utils.IsWorkerPodVersionLabel(label) && !verifyLabelDeleteValidity(moduleLabels.name, moduleLabels.namespace, devicePluginPods) {
+			if utils.IsWorkerPodVersionLabel(label) && !verifyLabelDeleteValidity(moduleLabels.name, moduleLabels.namespace, schedulePluginPods) {
 				reconRes.requeue = true
 			} else {
 				reconRes.labelsToDelete = append(reconRes.labelsToDelete, label)
@@ -202,11 +204,11 @@ func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[st
 	return &reconRes
 }
 
-// validity is checked by verifying that devicePlugin pod defined
-// by name, namespace,role is missing. In case the pod is present, no matter in
-// what state, then the action is invalid
-func verifyLabelDeleteValidity(name, namespace string, devicePluginPods []v1.Pod) bool {
-	for _, pod := range devicePluginPods {
+// verifyLabelDeleteValidity checks that no schedule plugin pod (device plugin
+// or DRA) matching the module name and namespace is present. If a matching pod
+// exists, the delete action is invalid regardless of pod state.
+func verifyLabelDeleteValidity(name, namespace string, pods []v1.Pod) bool {
+	for _, pod := range pods {
 		podLabels := pod.GetLabels()
 		if pod.Namespace == namespace && podLabels[constants.ModuleNameLabel] == name {
 			return false
@@ -215,8 +217,6 @@ func verifyLabelDeleteValidity(name, namespace string, devicePluginPods []v1.Pod
 	return true
 }
 
-// validity is checked by verifying that kernel module defined
-// by name and namespace is not loaded. In case the kernel module is loaded, then the action is invalid
 func verifyLabelAddValidity(name, namespace string, loadedKernelModules []types.NamespacedName) bool {
 	nsn := types.NamespacedName{Name: name, Namespace: namespace}
 	for _, kernelModule := range loadedKernelModules {
@@ -227,7 +227,6 @@ func verifyLabelAddValidity(name, namespace string, loadedKernelModules []types.
 	return true
 }
 
-// returns the label, value of the label and action to execute on label (add or delete)
 func getLabelAndAction(moduleLabels *modulesVersionLabels) (string, string, string) {
 	labelActionKey := getModuleVersionLabelsState(moduleLabels)
 	labelAction, ok := labelActionTable[labelActionKey]
@@ -246,9 +245,9 @@ func getLabelAndAction(moduleLabels *modulesVersionLabels) (string, string, stri
 
 func getModuleVersionLabelsState(moduleLabels *modulesVersionLabels) labelActionKey {
 	key := labelActionKey{
-		module:       labelPresent,
-		workerPod:    labelPresent,
-		devicePlugin: labelPresent,
+		module:         labelPresent,
+		workerPod:      labelPresent,
+		schedulePlugin: labelPresent,
 	}
 	if moduleLabels.moduleVersionLabel == "" {
 		key.module = labelMissing
@@ -258,10 +257,10 @@ func getModuleVersionLabelsState(moduleLabels *modulesVersionLabels) labelAction
 	} else if moduleLabels.moduleVersionLabel != "" && moduleLabels.workerPodVersionLabel != moduleLabels.moduleVersionLabel {
 		key.workerPod = labelDifferent
 	}
-	if moduleLabels.devicePluginVersionLabel == "" {
-		key.devicePlugin = labelMissing
-	} else if moduleLabels.moduleVersionLabel != "" && moduleLabels.devicePluginVersionLabel != moduleLabels.moduleVersionLabel {
-		key.devicePlugin = labelDifferent
+	if moduleLabels.schedulePluginVersionLabel == "" {
+		key.schedulePlugin = labelMissing
+	} else if moduleLabels.moduleVersionLabel != "" && moduleLabels.schedulePluginVersionLabel != moduleLabels.moduleVersionLabel {
+		key.schedulePlugin = labelDifferent
 	}
 	return key
 }

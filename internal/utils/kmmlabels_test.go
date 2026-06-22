@@ -19,10 +19,10 @@ var _ = Describe("GetWorkerPodVersionLabelName", func() {
 	})
 })
 
-var _ = Describe("GetDevicePluginVersionLabelName", func() {
+var _ = Describe("GetSchedulePluginVersionLabelName", func() {
 	It("should work as expected", func() {
-		res := GetDevicePluginVersionLabelName("some-namespace", "some-name")
-		Expect(res).To(Equal("beta.kmm.node.kubernetes.io/version-device-plugin.some-namespace.some-name"))
+		res := GetSchedulePluginVersionLabelName("some-namespace", "some-name")
+		Expect(res).To(Equal("beta.kmm.node.kubernetes.io/version-schedule-plugin.some-namespace.some-name"))
 	})
 })
 
@@ -31,6 +31,18 @@ var _ = Describe("GetDRANodeLabel", func() {
 		res := GetDRANodeLabel("some-namespace", "some-name")
 		Expect(res).To(Equal("kmm.node.kubernetes.io/some-namespace.some-name.dra-ready"))
 	})
+})
+
+var _ = Describe("IsSchedulePluginVersionLabel", func() {
+	DescribeTable("should work as expected",
+		func(input string, expected bool) {
+			Expect(IsSchedulePluginVersionLabel(input)).To(Equal(expected))
+		},
+		Entry("schedule plugin version label", "beta.kmm.node.kubernetes.io/version-schedule-plugin.ns.name", true),
+		Entry("worker pod version label", "beta.kmm.node.kubernetes.io/version-worker-pod.ns.name", false),
+		Entry("module version label", "kmm.node.kubernetes.io/version-module.ns.name", false),
+		Entry("unrelated label", "some-other-label", false),
+	)
 })
 
 var _ = Describe("GetNamespaceNameFromVersionLabel", func() {
@@ -47,7 +59,7 @@ var _ = Describe("GetNamespaceNameFromVersionLabel", func() {
 			Expect(name).To(Equal(expectedName))
 		},
 		Entry("workerPod label", "beta.kmm.node.kubernetes.io/version-worker-pod.some-namespace.some-name", "some-namespace", "some-name", false),
-		Entry("devicePlugin label", "beta.kmm.node.kubernetes.io/version-device-plugin.some-namespace.some-name", "some-namespace", "some-name", false),
+		Entry("schedule plugin label", "beta.kmm.node.kubernetes.io/version-schedule-plugin.some-namespace.some-name", "some-namespace", "some-name", false),
 		Entry("module label", "kmm.node.kubernetes.io/version-module.some-namespace.some-name", "some-namespace", "some-name", false),
 		Entry("with error", "version-module-some-namespace-some-name", "some-namespace", "some-name", true),
 	)
