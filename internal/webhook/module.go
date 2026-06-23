@@ -163,8 +163,16 @@ func validateModule(mod *kmmv1beta1.Module, kubeVersion *KubeVersion) (admission
 		return nil, fmt.Errorf("failed to validate DRA: %v", err)
 	}
 
-	if err := validateDevicePluginVolumes(mod.Spec.DevicePlugin); err != nil {
-		return nil, fmt.Errorf("failed to validate device plugin volumes: %v", err)
+	if mod.Spec.DRA != nil {
+		if err := validateHostPathVolumes("spec.dra", mod.Spec.DRA.Volumes); err != nil {
+			return nil, fmt.Errorf("failed to validate DRA volumes: %v", err)
+		}
+	}
+
+	if mod.Spec.DevicePlugin != nil {
+		if err := validateHostPathVolumes("spec.devicePlugin", mod.Spec.DevicePlugin.Volumes); err != nil {
+			return nil, fmt.Errorf("failed to validate device plugin volumes: %v", err)
+		}
 	}
 
 	if mod.Spec.ModuleLoader == nil {
@@ -239,16 +247,12 @@ func isAllowedHostPath(hostPath string) bool {
 	return false
 }
 
-func validateDevicePluginVolumes(dp *kmmv1beta1.DevicePluginSpec) error {
-	if dp == nil {
-		return nil
-	}
-
-	for i, vol := range dp.Volumes {
+func validateHostPathVolumes(fieldPath string, volumes []corev1.Volume) error {
+	for i, vol := range volumes {
 		if vol.HostPath != nil && !isAllowedHostPath(vol.HostPath.Path) {
 			return fmt.Errorf(
-				"spec.devicePlugin.volumes[%d]: hostPath %q is not allowed; only /dev, /sys, /var and /opt paths are permitted",
-				i, vol.HostPath.Path,
+				"%s.volumes[%d]: hostPath %q is not allowed; only /dev, /sys, /var and /opt paths are permitted",
+				fieldPath, i, vol.HostPath.Path,
 			)
 		}
 	}
