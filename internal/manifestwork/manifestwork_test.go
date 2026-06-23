@@ -26,6 +26,22 @@ var (
 	mockKM *module.MockKernelMapper
 )
 
+var _ = Describe("moduleStatusJSONPaths", func() {
+	It("should contain all expected status feedback paths", func() {
+		Expect(moduleStatusJSONPaths).To(ConsistOf(
+			workv1.JsonPath{Name: "devicePlugin.availableNumber", Path: ".status.devicePlugin.availableNumber"},
+			workv1.JsonPath{Name: "devicePlugin.desiredNumber", Path: ".status.devicePlugin.desiredNumber"},
+			workv1.JsonPath{Name: "devicePlugin.nodesMatchingSelectorNumber", Path: ".status.devicePlugin.nodesMatchingSelectorNumber"},
+			workv1.JsonPath{Name: "dra.availableNumber", Path: ".status.dra.availableNumber"},
+			workv1.JsonPath{Name: "dra.desiredNumber", Path: ".status.dra.desiredNumber"},
+			workv1.JsonPath{Name: "dra.nodesMatchingSelectorNumber", Path: ".status.dra.nodesMatchingSelectorNumber"},
+			workv1.JsonPath{Name: "moduleLoader.availableNumber", Path: ".status.moduleLoader.availableNumber"},
+			workv1.JsonPath{Name: "moduleLoader.desiredNumber", Path: ".status.moduleLoader.desiredNumber"},
+			workv1.JsonPath{Name: "moduleLoader.nodesMatchingSelectorNumber", Path: ".status.moduleLoader.nodesMatchingSelectorNumber"},
+		))
+	})
+})
+
 var _ = Describe("GarbageCollect", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())

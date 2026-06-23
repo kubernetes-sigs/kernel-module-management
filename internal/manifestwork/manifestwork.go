@@ -38,6 +38,18 @@ var moduleStatusJSONPaths = []workv1.JsonPath{
 		Path: ".status.devicePlugin.nodesMatchingSelectorNumber",
 	},
 	{
+		Name: "dra.availableNumber",
+		Path: ".status.dra.availableNumber",
+	},
+	{
+		Name: "dra.desiredNumber",
+		Path: ".status.dra.desiredNumber",
+	},
+	{
+		Name: "dra.nodesMatchingSelectorNumber",
+		Path: ".status.dra.nodesMatchingSelectorNumber",
+	},
+	{
 		Name: "moduleLoader.availableNumber",
 		Path: ".status.moduleLoader.availableNumber",
 	},
