@@ -829,3 +829,183 @@ var _ = Describe("validateDRA", func() {
 		Expect(validateDRA(mod, minValidKubeVersion)).NotTo(HaveOccurred())
 	})
 })
+
+var _ = Describe("validateDevicePluginVolumes", func() {
+	It("should accept nil DevicePlugin", func() {
+		Expect(validateDevicePluginVolumes(nil)).NotTo(HaveOccurred())
+	})
+
+	It("should accept DevicePlugin with no volumes", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+		}
+		Expect(validateDevicePluginVolumes(dp)).NotTo(HaveOccurred())
+	})
+
+	It("should accept non-hostPath volumes", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "config",
+					VolumeSource: v1.VolumeSource{
+						ConfigMap: &v1.ConfigMapVolumeSource{
+							LocalObjectReference: v1.LocalObjectReference{Name: "my-cm"},
+						},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).NotTo(HaveOccurred())
+	})
+
+	It("should accept hostPath volumes under /dev", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "dev-vfio",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/dev/vfio"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).NotTo(HaveOccurred())
+	})
+
+	It("should accept hostPath volumes equal to /dev", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "dev",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/dev"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).NotTo(HaveOccurred())
+	})
+
+	It("should accept hostPath volumes under /sys", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "sys-class",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/sys/class/net"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).NotTo(HaveOccurred())
+	})
+
+	It("should accept hostPath volumes under /var", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "var-lib",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/kubelet/device-plugins"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).NotTo(HaveOccurred())
+	})
+
+	It("should accept hostPath volumes under /opt", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "opt-lib",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/opt/lib/firmware"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).NotTo(HaveOccurred())
+	})
+
+	It("should reject hostPath volumes outside allowed paths", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "root",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).To(MatchError(ContainSubstring("not allowed")))
+	})
+
+	It("should reject hostPath volumes under /etc", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "etc",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/etc/config"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).To(MatchError(ContainSubstring("not allowed")))
+	})
+
+	It("should reject hostPath with prefix trick like /devious", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "tricky",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/devious"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).To(MatchError(ContainSubstring("not allowed")))
+	})
+
+	It("should reject hostPath with path traversal like /dev/../etc", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "traversal",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/dev/../etc/shadow"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).To(MatchError(ContainSubstring("not allowed")))
+	})
+
+	It("should accept hostPath with redundant slashes under /sys", func() {
+		dp := &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{Image: "img:tag"},
+			Volumes: []v1.Volume{
+				{
+					Name: "sys-clean",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: "/sys//class//net"},
+					},
+				},
+			},
+		}
+		Expect(validateDevicePluginVolumes(dp)).NotTo(HaveOccurred())
+	})
+})
