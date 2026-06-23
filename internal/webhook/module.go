@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -162,6 +163,10 @@ func validateModule(mod *kmmv1beta1.Module, kubeVersion *KubeVersion) (admission
 		return nil, fmt.Errorf("failed to validate DRA: %v", err)
 	}
 
+	if err := validateDevicePluginVolumes(mod.Spec.DevicePlugin); err != nil {
+		return nil, fmt.Errorf("failed to validate device plugin volumes: %v", err)
+	}
+
 	if mod.Spec.ModuleLoader == nil {
 		// If ModuleLoader is nil, there is no need to validate related fields
 		return nil, nil
@@ -217,6 +222,35 @@ func validateDRA(mod *kmmv1beta1.Module, kubeVersion *KubeVersion) error {
 			return fmt.Errorf("spec.dra.deviceClasses[%d].name %q is a duplicate", i, dc.Name)
 		}
 		seen.Insert(dc.Name)
+	}
+
+	return nil
+}
+
+var allowedHostPathPrefixes = []string{"/dev", "/sys", "/var", "/opt"}
+
+func isAllowedHostPath(hostPath string) bool {
+	p := filepath.Clean(hostPath)
+	for _, prefix := range allowedHostPathPrefixes {
+		if p == prefix || strings.HasPrefix(p, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func validateDevicePluginVolumes(dp *kmmv1beta1.DevicePluginSpec) error {
+	if dp == nil {
+		return nil
+	}
+
+	for i, vol := range dp.Volumes {
+		if vol.HostPath != nil && !isAllowedHostPath(vol.HostPath.Path) {
+			return fmt.Errorf(
+				"spec.devicePlugin.volumes[%d]: hostPath %q is not allowed; only /dev, /sys, /var and /opt paths are permitted",
+				i, vol.HostPath.Path,
+			)
+		}
 	}
 
 	return nil
