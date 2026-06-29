@@ -907,11 +907,11 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 										Privileged: ptr.To(true),
 									},
 									VolumeMounts: []v1.VolumeMount{
-										dpVolMount,
 										{
 											Name:      "kubelet-device-plugins",
 											MountPath: "/var/lib/kubelet/device-plugins",
 										},
+										dpVolMount,
 									},
 								},
 							},
