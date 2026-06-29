@@ -512,10 +512,14 @@ func (dsci *draDaemonSetCreatorImpl) setDRAAsDesired(
 		utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name): "",
 	}
 
-	if mod.Spec.ModuleLoader != nil && mod.Spec.ModuleLoader.Container.Version != "" {
-		versionLabel := utils.GetSchedulePodVersionLabelName(mod.Namespace, mod.Name)
-		standardLabels[versionLabel] = mod.Spec.ModuleLoader.Container.Version
-		nodeSelector[versionLabel] = mod.Spec.ModuleLoader.Container.Version
+	if mod.Spec.ModuleLoader != nil {
+		if mod.Spec.ModuleLoader.Container.Version != "" {
+			versionLabel := utils.GetSchedulePodVersionLabelName(mod.Namespace, mod.Name)
+			standardLabels[versionLabel] = mod.Spec.ModuleLoader.Container.Version
+			nodeSelector[versionLabel] = mod.Spec.ModuleLoader.Container.Version
+		}
+	} else {
+		nodeSelector = mod.Spec.Selector
 	}
 
 	ds.SetLabels(
