@@ -700,10 +700,8 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 									},
 								},
 							},
-							ImagePullSecrets: []v1.LocalObjectReference{repoSecret},
-							NodeSelector: map[string]string{
-								utils.GetKernelModuleReadyNodeLabel(namespace, draModuleName): "",
-							},
+							ImagePullSecrets:   []v1.LocalObjectReference{repoSecret},
+							NodeSelector:       map[string]string{"has-feature-x": "true"},
 							PriorityClassName:  "system-node-critical",
 							HostNetwork:        true,
 							ServiceAccountName: serviceAccountName,
