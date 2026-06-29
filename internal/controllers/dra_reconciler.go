@@ -32,6 +32,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,6 +49,10 @@ const (
 	kubeletPluginsPath               = "/var/lib/kubelet/plugins/"
 	kubeletPluginsRegistryVolumeName = "kubelet-plugins-registry"
 	kubeletPluginsRegistryPath       = "/var/lib/kubelet/plugins_registry/"
+	cdiVolumeName                    = "cdi"
+	cdiPath                          = "/var/run/cdi"
+
+	draHealthcheckPort = 51515
 )
 
 type DRAReconciler struct {
@@ -438,9 +443,64 @@ func (dsci *draDaemonSetCreatorImpl) setDRAAsDesired(
 		},
 	}
 
+	cdiVolume := v1.Volume{
+		Name: cdiVolumeName,
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: cdiPath,
+				Type: &hostPathDirOrCreate,
+			},
+		},
+	}
+
 	containerVolumeMounts := []v1.VolumeMount{
 		{Name: kubeletPluginsVolumeName, MountPath: kubeletPluginsPath},
 		{Name: kubeletPluginsRegistryVolumeName, MountPath: kubeletPluginsRegistryPath},
+		{Name: cdiVolumeName, MountPath: cdiPath},
+	}
+
+	presetEnv := []v1.EnvVar{
+		{
+			Name: "NODE_NAME",
+			ValueFrom: &v1.EnvVarSource{
+				FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+			},
+		},
+		{
+			Name: "POD_UID",
+			ValueFrom: &v1.EnvVarSource{
+				FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.uid"},
+			},
+		},
+		{
+			Name:  "CDI_ROOT",
+			Value: cdiPath,
+		},
+		{
+			Name:  "KUBELET_REGISTRAR_DIRECTORY_PATH",
+			Value: kubeletPluginsRegistryPath,
+		},
+		{
+			Name:  "KUBELET_PLUGINS_DIRECTORY_PATH",
+			Value: kubeletPluginsPath,
+		},
+		{
+			Name:  "HEALTHCHECK_PORT",
+			Value: fmt.Sprintf("%d", draHealthcheckPort),
+		},
+	}
+
+	draLivenessProbe := &v1.Probe{
+		ProbeHandler: v1.ProbeHandler{
+			GRPC: &v1.GRPCAction{
+				Port:    draHealthcheckPort,
+				Service: ptr.To("liveness"),
+			},
+		},
+		InitialDelaySeconds: 30,
+		PeriodSeconds:       10,
+		TimeoutSeconds:      5,
+		FailureThreshold:    3,
 	}
 
 	standardLabels := map[string]string{
@@ -470,13 +530,14 @@ func (dsci *draDaemonSetCreatorImpl) setDRAAsDesired(
 				Finalizers: []string{constants.NodeLabelerFinalizer},
 			},
 			Spec: v1.PodSpec{
-				InitContainers:               generatePodContainerSpec(mod.Spec.DRA.InitContainer, "dra-init", nil),
-				Containers:                   generatePodContainerSpec(&mod.Spec.DRA.Container, "dra", containerVolumeMounts),
+				InitContainers:               generatePodContainerSpec(mod.Spec.DRA.InitContainer, "dra-init", nil, nil, nil),
+				Containers:                   generatePodContainerSpec(&mod.Spec.DRA.Container, "dra", containerVolumeMounts, presetEnv, draLivenessProbe),
 				PriorityClassName:            "system-node-critical",
+				HostNetwork:                  true,
 				ImagePullSecrets:             getPodPullSecrets(mod.Spec.ImageRepoSecret),
 				NodeSelector:                 nodeSelector,
 				ServiceAccountName:           mod.Spec.DRA.ServiceAccountName,
-				Volumes:                      append([]v1.Volume{pluginsVolume, registryVolume}, mod.Spec.DRA.Volumes...),
+				Volumes:                      append([]v1.Volume{pluginsVolume, registryVolume, cdiVolume}, mod.Spec.DRA.Volumes...),
 				Tolerations:                  mod.Spec.Tolerations,
 				AutomountServiceAccountToken: mod.Spec.DRA.AutomountServiceAccountToken,
 			},

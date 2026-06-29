@@ -479,10 +479,11 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 
 		err := dsc.setDRAAsDesired(context.Background(), &ds, &mod)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
 		Expect(ds.Spec.Template.Spec.Volumes[0].Name).To(Equal("kubelet-plugins"))
 		Expect(ds.Spec.Template.Spec.Volumes[1].Name).To(Equal("kubelet-plugins-registry"))
-		Expect(ds.Spec.Template.Spec.Volumes[2]).To(Equal(vol))
+		Expect(ds.Spec.Template.Spec.Volumes[2].Name).To(Equal("cdi"))
+		Expect(ds.Spec.Template.Spec.Volumes[3]).To(Equal(vol))
 	})
 
 	DescribeTable("should work as expected",
@@ -614,6 +615,25 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 			hostPathDirOrCreate := v1.HostPathDirectoryOrCreate
 			hostPathDir := v1.HostPathDirectory
 
+			presetEnv := []v1.EnvVar{
+				{
+					Name: "NODE_NAME",
+					ValueFrom: &v1.EnvVarSource{
+						FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+					},
+				},
+				{
+					Name: "POD_UID",
+					ValueFrom: &v1.EnvVarSource{
+						FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.uid"},
+					},
+				},
+				{Name: "CDI_ROOT", Value: "/var/run/cdi"},
+				{Name: "KUBELET_REGISTRAR_DIRECTORY_PATH", Value: "/var/lib/kubelet/plugins_registry/"},
+				{Name: "KUBELET_PLUGINS_DIRECTORY_PATH", Value: "/var/lib/kubelet/plugins/"},
+				{Name: "HEALTHCHECK_PORT", Value: "51515"},
+			}
+
 			expected := appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      dsName,
@@ -643,7 +663,7 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 								{
 									Args:            args,
 									Command:         command,
-									Env:             env,
+									Env:             append(presetEnv, env...),
 									Image:           draImage,
 									ImagePullPolicy: ipp,
 									Name:            "dra",
@@ -652,7 +672,6 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 										Privileged: ptr.To(true),
 									},
 									VolumeMounts: []v1.VolumeMount{
-										draVolMount,
 										{
 											Name:      "kubelet-plugins",
 											MountPath: "/var/lib/kubelet/plugins/",
@@ -661,6 +680,23 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 											Name:      "kubelet-plugins-registry",
 											MountPath: "/var/lib/kubelet/plugins_registry/",
 										},
+										{
+											Name:      "cdi",
+											MountPath: "/var/run/cdi",
+										},
+										draVolMount,
+									},
+									LivenessProbe: &v1.Probe{
+										ProbeHandler: v1.ProbeHandler{
+											GRPC: &v1.GRPCAction{
+												Port:    51515,
+												Service: ptr.To("liveness"),
+											},
+										},
+										InitialDelaySeconds: 30,
+										PeriodSeconds:       10,
+										TimeoutSeconds:      5,
+										FailureThreshold:    3,
 									},
 								},
 							},
@@ -669,6 +705,7 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 								utils.GetKernelModuleReadyNodeLabel(namespace, draModuleName): "",
 							},
 							PriorityClassName:  "system-node-critical",
+							HostNetwork:        true,
 							ServiceAccountName: serviceAccountName,
 							Volumes: []v1.Volume{
 								{
@@ -686,6 +723,15 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 										HostPath: &v1.HostPathVolumeSource{
 											Path: "/var/lib/kubelet/plugins_registry/",
 											Type: &hostPathDir,
+										},
+									},
+								},
+								{
+									Name: "cdi",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{
+											Path: "/var/run/cdi",
+											Type: &hostPathDirOrCreate,
 										},
 									},
 								},
