@@ -42,6 +42,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/nmc"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/version"
 	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -113,7 +114,16 @@ func main() {
 	}
 
 	options := cg.GetManagerOptionsFromConfig(cfg, scheme)
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
+	restCfg := ctrl.GetConfigOrDie()
+
+	kubeVersion, err := version.DiscoverKubeVersion(restCfg)
+	if err != nil {
+		cmd.FatalError(setupLogger, err, "unable to discover Kubernetes version")
+	}
+
+	setupLogger.Info("Detected Kubernetes version", "major", kubeVersion.Major, "minor", kubeVersion.Minor)
+
+	mgr, err := ctrl.NewManager(restCfg, options)
 	if err != nil {
 		cmd.FatalError(setupLogger, err, "unable to create manager")
 	}
@@ -170,8 +180,16 @@ func main() {
 		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.PodNodeLabelReconcilerName)
 	}
 
-	if err = controllers.NewDRAReconciler(client, nodeAPI, scheme).SetupWithManager(mgr); err != nil {
-		cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.DRAReconcilerName)
+	if kubeVersion.AtLeast(constants.MinKubeMajorForDRA, constants.MinKubeMinorForDRA) {
+		if err = controllers.NewDRAReconciler(client, nodeAPI, scheme).SetupWithManager(mgr); err != nil {
+			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.DRAReconcilerName)
+		}
+	} else {
+		setupLogger.Info(
+			fmt.Sprintf("Skipping DRA controller; requires Kubernetes >= %d.%d", constants.MinKubeMajorForDRA, constants.MinKubeMinorForDRA),
+			"detectedMajor", kubeVersion.Major,
+			"detectedMinor", kubeVersion.Minor,
+		)
 	}
 
 	if err = controllers.NewNodeLabelModuleVersionReconciler(client).SetupWithManager(mgr); err != nil {

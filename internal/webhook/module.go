@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -31,10 +30,9 @@ import (
 	"github.com/go-logr/logr"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/version"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -43,54 +41,13 @@ import (
 // 63 (max label key length after slash) - len("version-schedule-plugin.") = 38
 const maxCombinedLength = 38
 
-var kubeVersionRe = regexp.MustCompile(`^v?(\d+)\.(\d+)`)
-
-// KubeVersion holds the parsed major and minor version of a Kubernetes cluster.
-type KubeVersion struct {
-	Major int
-	Minor int
-}
-
 type ModuleValidator struct {
 	logger      logr.Logger
-	kubeVersion *KubeVersion
+	kubeVersion *version.KubeVersion
 }
 
-func NewModuleValidator(logger logr.Logger, kubeVersion *KubeVersion) *ModuleValidator {
+func NewModuleValidator(logger logr.Logger, kubeVersion *version.KubeVersion) *ModuleValidator {
 	return &ModuleValidator{logger: logger, kubeVersion: kubeVersion}
-}
-
-// DiscoverKubeVersion queries the Kubernetes API server and returns its version.
-func DiscoverKubeVersion(cfg *rest.Config) (KubeVersion, error) {
-	discClient, err := discovery.NewDiscoveryClientForConfig(cfg)
-	if err != nil {
-		return KubeVersion{}, fmt.Errorf("failed to create discovery client: %v", err)
-	}
-
-	serverVersion, err := discClient.ServerVersion()
-	if err != nil {
-		return KubeVersion{}, fmt.Errorf("failed to query Kubernetes server version: %v", err)
-	}
-
-	return parseKubeVersion(serverVersion.GitVersion)
-}
-
-// parseKubeVersion extracts the major and minor version from a Kubernetes
-// GitVersion string such as "v1.34.0" or "v1.34.0+k3s1".
-func parseKubeVersion(gitVersion string) (KubeVersion, error) {
-	m := kubeVersionRe.FindStringSubmatch(gitVersion)
-	if m == nil {
-		return KubeVersion{}, fmt.Errorf("cannot parse Kubernetes version from %q", gitVersion)
-	}
-	major, err := strconv.Atoi(m[1])
-	if err != nil {
-		return KubeVersion{}, fmt.Errorf("cannot parse Kubernetes major version from %q: %v", gitVersion, err)
-	}
-	minor, err := strconv.Atoi(m[2])
-	if err != nil {
-		return KubeVersion{}, fmt.Errorf("cannot parse Kubernetes minor version from %q: %v", gitVersion, err)
-	}
-	return KubeVersion{Major: major, Minor: minor}, nil
 }
 
 func (m *ModuleValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
@@ -145,7 +102,7 @@ func (m *ModuleValidator) ValidateDelete(ctx context.Context, obj runtime.Object
 	return nil, NotImplemented
 }
 
-func validateModule(mod *kmmv1beta1.Module, kubeVersion *KubeVersion) (admission.Warnings, error) {
+func validateModule(mod *kmmv1beta1.Module, kubeVersion *version.KubeVersion) (admission.Warnings, error) {
 	nameLength := len(mod.Name + mod.Namespace)
 
 	if nameLength > maxCombinedLength {
@@ -192,20 +149,18 @@ func validateModule(mod *kmmv1beta1.Module, kubeVersion *KubeVersion) (admission
 	return nil, validateFilesToSign(mod.Spec.ModuleLoader.Container)
 }
 
-func validateDRA(mod *kmmv1beta1.Module, kubeVersion *KubeVersion) error {
+func validateDRA(mod *kmmv1beta1.Module, kubeVersion *version.KubeVersion) error {
 	if mod.Spec.DRA == nil {
 		return nil
 	}
 
 	// Skip version gating when kubeVersion is nil (e.g. hub webhook validating
 	// a ManagedClusterModule — the spoke's own webhook will enforce its version).
-	if kubeVersion != nil {
-		if kubeVersion.Major < constants.MinKubeMajorForDRA || (kubeVersion.Major == constants.MinKubeMajorForDRA && kubeVersion.Minor < constants.MinKubeMinorForDRA) {
-			return fmt.Errorf(
-				"spec.dra requires Kubernetes %d.%d or later; current cluster version is %d.%d",
-				constants.MinKubeMajorForDRA, constants.MinKubeMinorForDRA, kubeVersion.Major, kubeVersion.Minor,
-			)
-		}
+	if kubeVersion != nil && !kubeVersion.AtLeast(constants.MinKubeMajorForDRA, constants.MinKubeMinorForDRA) {
+		return fmt.Errorf(
+			"spec.dra requires Kubernetes %d.%d or later; current cluster version is %d.%d",
+			constants.MinKubeMajorForDRA, constants.MinKubeMinorForDRA, kubeVersion.Major, kubeVersion.Minor,
+		)
 	}
 
 	driverName := mod.Spec.DRA.DriverName
@@ -252,7 +207,7 @@ func validateHostPathVolumes(fieldPath string, volumes []corev1.Volume) error {
 	for i, vol := range volumes {
 		if vol.HostPath != nil && !isAllowedHostPath(vol.HostPath.Path) {
 			return fmt.Errorf(
-				"%s.volumes[%d]: hostPath %q is not allowed; only /dev, /sys, /var and /opt paths are permitted",
+				"%s.volumes[%d]: hostPath %q is not allowed; only /dev, /sys, /var, /opt and /run paths are permitted",
 				fieldPath, i, vol.HostPath.Path,
 			)
 		}

@@ -23,6 +23,7 @@ import (
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/version"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -53,7 +54,7 @@ var (
 		},
 	}
 
-	moduleWebhook = NewModuleValidator(GinkgoLogr, &KubeVersion{Major: 1, Minor: 34})
+	moduleWebhook = NewModuleValidator(GinkgoLogr, &version.KubeVersion{Major: 1, Minor: 34})
 )
 
 var _ = Describe("maxCombinedLength", func() {
@@ -411,7 +412,7 @@ var _ = Describe("validateModule", func() {
 			mod.Name = name
 			mod.Namespace = ns
 
-			_, err := validateModule(&mod, &KubeVersion{Major: 1, Minor: 34})
+			_, err := validateModule(&mod, &version.KubeVersion{Major: 1, Minor: 34})
 			exp := Expect(err)
 
 			if errExpected {
@@ -426,7 +427,7 @@ var _ = Describe("validateModule", func() {
 	It("should pass when moduleLoader is not defined", func() {
 		mod := validModule
 		mod.Spec.ModuleLoader = nil
-		_, err := validateModule(&mod, &KubeVersion{Major: 1, Minor: 34})
+		_, err := validateModule(&mod, &version.KubeVersion{Major: 1, Minor: 34})
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
@@ -699,36 +700,6 @@ var _ = Describe("validateTolerations", func() {
 	})
 })
 
-var _ = Describe("parseKubeVersion", func() {
-	DescribeTable(
-		"should parse valid version strings",
-		func(gitVersion string, expectedMajor, expectedMinor int) {
-			kv, err := parseKubeVersion(gitVersion)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(kv.Major).To(Equal(expectedMajor))
-			Expect(kv.Minor).To(Equal(expectedMinor))
-		},
-		Entry("standard version", "v1.34.0", 1, 34),
-		Entry("with build metadata", "v1.34.0+k3s1", 1, 34),
-		Entry("pre-release version", "v1.33.0-alpha.1", 1, 33),
-		Entry("higher minor", "v1.35.1", 1, 35),
-		Entry("without v prefix", "1.34.0", 1, 34),
-		Entry("hypothetical k8s 2.0", "v2.0.0", 2, 0),
-		Entry("hypothetical k8s 2.5", "v2.5.3", 2, 5),
-	)
-
-	DescribeTable(
-		"should return error for invalid strings",
-		func(gitVersion string) {
-			_, err := parseKubeVersion(gitVersion)
-			Expect(err).To(HaveOccurred())
-		},
-		Entry("empty string", ""),
-		Entry("garbage", "invalid"),
-		Entry("no minor", "v1"),
-	)
-})
-
 var _ = Describe("validateDRA", func() {
 	validDRASpec := func() *kmmv1beta1.DRASpec {
 		return &kmmv1beta1.DRASpec{
@@ -739,7 +710,7 @@ var _ = Describe("validateDRA", func() {
 		}
 	}
 
-	minValidKubeVersion := &KubeVersion{Major: 1, Minor: 34}
+	minValidKubeVersion := &version.KubeVersion{Major: 1, Minor: 34}
 
 	It("should be a no-op when spec.dra is nil", func() {
 		mod := &kmmv1beta1.Module{}
@@ -748,7 +719,7 @@ var _ = Describe("validateDRA", func() {
 
 	DescribeTable(
 		"Kubernetes version gate",
-		func(kv *KubeVersion, shouldFail bool) {
+		func(kv *version.KubeVersion, shouldFail bool) {
 			mod := &kmmv1beta1.Module{
 				Spec: kmmv1beta1.ModuleSpec{
 					DRA: validDRASpec(),
@@ -761,11 +732,11 @@ var _ = Describe("validateDRA", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 		},
-		Entry("k8s 1.33 rejects", &KubeVersion{Major: 1, Minor: 33}, true),
-		Entry("k8s 1.34 accepts", &KubeVersion{Major: 1, Minor: 34}, false),
-		Entry("k8s 1.35 accepts", &KubeVersion{Major: 1, Minor: 35}, false),
-		Entry("k8s 2.0 accepts (future major)", &KubeVersion{Major: 2, Minor: 0}, false),
-		Entry("k8s 0.99 rejects (old major)", &KubeVersion{Major: 0, Minor: 99}, true),
+		Entry("k8s 1.33 rejects", &version.KubeVersion{Major: 1, Minor: 33}, true),
+		Entry("k8s 1.34 accepts", &version.KubeVersion{Major: 1, Minor: 34}, false),
+		Entry("k8s 1.35 accepts", &version.KubeVersion{Major: 1, Minor: 35}, false),
+		Entry("k8s 2.0 accepts (future major)", &version.KubeVersion{Major: 2, Minor: 0}, false),
+		Entry("k8s 0.99 rejects (old major)", &version.KubeVersion{Major: 0, Minor: 99}, true),
 		Entry("nil version skips gate (hub webhook)", nil, false),
 	)
 
