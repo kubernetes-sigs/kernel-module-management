@@ -332,6 +332,25 @@ var _ = Describe("worker_UnloadKmod", func() {
 		)
 	})
 
+	It("should use ModulesLoadingOrder when set", func() {
+		cfg := v1beta1.ModuleConfig{
+			ContainerImage: imageName,
+			Modprobe: v1beta1.ModprobeSpec{
+				ModuleName:          moduleName,
+				DirName:             dirName,
+				ModulesLoadingOrder: []string{"a", "b", "c"},
+			},
+		}
+
+		mr.EXPECT().Run(ctx, "-rvd", filepath.Join(sharedFilesDir, dirName), "a", "b", "c")
+
+		Expect(
+			w.UnloadKmod(ctx, &cfg, ""),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
 	It("should remove all firmware file only", func() {
 		cfg := v1beta1.ModuleConfig{
 			ContainerImage: imageName,

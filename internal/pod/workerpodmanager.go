@@ -166,7 +166,7 @@ func (wpmi *workerPodManagerImpl) LoaderPodTemplate(ctx context.Context, nmc cli
 		return nil, fmt.Errorf("could not create the base Pod: %v", err)
 	}
 
-	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
+	if len(nms.Config.Modprobe.ModulesLoadingOrder) > 0 {
 		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
 			return nil, fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
 		}
@@ -238,11 +238,7 @@ func (wpmi *workerPodManagerImpl) UnloaderPodTemplate(ctx context.Context, nmc c
 		return nil, fmt.Errorf("could not set the worker Pod's security context: %v", err)
 	}
 
-	if nms.Config.Modprobe.ModulesLoadingOrder != nil {
-		if err = setWorkerSofdepConfig(pod, nms.Config.Modprobe.ModulesLoadingOrder); err != nil {
-			return nil, fmt.Errorf("could not set software dependency for mulitple modules: %v", err)
-		}
-	}
+	// we skip the softdep configuration, since in unload we will do it with one "modprobe -r" call
 
 	if nms.Config.Modprobe.FirmwarePath != "" {
 		firmwareHostPath := wpmi.workerCfg.FirmwareHostPath
