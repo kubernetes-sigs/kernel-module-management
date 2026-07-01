@@ -9,6 +9,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/cmd"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/config"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/version"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/webhook"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/webhook/hub"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -85,7 +86,7 @@ func main() {
 	if enableModule {
 		logger.Info("Enabling Module webhook")
 
-		kubeVersion, err := webhook.DiscoverKubeVersion(restCfg)
+		kubeVersion, err := version.DiscoverKubeVersion(restCfg)
 		if err != nil {
 			cmd.FatalError(setupLogger, err, "unable to discover Kubernetes version")
 		}

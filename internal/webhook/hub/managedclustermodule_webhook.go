@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/kubernetes-sigs/kernel-module-management/api-hub/v1beta1"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/version"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/webhook"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -34,7 +35,7 @@ type ManagedClusterModuleValidator struct {
 	m      admission.CustomValidator
 }
 
-func NewManagedClusterModuleValidator(logger logr.Logger, kubeVersion *webhook.KubeVersion) *ManagedClusterModuleValidator {
+func NewManagedClusterModuleValidator(logger logr.Logger, kubeVersion *version.KubeVersion) *ManagedClusterModuleValidator {
 	return &ManagedClusterModuleValidator{
 		logger: logger,
 		m:      webhook.NewModuleValidator(logger, kubeVersion),
