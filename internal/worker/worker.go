@@ -146,14 +146,19 @@ func (w *worker) UnloadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, f
 		if cfg.Modprobe.Args != nil {
 			args = append(args, cfg.Modprobe.Args.Unload...)
 		}
-
-		args = append(args, moduleName)
+		if len(cfg.Modprobe.ModulesLoadingOrder) > 0 {
+			w.logger.Info("Preparing to unload multiple modules", "modules", cfg.Modprobe.ModulesLoadingOrder)
+			args = append(args, cfg.Modprobe.ModulesLoadingOrder...)
+		} else {
+			w.logger.Info("Preparing to unload single module", "moduleName", moduleName)
+			args = append(args, moduleName)
+		}
 	}
 
-	w.logger.Info("Unloading module", "name", moduleName)
+	w.logger.Info("Starting unloading", "args", args)
 
 	if err := w.mr.Run(ctx, args...); err != nil {
-		return fmt.Errorf("could not unload module %s: %v", moduleName, err)
+		return fmt.Errorf("failed to unload module %q: %v", args, err)
 	}
 
 	//remove firmware files only (no directories)

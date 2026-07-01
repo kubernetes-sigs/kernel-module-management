@@ -484,6 +484,13 @@ cp -R /firmware-path/* /tmp/firmware-path;
 		configAnnotationValue = strings.ReplaceAll(configAnnotationValue, "firmwarePath: /firmware-path\n  ", "")
 	}
 	tolerationAnotationValue := "- effect: NoExecute\n  key: test-key\n  value: test-value\n"
+	annotations := map[string]string{
+		configAnnotationKey:      configAnnotationValue,
+		tolerationsAnnotationKey: tolerationAnotationValue,
+	}
+	if isLoaderPod {
+		annotations[modulesOrderKey] = modulesOrderValue
+	}
 	pod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      WorkerPodName(nmcName, moduleName),
@@ -495,11 +502,7 @@ cp -R /firmware-path/* /tmp/firmware-path;
 				actionLabelKey:                string(action),
 				constants.ModuleNameLabel:     moduleName,
 			},
-			Annotations: map[string]string{
-				configAnnotationKey:      configAnnotationValue,
-				modulesOrderKey:          modulesOrderValue,
-				tolerationsAnnotationKey: tolerationAnotationValue,
-			},
+			Annotations: annotations,
 		},
 		Spec: v1.PodSpec{
 			Tolerations: []v1.Toleration{
@@ -559,11 +562,6 @@ cp -R /firmware-path/* /tmp/firmware-path;
 							MountPath: sharedFilesDir,
 							ReadOnly:  true,
 						},
-						{
-							Name:      "modules-order",
-							ReadOnly:  true,
-							MountPath: "/etc/modprobe.d",
-						},
 					},
 				},
 			},
@@ -601,21 +599,31 @@ cp -R /firmware-path/* /tmp/firmware-path;
 						EmptyDir: &v1.EmptyDirVolumeSource{},
 					},
 				},
-				{
-					Name: "modules-order",
-					VolumeSource: v1.VolumeSource{
-						DownwardAPI: &v1.DownwardAPIVolumeSource{
-							Items: []v1.DownwardAPIVolumeFile{
-								{
-									Path:     "softdep.conf",
-									FieldRef: &v1.ObjectFieldSelector{FieldPath: fmt.Sprintf("metadata.annotations['%s']", modulesOrderKey)},
-								},
-							},
+			},
+		},
+	}
+
+	if isLoaderPod {
+		softDepVolumeMount := v1.VolumeMount{
+			Name:      "modules-order",
+			ReadOnly:  true,
+			MountPath: "/etc/modprobe.d",
+		}
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, softDepVolumeMount)
+		softdepVolume := v1.Volume{
+			Name: "modules-order",
+			VolumeSource: v1.VolumeSource{
+				DownwardAPI: &v1.DownwardAPIVolumeSource{
+					Items: []v1.DownwardAPIVolumeFile{
+						{
+							Path:     "softdep.conf",
+							FieldRef: &v1.ObjectFieldSelector{FieldPath: fmt.Sprintf("metadata.annotations['%s']", modulesOrderKey)},
 						},
 					},
 				},
 			},
-		},
+		}
+		pod.Spec.Volumes = append(pod.Spec.Volumes, softdepVolume)
 	}
 
 	if withFirmware {
