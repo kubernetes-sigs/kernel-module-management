@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
+KUBE_MAJOR=$(kubectl version -o json | jq -r '.serverVersion.major' | tr -d '+')
+KUBE_MINOR=$(kubectl version -o json | jq -r '.serverVersion.minor' | tr -d '+')
+if [ "${KUBE_MAJOR}" -eq 1 ] && [ "${KUBE_MINOR}" -lt 34 ]; then
+  echo "SKIP: DRA requires Kubernetes >= 1.34, got ${KUBE_MAJOR}.${KUBE_MINOR}"
+  exit 0
+fi
+
+echo "Wait for the second node"
+kubectl wait --for=condition=Ready node/minikube-m02 --timeout=2m
+
+echo "Deploy KMM"
+make deploy
+
+echo "Create a build secret"
+kubectl create secret generic build-secret --from-literal=ci-build-secret=super-secret-value
+
+echo "Add a configmap that contains the kernel module build dockerfile"
+kubectl apply -f ci/kmm-kmod-dockerfile.yaml
+
+kubectl wait --for=condition=Available deployment/kmm-operator-controller deployment/kmm-operator-webhook -n kmm-operator-system
+
+echo "Create RBAC for the DRA example driver"
+kubectl apply -f ci/dra-example-driver-rbac.yaml
+
+echo "Add a Module with DRA spec"
+timeout 1m bash -c 'until kubectl apply -f ci/module-kmm-ci-dra.yaml; do sleep 3; done'
+
+echo "Check that the module gets loaded on the node"
+timeout 10m bash -c 'until minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
+
+echo "Check that the DRA DaemonSet gets created"
+timeout 2m bash -c 'until kubectl get ds -l kmm.node.kubernetes.io/role=dra,kmm.node.kubernetes.io/module.name=kmm-ci-dra -o name 2>/dev/null | grep -q daemonset; do sleep 3; done'
+
+echo "Check that the DRA DaemonSet pod is ready"
+timeout 5m bash -c 'until [ "$(kubectl get ds -l kmm.node.kubernetes.io/role=dra,kmm.node.kubernetes.io/module.name=kmm-ci-dra -o jsonpath="{.items[0].status.numberReady}" 2>/dev/null)" = "1" ]; do sleep 3; done'
+
+echo "Check that the DeviceClass was created with correct labels"
+DC_MODULE_NAME=$(kubectl get deviceclass kmm-ci-test-device -o jsonpath='{.metadata.labels.kmm\.node\.kubernetes\.io/module\.name}')
+DC_MODULE_NS=$(kubectl get deviceclass kmm-ci-test-device -o jsonpath='{.metadata.labels.kmm\.node\.kubernetes\.io/module\.namespace}')
+[ "${DC_MODULE_NAME}" = "kmm-ci-dra" ]
+[ "${DC_MODULE_NS}" = "default" ]
+
+echo "Check that the DRA node label was set"
+timeout 2m bash -c 'until kubectl get node minikube -o jsonpath="{.metadata.labels}" | grep "kmm\.node\.kubernetes\.io/default\.kmm-ci-dra\.dra-ready"; do sleep 3; done'
+
+echo "Check that ResourceSlices were published by the driver"
+timeout 2m bash -c 'until [ "$(kubectl get resourceslice --no-headers 2>/dev/null | grep gpu.example.com | wc -l)" -gt 0 ]; do sleep 3; done'
+
+echo "Check that Module status.dra is populated"
+[ "$(kubectl get module kmm-ci-dra -o jsonpath='{.status.dra.availableNumber}')" = "1" ]
+
+echo "Deploy a consumer pod requesting DRA hardware"
+kubectl apply -f ci/dra-consumer-pod.yaml
+
+echo "Check that the consumer pod is running on the node with the DRA driver"
+kubectl wait --for=condition=Ready pod/dra-consumer --timeout=2m
+[ "$(kubectl get pod dra-consumer -o jsonpath='{.spec.nodeName}')" = "minikube" ]
+
+echo "Remove the consumer pod"
+kubectl delete -f ci/dra-consumer-pod.yaml
+timeout 1m bash -c 'until ! kubectl get pod dra-consumer 2>/dev/null; do sleep 3; done'
+
+echo "Remove the Module"
+kubectl delete -f ci/module-kmm-ci-dra.yaml --wait=false
+
+echo "Check that the DRA DaemonSet gets cleaned up"
+timeout 2m bash -c 'until [ "$(kubectl get ds -l kmm.node.kubernetes.io/role=dra,kmm.node.kubernetes.io/module.name=kmm-ci-dra --no-headers 2>/dev/null | wc -l)" -eq 0 ]; do sleep 3; done'
+
+echo "Check that the DeviceClass gets cleaned up"
+timeout 1m bash -c 'until ! kubectl get deviceclass kmm-ci-test-device 2>/dev/null; do sleep 3; done'
+
+echo "Check that the module gets unloaded from the node"
+timeout 1m bash -c 'until ! minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'
+
+echo "Wait for the Module to be deleted"
+kubectl wait --for delete modules.kmm.sigs.x-k8s.io/kmm-ci-dra
