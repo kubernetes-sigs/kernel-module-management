@@ -130,6 +130,11 @@ jobs:
             env:
               KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
             script: ./ci/prow/e2e-incluster-build
+          - name: e2e-dra
+            env:
+              KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci
+            script: ./ci/prow/e2e-dra
+            start-args: --nodes=2
           - name: e2e-hub
             env:
               KUSTOMIZE_CONFIG_HUB_DEFAULT: ci/install-ci-hub
@@ -154,7 +159,7 @@ jobs:
       - name: Create the minikube cluster
         uses: ./.github/actions/create-minikube-cluster
         with:
-          start-args: --insecure-registry=host.minikube.internal:5000
+          start-args: --insecure-registry=host.minikube.internal:5000 ${{ matrix.start-args || '' }}
 
       - name: Download container images
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8

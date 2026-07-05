@@ -1,0 +1,36 @@
+---
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: Module
+metadata:
+  name: kmm-ci-dra
+spec:
+  moduleLoader:
+    container:
+      modprobe:
+        moduleName: kmm_ci_a
+        modulesLoadingOrder: [kmm_ci_a, kmm_ci_b]
+      kernelMappings:
+        - regexp: '^.+$'
+          containerImage: host.minikube.internal:5000/$MOD_NAMESPACE/$MOD_NAME:$KERNEL_FULL_VERSION
+          registryTLS:
+            insecure: true
+          build:
+            secrets:
+              - name: build-secret
+            dockerfileConfigMap:
+              name: kmm-kmod-dockerfile
+            kanikoParams:
+              tag: "debug"
+  dra:
+    driverName: gpu.example.com
+    serviceAccountName: dra-example-driver
+    container:
+      image: registry.k8s.io/dra-example-driver/dra-example-driver:v0.3.0
+      command: ["dra-example-kubeletplugin"]
+      env:
+        - name: DRIVER_NAME
+          value: gpu.example.com
+    deviceClasses:
+      - name: kmm-ci-test-device
+  selector:
+    kubernetes.io/hostname: minikube
