@@ -23,8 +23,8 @@ func GetWorkerPodVersionLabelName(namespace, name string) string {
 	return fmt.Sprintf("%s.%s.%s", constants.WorkerPodVersionLabelPrefix, namespace, name)
 }
 
-func GetSchedulePluginVersionLabelName(namespace, name string) string {
-	return fmt.Sprintf("%s.%s.%s", constants.SchedulePluginVersionLabelPrefix, namespace, name)
+func GetSchedulePodVersionLabelName(namespace, name string) string {
+	return fmt.Sprintf("%s.%s.%s", constants.SchedulePodVersionLabelPrefix, namespace, name)
 }
 
 func GetNamespaceNameFromVersionLabel(label string) (string, string, error) {
@@ -36,7 +36,7 @@ func GetNamespaceNameFromVersionLabel(label string) (string, string, error) {
 }
 
 func IsVersionLabel(label string) bool {
-	return IsModuleVersionLabel(label) || IsWorkerPodVersionLabel(label) || IsSchedulePluginVersionLabel(label)
+	return IsModuleVersionLabel(label) || IsWorkerPodVersionLabel(label) || IsSchedulePodVersionLabel(label)
 }
 
 func IsModuleVersionLabel(label string) bool {
@@ -47,8 +47,8 @@ func IsWorkerPodVersionLabel(label string) bool {
 	return strings.HasPrefix(label, constants.WorkerPodVersionLabelPrefix)
 }
 
-func IsSchedulePluginVersionLabel(label string) bool {
-	return strings.HasPrefix(label, constants.SchedulePluginVersionLabelPrefix)
+func IsSchedulePodVersionLabel(label string) bool {
+	return strings.HasPrefix(label, constants.SchedulePodVersionLabelPrefix)
 }
 
 func GetNodesVersionLabels(nodeLabels map[string]string) map[string]string {

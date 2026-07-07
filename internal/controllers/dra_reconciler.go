@@ -240,7 +240,7 @@ func getExistingDRADSFromVersion(existingDS []appsv1.DaemonSet,
 		version = moduleLoader.Container.Version
 	}
 
-	versionLabel := utils.GetSchedulePluginVersionLabelName(moduleNamespace, moduleName)
+	versionLabel := utils.GetSchedulePodVersionLabelName(moduleNamespace, moduleName)
 	for _, ds := range existingDS {
 		dsModuleVersion := ds.GetLabels()[versionLabel]
 		if dsModuleVersion == version {
@@ -252,7 +252,7 @@ func getExistingDRADSFromVersion(existingDS []appsv1.DaemonSet,
 
 func isOlderVersionUnusedDRADaemonSet(ds *appsv1.DaemonSet, moduleNamespace, moduleVersion string) bool {
 	moduleName := ds.Labels[constants.ModuleNameLabel]
-	versionLabel := utils.GetSchedulePluginVersionLabelName(moduleNamespace, moduleName)
+	versionLabel := utils.GetSchedulePodVersionLabelName(moduleNamespace, moduleName)
 	return ds.Labels[versionLabel] != moduleVersion && ds.Status.DesiredNumberScheduled == 0
 }
 
@@ -513,7 +513,7 @@ func (dsci *draDaemonSetCreatorImpl) setDRAAsDesired(
 	}
 
 	if mod.Spec.ModuleLoader != nil && mod.Spec.ModuleLoader.Container.Version != "" {
-		versionLabel := utils.GetSchedulePluginVersionLabelName(mod.Namespace, mod.Name)
+		versionLabel := utils.GetSchedulePodVersionLabelName(mod.Namespace, mod.Name)
 		standardLabels[versionLabel] = mod.Spec.ModuleLoader.Container.Version
 		nodeSelector[versionLabel] = mod.Spec.ModuleLoader.Container.Version
 	}
