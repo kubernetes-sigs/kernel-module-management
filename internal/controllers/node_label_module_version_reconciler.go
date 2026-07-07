@@ -19,11 +19,11 @@ import (
 )
 
 type modulesVersionLabels struct {
-	name                       string
-	namespace                  string
-	moduleVersionLabel         string
-	workerPodVersionLabel      string
-	schedulePluginVersionLabel string
+	name                    string
+	namespace               string
+	moduleVersionLabel      string
+	workerPodVersionLabel   string
+	schedulePodVersionLabel string
 }
 
 const (
@@ -51,14 +51,14 @@ func NewNodeLabelModuleVersionReconciler(client client.Client) *NodeLabelModuleV
 func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, node *v1.Node) (ctrl.Result, error) {
 	modulesVersionLabels := nlmvr.helperAPI.getLabelsPerModules(ctx, node.Labels)
 
-	schedulePluginPods, err := nlmvr.helperAPI.getSchedulePluginPods(ctx, node.Name)
+	schedulePods, err := nlmvr.helperAPI.getSchedulePods(ctx, node.Name)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("could not get schedule plugin pods for the node %s: %v", node.Name, err)
+		return ctrl.Result{}, fmt.Errorf("could not get schedule pods for the node %s: %v", node.Name, err)
 	}
 
 	loadedKernelModules := nlmvr.helperAPI.getLoadedKernelModules(node.GetLabels())
 
-	reconLabelsRes := nlmvr.helperAPI.reconcileLabels(modulesVersionLabels, schedulePluginPods, loadedKernelModules)
+	reconLabelsRes := nlmvr.helperAPI.reconcileLabels(modulesVersionLabels, schedulePods, loadedKernelModules)
 
 	logger := log.FromContext(ctx).WithValues("node name", node.Name)
 	logLabelsUpdateData(logger, reconLabelsRes)
@@ -75,9 +75,9 @@ func (nlmvr *NodeLabelModuleVersionReconciler) Reconcile(ctx context.Context, no
 
 type nodeLabelModuleVersionHelperAPI interface {
 	getLabelsPerModules(ctx context.Context, nodeLabels map[string]string) map[string]*modulesVersionLabels
-	getSchedulePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error)
+	getSchedulePods(ctx context.Context, nodeName string) ([]v1.Pod, error)
 	getLoadedKernelModules(labels map[string]string) []types.NamespacedName
-	reconcileLabels(modulesLabels map[string]*modulesVersionLabels, schedulePluginPods []v1.Pod, kernelModuleReadyLabels []types.NamespacedName) *reconcileLabelsResult
+	reconcileLabels(modulesLabels map[string]*modulesVersionLabels, schedulePods []v1.Pod, kernelModuleReadyLabels []types.NamespacedName) *reconcileLabelsResult
 	updateNodeLabels(ctx context.Context, nodeName string, reconLabelsRes *reconcileLabelsResult) error
 }
 
@@ -110,8 +110,8 @@ func (nlmvha *nodeLabelModuleVersionHelper) getLabelsPerModules(ctx context.Cont
 				labelsPerModule[mapKey].moduleVersionLabel = value
 			case utils.IsWorkerPodVersionLabel(key):
 				labelsPerModule[mapKey].workerPodVersionLabel = value
-			case utils.IsSchedulePluginVersionLabel(key):
-				labelsPerModule[mapKey].schedulePluginVersionLabel = value
+			case utils.IsSchedulePodVersionLabel(key):
+				labelsPerModule[mapKey].schedulePodVersionLabel = value
 			}
 		}
 	}
@@ -119,7 +119,7 @@ func (nlmvha *nodeLabelModuleVersionHelper) getLabelsPerModules(ctx context.Cont
 	return labelsPerModule
 }
 
-func (nlmvha *nodeLabelModuleVersionHelper) getSchedulePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error) {
+func (nlmvha *nodeLabelModuleVersionHelper) getSchedulePods(ctx context.Context, nodeName string) ([]v1.Pod, error) {
 	req, err := labels.NewRequirement(
 		constants.DaemonSetRole,
 		selection.In,
@@ -136,7 +136,7 @@ func (nlmvha *nodeLabelModuleVersionHelper) getSchedulePluginPods(ctx context.Co
 		client.MatchingLabelsSelector{Selector: labels.NewSelector().Add(*req)},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get list of schedule plugin pods on node %s: %v", nodeName, err)
+		return nil, fmt.Errorf("failed to get list of schedule pods on node %s: %v", nodeName, err)
 	}
 	return podsList.Items, nil
 }
@@ -176,7 +176,7 @@ func (nlmvha *nodeLabelModuleVersionHelper) updateNodeLabels(ctx context.Context
 }
 
 func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[string]*modulesVersionLabels,
-	schedulePluginPods []v1.Pod,
+	schedulePods []v1.Pod,
 	loadedKernelModules []types.NamespacedName) *reconcileLabelsResult {
 
 	reconRes := reconcileLabelsResult{
@@ -187,7 +187,7 @@ func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[st
 		label, labelValue, action := getLabelAndAction(moduleLabels)
 		switch action {
 		case deleteAction:
-			if utils.IsWorkerPodVersionLabel(label) && !verifyLabelDeleteValidity(moduleLabels.name, moduleLabels.namespace, schedulePluginPods) {
+			if utils.IsWorkerPodVersionLabel(label) && !verifyLabelDeleteValidity(moduleLabels.name, moduleLabels.namespace, schedulePods) {
 				reconRes.requeue = true
 			} else {
 				reconRes.labelsToDelete = append(reconRes.labelsToDelete, label)
@@ -204,7 +204,7 @@ func (nlmvha *nodeLabelModuleVersionHelper) reconcileLabels(modulesLabels map[st
 	return &reconRes
 }
 
-// verifyLabelDeleteValidity checks that no schedule plugin pod (device plugin
+// verifyLabelDeleteValidity checks that no schedule pod (device plugin
 // or DRA) matching the module name and namespace is present. If a matching pod
 // exists, the delete action is invalid regardless of pod state.
 func verifyLabelDeleteValidity(name, namespace string, pods []v1.Pod) bool {
@@ -245,9 +245,9 @@ func getLabelAndAction(moduleLabels *modulesVersionLabels) (string, string, stri
 
 func getModuleVersionLabelsState(moduleLabels *modulesVersionLabels) labelActionKey {
 	key := labelActionKey{
-		module:         labelPresent,
-		workerPod:      labelPresent,
-		schedulePlugin: labelPresent,
+		module:      labelPresent,
+		workerPod:   labelPresent,
+		schedulePod: labelPresent,
 	}
 	if moduleLabels.moduleVersionLabel == "" {
 		key.module = labelMissing
@@ -257,10 +257,10 @@ func getModuleVersionLabelsState(moduleLabels *modulesVersionLabels) labelAction
 	} else if moduleLabels.moduleVersionLabel != "" && moduleLabels.workerPodVersionLabel != moduleLabels.moduleVersionLabel {
 		key.workerPod = labelDifferent
 	}
-	if moduleLabels.schedulePluginVersionLabel == "" {
-		key.schedulePlugin = labelMissing
-	} else if moduleLabels.moduleVersionLabel != "" && moduleLabels.schedulePluginVersionLabel != moduleLabels.moduleVersionLabel {
-		key.schedulePlugin = labelDifferent
+	if moduleLabels.schedulePodVersionLabel == "" {
+		key.schedulePod = labelMissing
+	} else if moduleLabels.moduleVersionLabel != "" && moduleLabels.schedulePodVersionLabel != moduleLabels.moduleVersionLabel {
+		key.schedulePod = labelDifferent
 	}
 	return key
 }

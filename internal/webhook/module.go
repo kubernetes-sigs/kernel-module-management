@@ -38,8 +38,8 @@ import (
 )
 
 // maxCombinedLength is the maximum combined length of Module name and namespace when the version field is set.
-// 63 (max label key length after slash) - len("version-schedule-plugin.") = 38
-const maxCombinedLength = 38
+// 63 (max label key length after slash) - len("version-schedule-pod..") = 41
+const maxCombinedLength = 41
 
 type ModuleValidator struct {
 	logger      logr.Logger

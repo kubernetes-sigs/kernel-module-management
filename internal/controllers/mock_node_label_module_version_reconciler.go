@@ -68,33 +68,33 @@ func (mr *MocknodeLabelModuleVersionHelperAPIMockRecorder) getLoadedKernelModule
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getLoadedKernelModules", reflect.TypeOf((*MocknodeLabelModuleVersionHelperAPI)(nil).getLoadedKernelModules), labels)
 }
 
-// getSchedulePluginPods mocks base method.
-func (m *MocknodeLabelModuleVersionHelperAPI) getSchedulePluginPods(ctx context.Context, nodeName string) ([]v1.Pod, error) {
+// getSchedulePods mocks base method.
+func (m *MocknodeLabelModuleVersionHelperAPI) getSchedulePods(ctx context.Context, nodeName string) ([]v1.Pod, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getSchedulePluginPods", ctx, nodeName)
+	ret := m.ctrl.Call(m, "getSchedulePods", ctx, nodeName)
 	ret0, _ := ret[0].([]v1.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// getSchedulePluginPods indicates an expected call of getSchedulePluginPods.
-func (mr *MocknodeLabelModuleVersionHelperAPIMockRecorder) getSchedulePluginPods(ctx, nodeName any) *gomock.Call {
+// getSchedulePods indicates an expected call of getSchedulePods.
+func (mr *MocknodeLabelModuleVersionHelperAPIMockRecorder) getSchedulePods(ctx, nodeName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getSchedulePluginPods", reflect.TypeOf((*MocknodeLabelModuleVersionHelperAPI)(nil).getSchedulePluginPods), ctx, nodeName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getSchedulePods", reflect.TypeOf((*MocknodeLabelModuleVersionHelperAPI)(nil).getSchedulePods), ctx, nodeName)
 }
 
 // reconcileLabels mocks base method.
-func (m *MocknodeLabelModuleVersionHelperAPI) reconcileLabels(modulesLabels map[string]*modulesVersionLabels, schedulePluginPods []v1.Pod, kernelModuleReadyLabels []types.NamespacedName) *reconcileLabelsResult {
+func (m *MocknodeLabelModuleVersionHelperAPI) reconcileLabels(modulesLabels map[string]*modulesVersionLabels, schedulePods []v1.Pod, kernelModuleReadyLabels []types.NamespacedName) *reconcileLabelsResult {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "reconcileLabels", modulesLabels, schedulePluginPods, kernelModuleReadyLabels)
+	ret := m.ctrl.Call(m, "reconcileLabels", modulesLabels, schedulePods, kernelModuleReadyLabels)
 	ret0, _ := ret[0].(*reconcileLabelsResult)
 	return ret0
 }
 
 // reconcileLabels indicates an expected call of reconcileLabels.
-func (mr *MocknodeLabelModuleVersionHelperAPIMockRecorder) reconcileLabels(modulesLabels, schedulePluginPods, kernelModuleReadyLabels any) *gomock.Call {
+func (mr *MocknodeLabelModuleVersionHelperAPIMockRecorder) reconcileLabels(modulesLabels, schedulePods, kernelModuleReadyLabels any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "reconcileLabels", reflect.TypeOf((*MocknodeLabelModuleVersionHelperAPI)(nil).reconcileLabels), modulesLabels, schedulePluginPods, kernelModuleReadyLabels)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "reconcileLabels", reflect.TypeOf((*MocknodeLabelModuleVersionHelperAPI)(nil).reconcileLabels), modulesLabels, schedulePods, kernelModuleReadyLabels)
 }
 
 // updateNodeLabels mocks base method.

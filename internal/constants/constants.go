@@ -11,9 +11,9 @@ const (
 	DaemonSetRole          = "kmm.node.kubernetes.io/role"
 	NamespaceLabelKey      = "kmm.node.k8s.io/contains-modules"
 
-	WorkerPodVersionLabelPrefix      = "beta.kmm.node.kubernetes.io/version-worker-pod"
-	SchedulePluginVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-schedule-plugin"
-	ModuleVersionLabelPrefix         = "kmm.node.kubernetes.io/version-module"
+	WorkerPodVersionLabelPrefix   = "beta.kmm.node.kubernetes.io/version-worker-pod"
+	SchedulePodVersionLabelPrefix = "beta.kmm.node.kubernetes.io/version-schedule-pod"
+	ModuleVersionLabelPrefix      = "kmm.node.kubernetes.io/version-module"
 
 	GCDelayFinalizer  = "kmm.node.kubernetes.io/gc-delay"
 	ModuleFinalizer   = "kmm.node.kubernetes.io/module-finalizer"
