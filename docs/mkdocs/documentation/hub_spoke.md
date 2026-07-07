@@ -46,7 +46,8 @@ metadata:
   # No namespace, because this resource is cluster-scoped.
 spec:
   moduleSpec:
-    # Contains moduleLoader and devicePlugin sections, just like in a Module resource.
+    # Contains moduleLoader, devicePlugin and/or dra sections, just like in a Module resource.
+    # Note: devicePlugin and dra are mutually exclusive.
     # Optional. Change this value to force image re-verification and rebuilds.
     imageRebuildTriggerGeneration: 1
     selector:

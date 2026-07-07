@@ -12,7 +12,7 @@ In order to successfully upgrade a kernel module to a new version, the currently
 unloaded, and a new kernel module file should be loaded.
 This means that all user-mode application/workloads using the kernel module should be terminated before attempting to
 unload the kernel module.  
-There are 2 type of workloads that can use a kernel module:
+There are 3 types of workloads that can use a kernel module:
 
 - user workload: application running in the cluster that is accessing kernel module.
   It is deployed by the administrator, and it is their responsibility to make sure that the workload is not running on
@@ -20,6 +20,9 @@ There are 2 type of workloads that can use a kernel module:
   kernel module version has been loaded.
 - device plugin managed by KMM.
   The operator will manage the unloading/loading of the device plugin on a node being upgraded.
+- DRA driver managed by KMM.
+  The operator will manage the unloading/loading of the DRA driver on a node being upgraded, following the same
+  lifecycle as the device plugin.
 
 Due to Kubernetes limitations in label names, the combined length of `Module` name and namespace may not exceed 39
 characters.
@@ -69,24 +72,25 @@ It is strongly recommended to use `GetKernelModuleVersionReadyNodeLabel` functio
    When it detects a change in the value of that label, it sets the following internal labels to initiate the upgrade
    process:
      - `beta.kmm.node.kubernetes.io/version-worker-pod.<module-namespace>.<module-name>`
-     - `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>`
+     - `beta.kmm.node.kubernetes.io/version-schedule-pod.<module-namespace>.<module-name>`
 2. The operator manipulates its internal `NodeModulesConfig` resources to create worker Pods that unload the current
    version of a module and load the new one.
-3. The operator creates new device plugin DaemonSets with a new node selector component:
-   `kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>`
-   This makes it possible to terminate the device plugin Pod before unloading the current module, and to create them
-   again when the new module is loaded.
+3. The operator creates new device plugin (or DRA driver) DaemonSets with a new node selector component:
+   `beta.kmm.node.kubernetes.io/version-schedule-pod.<module-namespace>.<module-name>`
+   Both device plugin and DRA driver DaemonSets use the same `version-schedule-pod` label.
+   This makes it possible to terminate the device plugin or DRA driver Pod before unloading the current module, and to
+   create them again when the new module is loaded.
 
 ### Flow
 
-1. When the `version` field is modified in the `Module`, a new device plugin DaemonSet is created with the following
-   internal node selector:
-   `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>=$moduleVersion`
+1. When the `version` field is modified in the `Module`, a new device plugin (or DRA driver) DaemonSet is created with
+   the following internal node selector:
+   `beta.kmm.node.kubernetes.io/version-schedule-pod.<module-namespace>.<module-name>=$moduleVersion`
 2. When the `kmm.node.kubernetes.io/version-module.<module-namespace>.<module-name>` label is changed on the node, KMM's
    version label controller removes the
-   `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>` label, which terminates the
-   device plugin Pod;
-3. Once the device plugin Pod is terminated, the controller removes the
+   `beta.kmm.node.kubernetes.io/version-schedule-pod.<module-namespace>.<module-name>` label, which terminates the
+   device plugin (or DRA driver) Pod;
+3. Once the device plugin (or DRA driver) Pod is terminated, the controller removes the
    `beta.kmm.node.kubernetes.io/version-worker-pod.<module-namespace>.<module-name>` label, which removes the entry from
    the corresponding `NodeModulesConfig` resource.
    This results in a worker Pod being created to unload the current kernel module.
@@ -95,5 +99,5 @@ It is strongly recommended to use `GetKernelModuleVersionReadyNodeLabel` functio
    node, which adds back an updated entry into the corresponding `NodeModulesConfig` resource.
    This results in a worker Pod being created to load the new kernel module.
 5. Once the new kernel module is loaded, the controller sets the
-   `beta.kmm.node.kubernetes.io/version-device-plugin.<module-namespace>.<module-name>=$moduleVersion` label on the
-   node, which will cause the device plugin Pod to start again.
+   `beta.kmm.node.kubernetes.io/version-schedule-pod.<module-namespace>.<module-name>=$moduleVersion` label on the
+   node, which will cause the device plugin (or DRA driver) Pod to start again.

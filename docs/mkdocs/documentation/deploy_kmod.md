@@ -12,8 +12,8 @@ To be eligible for a `Module`, a `Node` must:
 When KMM needs to reconcile nodes with the desired state as configured in the `Module` resource, it creates worker Pods
 on the target node(s) to run the necessary action.  
 The operator monitors the outcome of those Pods and records that information.
-It uses it to label `Node` objects when the module was successfully loaded, and to run the device plugin (if
-configured).
+It uses it to label `Node` objects when the module was successfully loaded, and to run the device plugin or DRA driver
+(if configured).
 The label can be found in the node's label with the following format:
 ```
 kmm.node.kubernetes.io/<namespace>.<modulename>.ready
@@ -57,6 +57,92 @@ into device plugin pod, and allow users to mount what they need for the device p
 !!! note
     In this case, it is the user's responsibility to mount the necessary tokens and CAs into the device plugin pods, otherwise the device plugin may not work properly.
 
+### DRA (Dynamic Resource Allocation) driver
+
+If `.spec.dra` is configured in a `Module`, then KMM will create a DRA driver
+[DaemonSet](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/) in the cluster.
+DRA is the successor to the Device Plugin API and provides structured parameters, resource claims, and device classes
+for modern hardware orchestration.
+
+!!! note
+    DRA requires Kubernetes 1.34 or later. The KMM admission webhook rejects `Module` resources with `.spec.dra` on
+    older clusters.
+
+!!! note
+    `.spec.dra` and `.spec.devicePlugin` are mutually exclusive. A `Module` cannot have both fields set.
+
+The DRA DaemonSet will target nodes:
+
+- that match the `Module`'s `.spec.selector`;
+- on which the kernel module is loaded (using the `kmm.node.kubernetes.io/<namespace>.<modulename>.ready` label).
+
+When the DRA driver pod is running and ready on a node, KMM sets the following label:
+```
+kmm.node.kubernetes.io/<namespace>.<modulename>.dra-ready
+```
+It is strongly recommended to use `GetDRANodeLabel` function from the `labels` package in order to construct the correct label.
+
+DRA driver pods run with `hostNetwork: true` and `priorityClassName: system-node-critical`, which ensures they are not
+preempted and have access to the host network.
+KMM also configures a GRPC liveness probe on port `51515` (service `liveness`) with a 30-second initial delay.
+The DRA driver container should implement this GRPC health check endpoint; if it fails, the pod will be restarted.
+
+KMM automatically mounts the following host paths into DRA driver pods:
+
+| Host path | Mount type | Purpose |
+|---|---|---|
+| `/var/lib/kubelet/plugins/` | `HostPathDirectoryOrCreate` | DRA plugin socket registration |
+| `/var/lib/kubelet/plugins_registry/` | `HostPathDirectory` | Kubelet plugin discovery |
+| `/var/run/cdi` | `HostPathDirectoryOrCreate` | CDI device specification files |
+
+The following environment variables are preset in the DRA driver container:
+
+| Variable | Value |
+|---|---|
+| `NODE_NAME` | The name of the node the pod is running on (from `spec.nodeName`) |
+| `POD_UID` | The UID of the pod (from `metadata.uid`) |
+| `CDI_ROOT` | `/var/run/cdi` |
+| `KUBELET_REGISTRAR_DIRECTORY_PATH` | `/var/lib/kubelet/plugins_registry/` |
+| `KUBELET_PLUGINS_DIRECTORY_PATH` | `/var/lib/kubelet/plugins/` |
+| `HEALTHCHECK_PORT` | `51515` |
+
+Users may specify additional volumes and volume mounts via `.spec.dra.volumes` and `.spec.dra.container.volumeMounts`.
+
+!!! note
+    User-supplied hostPath volumes in `.spec.dra.volumes` are restricted to paths under `/dev`, `/sys`, `/var`, `/opt`,
+    or `/run`. The admission webhook rejects volumes with paths outside these prefixes.
+
+There is also support for running an init-container as part of the DRA driver by setting `.spec.dra.initContainer`.
+
+#### DRA driver name
+
+`.spec.dra.driverName` is required and must be a valid
+[DNS subdomain](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names).
+This is the name the DRA driver registers with kubelet.
+
+#### DeviceClasses
+
+`.spec.dra.deviceClasses` is an optional list of
+[DeviceClass](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/#deviceclass)
+resources that KMM will create and manage on behalf of the `Module`.
+
+Each entry requires a `name` (must be a valid DNS subdomain and unique within the list) and may include `selectors` and
+`config` fields matching the Kubernetes `DeviceClass` spec.
+
+KMM tracks ownership of DeviceClasses via labels (`kmm.node.kubernetes.io/module.name` and
+`kmm.node.kubernetes.io/module.namespace`).
+When a `Module` is deleted, all DeviceClasses managed by that Module are automatically deleted.
+Removing an entry from the list deletes the corresponding DeviceClass; editing an entry updates it.
+
+#### Service account token auto-mounting
+
+By default, Kubernetes auto-mounts the service account token and root CAs into DRA driver pods.
+The `module.spec.dra.automountServiceAccountToken` field can be set to `false` to disable this behavior, allowing users
+to mount their own tokens and CAs as needed.
+
+!!! note
+    When set to `false`, it is the user's responsibility to mount the necessary tokens and CAs into the DRA driver pods.
+
 ## `Module` CRD
 
 The `Module` Custom Resource Definition represents a kernel module that should be loaded on all or select nodes in the
@@ -77,8 +163,10 @@ The reconciliation loop for `Module` runs the following steps:
     2. create a worker Pod pulling the container image determined at the previous step and running `modprobe`;
     3. if `.spec.devicePlugin` is defined, create a device plugin `DaemonSet` using the configuration specified under
        `.spec.devicePlugin.container`;
+    4. if `.spec.dra` is defined, create a DRA driver `DaemonSet` using the configuration specified under
+       `.spec.dra`, and create any `DeviceClass` resources listed in `.spec.dra.deviceClasses`;
 4. garbage-collect:
-    1. obsolete device plugin `DaemonSets` that do not target any node;
+    1. obsolete device plugin and DRA `DaemonSet` that do not target any node;
     2. successful build pods;
     3. successful signing pods.
 
@@ -160,8 +248,9 @@ After the rebuild process completes, KMM updates `.status.imageRebuildTriggerGen
 
 ### Supporting Modules without OOT kmods
 In some cases, there is a need to configure the KMM Module to avoid loading an out-of-tree kernel module and
-instead use the in-tree one, running only the device plugin.
-In such cases, the moduleLoader can be omitted from the Module custom resource, leaving only the devicePlugin section.
+instead use the in-tree one, running only the device plugin or DRA driver.
+In such cases, the moduleLoader can be omitted from the Module custom resource, leaving only the devicePlugin or dra
+section.
 
 ```yaml
 apiVersion: kmm.sigs.x-k8s.io/v1beta1
@@ -174,6 +263,22 @@ spec:
   devicePlugin:
     container:
       image: some.registry/org/my-device-plugin:latest
+```
+
+Or using DRA instead of a device plugin:
+
+```yaml
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: Module
+metadata:
+  name: my-kmod
+spec:
+  selector:
+    node-role.kubernetes.io/worker: ""
+  dra:
+    driverName: dra.example.com
+    container:
+      image: some.registry/org/my-dra-driver:latest
 ```
 
 ### Example resource
@@ -278,7 +383,7 @@ spec:
         configMap:
           name: some-configmap
 
-    serviceAccountName: sa-device-plugin  # Optional; created automatically if not set
+    serviceAccountName: sa-device-plugin  # Optional; defaults to the namespace's default ServiceAccount if not set
 
   imageRepoSecret:  # Optional. Used to pull kmod and device plugin images
     name: secret-name
@@ -286,6 +391,73 @@ spec:
   # Optional. Change this value to force KMM to re-verify and potentially rebuild all module images.
   # See "Forcing module image rebuilds" section for details.
   imageRebuildTriggerGeneration: 1
+
+  selector:
+    node-role.kubernetes.io/worker: ""
+```
+
+### Example resource with DRA
+
+Below is an annotated `Module` example using DRA instead of a device plugin.
+Remember that `.spec.dra` and `.spec.devicePlugin` are mutually exclusive.
+
+!!! note
+    DRA requires Kubernetes 1.34 or later.
+
+```yaml
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: Module
+metadata:
+  name: my-kmod
+spec:
+  moduleLoader:
+    container:
+      modprobe:
+        moduleName: my-kmod
+      kernelMappings:
+        - regexp: '^.+$'
+          containerImage: "some.registry/org/my-kmod:${KERNEL_FULL_VERSION}"
+
+  dra:
+    driverName: dra.example.com  # Required; must be a valid DNS subdomain
+
+    container:
+      image: some.registry/org/my-dra-driver:latest  # Required
+
+      env:  # Optional
+        - name: MY_DRA_ENV_VAR
+          value: SOME_VALUE
+
+      volumeMounts:  # Optional; appended to the auto-mounted volumes
+        - mountPath: /some/mountPath
+          name: dra-extra-volume
+
+    initContainer:  # Optional
+      image: some.registry/org/my-dra-init:latest
+
+    volumes:  # Optional; appended to the auto-mounted volumes
+      - name: dra-extra-volume
+        configMap:
+          name: some-configmap
+
+    serviceAccountName: sa-dra-driver  # Optional; defaults to the namespace's default ServiceAccount if not set
+
+    deviceClasses:  # Optional; list of DeviceClass resources to create
+      - name: my-device-class
+        selectors:  # Optional; restrict which devices match this class
+          - cel:
+              expression: "device.driver == 'dra.example.com'"
+        config:  # Optional; per-device configuration
+          - opaque:
+              driver: dra.example.com
+              parameters:
+                apiVersion: dra.example.com/v1
+                kind: MyDeviceConfig
+                spec:
+                  mode: default
+
+  imageRepoSecret:  # Optional
+    name: secret-name
 
   selector:
     node-role.kubernetes.io/worker: ""

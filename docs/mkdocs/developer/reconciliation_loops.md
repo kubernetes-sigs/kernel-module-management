@@ -21,3 +21,20 @@ Each time a new `Module` is created, we need to find to which nodes it applies.
    in the cluster.
 
 ![Modules reconciliation](diagrams/reconciliation-module.png)
+
+## DRA
+
+A separate DRA reconciler watches `Module` resources that have `.spec.dra` set.
+
+1. When a `Module` has `.spec.dra` configured, the DRA reconciler creates a DRA driver `DaemonSet` targeting nodes
+   where the kernel module is loaded.
+
+1. It also creates and manages cluster-scoped `DeviceClass` resources as declared in `.spec.dra.deviceClasses`.
+   DeviceClasses are tracked via labels (`kmm.node.kubernetes.io/module.name` and
+   `kmm.node.kubernetes.io/module.namespace`) since they are cluster-scoped while Modules are namespaced.
+
+1. When `spec.dra` is removed or the `Module` is deleted, the reconciler deletes all associated DRA `DaemonSet` and
+   `DeviceClass` resources.
+
+1. During [ordered upgrades](../documentation/ordered_upgrade.md), a new DRA `DaemonSet` is created for the new module
+   version. Once the old-version `DaemonSet` is no longer scheduled on any node, it is garbage-collected.
