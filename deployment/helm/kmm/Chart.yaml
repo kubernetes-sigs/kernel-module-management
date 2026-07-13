@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kmm
+description: Kernel Module Management (KMM) operator Helm chart
+type: application
+version: 0.1.0
+appVersion: "0.0.1"

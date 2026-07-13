@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    control-plane: webhook-server
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      control-plane: webhook-server
+      {{- include "kmm-hub.selectorLabels" . | nindent 6 }}
+  replicas: {{ .Values.webhookServer.replicas }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: webhook-server
+      labels:
+        control-plane: webhook-server
+        {{- include "kmm-hub.selectorLabels" . | nindent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - image: {{ .Values.webhookServer.image }}
+          name: webhook-server
+          env:
+            - name: OPERATOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          args:
+            - --config={{ .Values.webhookServer.configName }}
+            {{- range .Values.webhookServer.enabledWebhooks }}
+            - {{ . }}
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.webhookServer.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+      serviceAccountName: {{ include "kmm-hub.namePrefix" . }}controller
+      terminationGracePeriodSeconds: 10
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Equal
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Equal
+          effect: NoSchedule
+      volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: {{ include "kmm-hub.namePrefix" . }}webhook-server-cert

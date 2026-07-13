@@ -1,0 +1,71 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "kmm.namePrefix" . }}validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/{{ include "kmm.namePrefix" . }}serving-cert"
+  labels:
+    {{- include "kmm.labels" . | nindent 4 }}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "kmm.namePrefix" . }}webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate--v1-namespace
+  failurePolicy: Fail
+  name: namespace-deletion.kmm.sigs.k8s.io
+  namespaceSelector:
+    matchLabels:
+      kmm.node.k8s.io/contains-modules: ''
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - DELETE
+    resources:
+    - namespaces
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "kmm.namePrefix" . }}webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate-kmm-sigs-x-k8s-io-v1beta1-module
+  failurePolicy: Fail
+  name: vmodule.kb.io
+  rules:
+  - apiGroups:
+    - kmm.sigs.x-k8s.io
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - modules
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "kmm.namePrefix" . }}webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate-kmm-sigs-x-k8s-io-v1beta2-preflightvalidation
+  failurePolicy: Fail
+  name: vpreflightvalidation.kb.io
+  rules:
+  - apiGroups:
+    - kmm.sigs.x-k8s.io
+    apiVersions:
+    - v1beta2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - preflightvalidations
+  sideEffects: None

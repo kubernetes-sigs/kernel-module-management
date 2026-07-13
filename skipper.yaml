@@ -7,6 +7,7 @@ volumes:
     - $HOME/.cache/go-build:$HOME/.cache/go-build
     - $HOME/go/pkg:/go/pkg
     - $HOME/.cache/golangci-lint:$HOME/.cache/golangci-lint
+    - $HOME/.cache/goimports:$HOME/.cache/goimports
     - $HOME/.docker:$HOME/.docker
     - $HOME/.kube/:$HOME/.kube
     - $HOME/.minikube/:$HOME/.minikube

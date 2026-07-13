@@ -1,0 +1,244 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}manager-role
+  labels:
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - cluster.open-cluster-management.io
+  resources:
+  - managedclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - hub.kmm.sigs.x-k8s.io
+  resources:
+  - managedclustermodules
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - hub.kmm.sigs.x-k8s.io
+  resources:
+  - managedclustermodules/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - hub.kmm.sigs.x-k8s.io
+  resources:
+  - managedclustermodules/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kmm.sigs.x-k8s.io
+  resources:
+  - modulebuildsignconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kmm.sigs.x-k8s.io
+  resources:
+  - modulebuildsignconfigs/status
+  - moduleimagesconfigs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kmm.sigs.x-k8s.io
+  resources:
+  - moduleimagesconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - work.open-cluster-management.io
+  resources:
+  - manifestworks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}manager-rolebinding
+  labels:
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kmm-hub.namePrefix" . }}manager-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "kmm-hub.namePrefix" . }}controller
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}leader-election-role
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}leader-election-rolebinding
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "kmm-hub.namePrefix" . }}leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "kmm-hub.namePrefix" . }}controller
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}proxy-role
+  labels:
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}proxy-rolebinding
+  labels:
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kmm-hub.namePrefix" . }}proxy-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "kmm-hub.namePrefix" . }}controller
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}metrics-reader
+  labels:
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+rules:
+- nonResourceURLs:
+  - "/metrics"
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}event-recorder-clusterrole
+  labels:
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kmm-hub.namePrefix" . }}event-recorder-clusterrolebinding
+  labels:
+    {{- include "kmm-hub.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kmm-hub.namePrefix" . }}event-recorder-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: {{ include "kmm-hub.namePrefix" . }}controller
+  namespace: {{ .Release.Namespace }}
