@@ -1,0 +1,40 @@
+namePrefix: "kmm-operator-"
+
+controller:
+  image: gcr.io/k8s-staging-kmm/kernel-module-management-operator:latest
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 384Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  workerImage: gcr.io/k8s-staging-kmm/kernel-module-management-worker:latest
+  signerImage: gcr.io/k8s-staging-kmm/kernel-module-management-signimage:latest
+  buildImage: gcr.io/kaniko-project/executor:latest
+  managerConfig: kmm-operator-manager-config
+
+webhookServer:
+  image: gcr.io/k8s-staging-kmm/kernel-module-management-webhook-server:latest
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 384Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  configName: kmm-operator-manager-config
+  enabledWebhooks:
+    - --enable-module
+    - --enable-namespace
+    - --enable-preflightvalidation
+
+certManager:
+  enabled: true
+
+labels:
+  app.kubernetes.io/component: kmm
+  app.kubernetes.io/name: kmm
+  app.kubernetes.io/part-of: kmm

@@ -1,0 +1,31 @@
+{{- if .Values.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "kmm.namePrefix" . }}selfsigned-issuer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/instance: selfsigned-issuer
+    app.kubernetes.io/created-by: kernel-module-management
+    {{- include "kmm.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "kmm.namePrefix" . }}serving-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/instance: serving-cert
+    app.kubernetes.io/created-by: kernel-module-management
+    {{- include "kmm.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+  - {{ include "kmm.namePrefix" . }}webhook-service.{{ .Release.Namespace }}.svc
+  - {{ include "kmm.namePrefix" . }}webhook-service.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ include "kmm.namePrefix" . }}selfsigned-issuer
+  secretName: {{ include "kmm.namePrefix" . }}webhook-server-cert
+{{- end }}

@@ -95,6 +95,9 @@ all: generate manager manager-hub manifests
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+HELM_CHART_KMM ?= deployment/helm/kmm
+HELM_CHART_KMM_HUB ?= deployment/helm/kmm-hub
+
 ##@ Development
 
 .PHONY: manifests
@@ -107,6 +110,16 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	$(CONTROLLER_GEN) crd paths="./api-hub/..." output:crd:artifacts:config=config/crd-hub/bases
 	$(CONTROLLER_GEN) webhook paths="./internal/webhook/hub" output:webhook:artifacts:config=config/webhook-hub
 	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./internal/controllers/hub" output:rbac:artifacts:config=config/rbac-hub
+	# Sync CRDs to Helm charts
+	@mkdir -p $(HELM_CHART_KMM)/crds
+	@cp config/crd/bases/kmm.sigs.x-k8s.io_modules.yaml $(HELM_CHART_KMM)/crds/
+	@cp config/crd/bases/kmm.sigs.x-k8s.io_nodemodulesconfigs.yaml $(HELM_CHART_KMM)/crds/
+	@cp config/crd/bases/kmm.sigs.x-k8s.io_moduleimagesconfigs.yaml $(HELM_CHART_KMM)/crds/
+	@cp config/crd/bases/kmm.sigs.x-k8s.io_modulebuildsignconfigs.yaml $(HELM_CHART_KMM)/crds/
+	@mkdir -p $(HELM_CHART_KMM_HUB)/crds
+	@cp config/crd-hub/bases/hub.kmm.sigs.x-k8s.io_managedclustermodules.yaml $(HELM_CHART_KMM_HUB)/crds/
+	@cp config/crd-hub/bases/kmm.sigs.x-k8s.io_modulebuildsignconfigs.yaml $(HELM_CHART_KMM_HUB)/crds/
+	@cp config/crd-hub/bases/kmm.sigs.x-k8s.io_moduleimagesconfigs.yaml $(HELM_CHART_KMM_HUB)/crds/
 
 .PHONY: generate
 generate: controller-gen mockgen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -359,6 +372,43 @@ workerimage-build: ## Build docker image for worker app.
 
 operatorhub-release:
 	IMG=$(IMG) HUB_IMG=$(HUB_IMG) WORKER_IMG=$(WORKER_IMG) SIGNER_IMG=$(SIGNER_IMG) VERSION=$(VERSION) ./hack/release-operatorhub
+
+##@ Helm Deployment
+
+HELM_RELEASE_KMM ?= kmm
+HELM_RELEASE_KMM_HUB ?= kmm-hub
+HELM_NAMESPACE ?= kmm-operator-system
+
+.PHONY: helm-deploy
+helm-deploy: deploy-cert-manager manifests ## Deploy KMM controller using Helm to the K8s cluster specified in ~/.kube/config.
+	helm upgrade --install $(HELM_RELEASE_KMM) $(HELM_CHART_KMM) \
+		--namespace $(HELM_NAMESPACE) --create-namespace \
+		--set controller.image=$(IMG) \
+		--set controller.workerImage=$(WORKER_IMG) \
+		--set controller.signerImage=$(SIGNER_IMG) \
+		--set webhookServer.image=$(WEBHOOK_IMG)
+
+.PHONY: helm-deploy-hub
+helm-deploy-hub: deploy-cert-manager manifests ## Deploy KMM-Hub controller using Helm to the K8s cluster specified in ~/.kube/config.
+	helm upgrade --install $(HELM_RELEASE_KMM_HUB) $(HELM_CHART_KMM_HUB) \
+		--namespace $(HELM_NAMESPACE) --create-namespace \
+		--set controller.image=$(HUB_IMG) \
+		--set controller.signerImage=$(SIGNER_IMG) \
+		--set webhookServer.image=$(WEBHOOK_IMG)
+
+.PHONY: helm-undeploy-kmm
+helm-undeploy-kmm: ## Uninstall KMM Helm release from the K8s cluster.
+	helm uninstall $(HELM_RELEASE_KMM) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-undeploy-kmm-hub
+helm-undeploy-kmm-hub: ## Uninstall KMM-Hub Helm release from the K8s cluster.
+	helm uninstall $(HELM_RELEASE_KMM_HUB) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-undeploy
+helm-undeploy: helm-undeploy-kmm undeploy-cert-manager ## Undeploy KMM controller and cert-manager from the K8s cluster. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+
+.PHONY: helm-undeploy-hub
+helm-undeploy-hub: helm-undeploy-kmm-hub undeploy-cert-manager ## Undeploy KMM-Hub controller and cert-manager from the K8s cluster. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 
 include docs.mk
 
