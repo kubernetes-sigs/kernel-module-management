@@ -221,12 +221,28 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
 			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
+			mockReconHelper.EXPECT().clearModuleLoaderStatus(ctx, mod).Return(nil),
 		)
 
 		res, err := mr.Reconcile(ctx, modWithoutModuleLoader)
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should return an error when clearModuleLoaderStatus fails", func() {
+		modWithoutModuleLoader := mod
+		modWithoutModuleLoader.Spec.ModuleLoader = nil
+		gomock.InOrder(
+			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
+			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
+			mockReconHelper.EXPECT().clearModuleLoaderStatus(ctx, mod).Return(fmt.Errorf("some error")),
+		)
+
+		res, err := mr.Reconcile(ctx, modWithoutModuleLoader)
+
+		Expect(res).To(Equal(reconcile.Result{}))
+		Expect(err).To(HaveOccurred())
 	})
 })
 
@@ -1104,6 +1120,46 @@ var _ = Describe("updateModuleLoaderStatus", func() {
 		Expect(mod.Status.ModuleLoader.NodesMatchingSelectorNumber).To(Equal(int32(2)))
 		Expect(mod.Status.ModuleLoader.DesiredNumber).To(Equal(int32(1)))
 		Expect(mod.Status.ModuleLoader.AvailableNumber).To(Equal(int32(1)))
+	})
+})
+
+var _ = Describe("clearModuleLoaderStatus", func() {
+	var (
+		ctx  context.Context
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		mrh  *moduleReconcilerHelper
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		mrh = &moduleReconcilerHelper{client: clnt}
+	})
+
+	It("should do nothing when status is already empty", func() {
+		mod := kmmv1beta1.Module{}
+		err := mrh.clearModuleLoaderStatus(ctx, &mod)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should patch status when moduleLoader status is non-empty", func() {
+		mod := kmmv1beta1.Module{
+			Status: kmmv1beta1.ModuleStatus{
+				ModuleLoader: kmmv1beta1.DaemonSetStatus{
+					DesiredNumber:   3,
+					AvailableNumber: 2,
+				},
+			},
+		}
+		statusWriter := client.NewMockStatusWriter(ctrl)
+		clnt.EXPECT().Status().Return(statusWriter)
+		statusWriter.EXPECT().Patch(ctx, &mod, gomock.Any()).Return(nil)
+
+		err := mrh.clearModuleLoaderStatus(ctx, &mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mod.Status.ModuleLoader).To(Equal(kmmv1beta1.DaemonSetStatus{}))
 	})
 })
 

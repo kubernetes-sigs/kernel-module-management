@@ -118,7 +118,7 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 
 	if mod.Spec.ModuleLoader == nil {
 		logger.Info("ModuleLoader is not defined, skipping loading kernel module")
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, mr.reconHelper.clearModuleLoaderStatus(ctx, mod)
 	}
 
 	// get nodes targeted by selector
@@ -194,6 +194,7 @@ type moduleReconcilerHelperAPI interface {
 	enableModuleOnNode(ctx context.Context, mld *api.ModuleLoaderData, node *v1.Node) error
 	disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error
 	updateModuleStatus(ctx context.Context, mod *kmmv1beta1.Module, targetedNodes []v1.Node) error
+	clearModuleLoaderStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 }
 
 type moduleReconcilerHelper struct {
@@ -514,6 +515,19 @@ func (mrh *moduleReconcilerHelper) updateModuleLoaderStatus(ctx context.Context,
 	mod.Status.ModuleLoader.AvailableNumber = int32(numAvailable)
 
 	return nil
+}
+
+func (mrh *moduleReconcilerHelper) clearModuleLoaderStatus(ctx context.Context, mod *kmmv1beta1.Module) error {
+	emptyStatus := kmmv1beta1.DaemonSetStatus{}
+	if mod.Status.ModuleLoader == emptyStatus {
+		return nil
+	}
+
+	unmodifiedMod := mod.DeepCopy()
+
+	mod.Status.ModuleLoader = kmmv1beta1.DaemonSetStatus{}
+
+	return mrh.client.Status().Patch(ctx, mod, client.MergeFrom(unmodifiedMod))
 }
 
 func (mrh *moduleReconcilerHelper) updateImageRebuildTriggerGenerationStatus(ctx context.Context, mod *kmmv1beta1.Module) error {
