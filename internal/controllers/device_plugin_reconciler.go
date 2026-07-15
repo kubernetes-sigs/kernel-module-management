@@ -107,6 +107,9 @@ func (r *DevicePluginReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.
 	r.reconHelperAPI.setKMMOMetrics(ctx)
 
 	if mod.Spec.DevicePlugin == nil {
+		if err = r.reconHelperAPI.removeDevicePluginTargetLabels(ctx, mod); err != nil {
+			return ctrl.Result{}, fmt.Errorf("could not remove device-plugin-target labels: %v", err)
+		}
 		if len(existingDevicePluginDS) > 0 {
 			if err = r.reconHelperAPI.deleteDevicePluginDaemonSets(ctx, existingDevicePluginDS); err != nil {
 				return ctrl.Result{}, err

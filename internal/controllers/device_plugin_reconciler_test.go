@@ -152,6 +152,7 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
+			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().clearDevicePluginStatus(ctx, mod).Return(nil),
 		)
 
@@ -168,6 +169,7 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
+			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().deleteDevicePluginDaemonSets(ctx, devicePluginDS).Return(nil),
 			mockReconHelper.EXPECT().clearDevicePluginStatus(ctx, mod).Return(nil),
 		)
@@ -178,12 +180,28 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("cleanup when spec.devicePlugin is nil and removeDevicePluginTargetLabels fails", func() {
+		mod.Spec.DevicePlugin = nil
+
+		gomock.InOrder(
+			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
+			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
+			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(fmt.Errorf("some error")),
+		)
+
+		res, err := dpr.Reconcile(ctx, mod)
+
+		Expect(res).To(Equal(reconcile.Result{}))
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("cleanup when spec.devicePlugin is nil and clearDevicePluginStatus fails", func() {
 		mod.Spec.DevicePlugin = nil
 
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
+			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().clearDevicePluginStatus(ctx, mod).Return(fmt.Errorf("some error")),
 		)
 
