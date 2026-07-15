@@ -42,6 +42,20 @@ func (m *MockmoduleReconcilerHelperAPI) EXPECT() *MockmoduleReconcilerHelperAPIM
 	return m.recorder
 }
 
+// clearModuleLoaderStatus mocks base method.
+func (m *MockmoduleReconcilerHelperAPI) clearModuleLoaderStatus(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "clearModuleLoaderStatus", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// clearModuleLoaderStatus indicates an expected call of clearModuleLoaderStatus.
+func (mr *MockmoduleReconcilerHelperAPIMockRecorder) clearModuleLoaderStatus(ctx, mod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "clearModuleLoaderStatus", reflect.TypeOf((*MockmoduleReconcilerHelperAPI)(nil).clearModuleLoaderStatus), ctx, mod)
+}
+
 // disableModuleOnNode mocks base method.
 func (m *MockmoduleReconcilerHelperAPI) disableModuleOnNode(ctx context.Context, modNamespace, modName, nodeName string) error {
 	m.ctrl.T.Helper()
