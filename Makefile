@@ -378,6 +378,7 @@ operatorhub-release:
 HELM_RELEASE_KMM ?= kmm
 HELM_RELEASE_KMM_HUB ?= kmm-hub
 HELM_NAMESPACE ?= kmm-operator-system
+HELM_EXTRA_ARGS ?=
 
 .PHONY: helm-deploy
 helm-deploy: deploy-cert-manager manifests ## Deploy KMM controller using Helm to the K8s cluster specified in ~/.kube/config.
@@ -386,7 +387,8 @@ helm-deploy: deploy-cert-manager manifests ## Deploy KMM controller using Helm t
 		--set controller.image=$(IMG) \
 		--set controller.workerImage=$(WORKER_IMG) \
 		--set controller.signerImage=$(SIGNER_IMG) \
-		--set webhookServer.image=$(WEBHOOK_IMG)
+		--set webhookServer.image=$(WEBHOOK_IMG) \
+		$(HELM_EXTRA_ARGS)
 
 .PHONY: helm-deploy-hub
 helm-deploy-hub: deploy-cert-manager manifests ## Deploy KMM-Hub controller using Helm to the K8s cluster specified in ~/.kube/config.
@@ -394,7 +396,8 @@ helm-deploy-hub: deploy-cert-manager manifests ## Deploy KMM-Hub controller usin
 		--namespace $(HELM_NAMESPACE) --create-namespace \
 		--set controller.image=$(HUB_IMG) \
 		--set controller.signerImage=$(SIGNER_IMG) \
-		--set webhookServer.image=$(WEBHOOK_IMG)
+		--set webhookServer.image=$(WEBHOOK_IMG) \
+		$(HELM_EXTRA_ARGS)
 
 .PHONY: helm-undeploy-kmm
 helm-undeploy-kmm: ## Uninstall KMM Helm release from the K8s cluster.

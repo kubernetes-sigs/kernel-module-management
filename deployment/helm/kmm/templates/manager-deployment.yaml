@@ -37,6 +37,9 @@ spec:
         runAsNonRoot: true
       containers:
       - image: {{ .Values.controller.image }}
+        {{- if .Values.controller.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.controller.imagePullPolicy }}
+        {{- end }}
         name: manager
         args:
           - "--config={{ .Values.controller.managerConfig }}"
