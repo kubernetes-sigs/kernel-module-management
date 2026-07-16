@@ -1,0 +1,9 @@
+controller:
+  image: kmm:local
+  imagePullPolicy: Never
+  workerImage: kmm-worker:local
+  signerImage: host.minikube.internal:5000/kmm/signimage:local
+
+webhookServer:
+  image: kmm-webhook-server:local
+  imagePullPolicy: Never
