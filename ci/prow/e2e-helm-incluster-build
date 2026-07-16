@@ -12,8 +12,8 @@ check_module_not_loaded () {
   fi
 }
 
-echo "Deploy KMM..."
-make deploy
+echo "Deploy KMM via Helm..."
+make helm-deploy
 
 check_module_not_loaded "kmm_ci_a"
 check_module_not_loaded "kmm_ci_b"

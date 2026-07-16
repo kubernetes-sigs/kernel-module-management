@@ -54,6 +54,10 @@ spec:
             value: {{ .Values.controller.signerImage }}
           - name: RELATED_IMAGE_WORKER
             value: {{ .Values.controller.workerImage }}
+          {{- if .Values.controller.managed }}
+          - name: KMM_MANAGED
+            value: "1"
+          {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

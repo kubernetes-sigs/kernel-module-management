@@ -141,6 +141,16 @@ jobs:
               KUSTOMIZE_CONFIG_DEFAULT: ci/install-ci-spoke
             import_hub_image: true
             script: ./ci/prow/e2e-hub-spoke-incluster-build
+          - name: e2e-helm
+            env:
+              HELM_VALUES_FILE: ci/helm-values-ci.yaml
+            script: ./ci/prow/e2e-helm-incluster-build
+          - name: e2e-helm-hub
+            env:
+              HELM_VALUES_FILE: ci/helm-values-ci-spoke.yaml
+              HELM_HUB_VALUES_FILE: ci/helm-values-ci-hub.yaml
+            import_hub_image: true
+            script: ./ci/prow/e2e-helm-hub-spoke-incluster-build
 
     runs-on: ubuntu-24.04
     name: ${{ matrix.name }}
