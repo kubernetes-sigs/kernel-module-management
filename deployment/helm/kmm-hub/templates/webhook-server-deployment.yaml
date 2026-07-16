@@ -37,6 +37,9 @@ spec:
         runAsNonRoot: true
       containers:
         - image: {{ .Values.webhookServer.image }}
+          {{- if .Values.webhookServer.imagePullPolicy }}
+          imagePullPolicy: {{ .Values.webhookServer.imagePullPolicy }}
+          {{- end }}
           name: webhook-server
           env:
             - name: OPERATOR_NAMESPACE
