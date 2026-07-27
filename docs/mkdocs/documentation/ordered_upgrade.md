@@ -24,7 +24,7 @@ There are 3 types of workloads that can use a kernel module:
   The operator will manage the unloading/loading of the DRA driver on a node being upgraded, following the same
   lifecycle as the device plugin.
 
-Due to Kubernetes limitations in label names, the combined length of `Module` name and namespace may not exceed 39
+Due to Kubernetes limitations in label names, the combined length of `Module` name and namespace may not exceed 41
 characters.
 
 ## Upgrade steps
