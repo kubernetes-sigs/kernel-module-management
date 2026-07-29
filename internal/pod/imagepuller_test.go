@@ -163,6 +163,14 @@ var _ = Describe("CreatePullPod", func() {
 	testMic := kmmv1beta1.ModuleImagesConfig{}
 	testRepoSecret := v1.LocalObjectReference{}
 	imagePullPolicy := v1.PullAlways
+	testTolerations := []v1.Toleration{
+		{
+			Key:      "custom-taint",
+			Operator: v1.TolerationOpEqual,
+			Value:    "true",
+			Effect:   v1.TaintEffectNoSchedule,
+		},
+	}
 
 	It("check the pod fields", func() {
 		expectedPod := v1.Pod{
@@ -185,6 +193,7 @@ var _ = Describe("CreatePullPod", func() {
 				},
 				RestartPolicy:    v1.RestartPolicyNever,
 				ImagePullSecrets: []v1.LocalObjectReference{testRepoSecret},
+				Tolerations:      testTolerations,
 			},
 		}
 
@@ -200,7 +209,7 @@ var _ = Describe("CreatePullPod", func() {
 				}
 				return nil
 			})
-		err := ip.CreatePullPod(ctx, testName, testNamespace, testImage, false, &testRepoSecret, imagePullPolicy, &testMic)
+		err := ip.CreatePullPod(ctx, testName, testNamespace, testImage, false, &testRepoSecret, imagePullPolicy, testTolerations, &testMic)
 		Expect(err).To(BeNil())
 	})
 })
