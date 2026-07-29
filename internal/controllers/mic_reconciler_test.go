@@ -548,7 +548,7 @@ var _ = Describe("processImagesSpecs", func() {
 				micHelper.EXPECT().GetImageState(&testMic, "image 1").Return(kmmv1beta1.ImageState("")),
 				mockImagePuller.EXPECT().GetPullPodForImage(pullPods, "image 1").Return(nil),
 				mockImagePuller.EXPECT().CreatePullPod(ctx, "some name", "some namespace", "image 1", expectedOneTimePodFlag,
-					nil, v1.PullPolicy(""), &testMic).Return(nil),
+					nil, v1.PullPolicy(""), testMic.Spec.Tolerations, &testMic).Return(nil),
 			)
 			err := mrh.processImagesSpecs(ctx, &testMic, pullPods)
 			Expect(err).To(BeNil())

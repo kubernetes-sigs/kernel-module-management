@@ -286,6 +286,7 @@ func (mrhi *micReconcilerHelperImpl) processImagesSpecs(ctx context.Context, mic
 					oneTimePod,
 					micObj.Spec.ImageRepoSecret,
 					micObj.Spec.ImagePullPolicy,
+					micObj.Spec.Tolerations,
 					micObj)
 				errs = append(errs, err)
 			}
