@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -487,7 +488,7 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 	})
 
 	DescribeTable("should work as expected",
-		func(withInitContainer bool) {
+		func(withInitContainer bool, customLiveness *v1.Probe, customStartup *v1.Probe) {
 			const (
 				dsName             = "ds-name"
 				serviceAccountName = "some-service-account"
@@ -566,6 +567,8 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 							ImagePullPolicy: ipp,
 							Resources:       resources,
 							VolumeMounts:    []v1.VolumeMount{draVolMount},
+							LivenessProbe:   customLiveness,
+							StartupProbe:    customStartup,
 						},
 						ServiceAccountName:           serviceAccountName,
 						Volumes:                      []v1.Volume{draVol},
@@ -610,6 +613,22 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 
 			if !withInitContainer {
 				expectedInitContainer = nil
+			}
+
+			expectedLivenessProbe := &v1.Probe{
+				ProbeHandler: v1.ProbeHandler{
+					GRPC: &v1.GRPCAction{
+						Port:    51515,
+						Service: ptr.To("liveness"),
+					},
+				},
+				InitialDelaySeconds: 30,
+				PeriodSeconds:       10,
+				TimeoutSeconds:      5,
+				FailureThreshold:    3,
+			}
+			if customLiveness != nil {
+				expectedLivenessProbe = customLiveness
 			}
 
 			hostPathDirOrCreate := v1.HostPathDirectoryOrCreate
@@ -686,18 +705,8 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 										},
 										draVolMount,
 									},
-									LivenessProbe: &v1.Probe{
-										ProbeHandler: v1.ProbeHandler{
-											GRPC: &v1.GRPCAction{
-												Port:    51515,
-												Service: ptr.To("liveness"),
-											},
-										},
-										InitialDelaySeconds: 30,
-										PeriodSeconds:       10,
-										TimeoutSeconds:      5,
-										FailureThreshold:    3,
-									},
+									LivenessProbe: expectedLivenessProbe,
+									StartupProbe:  customStartup,
 								},
 							},
 							ImagePullSecrets:   []v1.LocalObjectReference{repoSecret},
@@ -747,8 +756,39 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 				BeTrue(), cmp.Diff(expected, ds),
 			)
 		},
-		Entry("without init container", false),
-		Entry("with init container", true),
+		Entry("without init container", false, nil, nil),
+		Entry("with init container", true, nil, nil),
+		Entry("custom liveness probe", false,
+			&v1.Probe{
+				ProbeHandler: v1.ProbeHandler{
+					HTTPGet: &v1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(8080)},
+				},
+				PeriodSeconds: 30,
+			}, nil),
+		Entry("custom startup probe", false, nil,
+			&v1.Probe{
+				ProbeHandler: v1.ProbeHandler{
+					HTTPGet: &v1.HTTPGetAction{Path: "/ready", Port: intstr.FromInt32(8080)},
+				},
+				InitialDelaySeconds: 10,
+				PeriodSeconds:       5,
+				FailureThreshold:    30,
+			}),
+		Entry("custom liveness and startup probes", false,
+			&v1.Probe{
+				ProbeHandler: v1.ProbeHandler{
+					HTTPGet: &v1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(8080)},
+				},
+				PeriodSeconds: 30,
+			},
+			&v1.Probe{
+				ProbeHandler: v1.ProbeHandler{
+					HTTPGet: &v1.HTTPGetAction{Path: "/ready", Port: intstr.FromInt32(8080)},
+				},
+				InitialDelaySeconds: 10,
+				PeriodSeconds:       5,
+				FailureThreshold:    30,
+			}),
 	)
 
 	It("should include the version-dra label in the DaemonSet labels and node selector when version is set", func() {

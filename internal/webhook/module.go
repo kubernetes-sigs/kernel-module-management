@@ -131,6 +131,15 @@ func validateModule(mod *kmmv1beta1.Module, kubeVersion *version.KubeVersion) (a
 		if err := validateHostPathVolumes("spec.devicePlugin", mod.Spec.DevicePlugin.Volumes); err != nil {
 			return nil, fmt.Errorf("failed to validate device plugin volumes: %v", err)
 		}
+
+		if mod.Spec.DevicePlugin.InitContainer != nil {
+			if mod.Spec.DevicePlugin.InitContainer.StartupProbe != nil {
+				return nil, fmt.Errorf("spec.devicePlugin.initContainer.startupProbe is not supported")
+			}
+			if mod.Spec.DevicePlugin.InitContainer.LivenessProbe != nil {
+				return nil, fmt.Errorf("spec.devicePlugin.initContainer.livenessProbe is not supported")
+			}
+		}
 	}
 
 	if mod.Spec.ModuleLoader == nil {
@@ -186,6 +195,15 @@ func validateDRA(mod *kmmv1beta1.Module, kubeVersion *version.KubeVersion) error
 			return fmt.Errorf("spec.dra.deviceClasses[%d].name %q is a duplicate", i, dc.Name)
 		}
 		seen.Insert(dc.Name)
+	}
+
+	if mod.Spec.DRA.InitContainer != nil {
+		if mod.Spec.DRA.InitContainer.StartupProbe != nil {
+			return fmt.Errorf("spec.dra.initContainer.startupProbe is not supported")
+		}
+		if mod.Spec.DRA.InitContainer.LivenessProbe != nil {
+			return fmt.Errorf("spec.dra.initContainer.livenessProbe is not supported")
+		}
 	}
 
 	return nil
