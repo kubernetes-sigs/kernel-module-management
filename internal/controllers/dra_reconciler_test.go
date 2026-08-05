@@ -840,6 +840,83 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 			utils.GetKernelModuleReadyNodeLabel(namespace, draModuleName), "",
 		))
 	})
+
+	It("should default to privileged: true when SecurityContext is nil", func() {
+		mod := kmmv1beta1.Module{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: kmmv1beta1.GroupVersion.String(),
+				Kind:       "Module",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      draModuleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					Container: kmmv1beta1.CommonContainerSpec{
+						Image: draImage,
+					},
+					DriverName: "test.driver",
+				},
+			},
+		}
+
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-ds",
+				Namespace: namespace,
+			},
+		}
+
+		err := dsc.setDRAAsDesired(context.Background(), &ds, &mod)
+		Expect(err).NotTo(HaveOccurred())
+
+		container := ds.Spec.Template.Spec.Containers[0]
+		Expect(container.SecurityContext).To(Equal(&v1.SecurityContext{Privileged: ptr.To(true)}))
+	})
+
+	It("should use a custom SecurityContext when set in the container spec", func() {
+		customSC := &v1.SecurityContext{
+			AllowPrivilegeEscalation: ptr.To(false),
+			Capabilities: &v1.Capabilities{
+				Drop: []v1.Capability{"ALL"},
+			},
+			ReadOnlyRootFilesystem: ptr.To(true),
+		}
+
+		mod := kmmv1beta1.Module{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: kmmv1beta1.GroupVersion.String(),
+				Kind:       "Module",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      draModuleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					Container: kmmv1beta1.CommonContainerSpec{
+						Image:           draImage,
+						SecurityContext: customSC,
+					},
+					DriverName: "test.driver",
+				},
+			},
+		}
+
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-ds",
+				Namespace: namespace,
+			},
+		}
+
+		err := dsc.setDRAAsDesired(context.Background(), &ds, &mod)
+		Expect(err).NotTo(HaveOccurred())
+
+		container := ds.Spec.Template.Spec.Containers[0]
+		Expect(container.SecurityContext).To(Equal(customSC))
+	})
 })
 
 var _ = Describe("DRAReconciler_garbageCollectDRADaemonSets", func() {
