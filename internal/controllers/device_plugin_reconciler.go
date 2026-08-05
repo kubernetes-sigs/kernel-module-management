@@ -485,6 +485,12 @@ func generatePodContainerSpec(
 	if containerSpec == nil {
 		return nil
 	}
+
+	securityContext := containerSpec.SecurityContext
+	if securityContext == nil {
+		securityContext = &v1.SecurityContext{Privileged: ptr.To(true)}
+	}
+
 	return []v1.Container{
 		{
 			Args:            containerSpec.Args,
@@ -494,7 +500,7 @@ func generatePodContainerSpec(
 			Image:           containerSpec.Image,
 			ImagePullPolicy: containerSpec.ImagePullPolicy,
 			Resources:       containerSpec.Resources,
-			SecurityContext: &v1.SecurityContext{Privileged: ptr.To(true)},
+			SecurityContext: securityContext,
 			VolumeMounts:    append(presetVolumeMounts, containerSpec.VolumeMounts...),
 			LivenessProbe:   livenessProbe,
 			StartupProbe:    startupProbe,
