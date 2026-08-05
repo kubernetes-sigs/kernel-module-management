@@ -299,6 +299,16 @@ type CommonContainerSpec struct {
 	// VolumeMounts is a list of volume mounts that are appended to the default ones.
 	// +optional
 	VolumeMounts []v1.VolumeMount `json:"volumeMounts,omitempty"`
+
+	// StartupProbe allows a startup probe to be set for this container.
+	// When nil, no startup probes are configured.
+	// +optional
+	StartupProbe *v1.Probe `json:"startupProbe,omitempty"`
+
+	// LivenessProbe overrides the default liveness probe for this container.
+	// When nil, the default behavior is preserved (no probe for DevicePlugin, hardcoded gRPC probe for DRA).
+	// +optional
+	LivenessProbe *v1.Probe `json:"livenessProbe,omitempty"`
 }
 
 // DevicePluginContainerSpec is a backward-compatible alias for CommonContainerSpec.

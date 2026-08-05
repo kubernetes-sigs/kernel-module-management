@@ -430,6 +430,36 @@ var _ = Describe("validateModule", func() {
 		_, err := validateModule(&mod, &version.KubeVersion{Major: 1, Minor: 34})
 		Expect(err).NotTo(HaveOccurred())
 	})
+
+	It("should reject startupProbe on devicePlugin initContainer", func() {
+		mod := validModule
+		mod.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{
+				Image: "plugin:latest",
+			},
+			InitContainer: &kmmv1beta1.DevicePluginContainerSpec{
+				Image:        "init:latest",
+				StartupProbe: &v1.Probe{},
+			},
+		}
+		_, err := validateModule(&mod, &version.KubeVersion{Major: 1, Minor: 34})
+		Expect(err).To(MatchError(ContainSubstring("spec.devicePlugin.initContainer.startupProbe is not supported")))
+	})
+
+	It("should reject livenessProbe on devicePlugin initContainer", func() {
+		mod := validModule
+		mod.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{
+			Container: kmmv1beta1.DevicePluginContainerSpec{
+				Image: "plugin:latest",
+			},
+			InitContainer: &kmmv1beta1.DevicePluginContainerSpec{
+				Image:         "init:latest",
+				LivenessProbe: &v1.Probe{},
+			},
+		}
+		_, err := validateModule(&mod, &version.KubeVersion{Major: 1, Minor: 34})
+		Expect(err).To(MatchError(ContainSubstring("spec.devicePlugin.initContainer.livenessProbe is not supported")))
+	})
 })
 
 var _ = Describe("ValidateCreate", func() {
@@ -793,6 +823,41 @@ var _ = Describe("validateDRA", func() {
 		dra.DeviceClasses = []kmmv1beta1.DeviceClassSpec{
 			{Name: "gpu"},
 			{Name: "fpga"},
+		}
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).NotTo(HaveOccurred())
+	})
+
+	It("should reject startupProbe on initContainer", func() {
+		dra := validDRASpec()
+		dra.InitContainer = &kmmv1beta1.CommonContainerSpec{
+			Image:        "init:latest",
+			StartupProbe: &v1.Probe{},
+		}
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).To(MatchError(ContainSubstring("spec.dra.initContainer.startupProbe is not supported")))
+	})
+
+	It("should reject livenessProbe on initContainer", func() {
+		dra := validDRASpec()
+		dra.InitContainer = &kmmv1beta1.CommonContainerSpec{
+			Image:         "init:latest",
+			LivenessProbe: &v1.Probe{},
+		}
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).To(MatchError(ContainSubstring("spec.dra.initContainer.livenessProbe is not supported")))
+	})
+
+	It("should accept initContainer without probes", func() {
+		dra := validDRASpec()
+		dra.InitContainer = &kmmv1beta1.CommonContainerSpec{
+			Image: "init:latest",
 		}
 		mod := &kmmv1beta1.Module{
 			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
