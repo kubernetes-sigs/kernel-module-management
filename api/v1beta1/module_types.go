@@ -299,6 +299,14 @@ type CommonContainerSpec struct {
 	// VolumeMounts is a list of volume mounts that are appended to the default ones.
 	// +optional
 	VolumeMounts []v1.VolumeMount `json:"volumeMounts,omitempty"`
+
+	// SecurityContext overrides the default security context for this container.
+	// When nil, the default privileged security context is applied.
+	// Ensure the specified context grants sufficient permissions for the
+	// container's operation (e.g., device access); an overly restrictive
+	// context will cause the pod to fail at runtime.
+	// +optional
+	SecurityContext *v1.SecurityContext `json:"securityContext,omitempty"`
 }
 
 // DevicePluginContainerSpec is a backward-compatible alias for CommonContainerSpec.

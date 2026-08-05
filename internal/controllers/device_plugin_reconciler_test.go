@@ -975,6 +975,81 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 			true,
 		),
 	)
+
+	It("should default to privileged: true when SecurityContext is nil", func() {
+		mod := kmmv1beta1.Module{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: kmmv1beta1.GroupVersion.String(),
+				Kind:       "Module",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				DevicePlugin: &kmmv1beta1.DevicePluginSpec{
+					Container: kmmv1beta1.DevicePluginContainerSpec{
+						Image: "device-plugin-image",
+					},
+				},
+			},
+		}
+
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+		}
+
+		err := dsc.setDevicePluginAsDesired(context.Background(), &ds, &mod)
+		Expect(err).NotTo(HaveOccurred())
+
+		container := ds.Spec.Template.Spec.Containers[0]
+		Expect(container.SecurityContext).To(Equal(&v1.SecurityContext{Privileged: ptr.To(true)}))
+	})
+
+	It("should use a custom SecurityContext when set in the container spec", func() {
+		customSC := &v1.SecurityContext{
+			AllowPrivilegeEscalation: ptr.To(false),
+			Capabilities: &v1.Capabilities{
+				Drop: []v1.Capability{"ALL"},
+			},
+			ReadOnlyRootFilesystem: ptr.To(true),
+		}
+
+		mod := kmmv1beta1.Module{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: kmmv1beta1.GroupVersion.String(),
+				Kind:       "Module",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+			Spec: kmmv1beta1.ModuleSpec{
+				DevicePlugin: &kmmv1beta1.DevicePluginSpec{
+					Container: kmmv1beta1.DevicePluginContainerSpec{
+						Image:           "device-plugin-image",
+						SecurityContext: customSC,
+					},
+				},
+			},
+		}
+
+		ds := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moduleName,
+				Namespace: namespace,
+			},
+		}
+
+		err := dsc.setDevicePluginAsDesired(context.Background(), &ds, &mod)
+		Expect(err).NotTo(HaveOccurred())
+
+		container := ds.Spec.Template.Spec.Containers[0]
+		Expect(container.SecurityContext).To(Equal(customSC))
+	})
 })
 
 var _ = Describe("DevicePluginReconciler_getExistingDSFromVersion", func() {
