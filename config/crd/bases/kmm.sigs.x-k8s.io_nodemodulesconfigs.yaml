@@ -104,6 +104,13 @@ spec:
                                 FirmwarePath is the path of the firmware(s).
                                 The firmware(s) will be copied to the host for the kernel to find them.
                               type: string
+                            modprobedDir:
+                              description: |-
+                                ModprobedDir is an absolute path in the driver container image that contains
+                                modprobe.d configuration files (flat directory only; no subdirectories).
+                                When set, KMM copies those files into /etc/modprobe.d/ in the worker pod
+                                before modprobe load/unload.
+                              type: string
                             moduleName:
                               description: |-
                                 ModuleName is the name of the Module to be loaded.
@@ -301,6 +308,13 @@ spec:
                               description: |-
                                 FirmwarePath is the path of the firmware(s).
                                 The firmware(s) will be copied to the host for the kernel to find them.
+                              type: string
+                            modprobedDir:
+                              description: |-
+                                ModprobedDir is an absolute path in the driver container image that contains
+                                modprobe.d configuration files (flat directory only; no subdirectories).
+                                When set, KMM copies those files into /etc/modprobe.d/ in the worker pod
+                                before modprobe load/unload.
                               type: string
                             moduleName:
                               description: |-
