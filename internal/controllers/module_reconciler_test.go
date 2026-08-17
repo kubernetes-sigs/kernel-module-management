@@ -784,6 +784,9 @@ var _ = Describe("enableModuleOnNode", func() {
 			Namespace:             moduleNamespace,
 			InTreeModulesToRemove: []string{"InTreeModuleToRemove"},
 			ContainerImage:        containerImage,
+			Modprobe: kmmv1beta1.ModprobeSpec{
+				ModprobedDir: "/opt/driver/modprobe.d",
+			},
 		}
 
 		expectedModuleConfig = &kmmv1beta1.ModuleConfig{

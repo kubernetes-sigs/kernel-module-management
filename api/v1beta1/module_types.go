@@ -174,6 +174,13 @@ type ModprobeSpec struct {
 	// +optional
 	FirmwarePath string `json:"firmwarePath,omitempty"`
 
+	// ModprobedDir is an absolute path in the driver container image that contains
+	// modprobe.d configuration files (flat directory only; no subdirectories).
+	// When set, KMM copies those files into /etc/modprobe.d/ in the worker pod
+	// before modprobe load/unload.
+	// +optional
+	ModprobedDir string `json:"modprobedDir,omitempty"`
+
 	// ModulesLoadingOrder defines the dependency between kernel modules loading, in case
 	// it was not created by depmod (independent kernel modules).
 	// The list order should be: upmost module, then the module it depends on and so on.
