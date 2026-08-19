@@ -142,6 +142,8 @@ type ModprobeArgs struct {
 	Unload []string `json:"unload,omitempty"`
 }
 
+// ModprobeSpec contains properties to customize which module modprobe loads and with which properties.
+// +kubebuilder:validation:XValidation:rule="!(has(self.modprobedDir) && has(self.modulesLoadingOrder))",message="modprobedDir and modulesLoadingOrder are mutually exclusive"
 type ModprobeSpec struct {
 	// ModuleName is the name of the Module to be loaded.
 	// This field can only be unset if rawArgs is set.
@@ -177,7 +179,7 @@ type ModprobeSpec struct {
 	// ModprobedDir is an absolute path in the driver container image that contains
 	// modprobe.d configuration files (flat directory only; no subdirectories).
 	// When set, KMM copies those files into /etc/modprobe.d/ in the worker pod
-	// before modprobe load/unload.
+	// before modprobe load/unload. Mutually exclusive with ModulesLoadingOrder.
 	// +optional
 	ModprobedDir string `json:"modprobedDir,omitempty"`
 

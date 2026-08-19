@@ -72,6 +72,8 @@ spec:
                         kernelVersion:
                           type: string
                         modprobe:
+                          description: ModprobeSpec contains properties to customize
+                            which module modprobe loads and with which properties.
                           properties:
                             args:
                               description: |-
@@ -109,7 +111,7 @@ spec:
                                 ModprobedDir is an absolute path in the driver container image that contains
                                 modprobe.d configuration files (flat directory only; no subdirectories).
                                 When set, KMM copies those files into /etc/modprobe.d/ in the worker pod
-                                before modprobe load/unload.
+                                before modprobe load/unload. Mutually exclusive with ModulesLoadingOrder.
                               type: string
                             moduleName:
                               description: |-
@@ -161,6 +163,10 @@ spec:
                                   type: array
                               type: object
                           type: object
+                          x-kubernetes-validations:
+                          - message: modprobedDir and modulesLoadingOrder are mutually
+                              exclusive
+                            rule: '!(has(self.modprobedDir) && has(self.modulesLoadingOrder))'
                       required:
                       - containerImage
                       - insecurePull
@@ -277,6 +283,8 @@ spec:
                         kernelVersion:
                           type: string
                         modprobe:
+                          description: ModprobeSpec contains properties to customize
+                            which module modprobe loads and with which properties.
                           properties:
                             args:
                               description: |-
@@ -314,7 +322,7 @@ spec:
                                 ModprobedDir is an absolute path in the driver container image that contains
                                 modprobe.d configuration files (flat directory only; no subdirectories).
                                 When set, KMM copies those files into /etc/modprobe.d/ in the worker pod
-                                before modprobe load/unload.
+                                before modprobe load/unload. Mutually exclusive with ModulesLoadingOrder.
                               type: string
                             moduleName:
                               description: |-
@@ -366,6 +374,10 @@ spec:
                                   type: array
                               type: object
                           type: object
+                          x-kubernetes-validations:
+                          - message: modprobedDir and modulesLoadingOrder are mutually
+                              exclusive
+                            rule: '!(has(self.modprobedDir) && has(self.modulesLoadingOrder))'
                       required:
                       - containerImage
                       - insecurePull
