@@ -74,7 +74,7 @@ kubectl -n cert-manager wait --for=condition=Available deployment \
 ### Installing KMM
 
 ```shell
-kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default
+kubectl apply --server-side --force-conflicts -k https://github.com/kubernetes-sigs/kernel-module-management/config/default
 ```
 
 This installs the operator in the `kmm-operator-system` namespace.
