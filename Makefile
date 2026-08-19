@@ -192,7 +192,7 @@ KUSTOMIZE_CONFIG_CRD ?= config/crd
 
 .PHONY: install
 install: manifests ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	kubectl apply -k $(KUSTOMIZE_CONFIG_CRD)
+	kubectl apply --server-side --force-conflicts -k $(KUSTOMIZE_CONFIG_CRD)
 
 .PHONY: uninstall
 uninstall: manifests ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
@@ -220,14 +220,14 @@ deploy: deploy-cert-manager manifests kustomize ## Deploy controller to the K8s 
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG) worker=$(WORKER_IMG)
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	cd config/webhook-server && $(KUSTOMIZE) edit set image webhook-server=$(WEBHOOK_IMG)
-	kubectl apply -k $(KUSTOMIZE_CONFIG_DEFAULT)
+	kubectl apply --server-side --force-conflicts -k $(KUSTOMIZE_CONFIG_DEFAULT)
 
 .PHONY: deploy-hub
 deploy-hub: deploy-cert-manager manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager-hub && $(KUSTOMIZE) edit set image controller=$(HUB_IMG)
 	cd config/manager-base && $(KUSTOMIZE) edit set image signer=$(SIGNER_IMG)
 	cd config/webhook-server && $(KUSTOMIZE) edit set image webhook-server=$(WEBHOOK_IMG)
-	kubectl apply -k $(KUSTOMIZE_CONFIG_HUB_DEFAULT)
+	kubectl apply --server-side --force-conflicts -k $(KUSTOMIZE_CONFIG_HUB_DEFAULT)
 
 .PHONY: undeploy-kmm
 undeploy-kmm: kustomize

@@ -28,7 +28,7 @@ First, [install the cert-manager dependency](./install.md#installing-the-cert-ma
 Then, run the following command:
 
 ```shell
-kubectl apply -k https://github.com/kubernetes-sigs/kernel-module-management/config/default-hub
+kubectl apply --server-side --force-conflicts -k https://github.com/kubernetes-sigs/kernel-module-management/config/default-hub
 ```
 
 This installs the operator in the `kmm-operator-system` namespace.
