@@ -176,8 +176,8 @@ type ModprobeSpec struct {
 
 	// ModprobedDir is an absolute path in the driver container image that contains
 	// modprobe.d configuration files (flat directory only; no subdirectories).
-	// When set, KMM copies those files into /etc/modprobe.d/ in the worker pod
-	// before modprobe load/unload.
+	// When set, KMM copies those files as-is into /etc/modprobe.d/ in the worker
+	// pod before modprobe load/unload. May be set together with ModulesLoadingOrder.
 	// +optional
 	ModprobedDir string `json:"modprobedDir,omitempty"`
 
