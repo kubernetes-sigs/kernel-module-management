@@ -201,6 +201,7 @@ var _ = Describe("CreateLoaderPod", func() {
 			if withFirmwareLoading && firmwareHostPath != nil {
 				container.SecurityContext = &v1.SecurityContext{
 					Privileged: ptr.To(true),
+					RunAsUser:  workerCfg.RunAsUser,
 				}
 			} else {
 				container.SecurityContext = &v1.SecurityContext{

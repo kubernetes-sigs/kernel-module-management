@@ -584,9 +584,10 @@ func setWorkerSecurityContext(pod *v1.Pod, workerCfg *config.Worker, privileged 
 		sc.Capabilities = &v1.Capabilities{
 			Add: []v1.Capability{"SYS_MODULE"},
 		}
-		sc.RunAsUser = workerCfg.RunAsUser
 		sc.SELinuxOptions = &v1.SELinuxOptions{Type: workerCfg.SELinuxType}
 	}
+
+	sc.RunAsUser = workerCfg.RunAsUser
 
 	container.SecurityContext = sc
 
