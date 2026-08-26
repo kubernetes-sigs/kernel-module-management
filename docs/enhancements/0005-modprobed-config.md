@@ -28,10 +28,9 @@ modules that rely on this pattern cannot be reliably unloaded through KMM.
   Firmware loading capability, with no degradation to either.
 - Users are always informed when their modprobe.d configuration could not
   be applied, rather than experiencing a silent failure.
-- The modprobe.d capability introduces no degradation to the existing
-  `ModulesLoadingOrder` capability — achieved by preventing the two from
-  being enabled together on the same module (see Non-Goals), rather than
-  allowing them to silently conflict.
+- The modprobe.d capability works correctly together with the existing
+  `ModulesLoadingOrder` capability, with no degradation to either.
+  A Module may enable both on the same resource.
 - Users can specify where in their driver container image their
   modprobe.d files live, via a new field on the Module API. KMM always
   copies those files to the same fixed location on the worker pod
@@ -49,14 +48,24 @@ modules that rely on this pattern cannot be reliably unloaded through KMM.
 - Nested directory structures: only modprobe.d files placed directly in
   the configured directory are supported. Files placed in sub-directories
   are not picked up.
-- Combined use with `ModulesLoadingOrder`: `ModulesLoadingOrder` is
-  implemented today by mounting a read-only volume at `/etc/modprobe.d/`
-  in the worker Pod, which collides with this capability's use of the
-  same path. Merging both into a single input (for example, generating
-  and mounting the combined configuration from an init container) is a
-  long-term solution that is out of scope for this enhancement. Users who
-  need both softdep-style module ordering and other modprobe.d directives
-  can express the ordering directly in their own modprobe.d files.
+
+### 2.3 Approach
+
+User modprobe.d files are copied from the driver image into
+`/etc/modprobe.d/` on the worker pod (the same pattern as Firmware), so
+they are present before `modprobe` runs. `modprobe` only reads files
+that end with `.conf`; user files should use that suffix so they take
+effect. KMM copies the directory as-is and does not rename or filter by
+extension.
+
+`ModulesLoadingOrder` continues to be a `softdep.conf` file in that
+directory. When both capabilities are enabled, KMM mounts that file
+read-only at `/etc/modprobe.d/softdep.conf` and copies the user's files
+next to it. The directory stays writable, so `modprobe` reads both.
+If the user image already contains a file named `softdep.conf`, the copy
+fails rather than overwriting KMM's file (FR-9).
+
+When `modprobedDir` is not set, `ModulesLoadingOrder` is unchanged.
 
 ## 3. Requirements
 
@@ -90,12 +99,14 @@ modules that rely on this pattern cannot be reliably unloaded through KMM.
   pick up changes to the configured directory automatically.
 - **FR-7:** The modprobe.d capability must continue to work correctly for
   modules that also use Firmware loading.
-- **FR-8:** KMM must reject, via validating webhook, any Module that
-  enables the modprobe.d capability while also setting
-  `ModulesLoadingOrder`, since the two currently cannot coexist (see
-  Non-Goals). The rejection must clearly state why the combination isn't
-  supported and point the user to expressing module ordering directly in
-  their own modprobe.d files instead.
+- **FR-8:** A Module may enable the modprobe.d capability and set
+  `ModulesLoadingOrder` at the same time. Both take effect: the user's
+  init/de-init configuration and the configured load order. KMM must not
+  reject this combination.
+- **FR-9:** If a Module enables both capabilities and the user's
+  modprobe.d files include a file whose name collides with the file KMM
+  uses for `ModulesLoadingOrder`, the module must fail to load rather
+  than silently overwriting either file.
 
 ### 3.2 Non-Functional Requirements
 
@@ -108,9 +119,9 @@ modules that rely on this pattern cannot be reliably unloaded through KMM.
   to behave exactly as they do today — this capability introduces no
   change for existing modules.
 - **NFR-3:** When the modprobe.d configuration cannot be applied (per
-  FR-4 or FR-5), the user must be able to observe the failure and its
-  cause through the Module's status or a Kubernetes event, without having
-  to inspect pod logs to discover it.
+  FR-4, FR-5, or FR-9), the user must be able to observe the failure and
+  its cause through the Module's status or a Kubernetes event, without
+  having to inspect pod logs to discover it.
 
 ## 4. Acceptance Criteria
 
@@ -133,10 +144,14 @@ modules that rely on this pattern cannot be reliably unloaded through KMM.
       event.
 - [ ] A user can use the modprobe.d capability on a module that also uses
       Firmware loading, and both capabilities work correctly together.
-- [ ] A user who tries to enable the modprobe.d capability on a module
-      that also sets `ModulesLoadingOrder` is rejected by the validating
-      webhook, with a message explaining the conflict and the
-      recommended workaround.
+- [ ] A user can enable the modprobe.d capability on a module that also
+      sets `ModulesLoadingOrder`, and both take effect: load order from
+      `ModulesLoadingOrder` and the init/de-init sequences from the
+      user's modprobe.d files.
+- [ ] A user who enables both capabilities and whose modprobe.d files
+      include a file that collides with KMM's `ModulesLoadingOrder`
+      file sees the module fail to load and can observe the failure via
+      the Module's status or a Kubernetes event.
 - [ ] A user who sets the modprobe.d field to a value that isn't a
       well-formed absolute path is rejected by the validating webhook.
 
@@ -149,21 +164,5 @@ modules that rely on this pattern cannot be reliably unloaded through KMM.
   precondition for modules that use Firmware loading today, which is
   already documented.
 - Users authoring modprobe.d configuration files are already familiar with
-  the modprobe.d file format; KMM provides no authoring assistance or
-  content validation.
-
-## 6. Future Work
-
-- **Long-term merge:** revisit combining KMM-generated configuration
-  (for example, the softdep config produced for `ModulesLoadingOrder`)
-  and user-supplied modprobe.d files into a single input, so the two
-  capabilities can be used together. This likely requires moving away
-  from the current read-only DownwardAPI-based mount for
-  `ModulesLoadingOrder` toward generating configuration into a shared,
-  writable volume (for example, from an init container).
-- **Remove `ModulesLoadingOrder`:** once the modprobe.d capability is
-  available, users can express module load ordering directly in their
-  own modprobe.d files, making the `ModulesLoadingOrder` field redundant.
-  Track a follow-up task to remove it from the API in KMM 3.0 (the next
-  version where breaking API changes for existing users are permitted),
-  once this enhancement's work is complete.
+  the modprobe.d file format and that files should be named `*.conf`;
+  KMM provides no authoring assistance or content validation.
