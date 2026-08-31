@@ -327,7 +327,24 @@ func validateModprobe(modprobe kmmv1beta1.ModprobeSpec) error {
 		}
 	}
 
+	if modprobe.ModprobedDir != "" {
+		if !isWellFormedAbsolutePath(modprobe.ModprobedDir) {
+			return fmt.Errorf("modprobedDir %q must be a well-formed absolute path", modprobe.ModprobedDir)
+		}
+	}
+
 	return nil
+}
+
+func isWellFormedAbsolutePath(p string) bool {
+	if !filepath.IsAbs(p) {
+		return false
+	}
+	trimmed := strings.TrimSuffix(p, "/")
+	if trimmed == "" {
+		trimmed = "/"
+	}
+	return filepath.Clean(trimmed) == trimmed
 }
 
 func validateSignSection(sign *kmmv1beta1.Sign, dirName string) error {

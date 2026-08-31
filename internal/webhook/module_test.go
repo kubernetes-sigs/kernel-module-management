@@ -400,6 +400,68 @@ var _ = Describe("validateModprobe", func() {
 			HaveOccurred(),
 		)
 	})
+
+	DescribeTable(
+		"modprobedDir validation",
+		func(modprobe kmmv1beta1.ModprobeSpec, errSubstrs []string) {
+			err := validateModprobe(modprobe)
+			if len(errSubstrs) == 0 {
+				Expect(err).NotTo(HaveOccurred())
+				return
+			}
+			for _, substr := range errSubstrs {
+				Expect(err).To(MatchError(ContainSubstring(substr)))
+			}
+		},
+		Entry(
+			"should fail when modprobedDir is relative",
+			kmmv1beta1.ModprobeSpec{
+				ModuleName:   "module-name",
+				ModprobedDir: "opt/driver/modprobe.d",
+			},
+			[]string{"well-formed absolute path"},
+		),
+		Entry(
+			"should fail when modprobedDir contains ..",
+			kmmv1beta1.ModprobeSpec{
+				ModuleName:   "module-name",
+				ModprobedDir: "/opt/../driver/modprobe.d",
+			},
+			[]string{"well-formed absolute path"},
+		),
+		Entry(
+			"should fail when modprobedDir contains .",
+			kmmv1beta1.ModprobeSpec{
+				ModuleName:   "module-name",
+				ModprobedDir: "/opt/./driver/modprobe.d",
+			},
+			[]string{"well-formed absolute path"},
+		),
+		Entry(
+			"should fail when modprobedDir contains an empty segment",
+			kmmv1beta1.ModprobeSpec{
+				ModuleName:   "module-name",
+				ModprobedDir: "/opt//driver/modprobe.d",
+			},
+			[]string{"well-formed absolute path"},
+		),
+		Entry(
+			"should pass when modprobedDir is a well-formed absolute path",
+			kmmv1beta1.ModprobeSpec{
+				ModuleName:   "module-name",
+				ModprobedDir: "/opt/driver/modprobe.d",
+			},
+			nil,
+		),
+		Entry(
+			"should pass when modprobedDir has a trailing slash",
+			kmmv1beta1.ModprobeSpec{
+				ModuleName:   "module-name",
+				ModprobedDir: "/opt/driver/modprobe.d/",
+			},
+			nil,
+		),
+	)
 })
 
 var _ = Describe("validateModule", func() {
