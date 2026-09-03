@@ -53,6 +53,28 @@ timeout 2m bash -c 'until [ "$(kubectl get resourceslice --no-headers 2>/dev/nul
 echo "Check that Module status.dra is populated"
 [ "$(kubectl get module kmm-ci-dra -o jsonpath='{.status.dra.availableNumber}')" = "1" ]
 
+# The waits added here assign the kubectl output before testing it, so that a kubectl failure keeps
+# the loop running until it times out instead of being read as "the resource is already gone".
+DRA_SELECTOR='kmm.node.kubernetes.io/role=dra,kmm.node.kubernetes.io/module.name=kmm-ci-dra'
+DRA_TARGET_LABEL='kmm.node.kubernetes.io/default.kmm-ci-dra.dra-target'
+
+echo "Check that the DRA DaemonSet requires the target label"
+kubectl get ds -l "${DRA_SELECTOR}" -o jsonpath='{.items[0].spec.template.spec.nodeSelector}' | grep "${DRA_TARGET_LABEL}"
+
+# A DaemonSet created by a KMM that predates the target label selects on the kernel-module-ready
+# label alone, and cordoning its node would not evict its Pod. Removing the selector here is what
+# such a DaemonSet looks like, and the reconciler has to put it back.
+echo "Check that the target selector is restored if it goes missing from the DaemonSet"
+DRA_DS=$(kubectl get ds -l "${DRA_SELECTOR}" -o jsonpath='{.items[0].metadata.name}')
+kubectl patch ds "${DRA_DS}" --type=json \
+  -p "[{\"op\": \"remove\", \"path\": \"/spec/template/spec/nodeSelector/${DRA_TARGET_LABEL/\//~1}\"}]"
+timeout 2m bash -c 'until kubectl get ds '"${DRA_DS}"' -o jsonpath="{.spec.template.spec.nodeSelector}" | grep -q '"${DRA_TARGET_LABEL}"'; do sleep 3; done'
+
+# Restoring the selector rolls the DaemonSet, and that rollout is exactly what the reconciler holds
+# back once a claim is reserved, so the drift has to be repaired before a consumer takes one.
+echo "Wait for the restored DaemonSet to settle"
+timeout 5m bash -c 'until [ "$(kubectl get ds -l '"${DRA_SELECTOR}"' -o jsonpath="{.items[0].status.numberReady}" 2>/dev/null)" = "1" ]; do sleep 3; done'
+
 echo "Deploy a consumer pod requesting DRA hardware"
 kubectl apply -f ci/dra-consumer-pod.yaml
 
@@ -60,9 +82,136 @@ echo "Check that the consumer pod is running on the node with the DRA driver"
 kubectl wait --for=condition=Ready pod/dra-consumer --timeout=2m
 [ "$(kubectl get pod dra-consumer -o jsonpath='{.spec.nodeName}')" = "minikube" ]
 
-echo "Remove the consumer pod"
-kubectl delete -f ci/dra-consumer-pod.yaml
-timeout 1m bash -c 'until ! kubectl get pod dra-consumer 2>/dev/null; do sleep 3; done'
+# The claim comes from a ResourceClaimTemplate, so its name is generated. Everything below asserts
+# against the reservation rather than the consumer Pod, since the reservation is what the reconciler
+# reads.
+echo "Find the ResourceClaim generated for the consumer"
+CLAIM=$(kubectl get resourceclaims -o json |
+  jq -r '.items[] | select(.metadata.ownerReferences[]?.name == "dra-consumer") | .metadata.name')
+[ -n "${CLAIM}" ]
+
+echo "Check that the claim is reserved for the consumer"
+timeout 2m bash -c 'until [ "$(kubectl get resourceclaim '"${CLAIM}"' -o jsonpath="{.status.reservedFor[*].name}")" = "dra-consumer" ]; do sleep 3; done'
+
+echo "Check that the DaemonSet is not rolled while the claim is reserved"
+DS_GENERATION=$(kubectl get ds "${DRA_DS}" -o jsonpath='{.metadata.generation}')
+for _ in $(seq 7); do
+  [ "$(kubectl get ds "${DRA_DS}" -o jsonpath='{.metadata.generation}')" = "${DS_GENERATION}" ]
+  sleep 3
+done
+kubectl get ds "${DRA_DS}" -o jsonpath='{.spec.template.spec.nodeSelector}' | grep "${DRA_TARGET_LABEL}"
+
+echo "Check that the DRA target label was set on the node"
+timeout 2m bash -c 'until [ "$(kubectl get nodes -l '"${DRA_TARGET_LABEL}"' -o name)" = "node/minikube" ]; do sleep 3; done'
+
+# The consumer stays up on purpose. kubectl drain marks the node unschedulable before it evicts
+# anything, and the DRA driver is what kubelet calls to unprepare the devices this consumer holds,
+# so the target label has to outlive the cordon.
+#
+# The example driver does not hold kmm_ci_a, and kmm_ci_a exports nothing a process could hold open,
+# so here the kernel module unloads while the node is cordoned and the driver Pod goes with it
+# through the kernel-module-ready label, whatever the target label says. Pinning it would mean
+# giving kmm_ci_a something to hold, and kmm-kmod-dockerfile.yaml builds that module by cloning the
+# default branch and is shared with two other e2e jobs, so it is a fixture change of its own. What
+# is checked below is therefore the target label's own lifecycle, which is what gates the Pod for a
+# driver that does hold its kernel module: the label survives a cordon while a claim is reserved,
+# and only goes once nothing holds one.
+echo "Cordon the node while the consumer still holds its ResourceClaim"
+trap 'kubectl uncordon minikube || true' EXIT
+kubectl cordon minikube
+
+# The DRA reconciler reacts to the unschedulable taint the node lifecycle controller adds for the
+# cordon, so wait for that instead of guessing how long the cordon takes to land.
+echo "Wait for the cordon to reach the node taints"
+timeout 2m bash -c 'until kubectl get node minikube -o jsonpath="{.spec.taints}" | grep -q "node.kubernetes.io/unschedulable"; do sleep 3; done'
+
+# The label has to hold for the whole window rather than be there once, so a removal that arrives a
+# little later still fails the test. The reservation is asserted alongside it: a claim released
+# early would leave the label check passing for the wrong reason.
+echo "Check that the DRA target label survives the cordon while the claim is reserved"
+for _ in $(seq 10); do
+  [ "$(kubectl get nodes -l "${DRA_TARGET_LABEL}" -o name)" = "node/minikube" ]
+  [ "$(kubectl get resourceclaim "${CLAIM}" -o jsonpath='{.status.reservedFor[*].name}')" = "dra-consumer" ]
+  sleep 3
+done
+
+# The driver Pod is already gone here for the reason above, so kubelet cannot run
+# NodeUnprepareResources for this consumer and a graceful eviction never finishes. The delete is
+# forced so the test can still observe what the reconciler does once the consumer is gone. On a
+# driver that does hold its kernel module the driver would still be running at this point and the
+# eviction would complete normally.
+echo "Remove the consumer from the node"
+kubectl delete pod dra-consumer --force --grace-period=0
+kubectl wait --for=delete pod/dra-consumer --timeout=2m
+
+# --ignore-not-found so that the claim going away reads as released, while a kubectl failure keeps
+# the loop running until it times out instead of being read the same way.
+echo "Check that nothing holds the claim any more"
+timeout 2m bash -c 'until out=$(kubectl get resourceclaim '"${CLAIM}"' --ignore-not-found \
+  -o jsonpath="{.status.reservedFor[*].name}") && [ -z "${out}" ]; do sleep 3; done'
+
+echo "Check that the DRA target label is removed once nothing holds a claim"
+timeout 2m bash -c 'until out=$(kubectl get nodes -l '"${DRA_TARGET_LABEL}"' -o name) && [ -z "${out}" ]; do sleep 3; done'
+
+echo "Check that the DRA DaemonSet stops targeting the node"
+timeout 2m bash -c 'until n=$(kubectl get ds -l '"${DRA_SELECTOR}"' -o jsonpath="{.items[0].status.desiredNumberScheduled}") && [ "${n}" = "0" ]; do sleep 3; done'
+
+echo "Check that the DRA driver pod is actually gone"
+timeout 2m bash -c 'until out=$(kubectl get pods -l '"${DRA_SELECTOR}"' -o name) && [ -z "${out}" ]; do sleep 3; done'
+
+echo "Check that the kernel module is unloaded"
+timeout 5m bash -c 'until out=$(minikube ssh -- lsmod) && ! echo "${out}" | grep -q kmm_ci_a; do sleep 3; done'
+
+echo "Uncordon the node"
+kubectl uncordon minikube
+trap - EXIT
+
+echo "Check that the DRA target label is restored"
+timeout 2m bash -c 'until [ "$(kubectl get nodes -l '"${DRA_TARGET_LABEL}"' -o name)" = "node/minikube" ]; do sleep 3; done'
+
+echo "Check that the kernel module is reloaded and the DRA DaemonSet pod comes back"
+timeout 10m bash -c 'until out=$(minikube ssh -- lsmod) && echo "${out}" | grep -q kmm_ci_a; do sleep 3; done'
+timeout 5m bash -c 'until n=$(kubectl get ds -l '"${DRA_SELECTOR}"' -o jsonpath="{.items[0].status.numberReady}") && [ "${n}" = "1" ]; do sleep 3; done'
+
+# Everything above proved the label's lifecycle. This proves the other half of the guard: while a
+# claim is reserved, KMM must not roll the DaemonSet to add a selector it is missing, because that
+# takes the driver off the node for as long as the replacement takes to start. The controller is
+# stopped while the selector is removed, so the drift is already there when it comes back and there
+# is a real migration waiting to be held.
+echo "Deploy a second consumer to hold a claim across a pending migration"
+kubectl apply -f ci/dra-consumer-pod.yaml
+kubectl wait --for=condition=Ready pod/dra-consumer --timeout=2m
+CLAIM2=$(kubectl get resourceclaims -o json |
+  jq -r '.items[] | select(.metadata.ownerReferences[]?.name == "dra-consumer") | .metadata.name')
+[ -n "${CLAIM2}" ]
+timeout 2m bash -c 'until [ "$(kubectl get resourceclaim '"${CLAIM2}"' -o jsonpath="{.status.reservedFor[*].name}")" = "dra-consumer" ]; do sleep 3; done'
+
+echo "Take the target selector off the DaemonSet with the controller stopped"
+kubectl scale deployment/kmm-operator-controller -n kmm-operator-system --replicas=0
+timeout 2m bash -c 'until [ "$(kubectl get deployment/kmm-operator-controller -n kmm-operator-system -o jsonpath="{.status.replicas}")" = "" ]; do sleep 2; done'
+kubectl patch ds "${DRA_DS}" --type=json \
+  -p "[{\"op\": \"remove\", \"path\": \"/spec/template/spec/nodeSelector/${DRA_TARGET_LABEL/\//~1}\"}]"
+DS_GENERATION=$(kubectl get ds "${DRA_DS}" -o jsonpath='{.metadata.generation}')
+kubectl scale deployment/kmm-operator-controller -n kmm-operator-system --replicas=1
+kubectl wait --for=condition=Available deployment/kmm-operator-controller -n kmm-operator-system --timeout=5m
+
+# Long enough to cover several of the reconciler's own retries. The selector is read into a variable
+# first, so that a kubectl failure stops the test rather than reading as "the label is not there".
+echo "Check that the migration is held while the claim is reserved"
+for _ in $(seq 15); do
+  DS_SELECTOR=$(kubectl get ds "${DRA_DS}" -o jsonpath='{.spec.template.spec.nodeSelector}')
+  case "${DS_SELECTOR}" in
+    *"${DRA_TARGET_LABEL}"*) echo "the selector came back while a claim was still reserved"; exit 1 ;;
+  esac
+  [ "$(kubectl get ds "${DRA_DS}" -o jsonpath='{.metadata.generation}')" = "${DS_GENERATION}" ]
+  sleep 3
+done
+
+echo "Release the claim and check that the migration then goes through"
+kubectl delete pod dra-consumer --force --grace-period=0
+kubectl wait --for=delete pod/dra-consumer --timeout=2m
+timeout 3m bash -c 'until kubectl get ds '"${DRA_DS}"' -o jsonpath="{.spec.template.spec.nodeSelector}" | grep -q '"${DRA_TARGET_LABEL}"'; do sleep 3; done'
+kubectl rollout status daemonset/"${DRA_DS}" --timeout=5m
 
 echo "Remove the Module"
 kubectl delete -f ci/module-kmm-ci-dra.yaml --wait=false
@@ -72,6 +221,9 @@ timeout 2m bash -c 'until [ "$(kubectl get ds -l kmm.node.kubernetes.io/role=dra
 
 echo "Check that the DeviceClass gets cleaned up"
 timeout 1m bash -c 'until ! kubectl get deviceclass kmm-ci-test-device 2>/dev/null; do sleep 3; done'
+
+echo "Check that the DRA target label gets cleaned up"
+timeout 1m bash -c 'until out=$(kubectl get nodes -l '"${DRA_TARGET_LABEL}"' -o name) && [ -z "${out}" ]; do sleep 3; done'
 
 echo "Check that the module gets unloaded from the node"
 timeout 1m bash -c 'until ! minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; done'

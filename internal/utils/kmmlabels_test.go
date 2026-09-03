@@ -33,6 +33,29 @@ var _ = Describe("GetDRANodeLabel", func() {
 	})
 })
 
+var _ = Describe("GetDRATargetNodeLabel", func() {
+	It("should work as expected", func() {
+		res := GetDRATargetNodeLabel("some-namespace", "some-name")
+		Expect(res).To(Equal("kmm.node.kubernetes.io/some-namespace.some-name.dra-target"))
+	})
+})
+
+var _ = Describe("IsDRATargetNodeLabel", func() {
+	DescribeTable("should work as expected",
+		func(label string, expectedOK bool, expectedNS, expectedName string) {
+			ok, ns, name := IsDRATargetNodeLabel(label)
+			Expect(ok).To(Equal(expectedOK))
+			Expect(ns).To(Equal(expectedNS))
+			Expect(name).To(Equal(expectedName))
+		},
+		Entry("dra-target label", "kmm.node.kubernetes.io/some-namespace.some-name.dra-target", true, "some-namespace", "some-name"),
+		Entry("dra-ready label", "kmm.node.kubernetes.io/some-namespace.some-name.dra-ready", false, "", ""),
+		Entry("device-plugin-target label", "kmm.node.kubernetes.io/some-namespace.some-name.device-plugin-target", false, "", ""),
+		Entry("kernel module ready label", "kmm.node.kubernetes.io/some-namespace.some-name.ready", false, "", ""),
+		Entry("unrelated label", "some-label", false, "", ""),
+	)
+})
+
 var _ = Describe("IsSchedulePodVersionLabel", func() {
 	DescribeTable("should work as expected",
 		func(input string, expected bool) {
