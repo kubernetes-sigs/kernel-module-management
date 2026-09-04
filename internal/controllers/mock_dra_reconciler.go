@@ -55,6 +55,21 @@ func (mr *MockdraReconcilerHelperAPIMockRecorder) clearDRAStatus(ctx, mod any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "clearDRAStatus", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).clearDRAStatus), ctx, mod)
 }
 
+// confirmCurrentModule mocks base method.
+func (m *MockdraReconcilerHelperAPI) confirmCurrentModule(ctx context.Context, mod *v1beta1.Module) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "confirmCurrentModule", ctx, mod)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// confirmCurrentModule indicates an expected call of confirmCurrentModule.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) confirmCurrentModule(ctx, mod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "confirmCurrentModule", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).confirmCurrentModule), ctx, mod)
+}
+
 // deleteDRAResources mocks base method.
 func (m *MockdraReconcilerHelperAPI) deleteDRAResources(ctx context.Context, moduleName, moduleNamespace string) error {
 	m.ctrl.T.Helper()
@@ -127,6 +142,21 @@ func (mr *MockdraReconcilerHelperAPIMockRecorder) handleDRA(ctx, mod, existingDR
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDRA", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).handleDRA), ctx, mod, existingDRADS)
 }
 
+// handleDRATargetLabels mocks base method.
+func (m *MockdraReconcilerHelperAPI) handleDRATargetLabels(ctx context.Context, mod *v1beta1.Module, existingDRADS []v1.DaemonSet) (draTargetResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "handleDRATargetLabels", ctx, mod, existingDRADS)
+	ret0, _ := ret[0].(draTargetResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// handleDRATargetLabels indicates an expected call of handleDRATargetLabels.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) handleDRATargetLabels(ctx, mod, existingDRADS any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDRATargetLabels", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).handleDRATargetLabels), ctx, mod, existingDRADS)
+}
+
 // handleDeviceClasses mocks base method.
 func (m *MockdraReconcilerHelperAPI) handleDeviceClasses(ctx context.Context, mod *v1beta1.Module, existingDCs []v10.DeviceClass) error {
 	m.ctrl.T.Helper()
@@ -142,17 +172,31 @@ func (mr *MockdraReconcilerHelperAPIMockRecorder) handleDeviceClasses(ctx, mod, 
 }
 
 // moduleUpdateDRAStatus mocks base method.
-func (m *MockdraReconcilerHelperAPI) moduleUpdateDRAStatus(ctx context.Context, mod *v1beta1.Module, existingDRADS []v1.DaemonSet) error {
+func (m *MockdraReconcilerHelperAPI) moduleUpdateDRAStatus(ctx context.Context, mod *v1beta1.Module, existingDRADS []v1.DaemonSet, targetedNodes int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "moduleUpdateDRAStatus", ctx, mod, existingDRADS)
+	ret := m.ctrl.Call(m, "moduleUpdateDRAStatus", ctx, mod, existingDRADS, targetedNodes)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // moduleUpdateDRAStatus indicates an expected call of moduleUpdateDRAStatus.
-func (mr *MockdraReconcilerHelperAPIMockRecorder) moduleUpdateDRAStatus(ctx, mod, existingDRADS any) *gomock.Call {
+func (mr *MockdraReconcilerHelperAPIMockRecorder) moduleUpdateDRAStatus(ctx, mod, existingDRADS, targetedNodes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "moduleUpdateDRAStatus", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).moduleUpdateDRAStatus), ctx, mod, existingDRADS)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "moduleUpdateDRAStatus", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).moduleUpdateDRAStatus), ctx, mod, existingDRADS, targetedNodes)
+}
+
+// removeDRATargetLabels mocks base method.
+func (m *MockdraReconcilerHelperAPI) removeDRATargetLabels(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "removeDRATargetLabels", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// removeDRATargetLabels indicates an expected call of removeDRATargetLabels.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) removeDRATargetLabels(ctx, mod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "removeDRATargetLabels", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).removeDRATargetLabels), ctx, mod)
 }
 
 // MockdraDaemonSetCreator is a mock of draDaemonSetCreator interface.

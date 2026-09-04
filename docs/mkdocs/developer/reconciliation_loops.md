@@ -33,8 +33,34 @@ A separate DRA reconciler watches `Module` resources that have `.spec.dra` set.
    DeviceClasses are tracked via labels (`kmm.node.kubernetes.io/module.name` and
    `kmm.node.kubernetes.io/module.namespace`) since they are cluster-scoped while Modules are namespaced.
 
-1. When `spec.dra` is removed or the `Module` is deleted, the reconciler deletes all associated DRA `DaemonSet` and
-   `DeviceClass` resources.
+1. The reconciler also watches nodes and keeps a
+   `kmm.node.kubernetes.io/<module-namespace>.<module-name>.dra-target` label on the schedulable nodes selected by the
+   `Module`. The DRA `DaemonSet` requires that label on top of the kernel-module-ready one, so cordoning a node removes
+   the DRA driver Pod before the kernel module is unloaded. The label is reconciled over both the nodes the `Module`
+   selects and the nodes already carrying it, so narrowing the selector, or removing a selector label from a node, takes
+   the label off too. Modules without a `.spec.moduleLoader` keep targeting `.spec.selector` directly, since they have
+   no kernel module to unload.
+
+1. The reconciler watches `ResourceClaim` resources as well, and keeps the `dra-target` label on any node where a Pod
+   still holds a claim allocated from this `Module`'s driver, even once the `Module` selector or a `NoSchedule` taint
+   would have taken it off. kubelet calls the driver to unprepare those devices, so the label keeps the driver Pod
+   matching the `DaemonSet` while a claim is reserved, and is dropped once the last claim on the node is released. A
+   reservation that cannot be placed on a node, because its Pod is gone and the allocation names no single node, keeps
+   every label the pass would otherwise drop.
+
+   The label only decides which nodes the `DaemonSet` selects, which also asks for the kernel-module-ready label.
+   `NMCReconciler` removes that one for any `Module` still in a cordoned node's `NodeModulesConfig` spec, without
+   consulting claims, so whether the driver outlives its consumers still depends on which controller reaches the cordon
+   first. The label also cannot add tolerations to the driver Pod, so an untolerated `NoExecute` taint still evicts it.
+
+   The migration that adds this selector to a `DaemonSet` created before it rolls that `DaemonSet`'s Pods, so it is held
+   back while any claim on the driver is reserved or cannot be placed on a node. A pod template is not per node, so
+   that hold covers every `DaemonSet` the `Module` owns. Correcting a selector that carries the label with the wrong
+   value is not held: such a `DaemonSet` already selects no node, so the correction is what brings its driver back.
+
+1. `spec.dra` cannot be removed once set, and `spec.dra.driverName` cannot be changed, so deleting the `Module` is the
+   only way out. That deletes all associated DRA `DaemonSet` and `DeviceClass` resources and removes the `dra-target`
+   label from every node carrying it, without checking whether a claim still needs the driver.
 
 1. During [ordered upgrades](../documentation/ordered_upgrade.md), a new DRA `DaemonSet` is created for the new module
    version. Once the old-version `DaemonSet` is no longer scheduled on any node, it is garbage-collected.

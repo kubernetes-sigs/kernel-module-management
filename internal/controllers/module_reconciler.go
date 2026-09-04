@@ -52,6 +52,8 @@ import (
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=preflightvalidations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=preflightvalidations/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=resource.k8s.io,resources=deviceclasses,verbs=create;delete;deletecollection;get;list;patch;update;watch
+//+kubebuilder:rbac:groups=resource.k8s.io,resources=resourceclaims,verbs=list;watch
+//+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 const (
 	ModuleReconcilerName = "ModuleReconciler"

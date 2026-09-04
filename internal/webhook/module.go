@@ -94,6 +94,19 @@ func (m *ModuleValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 		}
 	}
 
+	// Retention is keyed by the driver name, so renaming it stops matching the claims allocated
+	// under the old one and drops the driver while they are still in use. Removing spec.dra takes
+	// the same path without even that check, and putting it back with another name is how a rename
+	// would otherwise get through. Adding it to a Module that never had one has no such driver.
+	if oldMod.Spec.DRA != nil {
+		if newMod.Spec.DRA == nil {
+			return nil, errors.New("spec.dra cannot be removed; delete the Module once no ResourceClaim consumer is left")
+		}
+		if oldMod.Spec.DRA.DriverName != newMod.Spec.DRA.DriverName {
+			return nil, errors.New("spec.dra.driverName is immutable; delete the Module once no ResourceClaim consumer is left")
+		}
+	}
+
 	return validateModule(newMod, m.kubeVersion)
 }
 

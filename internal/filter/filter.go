@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubectl/pkg/util/podutils"
@@ -206,6 +207,34 @@ func DevicePluginReconcilerNodePredicate() predicate.Predicate {
 	)
 }
 
+// DRAReconcilerNodePredicate matches the node events the DRA reconciler acts on: creations, taint
+// changes, and label changes. Label changes matter because a node that stops matching a Module's
+// selector has to lose its dra-target label.
+func DRAReconcilerNodePredicate() predicate.Predicate {
+	return predicate.And(
+		skipDeletions,
+		predicate.Or(nodeTaintsChanged, predicate.LabelChangedPredicate{}),
+	)
+}
+
+// ResourceClaimUsageChanged drops the ResourceClaim updates that cannot change whether a node still
+// needs its DRA driver, keeping the ones where the allocation appears or names different devices or
+// the set of consumers changes. Creations and deletions always pass: both change which claims exist.
+func ResourceClaimUsageChanged() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldClaim, okOld := e.ObjectOld.(*resourcev1.ResourceClaim)
+			newClaim, okNew := e.ObjectNew.(*resourcev1.ResourceClaim)
+			if !okOld || !okNew {
+				return false
+			}
+
+			return !reflect.DeepEqual(oldClaim.Status.Allocation, newClaim.Status.Allocation) ||
+				!reflect.DeepEqual(oldClaim.Status.ReservedFor, newClaim.Status.ReservedFor)
+		},
+	}
+}
+
 func ModuleReconcilePodPredicate() predicate.Predicate {
 	return predicate.And(
 		skipDeletions,
@@ -278,6 +307,99 @@ func (f *Filter) FindModulesForNode(ctx context.Context, node client.Object) []r
 
 	logger.Info("Adding reconciliation requests", "count", len(reqs))
 	logger.V(1).Info("New requests", "requests", reqs)
+
+	return reqs
+}
+
+// FindDRAModulesForNode enqueues the Modules a node event can affect for the DRA reconciler: those
+// whose selector matches the node, and those that still own a dra-target label on it. The second
+// set is what lets a node that stopped matching the selector get its stale label cleaned up.
+func (f *Filter) FindDRAModulesForNode(ctx context.Context, node client.Object) []reconcile.Request {
+	logger := ctrl.LoggerFrom(ctx).WithValues("node", node.GetName())
+
+	reqSet := sets.New[reconcile.Request]()
+
+	// A dra-target label names the Module that owns it, so these do not need a Module list and are
+	// found even when the Module no longer selects this node.
+	for label := range node.GetLabels() {
+		if ok, ns, name := utils.IsDRATargetNodeLabel(label); ok {
+			reqSet.Insert(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: ns, Name: name}})
+		}
+	}
+
+	mods := kmmv1beta1.ModuleList{}
+
+	if err := f.client.List(ctx, &mods); err != nil {
+		logger.Error(err, "could not list modules")
+		return reqSet.UnsortedList()
+	}
+
+	for i := range mods.Items {
+		mod := &mods.Items[i]
+
+		if mod.Spec.DRA == nil {
+			continue
+		}
+
+		selected, err := utils.IsObjectSelectedByLabels(node.GetLabels(), mod.Spec.Selector)
+		if err != nil {
+			logger.Error(err, "could not determine if node is selected by module", "module", mod.Name)
+			continue
+		}
+
+		if !selected {
+			continue
+		}
+
+		reqSet.Insert(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: mod.Namespace, Name: mod.Name}})
+	}
+
+	reqs := reqSet.UnsortedList()
+
+	logger.Info("Adding reconciliation requests", "count", len(reqs))
+	logger.V(1).Info("New requests", "requests", reqs)
+
+	return reqs
+}
+
+// FindDRAModulesForResourceClaim enqueues the Modules whose DRA driver this claim was allocated
+// from. Without it nothing would notice the last consumer on a node letting go, and the driver
+// would be held there indefinitely.
+func (f *Filter) FindDRAModulesForResourceClaim(ctx context.Context, obj client.Object) []reconcile.Request {
+	claim, ok := obj.(*resourcev1.ResourceClaim)
+	if !ok || claim.Status.Allocation == nil {
+		return nil
+	}
+
+	logger := ctrl.LoggerFrom(ctx).WithValues("resourceclaim", claim.Name)
+
+	drivers := sets.New[string]()
+	for _, result := range claim.Status.Allocation.Devices.Results {
+		drivers.Insert(result.Driver)
+	}
+
+	if drivers.Len() == 0 {
+		return nil
+	}
+
+	mods := kmmv1beta1.ModuleList{}
+	if err := f.client.List(ctx, &mods); err != nil {
+		logger.Error(err, "could not list modules")
+		return nil
+	}
+
+	reqs := make([]reconcile.Request, 0)
+	for i := range mods.Items {
+		mod := &mods.Items[i]
+
+		if mod.Spec.DRA == nil || !drivers.Has(mod.Spec.DRA.DriverName) {
+			continue
+		}
+
+		reqs = append(reqs, reconcile.Request{
+			NamespacedName: types.NamespacedName{Namespace: mod.Namespace, Name: mod.Name},
+		})
+	}
 
 	return reqs
 }

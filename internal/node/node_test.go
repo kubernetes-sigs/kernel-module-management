@@ -2,13 +2,16 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("IsNodeSchedulable", func() {
@@ -226,6 +229,67 @@ var _ = Describe("UpdateLabels", func() {
 		n = NewNode(clnt)
 	})
 
+	It("Should return an error callers can inspect", func() {
+		node := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1"}}
+
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).
+			Return(k8serrors.NewNotFound(v1.Resource("nodes"), node.Name))
+
+		err := n.UpdateLabels(ctx, &node, map[string]string{"label": ""}, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(k8serrors.IsNotFound(err)).To(BeTrue())
+	})
+
+	// The lock is what makes the patch fail rather than land when the node moved on, so what is
+	// checked is that the resourceVersion actually reaches the API server.
+	It("Should send the resourceVersion when the caller asks for a lock", func() {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node1", ResourceVersion: "42",
+				Labels: map[string]string{"label": ""}},
+		}
+		var data []byte
+
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, o ctrlclient.Object, p ctrlclient.Patch, _ ...ctrlclient.PatchOption) error {
+				var err error
+				data, err = p.Data(o)
+				return err
+			},
+		)
+
+		Expect(n.UpdateLabelsWithOptimisticLock(ctx, &node, nil, map[string]string{"label": ""})).To(Succeed())
+		Expect(string(data)).To(ContainSubstring(`"resourceVersion":"42"`))
+	})
+
+	It("Should not send the resourceVersion without a lock", func() {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node1", ResourceVersion: "42",
+				Labels: map[string]string{"label": ""}},
+		}
+		var data []byte
+
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, o ctrlclient.Object, p ctrlclient.Patch, _ ...ctrlclient.PatchOption) error {
+				var err error
+				data, err = p.Data(o)
+				return err
+			},
+		)
+
+		Expect(n.UpdateLabels(ctx, &node, nil, map[string]string{"label": ""})).To(Succeed())
+		Expect(string(data)).NotTo(ContainSubstring("resourceVersion"))
+	})
+
+	It("Should let a caller inspect a conflict from a locked patch", func() {
+		node := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1"}}
+
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).
+			Return(k8serrors.NewConflict(v1.Resource("nodes"), node.Name, fmt.Errorf("modified")))
+
+		err := n.UpdateLabelsWithOptimisticLock(ctx, &node, nil, map[string]string{"label": ""})
+		Expect(k8serrors.IsConflict(err)).To(BeTrue())
+	})
+
 	It("Should work as expected", func() {
 		node := v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
@@ -378,5 +442,47 @@ var _ = Describe("removeLabels", func() {
 		labels := map[string]string{firstloadedKernelModuleReadyNodeLabel: ""}
 		removeLabels(&node, labels)
 		Expect(node.Labels).ToNot(HaveKey(firstloadedKernelModuleReadyNodeLabel))
+	})
+})
+
+var _ = Describe("GetAllNodesByLabelKey", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		n    Node
+		ctx  context.Context
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		ctx = context.TODO()
+		n = NewNode(clnt)
+	})
+
+	It("should list by key existence, whatever the label value", func() {
+		const labelKey = "kmm.node.kubernetes.io/namespace.module.some-target"
+
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, list *v1.NodeList, opts ...ctrlclient.ListOption) error {
+				Expect(opts).To(Equal([]ctrlclient.ListOption{ctrlclient.HasLabels{labelKey}}))
+				list.Items = []v1.Node{
+					{ObjectMeta: metav1.ObjectMeta{Name: "empty", Labels: map[string]string{labelKey: ""}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "corrupted", Labels: map[string]string{labelKey: "x"}}},
+				}
+				return nil
+			},
+		)
+
+		nodes, err := n.GetAllNodesByLabelKey(ctx, labelKey)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nodes).To(HaveLen(2))
+	})
+
+	It("should return an error when the list fails", func() {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(errors.New("some error"))
+
+		_, err := n.GetAllNodesByLabelKey(ctx, "some-label")
+		Expect(err).To(HaveOccurred())
 	})
 })

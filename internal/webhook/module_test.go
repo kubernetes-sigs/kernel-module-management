@@ -559,6 +559,62 @@ var _ = Describe("ValidateUpdate", func() {
 	})
 
 	DescribeTable(
+		"DRA driver name updates",
+		func(oldDriver, newDriver string, errorExpected bool) {
+			old := validModule
+			old.Spec.DRA = &kmmv1beta1.DRASpec{DriverName: oldDriver}
+
+			new := validModule
+			new.Spec.DRA = &kmmv1beta1.DRASpec{DriverName: newDriver}
+
+			_, err := moduleWebhook.ValidateUpdate(ctx, &old, &new)
+
+			if errorExpected {
+				Expect(err).To(HaveOccurred())
+			} else {
+				Expect(err).NotTo(HaveOccurred())
+			}
+		},
+		// Renaming stops matching the claims allocated under the old name, so the driver would be
+		// removed from nodes that are still using it.
+		Entry(nil, "a.example.com", "b.example.com", true),
+		Entry(nil, "a.example.com", "a.example.com", false),
+	)
+
+	DescribeTable(
+		"DRA presence updates",
+		func(oldHasDRA, newHasDRA, errorExpected bool) {
+			old := validModule
+			new := validModule
+			if oldHasDRA {
+				old.Spec.DRA = &kmmv1beta1.DRASpec{DriverName: "a.example.com"}
+			} else {
+				old.Spec.DRA = nil
+			}
+			if newHasDRA {
+				new.Spec.DRA = &kmmv1beta1.DRASpec{DriverName: "a.example.com"}
+			} else {
+				new.Spec.DRA = nil
+			}
+
+			_, err := moduleWebhook.ValidateUpdate(ctx, &old, &new)
+
+			if errorExpected {
+				Expect(err).To(HaveOccurred())
+			} else {
+				Expect(err).NotTo(HaveOccurred())
+			}
+		},
+		// Dropping spec.dra deletes the driver without checking for reserved claims, and putting it
+		// back under another name is how a rename would otherwise get through. Adding it to a
+		// Module that never had one has no driver to pull out from under a claim.
+		Entry(nil, true, false, true),
+		Entry(nil, false, true, false),
+		Entry(nil, true, true, false),
+		Entry(nil, false, false, false),
+	)
+
+	DescribeTable(
 		"version updates",
 		func(oldVersion, newVersion string, errorExpected bool) {
 			old := validModule

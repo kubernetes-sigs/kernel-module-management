@@ -2,6 +2,7 @@ package filter
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -10,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -355,6 +357,81 @@ var _ = Describe("ModuleReconcilerNodePredicate", func() {
 	})
 })
 
+var _ = Describe("DRAReconcilerNodePredicate", func() {
+	It("should return true for creations", func() {
+		ev := event.CreateEvent{
+			Object: &v1.Node{},
+		}
+
+		Expect(
+			DRAReconcilerNodePredicate().Create(ev),
+		).To(
+			BeTrue(),
+		)
+	})
+
+	It("should return true when taints change", func() {
+		ev := event.UpdateEvent{
+			ObjectOld: &v1.Node{},
+			ObjectNew: &v1.Node{
+				Spec: v1.NodeSpec{
+					Taints: []v1.Taint{{Key: v1.TaintNodeUnschedulable, Effect: v1.TaintEffectNoSchedule}},
+				},
+			},
+		}
+
+		Expect(
+			DRAReconcilerNodePredicate().Update(ev),
+		).To(
+			BeTrue(),
+		)
+	})
+
+	It("should return true when labels change", func() {
+		ev := event.UpdateEvent{
+			ObjectOld: &v1.Node{},
+			ObjectNew: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"some label": "some value"},
+				},
+			},
+		}
+
+		Expect(
+			DRAReconcilerNodePredicate().Update(ev),
+		).To(
+			BeTrue(),
+		)
+	})
+
+	It("should return false when neither taints nor labels change", func() {
+		ev := event.UpdateEvent{
+			ObjectOld: &v1.Node{},
+			ObjectNew: &v1.Node{
+				Status: v1.NodeStatus{NodeInfo: v1.NodeSystemInfo{KernelVersion: "6.1.0"}},
+			},
+		}
+
+		Expect(
+			DRAReconcilerNodePredicate().Update(ev),
+		).To(
+			BeFalse(),
+		)
+	})
+
+	It("should return false for deletions", func() {
+		ev := event.DeleteEvent{
+			Object: &v1.Node{},
+		}
+
+		Expect(
+			DRAReconcilerNodePredicate().Delete(ev),
+		).To(
+			BeFalse(),
+		)
+	})
+})
+
 var _ = Describe("NodeUpdateKernelChangedPredicate", func() {
 	updateFunc := NodeUpdateKernelChangedPredicate().Update
 
@@ -460,6 +537,219 @@ var _ = Describe("FindModulesForNode", func() {
 
 		reqs := f.FindModulesForNode(ctx, &node)
 		Expect(reqs).To(Equal([]reconcile.Request{expectedReq}))
+	})
+})
+
+var _ = Describe("FindDRAModulesForNode", func() {
+	const (
+		modName   = "dra-module"
+		modNS     = "some-namespace"
+		draTarget = "kmm.node.kubernetes.io/some-namespace.dra-module.dra-target"
+	)
+
+	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
+		clnt = mockClient.NewMockClient(mockCtrl)
+		f = New(clnt, nil)
+	})
+
+	ctx := context.Background()
+
+	draModule := func(selector map[string]string) kmmv1beta1.Module {
+		return kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: modName, Namespace: modNS},
+			Spec: kmmv1beta1.ModuleSpec{
+				Selector: selector,
+				DRA:      &kmmv1beta1.DRASpec{},
+			},
+		}
+	}
+
+	expectModules := func(mods ...kmmv1beta1.Module) {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+				list.Items = mods
+				return nil
+			},
+		)
+	}
+
+	It("should return the module selecting the node", func() {
+		expectModules(draModule(map[string]string{"worker": "true"}))
+
+		node := v1.Node{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"worker": "true"}}}
+
+		Expect(f.FindDRAModulesForNode(ctx, &node)).To(ConsistOf(
+			reconcile.Request{NamespacedName: types.NamespacedName{Namespace: modNS, Name: modName}},
+		))
+	})
+
+	It("should ignore modules without a DRA spec", func() {
+		mod := draModule(map[string]string{"worker": "true"})
+		mod.Spec.DRA = nil
+		expectModules(mod)
+
+		node := v1.Node{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"worker": "true"}}}
+
+		Expect(f.FindDRAModulesForNode(ctx, &node)).To(BeEmpty())
+	})
+
+	It("should return the module owning a target label even when its selector no longer matches", func() {
+		expectModules(draModule(map[string]string{"worker": "true"}))
+
+		node := v1.Node{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{draTarget: ""}}}
+
+		Expect(f.FindDRAModulesForNode(ctx, &node)).To(ConsistOf(
+			reconcile.Request{NamespacedName: types.NamespacedName{Namespace: modNS, Name: modName}},
+		))
+	})
+
+	It("should not return a module twice when it both selects the node and owns its label", func() {
+		expectModules(draModule(map[string]string{"worker": "true"}))
+
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"worker": "true", draTarget: ""}},
+		}
+
+		Expect(f.FindDRAModulesForNode(ctx, &node)).To(HaveLen(1))
+	})
+
+	It("should keep processing modules after one with an invalid selector", func() {
+		bad := draModule(map[string]string{"$invalid key": "value"})
+		bad.Name = "bad-module"
+		expectModules(bad, draModule(map[string]string{"worker": "true"}))
+
+		node := v1.Node{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"worker": "true"}}}
+
+		Expect(f.FindDRAModulesForNode(ctx, &node)).To(ConsistOf(
+			reconcile.Request{NamespacedName: types.NamespacedName{Namespace: modNS, Name: modName}},
+		))
+	})
+
+	It("should still return label owners when listing modules fails", func() {
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(errors.New("some error"))
+
+		node := v1.Node{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{draTarget: ""}}}
+
+		Expect(f.FindDRAModulesForNode(ctx, &node)).To(ConsistOf(
+			reconcile.Request{NamespacedName: types.NamespacedName{Namespace: modNS, Name: modName}},
+		))
+	})
+})
+
+var _ = Describe("FindDRAModulesForResourceClaim", func() {
+	const driverName = "gpu.example.com"
+
+	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
+		clnt = mockClient.NewMockClient(mockCtrl)
+		f = New(clnt, nil)
+	})
+
+	ctx := context.Background()
+
+	allocated := func(driver string) *resourcev1.ResourceClaim {
+		return &resourcev1.ResourceClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "claim", Namespace: "workloads"},
+			Status: resourcev1.ResourceClaimStatus{
+				Allocation: &resourcev1.AllocationResult{
+					Devices: resourcev1.DeviceAllocationResult{
+						Results: []resourcev1.DeviceRequestAllocationResult{{Driver: driver}},
+					},
+				},
+			},
+		}
+	}
+
+	expectModules := func(mods ...kmmv1beta1.Module) {
+		clnt.EXPECT().List(ctx, gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
+				list.Items = mods
+				return nil
+			},
+		)
+	}
+
+	draModule := func(name, driver string) kmmv1beta1.Module {
+		return kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"},
+			Spec:       kmmv1beta1.ModuleSpec{DRA: &kmmv1beta1.DRASpec{DriverName: driver}},
+		}
+	}
+
+	It("should return nothing for an unallocated claim", func() {
+		Expect(f.FindDRAModulesForResourceClaim(ctx, &resourcev1.ResourceClaim{})).To(BeEmpty())
+	})
+
+	It("should return nothing when the allocation names no driver", func() {
+		claim := &resourcev1.ResourceClaim{}
+		claim.Status.Allocation = &resourcev1.AllocationResult{}
+
+		Expect(f.FindDRAModulesForResourceClaim(ctx, claim)).To(BeEmpty())
+	})
+
+	It("should return nothing for a non-claim object", func() {
+		Expect(f.FindDRAModulesForResourceClaim(ctx, &v1.Node{})).To(BeEmpty())
+	})
+
+	It("should enqueue the Module owning the driver the claim was allocated from", func() {
+		expectModules(draModule("mine", driverName), draModule("theirs", "other.example.com"))
+
+		Expect(f.FindDRAModulesForResourceClaim(ctx, allocated(driverName))).To(ConsistOf(
+			reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "mine"}},
+		))
+	})
+
+	It("should ignore Modules without a DRA spec", func() {
+		mod := draModule("no-dra", driverName)
+		mod.Spec.DRA = nil
+		expectModules(mod)
+
+		Expect(f.FindDRAModulesForResourceClaim(ctx, allocated(driverName))).To(BeEmpty())
+	})
+
+	It("should return nothing when listing modules fails", func() {
+		clnt.EXPECT().List(ctx, gomock.Any()).Return(errors.New("some error"))
+
+		Expect(f.FindDRAModulesForResourceClaim(ctx, allocated(driverName))).To(BeEmpty())
+	})
+})
+
+var _ = Describe("ResourceClaimUsageChanged", func() {
+	p := ResourceClaimUsageChanged()
+
+	withReservation := func(name string) *resourcev1.ResourceClaim {
+		c := &resourcev1.ResourceClaim{}
+		if name != "" {
+			c.Status.ReservedFor = []resourcev1.ResourceClaimConsumerReference{{Resource: "pods", Name: name}}
+		}
+		return c
+	}
+
+	It("should return true when the reservation set changes", func() {
+		ev := event.UpdateEvent{ObjectOld: withReservation("consumer"), ObjectNew: withReservation("")}
+		Expect(p.Update(ev)).To(BeTrue())
+	})
+
+	It("should return true when the allocation appears", func() {
+		newClaim := &resourcev1.ResourceClaim{}
+		newClaim.Status.Allocation = &resourcev1.AllocationResult{}
+		ev := event.UpdateEvent{ObjectOld: &resourcev1.ResourceClaim{}, ObjectNew: newClaim}
+		Expect(p.Update(ev)).To(BeTrue())
+	})
+
+	It("should return false for objects that are not ResourceClaims", func() {
+		ev := event.UpdateEvent{ObjectOld: &v1.Node{}, ObjectNew: &v1.Node{}}
+		Expect(p.Update(ev)).To(BeFalse())
+	})
+
+	It("should return false when neither changes", func() {
+		ev := event.UpdateEvent{ObjectOld: withReservation("consumer"), ObjectNew: withReservation("consumer")}
+		Expect(p.Update(ev)).To(BeFalse())
+	})
+
+	It("should return true for deletions, which release the claim", func() {
+		Expect(p.Delete(event.DeleteEvent{Object: &resourcev1.ResourceClaim{}})).To(BeTrue())
 	})
 })
 
