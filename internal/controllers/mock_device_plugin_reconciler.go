@@ -54,18 +54,19 @@ func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) clearDevicePluginStat
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "clearDevicePluginStatus", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).clearDevicePluginStatus), ctx, mod)
 }
 
-// deleteDevicePluginDaemonSets mocks base method.
-func (m *MockdevicePluginReconcilerHelperAPI) deleteDevicePluginDaemonSets(ctx context.Context, existingDevicePluginDS []v1.DaemonSet) error {
+// deleteDevicePluginResources mocks base method.
+func (m *MockdevicePluginReconcilerHelperAPI) deleteDevicePluginResources(ctx context.Context, mod *v1beta1.Module) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "deleteDevicePluginDaemonSets", ctx, existingDevicePluginDS)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "deleteDevicePluginResources", ctx, mod)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
-// deleteDevicePluginDaemonSets indicates an expected call of deleteDevicePluginDaemonSets.
-func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) deleteDevicePluginDaemonSets(ctx, existingDevicePluginDS any) *gomock.Call {
+// deleteDevicePluginResources indicates an expected call of deleteDevicePluginResources.
+func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) deleteDevicePluginResources(ctx, mod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "deleteDevicePluginDaemonSets", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).deleteDevicePluginDaemonSets), ctx, existingDevicePluginDS)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "deleteDevicePluginResources", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).deleteDevicePluginResources), ctx, mod)
 }
 
 // garbageCollect mocks base method.

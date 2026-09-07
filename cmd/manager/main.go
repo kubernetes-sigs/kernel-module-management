@@ -146,6 +146,7 @@ func main() {
 
 	dpc := controllers.NewDevicePluginReconciler(
 		client,
+		mgr.GetAPIReader(),
 		metricsAPI,
 		filterAPI,
 		nodeAPI,
@@ -181,7 +182,7 @@ func main() {
 	}
 
 	if kubeVersion.AtLeast(constants.MinKubeMajorForDRA, constants.MinKubeMinorForDRA) {
-		if err = controllers.NewDRAReconciler(client, nodeAPI, scheme).SetupWithManager(mgr); err != nil {
+		if err = controllers.NewDRAReconciler(client, mgr.GetAPIReader(), nodeAPI, scheme).SetupWithManager(mgr); err != nil {
 			cmd.FatalError(setupLogger, err, "unable to create controller", "name", controllers.DRAReconcilerName)
 		}
 	} else {

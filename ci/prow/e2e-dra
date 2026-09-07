@@ -78,3 +78,100 @@ timeout 1m bash -c 'until ! minikube ssh -- lsmod | grep kmm_ci_a; do sleep 3; d
 
 echo "Wait for the Module to be deleted"
 kubectl wait --for delete modules.kmm.sigs.x-k8s.io/kmm-ci-dra
+
+# Without a moduleLoader there is no NMC, so ModuleFinalizer goes on the first pass and only the
+# DRA one holds the Module. A DeviceClass is cluster scoped, so nothing else would collect it.
+source "$(dirname "$0")/finalizer-test-lib.sh"
+
+echo "Deploy a Module with a DRA spec and no moduleLoader"
+kubectl apply -f ci/module-kmm-ci-dra-only.yaml
+
+echo "Wait for the DRA finalizer and the DeviceClass"
+timeout 2m bash -c 'until kubectl get module kmm-ci-dra-only -o json | jq -e ".metadata.finalizers | index(\"kmm.node.kubernetes.io/dra-cleanup\")" > /dev/null; do sleep 3; done'
+timeout 2m bash -c 'until kubectl get deviceclass kmm-ci-cleanup-device; do sleep 3; done'
+
+# Beside anything already there, never over it. The trap lets it go if anything below fails.
+echo "Hold the DeviceClass so its deletion cannot complete"
+hold_with_test_finalizer deviceclass/kmm-ci-cleanup-device
+# Pinned, so a DeviceClass that goes and comes back under the same name fails rather than passes.
+DC_UID=$(kubectl get deviceclass kmm-ci-cleanup-device -o jsonpath='{.metadata.uid}')
+trap 'release_test_finalizer deviceclass/kmm-ci-cleanup-device || true' EXIT
+
+kubectl delete module kmm-ci-dra-only --wait=false
+
+# Everything else has to be gone first, or it would hold the Module by itself and this would pass
+# even with the DeviceClass wait broken. Nothing holds these Pods, so they do go.
+echo "Wait until the held DeviceClass is the only thing the Module waits for"
+DRA_DEADLINE=$(( SECONDS + 120 ))
+while true; do
+  if ! DRA_MODULE_JSON=$(kubectl get module kmm-ci-dra-only --ignore-not-found -o json); then
+    echo "could not read the Module"
+    exit 1
+  fi
+  if [ -z "${DRA_MODULE_JSON}" ]; then
+    echo "the Module was released before the DeviceClass was let go"
+    exit 1
+  fi
+
+  if ! DRA_DC_JSON=$(kubectl get deviceclass kmm-ci-cleanup-device --ignore-not-found -o json); then
+    echo "could not read the DeviceClass"
+    exit 1
+  fi
+  if [ -z "${DRA_DC_JSON}" ]; then
+    echo "the held DeviceClass went while the Module was still here"
+    exit 1
+  fi
+
+  # Read before the test, so that a failed query is a failure rather than an empty cluster.
+  if ! DRA_DS=$(kubectl get daemonset -l kmm.node.kubernetes.io/module.name=kmm-ci-dra-only -o name); then
+    echo "could not list the DRA DaemonSets"
+    exit 1
+  fi
+  if ! DRA_PODS=$(kubectl get pod -l kmm.node.kubernetes.io/module.name=kmm-ci-dra-only -o name); then
+    echo "could not list the DRA Pods"
+    exit 1
+  fi
+
+  if jq -e '
+        .metadata.deletionTimestamp != null
+        and (.metadata.finalizers == ["kmm.node.kubernetes.io/dra-cleanup"])' <<< "${DRA_MODULE_JSON}" > /dev/null &&
+     jq -e --arg uid "${DC_UID}" '
+        .metadata.uid == $uid
+        and .metadata.deletionTimestamp != null
+        and ((.metadata.finalizers // []) | index("tests.kmm.sigs.x-k8s.io/hold") != null)' <<< "${DRA_DC_JSON}" > /dev/null &&
+     [ -z "${DRA_DS}" ] && [ -z "${DRA_PODS}" ]; then
+    break
+  fi
+
+  if [ "${SECONDS}" -ge "${DRA_DEADLINE}" ]; then
+    echo "timed out waiting for the held DeviceClass to be the only thing the Module waits for"
+    jq -c '.metadata | {deletionTimestamp, finalizers}' <<< "${DRA_MODULE_JSON}" || true
+    jq -c '.metadata | {uid, deletionTimestamp, finalizers}' <<< "${DRA_DC_JSON}" || true
+    exit 1
+  fi
+
+  sleep 3
+done
+
+# --ignore-not-found so a Module that has gone reads as empty here rather than as a kubectl error.
+echo "Check that the Module is not released while the DeviceClass is still there"
+for _ in $(seq 10); do
+  MODULE_FINALIZERS=$(kubectl get module kmm-ci-dra-only --ignore-not-found -o jsonpath='{.metadata.finalizers}')
+  case "${MODULE_FINALIZERS}" in
+    *kmm.node.kubernetes.io/dra-cleanup*) ;;
+    *) echo "the Module was released with finalizers ${MODULE_FINALIZERS:-none} while its DeviceClass was still there"; exit 1 ;;
+  esac
+  if [ "$(kubectl get deviceclass kmm-ci-cleanup-device --ignore-not-found -o jsonpath='{.metadata.uid}')" != "${DC_UID}" ]; then
+    echo "the held DeviceClass went or was replaced while the Module was still here"
+    exit 1
+  fi
+  sleep 2
+done
+
+echo "Release the DeviceClass"
+release_test_finalizer deviceclass/kmm-ci-cleanup-device
+trap - EXIT
+
+echo "Check that the DeviceClass and the Module then go"
+timeout 2m bash -c 'until out=$(kubectl get deviceclass kmm-ci-cleanup-device --ignore-not-found -o name) && [ -z "${out}" ]; do sleep 3; done'
+kubectl wait --for delete modules.kmm.sigs.x-k8s.io/kmm-ci-dra-only --timeout=2m

@@ -1,0 +1,19 @@
+---
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: Module
+metadata:
+  name: kmm-ci-dra-only
+spec:
+  dra:
+    driverName: cleanup.example.com
+    serviceAccountName: dra-example-driver
+    container:
+      image: registry.k8s.io/dra-example-driver/dra-example-driver:v0.3.0
+      command: ["dra-example-kubeletplugin"]
+      env:
+        - name: DRIVER_NAME
+          value: cleanup.example.com
+    deviceClasses:
+      - name: kmm-ci-cleanup-device
+  selector:
+    kubernetes.io/hostname: minikube

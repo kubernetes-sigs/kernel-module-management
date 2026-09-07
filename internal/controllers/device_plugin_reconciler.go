@@ -57,12 +57,13 @@ type DevicePluginReconciler struct {
 
 func NewDevicePluginReconciler(
 	client client.Client,
+	apiReader client.Reader,
 	metricsAPI metrics.Metrics,
 	filter *filter.Filter,
 	nodeAPI node.Node,
 	scheme *runtime.Scheme,
 ) *DevicePluginReconciler {
-	reconHelperAPI := newDevicePluginReconcilerHelper(client, metricsAPI, nodeAPI, scheme)
+	reconHelperAPI := newDevicePluginReconcilerHelper(client, apiReader, metricsAPI, nodeAPI, scheme)
 	return &DevicePluginReconciler{
 		client:         client,
 		reconHelperAPI: reconHelperAPI,
@@ -91,31 +92,49 @@ func (r *DevicePluginReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.
 
 	logger := log.FromContext(ctx)
 
+	deleting := mod.GetDeletionTimestamp() != nil
+
+	// Goes on before anything it protects is written; one cannot be added once deletion has started.
+	if !deleting && mod.Spec.DevicePlugin != nil {
+		if _, err := setModuleFinalizer(ctx, r.client, mod, constants.DevicePluginFinalizer, true); err != nil {
+			return res, err
+		}
+	}
+
+	if !deleting {
+		r.reconHelperAPI.setKMMOMetrics(ctx)
+	}
+
+	// Ahead of the reads the normal path needs, so that a failure there cannot strand the Module.
+	if deleting || mod.Spec.DevicePlugin == nil {
+		done, err := r.reconHelperAPI.deleteDevicePluginResources(ctx, mod)
+		if err != nil {
+			return res, fmt.Errorf("could not delete device plugin resources: %v", err)
+		}
+
+		if !done {
+			return ctrl.Result{RequeueAfter: pluginCleanupRequeue}, nil
+		}
+
+		// A status write moves the resourceVersion, so the release waits for the next pass.
+		if mod.Status.DevicePlugin != (kmmv1beta1.DaemonSetStatus{}) {
+			if err := r.reconHelperAPI.clearDevicePluginStatus(ctx, mod.DeepCopy()); err != nil {
+				return res, fmt.Errorf("could not clear the device plugin status: %v", err)
+			}
+
+			return ctrl.Result{RequeueAfter: pluginCleanupRequeue}, nil
+		}
+
+		if _, err := setModuleFinalizer(ctx, r.client, mod, constants.DevicePluginFinalizer, false); err != nil {
+			return res, err
+		}
+
+		return res, nil
+	}
+
 	existingDevicePluginDS, err := r.reconHelperAPI.getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace)
 	if err != nil {
 		return res, fmt.Errorf("could not get DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
-	}
-
-	if mod.GetDeletionTimestamp() != nil {
-		if err = r.reconHelperAPI.removeDevicePluginTargetLabels(ctx, mod); err != nil {
-			return ctrl.Result{}, fmt.Errorf("could not remove device-plugin-target labels on deletion: %v", err)
-		}
-		err = r.reconHelperAPI.deleteDevicePluginDaemonSets(ctx, existingDevicePluginDS)
-		return ctrl.Result{}, err
-	}
-
-	r.reconHelperAPI.setKMMOMetrics(ctx)
-
-	if mod.Spec.DevicePlugin == nil {
-		if err = r.reconHelperAPI.removeDevicePluginTargetLabels(ctx, mod); err != nil {
-			return ctrl.Result{}, fmt.Errorf("could not remove device-plugin-target labels: %v", err)
-		}
-		if len(existingDevicePluginDS) > 0 {
-			if err = r.reconHelperAPI.deleteDevicePluginDaemonSets(ctx, existingDevicePluginDS); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, r.reconHelperAPI.clearDevicePluginStatus(ctx, mod)
 	}
 
 	if err = r.reconHelperAPI.handleDevicePluginTargetLabels(ctx, mod); err != nil {
@@ -151,7 +170,7 @@ type devicePluginReconcilerHelperAPI interface {
 	handleDevicePluginTargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
 	removeDevicePluginTargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
 	garbageCollect(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) error
-	deleteDevicePluginDaemonSets(ctx context.Context, existingDevicePluginDS []appsv1.DaemonSet) error
+	deleteDevicePluginResources(ctx context.Context, mod *kmmv1beta1.Module) (bool, error)
 	moduleUpdateDevicePluginStatus(ctx context.Context, mod *kmmv1beta1.Module, existingDevicePluginDS []appsv1.DaemonSet) error
 	clearDevicePluginStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	getModuleDevicePluginDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
@@ -159,12 +178,14 @@ type devicePluginReconcilerHelperAPI interface {
 
 type devicePluginReconcilerHelper struct {
 	client          client.Client
+	apiReader       client.Reader
 	metricsAPI      metrics.Metrics
 	daemonSetHelper daemonSetCreator
 	nodeAPI         node.Node
 }
 
 func newDevicePluginReconcilerHelper(client client.Client,
+	apiReader client.Reader,
 	metricsAPI metrics.Metrics,
 	nodeAPI node.Node,
 	scheme *runtime.Scheme,
@@ -172,6 +193,7 @@ func newDevicePluginReconcilerHelper(client client.Client,
 	daemonSetHelper := newDaemonSetCreator(scheme)
 	return &devicePluginReconcilerHelper{
 		client:          client,
+		apiReader:       apiReader,
 		metricsAPI:      metricsAPI,
 		daemonSetHelper: daemonSetHelper,
 		nodeAPI:         nodeAPI,
@@ -261,20 +283,7 @@ func (dprh *devicePluginReconcilerHelper) handleDevicePluginTargetLabels(ctx con
 func (dprh *devicePluginReconcilerHelper) removeDevicePluginTargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
 	targetLabel := utils.GetDevicePluginTargetNodeLabel(mod.Namespace, mod.Name)
 
-	nodes, err := dprh.nodeAPI.GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""})
-	if err != nil {
-		return fmt.Errorf("could not list nodes with device-plugin-target label: %v", err)
-	}
-
-	var errs []error
-	for i := range nodes {
-		node := &nodes[i]
-		if err := dprh.nodeAPI.UpdateLabels(ctx, node, nil, map[string]string{targetLabel: ""}); err != nil {
-			errs = append(errs, fmt.Errorf("could not remove device-plugin-target label from node %s: %v", node.Name, err))
-		}
-	}
-
-	return errors.Join(errs...)
+	return removeNodeLabel(ctx, dprh.client, dprh.apiReader, targetLabel)
 }
 
 func (dprh *devicePluginReconcilerHelper) garbageCollect(ctx context.Context,
@@ -301,15 +310,54 @@ func (dprh *devicePluginReconcilerHelper) garbageCollect(ctx context.Context,
 	return nil
 }
 
-func (dprh *devicePluginReconcilerHelper) deleteDevicePluginDaemonSets(ctx context.Context, existingDevicePluginDS []appsv1.DaemonSet) error {
-	// delete all the Device Plugin Daemonset, in order to allow worker pods to delete kernel modules
-	for _, ds := range existingDevicePluginDS {
-		err := dprh.client.Delete(ctx, &ds)
-		if err != nil {
-			return fmt.Errorf("failed to delete device-plugin Daemonset %s/%s: %v", ds.Namespace, ds.Name, err)
+// deleteDevicePluginResources asks for the Module's device plugin resources to go and reports
+// whether they have, reading through the API reader since a stale cache reads as an empty cluster.
+func (dprh *devicePluginReconcilerHelper) deleteDevicePluginResources(ctx context.Context, mod *kmmv1beta1.Module) (bool, error) {
+	var errs []error
+
+	remaining := 0
+
+	dsList := appsv1.DaemonSetList{}
+	dsOpts := []client.ListOption{
+		client.MatchingLabels{constants.ModuleNameLabel: mod.Name},
+		client.InNamespace(mod.Namespace),
+	}
+	if err := dprh.apiReader.List(ctx, &dsList, dsOpts...); err != nil {
+		return false, fmt.Errorf("could not list device plugin DaemonSets for module %s/%s: %v", mod.Namespace, mod.Name, err)
+	}
+
+	daemonSets := make([]client.Object, 0, len(dsList.Items))
+	for i := range dsList.Items {
+		if devicePluginRole(dsList.Items[i].GetLabels()[constants.DaemonSetRole]) {
+			daemonSets = append(daemonSets, &dsList.Items[i])
 		}
 	}
-	return nil
+
+	stillThere, err := deletePluginObjects(ctx, dprh.client, daemonSets)
+	remaining += stillThere
+	errs = append(errs, err)
+
+	podsLeft, err := pluginPodsRemain(ctx, dprh.apiReader, mod.Namespace, mod.Name, devicePluginRole)
+	errs = append(errs, err)
+	if podsLeft {
+		remaining++
+	}
+
+	errs = append(errs, dprh.removeDevicePluginTargetLabels(ctx, mod))
+
+	joined := errors.Join(errs...)
+	if joined == nil && remaining > 0 {
+		log.FromContext(ctx).Info("Waiting for the device plugin resources to go before releasing the Module",
+			"daemonSets", len(daemonSets), "podsLeft", podsLeft)
+	}
+
+	return joined == nil && remaining == 0, joined
+}
+
+// devicePluginRole reports whether a role label belongs to the device plugin. Resources written
+// before the role label existed carry none, so anything that is not another plugin counts.
+func devicePluginRole(role string) bool {
+	return role != constants.ModuleLoaderRoleLabelValue && role != constants.DRARoleLabelValue
 }
 
 func (dprh *devicePluginReconcilerHelper) setKMMOMetrics(ctx context.Context) {

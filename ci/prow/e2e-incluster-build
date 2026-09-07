@@ -60,3 +60,133 @@ check_module_not_loaded "kmm_ci_b"
 
 echo "Wait for the Module to be deleted..."
 kubectl wait --for delete modules.kmm.sigs.x-k8s.io/kmm-ci
+
+# Without a moduleLoader there is no NMC, so only device-plugin-cleanup holds the Module. What it
+# waits for is a Pod, which is the half the DRA test does not reach.
+source "$(dirname "$0")/finalizer-test-lib.sh"
+
+echo "Deploy a Module with a device plugin and no moduleLoader..."
+kubectl apply -f ci/module-kmm-ci-device-plugin-only.yaml
+
+echo "Wait for the device plugin finalizer and its Pod..."
+timeout 2m bash -c 'until kubectl get module kmm-ci-device-plugin-only -o json | jq -e ".metadata.finalizers | index(\"kmm.node.kubernetes.io/device-plugin-cleanup\")" > /dev/null; do sleep 3; done'
+timeout 5m bash -c 'until [ -n "$(kubectl get pod -l kmm.node.kubernetes.io/module.name=kmm-ci-device-plugin-only -o name)" ]; do sleep 3; done'
+
+# Beside the operator's finalizer, never over it: KMM puts NodeLabelerFinalizer on the Pod, and a
+# merge patch carrying only this one would take that off. The trap lets it go if anything fails.
+DP_POD=pod/$(kubectl get pod -l kmm.node.kubernetes.io/module.name=kmm-ci-device-plugin-only -o jsonpath='{.items[0].metadata.name}')
+DP_UID=$(kubectl get "${DP_POD}" -o jsonpath='{.metadata.uid}')
+DP_READY_LABEL=kmm.node.kubernetes.io/default.kmm-ci-device-plugin-only.device-plugin-ready
+DP_TARGET_LABEL=kmm.node.kubernetes.io/default.kmm-ci-device-plugin-only.device-plugin-target
+
+# Start from a state where KMM has set both labels, so that neither going missing later can read
+# as cleanup when it was never there.
+echo "Wait for the Pod to be ready and for both of its node labels..."
+kubectl wait --for=condition=Ready "${DP_POD}" --timeout=5m
+DP_LABEL_DEADLINE=$(( SECONDS + 120 ))
+until kubectl get node minikube -o json |
+  jq -e --arg r "${DP_READY_LABEL}" --arg t "${DP_TARGET_LABEL}" '
+    (.metadata.labels | has($r)) and (.metadata.labels | has($t))' > /dev/null; do
+  if [ "${SECONDS}" -ge "${DP_LABEL_DEADLINE}" ]; then
+    echo "the device plugin node labels never appeared"
+    exit 1
+  fi
+  sleep 3
+done
+kubectl get "${DP_POD}" -o json |
+  jq -e '(.metadata.finalizers // []) | index("kmm.node.kubernetes.io/node-labeler")' > /dev/null
+echo "Hold ${DP_POD} so its deletion cannot complete..."
+hold_with_test_finalizer "${DP_POD}"
+trap 'release_test_finalizer "${DP_POD}" || true' EXIT
+
+kubectl delete module kmm-ci-device-plugin-only --wait=false
+
+# The DaemonSet goes with foreground propagation, so holding one of its Pods holds it too: what is
+# asked of it is that it has been asked to go. KMM taking its finalizer off the Pod is the signal.
+echo "Wait until the held Pod is the only thing the Module waits for..."
+DP_DEADLINE=$(( SECONDS + 120 ))
+while true; do
+  if ! DP_MODULE_JSON=$(kubectl get module kmm-ci-device-plugin-only --ignore-not-found -o json); then
+    echo "could not read the Module"
+    exit 1
+  fi
+  if [ -z "${DP_MODULE_JSON}" ]; then
+    echo "the Module was released before its Pod was let go"
+    exit 1
+  fi
+
+  if ! DP_POD_JSON=$(kubectl get "${DP_POD}" --ignore-not-found -o json); then
+    echo "could not read ${DP_POD}"
+    exit 1
+  fi
+  if [ -z "${DP_POD_JSON}" ]; then
+    echo "the held Pod went while the Module was still here"
+    exit 1
+  fi
+
+  if ! DP_DS_JSON=$(kubectl get daemonset -l kmm.node.kubernetes.io/module.name=kmm-ci-device-plugin-only -o json); then
+    echo "could not list the device plugin DaemonSets"
+    exit 1
+  fi
+
+  if jq -e '
+        .metadata.deletionTimestamp != null
+        and (.metadata.finalizers == ["kmm.node.kubernetes.io/device-plugin-cleanup"])' <<< "${DP_MODULE_JSON}" > /dev/null &&
+     jq -e --arg uid "${DP_UID}" '
+        .metadata.uid == $uid
+        and .metadata.deletionTimestamp != null
+        and ((.metadata.finalizers // []) | index("tests.kmm.sigs.x-k8s.io/hold") != null)
+        and ((.metadata.finalizers // []) | index("kmm.node.kubernetes.io/node-labeler") == null)' <<< "${DP_POD_JSON}" > /dev/null &&
+     jq -e '[.items[] | select(.metadata.deletionTimestamp == null)] | length == 0' <<< "${DP_DS_JSON}" > /dev/null &&
+     kubectl get node minikube -o json |
+       jq -e --arg r "${DP_READY_LABEL}" '.metadata.labels | has($r) | not' > /dev/null; then
+    break
+  fi
+
+  if [ "${SECONDS}" -ge "${DP_DEADLINE}" ]; then
+    echo "timed out waiting for the held Pod to be the only thing the Module waits for"
+    jq -c '.metadata | {deletionTimestamp, finalizers}' <<< "${DP_MODULE_JSON}" || true
+    jq -c '.metadata | {uid, deletionTimestamp, finalizers}' <<< "${DP_POD_JSON}" || true
+    exit 1
+  fi
+
+  sleep 3
+done
+
+echo "Check that the Module is not released while its Pod is still there..."
+for _ in $(seq 10); do
+  MODULE_FINALIZERS=$(kubectl get module kmm-ci-device-plugin-only --ignore-not-found -o jsonpath='{.metadata.finalizers}')
+  case "${MODULE_FINALIZERS}" in
+    *kmm.node.kubernetes.io/device-plugin-cleanup*) ;;
+    *) echo "the Module was released with finalizers ${MODULE_FINALIZERS:-none} while its Pod was still there"; exit 1 ;;
+  esac
+  if [ "$(kubectl get "${DP_POD}" --ignore-not-found -o jsonpath='{.metadata.uid}')" != "${DP_UID}" ]; then
+    echo "the held Pod went or was replaced while the Module was still here"
+    exit 1
+  fi
+  sleep 2
+done
+
+echo "Release the Pod..."
+release_test_finalizer "${DP_POD}"
+trap - EXIT
+
+# A failed query is not the Pod having gone: only a call that came back, with nothing in it, is.
+echo "Check that the Pod, the Module and the node target label then go..."
+DP_GONE_DEADLINE=$(( SECONDS + 120 ))
+while true; do
+  if ! DP_LEFT=$(kubectl get "${DP_POD}" --ignore-not-found -o name); then
+    echo "could not read ${DP_POD}"
+    exit 1
+  fi
+  [ -z "${DP_LEFT}" ] && break
+  if [ "${SECONDS}" -ge "${DP_GONE_DEADLINE}" ]; then
+    echo "the held Pod did not go once the test finalizer was released"
+    exit 1
+  fi
+  sleep 3
+done
+
+kubectl wait --for delete modules.kmm.sigs.x-k8s.io/kmm-ci-device-plugin-only --timeout=2m
+kubectl get node minikube -o json |
+  jq -e --arg t "${DP_TARGET_LABEL}" '.metadata.labels | has($t) | not' > /dev/null
