@@ -55,18 +55,18 @@ func (mr *MockdraReconcilerHelperAPIMockRecorder) clearDRAStatus(ctx, mod any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "clearDRAStatus", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).clearDRAStatus), ctx, mod)
 }
 
-// deleteDRAResources mocks base method.
-func (m *MockdraReconcilerHelperAPI) deleteDRAResources(ctx context.Context, moduleName, moduleNamespace string) error {
+// finalizeModule mocks base method.
+func (m *MockdraReconcilerHelperAPI) finalizeModule(ctx context.Context, mod *v1beta1.Module) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "deleteDRAResources", ctx, moduleName, moduleNamespace)
+	ret := m.ctrl.Call(m, "finalizeModule", ctx, mod)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// deleteDRAResources indicates an expected call of deleteDRAResources.
-func (mr *MockdraReconcilerHelperAPIMockRecorder) deleteDRAResources(ctx, moduleName, moduleNamespace any) *gomock.Call {
+// finalizeModule indicates an expected call of finalizeModule.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) finalizeModule(ctx, mod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "deleteDRAResources", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).deleteDRAResources), ctx, moduleName, moduleNamespace)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "finalizeModule", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).finalizeModule), ctx, mod)
 }
 
 // garbageCollectDRADaemonSets mocks base method.
@@ -169,18 +169,18 @@ func (mr *MockdraReconcilerHelperAPIMockRecorder) moduleUpdateDRAStatus(ctx, mod
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "moduleUpdateDRAStatus", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).moduleUpdateDRAStatus), ctx, mod, existingDRADS)
 }
 
-// removeDRATargetLabels mocks base method.
-func (m *MockdraReconcilerHelperAPI) removeDRATargetLabels(ctx context.Context, mod *v1beta1.Module) error {
+// setFinalizer mocks base method.
+func (m *MockdraReconcilerHelperAPI) setFinalizer(ctx context.Context, mod *v1beta1.Module) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "removeDRATargetLabels", ctx, mod)
+	ret := m.ctrl.Call(m, "setFinalizer", ctx, mod)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// removeDRATargetLabels indicates an expected call of removeDRATargetLabels.
-func (mr *MockdraReconcilerHelperAPIMockRecorder) removeDRATargetLabels(ctx, mod any) *gomock.Call {
+// setFinalizer indicates an expected call of setFinalizer.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) setFinalizer(ctx, mod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "removeDRATargetLabels", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).removeDRATargetLabels), ctx, mod)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setFinalizer", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).setFinalizer), ctx, mod)
 }
 
 // MockdraDaemonSetCreator is a mock of draDaemonSetCreator interface.
