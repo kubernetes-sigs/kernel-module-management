@@ -65,11 +65,12 @@ type DRAReconciler struct {
 
 func NewDRAReconciler(
 	client client.Client,
+	apiReader client.Reader,
 	filter *filter.Filter,
 	nodeAPI node.Node,
 	scheme *runtime.Scheme,
 ) *DRAReconciler {
-	reconHelperAPI := newDRAReconcilerHelper(client, nodeAPI, scheme)
+	reconHelperAPI := newDRAReconcilerHelper(client, apiReader, nodeAPI, scheme)
 	return &DRAReconciler{
 		client:         client,
 		filter:         filter,
@@ -103,6 +104,47 @@ func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (
 
 	logger := log.FromContext(ctx)
 
+	deleting := mod.GetDeletionTimestamp() != nil
+
+	// Goes on before anything it protects is written; one cannot be added once deletion has started.
+	if !deleting && mod.Spec.DRA != nil {
+		if _, err := setModuleFinalizer(ctx, r.client, mod, constants.DRAFinalizer, true); err != nil {
+			return res, err
+		}
+	}
+
+	// Ahead of the reads the normal path needs, so that a failure there cannot strand the Module.
+	if deleting || mod.Spec.DRA == nil {
+		// Clear the dra-target labels so none linger on nodes once the Module is released.
+		if err := r.reconHelperAPI.removeDRATargetLabels(ctx, mod); err != nil {
+			return res, fmt.Errorf("could not remove dra-target labels: %v", err)
+		}
+
+		done, err := r.reconHelperAPI.deleteDRAResources(ctx, mod)
+		if err != nil {
+			return res, fmt.Errorf("could not delete DRA resources: %v", err)
+		}
+
+		if !done {
+			return ctrl.Result{RequeueAfter: pluginCleanupRequeue}, nil
+		}
+
+		// A status write moves the resourceVersion, so the release waits for the next pass.
+		if mod.Status.DRA != (kmmv1beta1.DaemonSetStatus{}) {
+			if err := r.reconHelperAPI.clearDRAStatus(ctx, mod.DeepCopy()); err != nil {
+				return res, fmt.Errorf("could not clear the DRA status: %v", err)
+			}
+
+			return ctrl.Result{RequeueAfter: pluginCleanupRequeue}, nil
+		}
+
+		if _, err := setModuleFinalizer(ctx, r.client, mod, constants.DRAFinalizer, false); err != nil {
+			return res, err
+		}
+
+		return res, nil
+	}
+
 	existingDRADS, err := r.reconHelperAPI.getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace)
 	if err != nil {
 		return res, fmt.Errorf("could not get DRA DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
@@ -111,24 +153,6 @@ func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (
 	existingDCs, err := r.reconHelperAPI.getModuleDeviceClasses(ctx, mod.Name, mod.Namespace)
 	if err != nil {
 		return res, fmt.Errorf("could not get DeviceClasses for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
-	}
-
-	// Remove the dra-target labels on cleanup so the DaemonSet controller takes the driver Pods off.
-	if mod.GetDeletionTimestamp() != nil {
-		return ctrl.Result{}, errors.Join(
-			r.reconHelperAPI.removeDRATargetLabels(ctx, mod),
-			r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace),
-		)
-	}
-
-	if mod.Spec.DRA == nil {
-		if err = errors.Join(
-			r.reconHelperAPI.removeDRATargetLabels(ctx, mod),
-			r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace),
-		); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, r.reconHelperAPI.clearDRAStatus(ctx, mod)
 	}
 
 	if err = r.reconHelperAPI.handleDRATargetLabels(ctx, mod); err != nil {
@@ -166,7 +190,7 @@ type draReconcilerHelperAPI interface {
 	getModuleDRADaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	handleDRA(ctx context.Context, mod *kmmv1beta1.Module, existingDRADS []appsv1.DaemonSet) error
 	garbageCollectDRADaemonSets(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) error
-	deleteDRAResources(ctx context.Context, moduleName, moduleNamespace string) error
+	deleteDRAResources(ctx context.Context, mod *kmmv1beta1.Module) (bool, error)
 	moduleUpdateDRAStatus(ctx context.Context, mod *kmmv1beta1.Module, existingDRADS []appsv1.DaemonSet) error
 	clearDRAStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	getModuleDeviceClasses(ctx context.Context, name, namespace string) ([]resourcev1.DeviceClass, error)
@@ -177,17 +201,20 @@ type draReconcilerHelperAPI interface {
 
 type draReconcilerHelper struct {
 	client          client.Client
+	apiReader       client.Reader
 	daemonSetHelper draDaemonSetCreator
 	nodeAPI         node.Node
 }
 
 func newDRAReconcilerHelper(client client.Client,
+	apiReader client.Reader,
 	nodeAPI node.Node,
 	scheme *runtime.Scheme,
 ) draReconcilerHelperAPI {
 	daemonSetHelper := newDRADaemonSetCreator(scheme)
 	return &draReconcilerHelper{
 		client:          client,
+		apiReader:       apiReader,
 		daemonSetHelper: daemonSetHelper,
 		nodeAPI:         nodeAPI,
 	}
@@ -253,7 +280,9 @@ func (drh *draReconcilerHelper) removeDRATargetLabels(ctx context.Context, mod *
 	return errors.Join(errs...)
 }
 
-func (drh *draReconcilerHelper) getModuleDRADaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
+// listModuleDRADaemonSets takes the reader, so that the same selector serves the cached pass and
+// the uncached check handleDRA makes before it generates a name.
+func listModuleDRADaemonSets(ctx context.Context, reader client.Reader, name, namespace string) ([]appsv1.DaemonSet, error) {
 	dsList := appsv1.DaemonSetList{}
 	opts := []client.ListOption{
 		client.MatchingLabels(map[string]string{
@@ -262,11 +291,15 @@ func (drh *draReconcilerHelper) getModuleDRADaemonSets(ctx context.Context, name
 		}),
 		client.InNamespace(namespace),
 	}
-	if err := drh.client.List(ctx, &dsList, opts...); err != nil {
+	if err := reader.List(ctx, &dsList, opts...); err != nil {
 		return nil, fmt.Errorf("could not list DaemonSets: %v", err)
 	}
 
 	return dsList.Items, nil
+}
+
+func (drh *draReconcilerHelper) getModuleDRADaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
+	return listModuleDRADaemonSets(ctx, drh.client, name, namespace)
 }
 
 func (drh *draReconcilerHelper) handleDRA(ctx context.Context, mod *kmmv1beta1.Module, existingDRADS []appsv1.DaemonSet) error {
@@ -277,6 +310,18 @@ func (drh *draReconcilerHelper) handleDRA(ctx context.Context, mod *kmmv1beta1.M
 	logger := log.FromContext(ctx)
 
 	ds, version := getExistingDRADSFromVersion(existingDRADS, mod.Namespace, mod.Name, mod.Spec.ModuleLoader)
+
+	// The finalizer registered above is a Module update, so the next pass can start before the
+	// DaemonSet informer has seen what this one created. Ask before generating another name.
+	if ds == nil {
+		fresh, err := listModuleDRADaemonSets(ctx, drh.apiReader, mod.Name, mod.Namespace)
+		if err != nil {
+			return err
+		}
+
+		ds, version = getExistingDRADSFromVersion(fresh, mod.Namespace, mod.Name, mod.Spec.ModuleLoader)
+	}
+
 	if ds == nil {
 		logger.Info("creating new DRA DaemonSet", "version", version)
 		ds = &appsv1.DaemonSet{
@@ -361,32 +406,72 @@ func isOlderVersionUnusedDRADaemonSet(ds *appsv1.DaemonSet, moduleNamespace, mod
 	return ds.Labels[versionLabel] != moduleVersion && ds.Status.DesiredNumberScheduled == 0
 }
 
-// deleteDRAResources deletes all DRA-owned DaemonSets and DeviceClasses using label-based bulk deletion.
-func (drh *draReconcilerHelper) deleteDRAResources(ctx context.Context, moduleName, moduleNamespace string) error {
+// deleteDRAResources asks for the Module's DRA resources to go and reports whether they have,
+// reading through the API reader since a stale cache reads as an empty cluster.
+func (drh *draReconcilerHelper) deleteDRAResources(ctx context.Context, mod *kmmv1beta1.Module) (bool, error) {
 	var errs []error
 
-	dsDeleteOpts := []client.DeleteAllOfOption{
+	remaining := 0
+
+	dsList := appsv1.DaemonSetList{}
+	dsOpts := []client.ListOption{
 		client.MatchingLabels{
-			constants.ModuleNameLabel: moduleName,
+			constants.ModuleNameLabel: mod.Name,
 			constants.DaemonSetRole:   constants.DRARoleLabelValue,
 		},
-		client.InNamespace(moduleNamespace),
+		client.InNamespace(mod.Namespace),
 	}
-	if err := drh.client.DeleteAllOf(ctx, &appsv1.DaemonSet{}, dsDeleteOpts...); err != nil {
-		errs = append(errs, fmt.Errorf("failed to delete DRA DaemonSets for module %s/%s: %v", moduleNamespace, moduleName, err))
+	if err := drh.apiReader.List(ctx, &dsList, dsOpts...); err != nil {
+		return false, fmt.Errorf("could not list DRA DaemonSets for module %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
 
-	dcDeleteOpts := []client.DeleteAllOfOption{
+	daemonSets := make([]client.Object, 0, len(dsList.Items))
+	for i := range dsList.Items {
+		daemonSets = append(daemonSets, &dsList.Items[i])
+	}
+
+	stillThere, err := deletePluginObjects(ctx, drh.client, daemonSets)
+	remaining += stillThere
+	errs = append(errs, err)
+
+	podsLeft, err := pluginPodsRemain(ctx, drh.apiReader, mod.Namespace, mod.Name, func(role string) bool {
+		return role == constants.DRARoleLabelValue
+	})
+	errs = append(errs, err)
+	if podsLeft {
+		remaining++
+	}
+
+	// A DeviceClass is cluster scoped, so a namespaced Module cannot own it and the namespace is
+	// carried as a label instead. InNamespace would match nothing here.
+	dcList := resourcev1.DeviceClassList{}
+	dcOpts := []client.ListOption{
 		client.MatchingLabels{
-			constants.ModuleNameLabel:      moduleName,
-			constants.ModuleNamespaceLabel: moduleNamespace,
+			constants.ModuleNameLabel:      mod.Name,
+			constants.ModuleNamespaceLabel: mod.Namespace,
 		},
 	}
-	if err := drh.client.DeleteAllOf(ctx, &resourcev1.DeviceClass{}, dcDeleteOpts...); err != nil {
-		errs = append(errs, fmt.Errorf("failed to delete DeviceClasses for module %s/%s: %v", moduleNamespace, moduleName, err))
+	if err := drh.apiReader.List(ctx, &dcList, dcOpts...); err != nil {
+		errs = append(errs, fmt.Errorf("could not list DeviceClasses for module %s/%s: %v", mod.Namespace, mod.Name, err))
+		return false, errors.Join(errs...)
 	}
 
-	return errors.Join(errs...)
+	deviceClasses := make([]client.Object, 0, len(dcList.Items))
+	for i := range dcList.Items {
+		deviceClasses = append(deviceClasses, &dcList.Items[i])
+	}
+
+	stillThere, err = deletePluginObjects(ctx, drh.client, deviceClasses)
+	remaining += stillThere
+	errs = append(errs, err)
+
+	joined := errors.Join(errs...)
+	if joined == nil && remaining > 0 {
+		log.FromContext(ctx).Info("Waiting for the DRA resources to go before releasing the Module",
+			"daemonSets", len(daemonSets), "podsLeft", podsLeft, "deviceClasses", len(deviceClasses))
+	}
+
+	return joined == nil && remaining == 0, joined
 }
 
 func (drh *draReconcilerHelper) moduleUpdateDRAStatus(ctx context.Context,
