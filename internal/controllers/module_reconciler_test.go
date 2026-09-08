@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -299,8 +300,39 @@ var _ = Describe("setFinalizerAndStatus", func() {
 		err := mrh.setFinalizerAndStatus(ctx, &mod)
 		Expect(err).To(HaveOccurred())
 	})
-})
+	// A merge patch sends the whole finalizer list, so an unlocked write from a stale read would
+	// take the plugin finalizers with it. Only the payload can show the lock is there.
+	locked := func(sent []byte) {
+		var patch struct {
+			Metadata struct {
+				ResourceVersion string `json:"resourceVersion"`
+			} `json:"metadata"`
+		}
+		Expect(json.Unmarshal(sent, &patch)).To(Succeed())
+		Expect(patch.Metadata.ResourceVersion).To(Equal("7"))
+	}
 
+	It("locks the version when it adds the module finalizer", func() {
+		mod := kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace, Name: moduleName, ResourceVersion: "7",
+		}}
+
+		gomock.InOrder(
+			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, o ctrlclient.Object, p ctrlclient.Patch, _ ...ctrlclient.PatchOption) error {
+					data, err := p.Data(o)
+					Expect(err).NotTo(HaveOccurred())
+					locked(data)
+					return nil
+				},
+			),
+			clnt.EXPECT().Status().Return(statusWriter),
+			statusWriter.EXPECT().Update(ctx, gomock.Any()).Return(nil),
+		)
+
+		Expect(mrh.setFinalizerAndStatus(ctx, &mod)).To(Succeed())
+	})
+})
 var _ = Describe("finalizeModule", func() {
 	const (
 		moduleName      = "moduleName"
@@ -421,8 +453,44 @@ var _ = Describe("finalizeModule", func() {
 
 		Expect(err).To(HaveOccurred())
 	})
-})
+	// A merge patch sends the whole finalizer list, so an unlocked write from a stale read would
+	// take the plugin finalizers with it. Only the payload can show the lock is there.
+	locked := func(sent []byte) {
+		var patch struct {
+			Metadata struct {
+				ResourceVersion string `json:"resourceVersion"`
+			} `json:"metadata"`
+		}
+		Expect(json.Unmarshal(sent, &patch)).To(Succeed())
+		Expect(patch.Metadata.ResourceVersion).To(Equal("7"))
+	}
 
+	It("locks the version when it removes the module finalizer", func() {
+		const foreign = "example.com/other-controller"
+
+		mod := kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace, Name: moduleName, ResourceVersion: "7",
+			Finalizers: []string{constants.ModuleFinalizer, foreign},
+		}}
+
+		gomock.InOrder(
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(nil),
+			clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(nil),
+			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, o ctrlclient.Object, p ctrlclient.Patch, _ ...ctrlclient.PatchOption) error {
+					data, err := p.Data(o)
+					Expect(err).NotTo(HaveOccurred())
+					locked(data)
+					// The other controller's finalizer survives this write.
+					Expect(string(data)).To(ContainSubstring(foreign))
+					return nil
+				},
+			),
+		)
+
+		Expect(mrh.finalizeModule(ctx, &mod)).To(Succeed())
+	})
+})
 var _ = Describe("handleMIC", func() {
 
 	const (
