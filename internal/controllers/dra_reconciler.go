@@ -32,6 +32,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -97,80 +98,78 @@ func (r *DRAReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (ctrl.Result, error) {
-	res := ctrl.Result{}
-
 	logger := log.FromContext(ctx)
 
-	existingDRADS, err := r.reconHelperAPI.getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace)
-	if err != nil {
-		return res, fmt.Errorf("could not get DRA DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
-	}
-
-	existingDCs, err := r.reconHelperAPI.getModuleDeviceClasses(ctx, mod.Name, mod.Namespace)
-	if err != nil {
-		return res, fmt.Errorf("could not get DeviceClasses for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
-	}
-
-	// Remove the dra-target labels on cleanup so the DaemonSet controller takes the driver Pods off.
 	if mod.GetDeletionTimestamp() != nil {
-		return ctrl.Result{}, errors.Join(
-			r.reconHelperAPI.removeDRATargetLabels(ctx, mod),
-			r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace),
-		)
+		if err := r.reconHelperAPI.finalizeModule(ctx, mod); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to finalize Module %s/%s: %v", mod.Namespace, mod.Name, err)
+		}
+		return ctrl.Result{}, nil
 	}
 
+	// A Module with no DRA spec should hold none of our resources or finalizer; tear it down the
+	// same way as on deletion, then reset the status since this Module lives on.
 	if mod.Spec.DRA == nil {
-		if err = errors.Join(
-			r.reconHelperAPI.removeDRATargetLabels(ctx, mod),
-			r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace),
-		); err != nil {
-			return ctrl.Result{}, err
+		if err := r.reconHelperAPI.finalizeModule(ctx, mod); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to finalize Module %s/%s: %v", mod.Namespace, mod.Name, err)
 		}
 		return ctrl.Result{}, r.reconHelperAPI.clearDRAStatus(ctx, mod)
 	}
 
+	// Register the finalizer before writing anything it protects, so a delete starting mid-pass
+	// still runs cleanup.
+	if err := r.reconHelperAPI.setFinalizer(ctx, mod); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to set finalizer on Module %s/%s: %v", mod.Namespace, mod.Name, err)
+	}
+
+	existingDRADS, err := r.reconHelperAPI.getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not get DRA DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
+	}
+
+	existingDCs, err := r.reconHelperAPI.getModuleDeviceClasses(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not get DeviceClasses for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
+	}
+
 	if err = r.reconHelperAPI.handleDRATargetLabels(ctx, mod); err != nil {
-		return res, fmt.Errorf("could not reconcile dra-target labels: %v", err)
+		return ctrl.Result{}, fmt.Errorf("could not reconcile dra-target labels: %v", err)
 	}
 
-	err = r.reconHelperAPI.handleDRA(ctx, mod, existingDRADS)
-	if err != nil {
-		return res, fmt.Errorf("could not handle DRA: %v", err)
+	if err = r.reconHelperAPI.handleDRA(ctx, mod, existingDRADS); err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not handle DRA: %v", err)
 	}
 
-	err = r.reconHelperAPI.garbageCollectDRADaemonSets(ctx, mod, existingDRADS)
-	if err != nil {
-		return res, fmt.Errorf("failed to run DRA garbage collection: %v", err)
+	if err = r.reconHelperAPI.garbageCollectDRADaemonSets(ctx, mod, existingDRADS); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to run DRA garbage collection: %v", err)
 	}
 
-	err = r.reconHelperAPI.handleDeviceClasses(ctx, mod, existingDCs)
-	if err != nil {
-		return res, fmt.Errorf("could not handle DeviceClasses: %v", err)
+	if err = r.reconHelperAPI.handleDeviceClasses(ctx, mod, existingDCs); err != nil {
+		return ctrl.Result{}, fmt.Errorf("could not handle DeviceClasses: %v", err)
 	}
 
-	err = r.reconHelperAPI.moduleUpdateDRAStatus(ctx, mod, existingDRADS)
-	if err != nil {
-		return res, fmt.Errorf("failed to update DRA status of the module: %v", err)
+	if err = r.reconHelperAPI.moduleUpdateDRAStatus(ctx, mod, existingDRADS); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update DRA status of the module: %v", err)
 	}
 
 	logger.Info("DRA reconcile loop finished successfully")
 
-	return res, nil
+	return ctrl.Result{}, nil
 }
 
 //go:generate mockgen -source=dra_reconciler.go -package=controllers -destination=mock_dra_reconciler.go draReconcilerHelperAPI,draDaemonSetCreator
 
 type draReconcilerHelperAPI interface {
+	setFinalizer(ctx context.Context, mod *kmmv1beta1.Module) error
+	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	getModuleDRADaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error)
 	handleDRA(ctx context.Context, mod *kmmv1beta1.Module, existingDRADS []appsv1.DaemonSet) error
 	garbageCollectDRADaemonSets(ctx context.Context, mod *kmmv1beta1.Module, existingDS []appsv1.DaemonSet) error
-	deleteDRAResources(ctx context.Context, moduleName, moduleNamespace string) error
 	moduleUpdateDRAStatus(ctx context.Context, mod *kmmv1beta1.Module, existingDRADS []appsv1.DaemonSet) error
 	clearDRAStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	getModuleDeviceClasses(ctx context.Context, name, namespace string) ([]resourcev1.DeviceClass, error)
 	handleDeviceClasses(ctx context.Context, mod *kmmv1beta1.Module, existingDCs []resourcev1.DeviceClass) error
 	handleDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
-	removeDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
 }
 
 type draReconcilerHelper struct {
@@ -189,6 +188,49 @@ func newDRAReconcilerHelper(client client.Client,
 		daemonSetHelper: daemonSetHelper,
 		nodeAPI:         nodeAPI,
 	}
+}
+
+// setFinalizer registers the DRA finalizer so the Module is held while its DRA resources are torn
+// down. DRA shares the Module with other controllers' finalizers, so the patch takes an optimistic
+// lock to avoid clobbering a concurrent write.
+func (drh *draReconcilerHelper) setFinalizer(ctx context.Context, mod *kmmv1beta1.Module) error {
+	if controllerutil.ContainsFinalizer(mod, constants.DRAFinalizer) {
+		return nil
+	}
+
+	modCopy := mod.DeepCopy()
+	controllerutil.AddFinalizer(mod, constants.DRAFinalizer)
+	return drh.client.Patch(ctx, mod, client.MergeFromWithOptions(modCopy, client.MergeFromWithOptimisticLock{}))
+}
+
+// finalizeModule removes the dra-target labels, tears down the Module's DRA DaemonSets and
+// DeviceClasses, and releases the finalizer once they are gone. It returns at once when the DRA
+// finalizer is absent: the finalizer is set before anything it protects is written, so its absence
+// means nothing was written and there is nothing to list or tear down. The DaemonSet controller
+// handles the driver Pods, so it waits for the DaemonSets and DeviceClasses to go, re-triggered by
+// their delete events, rather than polling.
+func (drh *draReconcilerHelper) finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error {
+	if !controllerutil.ContainsFinalizer(mod, constants.DRAFinalizer) {
+		return nil
+	}
+
+	if err := drh.removeDRATargetLabels(ctx, mod); err != nil {
+		return fmt.Errorf("could not remove dra-target labels: %v", err)
+	}
+
+	remaining, err := drh.deleteDRAResources(ctx, mod)
+	if err != nil {
+		return fmt.Errorf("could not delete DRA resources: %v", err)
+	}
+
+	if remaining > 0 {
+		log.FromContext(ctx).Info("DRA resources still present; not removing the finalizer", "count", remaining)
+		return nil
+	}
+
+	modCopy := mod.DeepCopy()
+	controllerutil.RemoveFinalizer(mod, constants.DRAFinalizer)
+	return drh.client.Patch(ctx, mod, client.MergeFromWithOptions(modCopy, client.MergeFromWithOptimisticLock{}))
 }
 
 // handleDRATargetLabels ensures the dra-target label is present on schedulable nodes targeted by
@@ -224,18 +266,21 @@ func (drh *draReconcilerHelper) handleDRATargetLabels(ctx context.Context, mod *
 	return errors.Join(errs...)
 }
 
-// removeDRATargetLabels removes the dra-target label from every node that carries it, used on cleanup.
+// removeDRATargetLabels removes the dra-target label from every node that carries it, used on
+// cleanup. It lists by the label key, not an empty value: a value match would skip a node whose
+// label drifted off the empty value and leave the key set, letting finalizeModule drop the
+// finalizer while a node is still labelled.
 func (drh *draReconcilerHelper) removeDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
 	targetLabel := utils.GetDRATargetNodeLabel(mod.Namespace, mod.Name)
 
-	nodes, err := drh.nodeAPI.GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""})
-	if err != nil {
+	nodeList := v1.NodeList{}
+	if err := drh.client.List(ctx, &nodeList, client.HasLabels{targetLabel}); err != nil {
 		return fmt.Errorf("could not list nodes with dra-target label: %v", err)
 	}
 
 	var errs []error
-	for i := range nodes {
-		node := &nodes[i]
+	for i := range nodeList.Items {
+		node := &nodeList.Items[i]
 		if err := drh.nodeAPI.UpdateLabels(ctx, node, nil, map[string]string{targetLabel: ""}); err != nil {
 			errs = append(errs, fmt.Errorf("could not remove dra-target label from node %s: %v", node.Name, err))
 		}
@@ -352,32 +397,67 @@ func isOlderVersionUnusedDRADaemonSet(ds *appsv1.DaemonSet, moduleNamespace, mod
 	return ds.Labels[versionLabel] != moduleVersion && ds.Status.DesiredNumberScheduled == 0
 }
 
-// deleteDRAResources deletes all DRA-owned DaemonSets and DeviceClasses using label-based bulk deletion.
-func (drh *draReconcilerHelper) deleteDRAResources(ctx context.Context, moduleName, moduleNamespace string) error {
+// deleteDRAResources deletes the Module's DRA DaemonSets and DeviceClasses and returns how many are
+// still present. A resource that is still finalizing counts as present.
+func (drh *draReconcilerHelper) deleteDRAResources(ctx context.Context, mod *kmmv1beta1.Module) (int, error) {
+	var errs []error
+	remaining := 0
+
+	daemonSets, err := drh.getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		return 0, err
+	}
+
+	dsObjs := make([]client.Object, 0, len(daemonSets))
+	for i := range daemonSets {
+		dsObjs = append(dsObjs, &daemonSets[i])
+	}
+
+	n, err := deleteDRAObjects(ctx, drh.client, dsObjs)
+	remaining += n
+	errs = append(errs, err)
+
+	deviceClasses, err := drh.getModuleDeviceClasses(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		errs = append(errs, err)
+		return 0, errors.Join(errs...)
+	}
+
+	dcObjs := make([]client.Object, 0, len(deviceClasses))
+	for i := range deviceClasses {
+		dcObjs = append(dcObjs, &deviceClasses[i])
+	}
+
+	n, err = deleteDRAObjects(ctx, drh.client, dcObjs)
+	remaining += n
+	errs = append(errs, err)
+
+	return remaining, errors.Join(errs...)
+}
+
+// deleteDRAObjects deletes the objects that are not already going and returns how many it saw, since
+// one that is still finalizing has not gone. Each delete pins the UID it read, skipping a replacement.
+func deleteDRAObjects(ctx context.Context, c client.Client, objs []client.Object) (int, error) {
 	var errs []error
 
-	dsDeleteOpts := []client.DeleteAllOfOption{
-		client.MatchingLabels{
-			constants.ModuleNameLabel: moduleName,
-			constants.DaemonSetRole:   constants.DRARoleLabelValue,
-		},
-		client.InNamespace(moduleNamespace),
-	}
-	if err := drh.client.DeleteAllOf(ctx, &appsv1.DaemonSet{}, dsDeleteOpts...); err != nil {
-		errs = append(errs, fmt.Errorf("failed to delete DRA DaemonSets for module %s/%s: %v", moduleNamespace, moduleName, err))
+	for _, obj := range objs {
+		// Asking again puts the GC finalizer back, and every one of those writes wakes us again.
+		if obj.GetDeletionTimestamp() != nil {
+			continue
+		}
+
+		opts := &client.DeleteOptions{
+			Preconditions:     &metav1.Preconditions{UID: ptr.To(obj.GetUID())},
+			PropagationPolicy: ptr.To(metav1.DeletePropagationForeground),
+		}
+
+		if err := c.Delete(ctx, obj, opts); err != nil && !apierrors.IsNotFound(err) {
+			// Items of a typed list carry no Kind, and a DeviceClass has no namespace.
+			errs = append(errs, fmt.Errorf("could not delete %s: %v", klog.KObj(obj), err))
+		}
 	}
 
-	dcDeleteOpts := []client.DeleteAllOfOption{
-		client.MatchingLabels{
-			constants.ModuleNameLabel:      moduleName,
-			constants.ModuleNamespaceLabel: moduleNamespace,
-		},
-	}
-	if err := drh.client.DeleteAllOf(ctx, &resourcev1.DeviceClass{}, dcDeleteOpts...); err != nil {
-		errs = append(errs, fmt.Errorf("failed to delete DeviceClasses for module %s/%s: %v", moduleNamespace, moduleName, err))
-	}
-
-	return errors.Join(errs...)
+	return len(objs), errors.Join(errs...)
 }
 
 func (drh *draReconcilerHelper) moduleUpdateDRAStatus(ctx context.Context,
