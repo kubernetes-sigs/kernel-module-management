@@ -228,9 +228,10 @@ func (mrh *moduleReconcilerHelper) setFinalizerAndStatus(ctx context.Context, mo
 	logger := log.FromContext(ctx)
 	logger.Info("Adding finalizer", "module name", mod.Name, "module namespace", mod.Namespace)
 
+	// both DRA and DevicePlugin can also set finalizers, on Module, so we switch to client.MergeFromWithOptimisticLock{} in order to avoid overriding previous operations
 	modCopy := mod.DeepCopy()
 	controllerutil.AddFinalizer(mod, constants.ModuleFinalizer)
-	err := mrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
+	err := mrh.client.Patch(ctx, mod, client.MergeFromWithOptions(modCopy, client.MergeFromWithOptimisticLock{}))
 	if err != nil {
 		return fmt.Errorf("failed to set finalizer for module %s/%s: %v", mod.Namespace, mod.Name, err)
 	}
@@ -286,7 +287,7 @@ func (mrh *moduleReconcilerHelper) finalizeModule(ctx context.Context, mod *kmmv
 	modCopy := mod.DeepCopy()
 	controllerutil.RemoveFinalizer(mod, constants.ModuleFinalizer)
 
-	return mrh.client.Patch(ctx, mod, client.MergeFrom(modCopy))
+	return mrh.client.Patch(ctx, mod, client.MergeFromWithOptions(modCopy, client.MergeFromWithOptimisticLock{}))
 }
 
 func (mrh *moduleReconcilerHelper) getNMCsByModuleSet(ctx context.Context, mod *kmmv1beta1.Module) (sets.Set[string], error) {

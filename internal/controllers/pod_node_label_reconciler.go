@@ -8,6 +8,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/util/podutils"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -140,6 +141,11 @@ func (r *PodNodeLabelReconciler) deleteLabel(ctx context.Context, nodeName strin
 	node := v1.Node{}
 
 	if err := r.client.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+		// A node that is gone carries no label; erroring here would hold the Pod finalizer for good.
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+
 		return fmt.Errorf("could not get node %s: %v", nodeName, err)
 	}
 
@@ -155,7 +161,8 @@ func (r *PodNodeLabelReconciler) deleteFinalizer(ctx context.Context, pod *v1.Po
 
 	controllerutil.RemoveFinalizer(pod, constants.NodeLabelerFinalizer)
 
-	return r.client.Patch(ctx, pod, client.MergeFrom(podCopy))
+	// A merge patch sends the whole list, so a stale read here would drop what else holds the Pod.
+	return r.client.Patch(ctx, pod, client.MergeFromWithOptions(podCopy, client.MergeFromWithOptimisticLock{}))
 }
 
 func (r *PodNodeLabelReconciler) SetupWithManager(mgr ctrl.Manager) error {
