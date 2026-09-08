@@ -18,7 +18,9 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -35,6 +37,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -42,11 +45,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+var _ = Describe("NewDRAReconciler", func() {
+	It("gives the helper the API reader rather than the cached client", func() {
+		ctrl := gomock.NewController(GinkgoT())
+		clnt := client.NewMockClient(ctrl)
+		reader := client.NewMockClient(ctrl)
+
+		// The cleanup reads through the API reader on purpose, so the wiring is worth pinning.
+		r := NewDRAReconciler(clnt, reader, nil, nil, scheme)
+
+		helper, ok := r.reconHelperAPI.(*draReconcilerHelper)
+		Expect(ok).To(BeTrue())
+		Expect(helper.client).To(BeIdenticalTo(clnt))
+		Expect(helper.apiReader).To(BeIdenticalTo(reader))
+	})
+})
+
 var _ = Describe("DRAReconciler_Reconcile", func() {
 	const draModuleName = "dra-module"
 
 	var (
 		ctrl            *gomock.Controller
+		clnt            *client.MockClient
 		mockReconHelper *MockdraReconcilerHelperAPI
 		mod             *kmmv1beta1.Module
 		dr              *DRAReconciler
@@ -54,25 +74,39 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
 		mockReconHelper = NewMockdraReconcilerHelperAPI(ctrl)
 
+		// The finalizer is already there, so these specs exercise the handlers rather than the
+		// pass that registers it. Registration has its own specs below.
 		mod = &kmmv1beta1.Module{
-			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: draModuleName},
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:       namespace,
+				Name:            draModuleName,
+				ResourceVersion: "1",
+				Finalizers:      []string{constants.DRAFinalizer},
+			},
 			Spec: kmmv1beta1.ModuleSpec{
 				DRA: &kmmv1beta1.DRASpec{},
 			},
 		}
 
 		dr = &DRAReconciler{
+			client:         clnt,
 			reconHelperAPI: mockReconHelper,
 		}
 	})
 
 	ctx := context.Background()
 
-	DescribeTable("check error flows", func(getDSError, getDCError, targetLabelError, handleDRAError, gcError, handleDCError bool) {
+	DescribeTable("check error flows", func(setFinalizerError, getDSError, getDCError, targetLabelError, handleDRAError, gcError, handleDCError bool) {
 		draDS := []appsv1.DaemonSet{{}}
 		returnedError := fmt.Errorf("some error")
+		if setFinalizerError {
+			mockReconHelper.EXPECT().setFinalizer(ctx, mod).Return(returnedError)
+			goto executeTestFunction
+		}
+		mockReconHelper.EXPECT().setFinalizer(ctx, mod).Return(nil)
 		if getDSError {
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, returnedError)
 			goto executeTestFunction
@@ -112,18 +146,20 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 
 	},
-		Entry("getModuleDRADaemonSets failed", true, false, false, false, false, false),
-		Entry("getModuleDeviceClasses failed", false, true, false, false, false, false),
-		Entry("handleDRATargetLabels failed", false, false, true, false, false, false),
-		Entry("handleDRA failed", false, false, false, true, false, false),
-		Entry("garbageCollectDRADaemonSets failed", false, false, false, false, true, false),
-		Entry("handleDeviceClasses failed", false, false, false, false, false, true),
-		Entry("moduleUpdateDRAStatus failed", false, false, false, false, false, false),
+		Entry("setFinalizer failed", true, false, false, false, false, false, false),
+		Entry("getModuleDRADaemonSets failed", false, true, false, false, false, false, false),
+		Entry("getModuleDeviceClasses failed", false, false, true, false, false, false, false),
+		Entry("handleDRATargetLabels failed", false, false, false, true, false, false, false),
+		Entry("handleDRA failed", false, false, false, false, true, false, false),
+		Entry("garbageCollectDRADaemonSets failed", false, false, false, false, false, true, false),
+		Entry("handleDeviceClasses failed", false, false, false, false, false, false, true),
+		Entry("moduleUpdateDRAStatus failed", false, false, false, false, false, false, false),
 	)
 
 	It("Good flow", func() {
 		draDS := []appsv1.DaemonSet{{}}
 		gomock.InOrder(
+			mockReconHelper.EXPECT().setFinalizer(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
 			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().handleDRATargetLabels(ctx, mod).Return(nil),
@@ -139,85 +175,50 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("module deletion flow", func() {
-		mod.SetDeletionTimestamp(&metav1.Time{})
-		draDS := []appsv1.DaemonSet{{}}
-		existingDCs := []resourcev1.DeviceClass{{ObjectMeta: metav1.ObjectMeta{Name: "gpu"}}}
+	It("finalizes and returns when the Module is being deleted", func() {
+		mod.SetDeletionTimestamp(&metav1.Time{Time: time.Now()})
 
 		By("good flow")
-		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
-			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(existingDCs, nil),
-			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
-			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(nil),
-		)
-
+		mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(nil)
 		res, err := dr.Reconcile(ctx, mod)
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 
-		By("error flow - deleteDRAResources fails")
-		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
-			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(existingDCs, nil),
-			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
-			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(fmt.Errorf("some error")),
-		)
-
+		By("error flow")
+		mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(fmt.Errorf("some error"))
 		res, err = dr.Reconcile(ctx, mod)
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("no-op when spec.dra is nil and no existing DaemonSets or DeviceClasses", func() {
+	It("finalizes and clears status when spec.dra is nil", func() {
 		mod.Spec.DRA = nil
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
-			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
-			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
-			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(nil),
+			mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().clearDRAStatus(ctx, mod).Return(nil),
 		)
 
 		res, err := dr.Reconcile(ctx, mod)
-
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("cleanup when spec.dra is nil but existing DaemonSets and DeviceClasses present", func() {
+	It("reports a finalize failure when spec.dra is nil", func() {
 		mod.Spec.DRA = nil
-		draDS := []appsv1.DaemonSet{{}}
-		existingDCs := []resourcev1.DeviceClass{{ObjectMeta: metav1.ObjectMeta{Name: "gpu"}}}
+		mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(fmt.Errorf("some error"))
 
-		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
-			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(existingDCs, nil),
-			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
-			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(nil),
-			mockReconHelper.EXPECT().clearDRAStatus(ctx, mod).Return(nil),
-		)
-
-		res, err := dr.Reconcile(ctx, mod)
-
-		Expect(res).To(Equal(reconcile.Result{}))
-		Expect(err).NotTo(HaveOccurred())
+		_, err := dr.Reconcile(ctx, mod)
+		Expect(err).To(HaveOccurred())
 	})
 
-	It("cleanup when spec.dra is nil and clearDRAStatus fails", func() {
+	It("reports a clearDRAStatus failure when spec.dra is nil", func() {
 		mod.Spec.DRA = nil
-
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
-			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
-			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
-			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(nil),
+			mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().clearDRAStatus(ctx, mod).Return(fmt.Errorf("some error")),
 		)
 
-		res, err := dr.Reconcile(ctx, mod)
-
-		Expect(res).To(Equal(reconcile.Result{}))
+		_, err := dr.Reconcile(ctx, mod)
 		Expect(err).To(HaveOccurred())
 	})
 })
@@ -358,16 +359,22 @@ var _ = Describe("DRAReconciler_removeDRATargetLabels", func() {
 	)
 
 	var (
-		ctrl *gomock.Controller
-		nm   *node.MockNode
-		drh  draReconcilerHelper
-		mod  *kmmv1beta1.Module
+		ctrl   *gomock.Controller
+		clnt   *client.MockClient
+		reader *client.MockClient
+		nm     *node.MockNode
+		drh    draReconcilerHelper
+		mod    *kmmv1beta1.Module
 	)
 
+	// A separate mock for the API reader, so a cleanup read that went to the cached client instead
+	// shows up here as an unexpected call rather than passing.
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		reader = client.NewMockClient(ctrl)
 		nm = node.NewMockNode(ctrl)
-		drh = draReconcilerHelper{nodeAPI: nm}
+		drh = draReconcilerHelper{client: clnt, apiReader: reader, nodeAPI: nm}
 		mod = &kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{Namespace: modNS, Name: modName}}
 	})
 
@@ -377,23 +384,32 @@ var _ = Describe("DRAReconciler_removeDRATargetLabels", func() {
 		return v1.Node{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{targetLabel: ""}}}
 	}
 
+	// listNodes has the API reader return the given nodes for the dra-target node list.
+	listNodes := func(nodes ...v1.Node) {
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, l ctrlclient.ObjectList, _ ...ctrlclient.ListOption) error {
+				Expect(l).To(BeAssignableToTypeOf(&v1.NodeList{}))
+				l.(*v1.NodeList).Items = nodes
+				return nil
+			},
+		)
+	}
+
 	It("removes the label from every node that carries it", func() {
-		nm.EXPECT().GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""}).
-			Return([]v1.Node{labelled("node1"), labelled("node2")}, nil)
+		listNodes(labelled("node1"), labelled("node2"))
 		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(nil).Times(2)
 
 		Expect(drh.removeDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
 	})
 
 	It("reports a listing failure rather than an empty cluster", func() {
-		nm.EXPECT().GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""}).Return(nil, fmt.Errorf("boom"))
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("boom"))
 
 		Expect(drh.removeDRATargetLabels(ctx, mod)).To(HaveOccurred())
 	})
 
 	It("goes on to the rest when one node cannot be unlabelled", func() {
-		nm.EXPECT().GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""}).
-			Return([]v1.Node{labelled("node1"), labelled("node2")}, nil)
+		listNodes(labelled("node1"), labelled("node2"))
 		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(fmt.Errorf("some error"))
 		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(nil)
 
@@ -401,22 +417,58 @@ var _ = Describe("DRAReconciler_removeDRATargetLabels", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("node1"))
 	})
+
+	It("lists by the label key alone, so a drifted value or a node outside the Module selector is still cleaned", func() {
+		// A Module selector is set to prove cleanup does not scope to it: node1 carries the label
+		// but not the selector label, yet it must still be listed and unlabelled.
+		mod.Spec.Selector = map[string]string{"example.com/pool": "gpu"}
+
+		var selector labels.Selector
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, l ctrlclient.ObjectList, opts ...ctrlclient.ListOption) error {
+				lo := &ctrlclient.ListOptions{}
+				for _, o := range opts {
+					o.ApplyToList(lo)
+				}
+				selector = lo.LabelSelector
+				l.(*v1.NodeList).Items = []v1.Node{labelled("node1")}
+				return nil
+			},
+		)
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(nil)
+
+		Expect(drh.removeDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
+		Expect(selector).NotTo(BeNil())
+		// The empty and the drifted value both match, so cleanup lists by key, not by value.
+		Expect(selector.Matches(labels.Set{targetLabel: ""})).To(BeTrue())
+		Expect(selector.Matches(labels.Set{targetLabel: "true"})).To(BeTrue())
+		// A node without the key is not matched.
+		Expect(selector.Matches(labels.Set{"unrelated/label": ""})).To(BeFalse())
+		// The matching sets above lack example.com/pool=gpu, so the Module selector is not folded
+		// into the cleanup query.
+		Expect(selector.Matches(labels.Set{"example.com/pool": "gpu"})).To(BeFalse())
+	})
 })
 
 var _ = Describe("DRAReconciler_handleDRA", func() {
 	var (
 		ctrl         *gomock.Controller
 		clnt         *client.MockClient
+		reader       *client.MockClient
 		mockDSHelper *MockdraDaemonSetCreator
 		drh          draReconcilerHelper
 	)
 
+	// A separate mock for the API reader, so a read that went to the cached client instead shows
+	// up here as an unexpected call rather than passing.
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
+		reader = client.NewMockClient(ctrl)
 		mockDSHelper = NewMockdraDaemonSetCreator(ctrl)
 		drh = draReconcilerHelper{
 			client:          clnt,
+			apiReader:       reader,
 			daemonSetHelper: mockDSHelper,
 		}
 	})
@@ -435,6 +487,99 @@ var _ = Describe("DRAReconciler_handleDRA", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("reuses the DaemonSet the last pass created, even when the cached list is empty", func() {
+		ctx := context.Background()
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "namespace"},
+			Spec:       kmmv1beta1.ModuleSpec{DRA: &kmmv1beta1.DRASpec{}},
+		}
+		existing := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{
+			Namespace: mod.Namespace, Name: "moduleName-dra-abcde",
+			Labels: map[string]string{
+				constants.ModuleNameLabel: mod.Name,
+				constants.DaemonSetRole:   constants.DRARoleLabelValue,
+			},
+		}}
+
+		// No Create: a second one under a generated name is what this guards against.
+		gomock.InOrder(
+			reader.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, l ctrlclient.ObjectList, _ ...ctrlclient.ListOption) error {
+					l.(*appsv1.DaemonSetList).Items = []appsv1.DaemonSet{*existing.DeepCopy()}
+					return nil
+				},
+			),
+			clnt.EXPECT().Get(ctx, ctrlclient.ObjectKeyFromObject(&existing), gomock.Any()).DoAndReturn(
+				func(_ context.Context, _ ctrlclient.ObjectKey, o ctrlclient.Object, _ ...ctrlclient.GetOption) error {
+					existing.DeepCopyInto(o.(*appsv1.DaemonSet))
+					return nil
+				},
+			),
+			mockDSHelper.EXPECT().setDRAAsDesired(ctx, gomock.Any(), &mod).Return(nil),
+		)
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+		Expect(drh.handleDRA(ctx, &mod, nil)).To(Succeed())
+	})
+
+	It("retries on the discovered name instead of generating a second DaemonSet when the cache misses it", func() {
+		ctx := context.Background()
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "namespace"},
+			Spec:       kmmv1beta1.ModuleSpec{DRA: &kmmv1beta1.DRASpec{}},
+		}
+		existing := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{
+			Namespace: mod.Namespace, Name: "moduleName-dra-abcde",
+			Labels: map[string]string{
+				constants.ModuleNameLabel: mod.Name,
+				constants.DaemonSetRole:   constants.DRARoleLabelValue,
+			},
+		}}
+
+		var created ctrlclient.Object
+		gomock.InOrder(
+			// The cached list is empty, so the API reader finds the DaemonSet the last pass created.
+			reader.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, l ctrlclient.ObjectList, _ ...ctrlclient.ListOption) error {
+					l.(*appsv1.DaemonSetList).Items = []appsv1.DaemonSet{*existing.DeepCopy()}
+					return nil
+				},
+			),
+			// The cached Get still misses it, so CreateOrPatch falls through to Create.
+			clnt.EXPECT().Get(ctx, ctrlclient.ObjectKeyFromObject(&existing), gomock.Any()).Return(
+				apierrors.NewNotFound(schema.GroupResource{}, existing.Name),
+			),
+			mockDSHelper.EXPECT().setDRAAsDesired(ctx, gomock.Any(), &mod).Return(nil),
+			// Create is attempted on the name the API reader returned; the real object rejects it.
+			clnt.EXPECT().Create(ctx, gomock.Any()).DoAndReturn(
+				func(_ context.Context, o ctrlclient.Object, _ ...ctrlclient.CreateOption) error {
+					created = o
+					return apierrors.NewAlreadyExists(schema.GroupResource{}, existing.Name)
+				},
+			),
+		)
+
+		err := drh.handleDRA(ctx, &mod, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(created).NotTo(BeNil())
+		// The discovered name is reused, not a fresh GenerateName, so no second DaemonSet is made.
+		Expect(created.GetName()).To(Equal(existing.Name))
+		Expect(created.GetGenerateName()).To(BeEmpty())
+	})
+
+	It("creates nothing when it cannot confirm what is already there", func() {
+		ctx := context.Background()
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "namespace"},
+			Spec:       kmmv1beta1.ModuleSpec{DRA: &kmmv1beta1.DRASpec{}},
+		}
+
+		// No Create: a failed read is not an empty cluster.
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		Expect(drh.handleDRA(ctx, &mod, nil)).NotTo(Succeed())
+	})
+
 	It("new daemonset", func() {
 		ctx := context.Background()
 		mod := kmmv1beta1.Module{
@@ -451,6 +596,20 @@ var _ = Describe("DRAReconciler_handleDRA", func() {
 			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, GenerateName: mod.Name + "-dra-"},
 		}
 		gomock.InOrder(
+			// Asked before a name is generated, and asked of the API server: the cached list can
+			// still be empty when the pass that registered the finalizer has already created one.
+			reader.EXPECT().List(ctx, gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, _ ctrlclient.ObjectList, opts ...ctrlclient.ListOption) error {
+					got := &ctrlclient.ListOptions{}
+					for _, o := range opts {
+						o.ApplyToList(got)
+					}
+					Expect(got.Namespace).To(Equal(mod.Namespace))
+					Expect(got.LabelSelector.String()).To(ContainSubstring(mod.Name))
+					Expect(got.LabelSelector.String()).To(ContainSubstring(constants.DRARoleLabelValue))
+					return nil
+				},
+			),
 			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(apierrors.NewNotFound(schema.GroupResource{}, "whatever")),
 			mockDSHelper.EXPECT().setDRAAsDesired(ctx, newDS, &mod).Return(nil),
 			clnt.EXPECT().Create(ctx, gomock.Any()).Return(nil),
@@ -663,7 +822,7 @@ var _ = Describe("DRAReconciler_moduleUpdateDRAStatus", func() {
 		clnt = client.NewMockClient(ctrl)
 		statusWriter = client.NewMockStatusWriter(ctrl)
 		mn = node.NewNode(clnt)
-		drh = newDRAReconcilerHelper(clnt, mn, nil)
+		drh = newDRAReconcilerHelper(clnt, clnt, mn, nil)
 	})
 
 	ctx := context.Background()
@@ -1352,8 +1511,8 @@ var _ = Describe("DRAReconciler_garbageCollectDRADaemonSets", func() {
 		Expect(err).NotTo(HaveOccurred())
 	},
 		Entry("no former DS to delete", false, 0),
-		Entry("former DS with zero desired — deleted", true, 0),
-		Entry("former DS still has desired pods — kept", true, 1),
+		Entry("former DS with zero desired is deleted", true, 0),
+		Entry("former DS still has desired pods is kept", true, 1),
 	)
 
 	It("should return an error if a deletion failed", func() {
@@ -1722,55 +1881,479 @@ var _ = Describe("DRAReconciler_handleDeviceClasses", func() {
 })
 
 var _ = Describe("DRAReconciler_deleteDRAResources", func() {
+	const (
+		modName = "my-mod"
+		modNS   = "my-ns"
+	)
+
+	var (
+		ctrl   *gomock.Controller
+		clnt   *client.MockClient
+		reader *client.MockClient
+		drh    draReconcilerHelper
+		mod    *kmmv1beta1.Module
+	)
+
+	// A separate mock for the API reader, so a read that went to the cached client instead shows
+	// up here as an unexpected call rather than passing.
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		reader = client.NewMockClient(ctrl)
+		drh = draReconcilerHelper{client: clnt, apiReader: reader}
+		mod = &kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{Namespace: modNS, Name: modName}}
+	})
+
+	ctx := context.Background()
+
+	// listing feeds one call per list type, so a spec only has to name what it wants back.
+	listing := func(dss []appsv1.DaemonSet, dcs []resourcev1.DeviceClass) {
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, l ctrlclient.ObjectList, _ ...ctrlclient.ListOption) error {
+				switch typed := l.(type) {
+				case *appsv1.DaemonSetList:
+					typed.Items = dss
+				case *resourcev1.DeviceClassList:
+					typed.Items = dcs
+				}
+				return nil
+			},
+		).AnyTimes()
+	}
+
+	It("counts nothing once the cluster is clear", func() {
+		listing(nil, nil)
+
+		remaining, err := drh.deleteDRAResources(ctx, mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(remaining).To(BeZero())
+	})
+
+	// A DeviceClass is cluster scoped, so the namespace label is all that keeps this Module away
+	// from a same-named one in another namespace.
+	It("selects DeviceClasses by both Module labels rather than by namespace", func() {
+		var dcOpts ctrlclient.ListOptions
+
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, l ctrlclient.ObjectList, o ...ctrlclient.ListOption) error {
+				if _, ok := l.(*resourcev1.DeviceClassList); ok {
+					for _, opt := range o {
+						opt.ApplyToList(&dcOpts)
+					}
+				}
+				return nil
+			},
+		).Times(2)
+
+		_, err := drh.deleteDRAResources(ctx, mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(dcOpts.Namespace).To(BeEmpty())
+		Expect(dcOpts.LabelSelector.String()).To(Equal(labels.SelectorFromSet(map[string]string{
+			constants.ModuleNameLabel:      modName,
+			constants.ModuleNamespaceLabel: modNS,
+		}).String()))
+	})
+
+	It("counts a DeviceClass that is still finalizing without asking again", func() {
+		now := metav1.Now()
+		listing(nil, []resourcev1.DeviceClass{{ObjectMeta: metav1.ObjectMeta{
+			Name: "class", DeletionTimestamp: &now,
+			Finalizers: []string{"tests.kmm.sigs.x-k8s.io/hold"},
+		}}})
+
+		// No Delete: it has been asked for, and asking again would wake this controller each pass.
+		remaining, err := drh.deleteDRAResources(ctx, mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(remaining).To(Equal(1))
+	})
+
+	It("pins the DaemonSet it read when it asks for it to go", func() {
+		ds := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{
+			Namespace: modNS, Name: "dra-ds", UID: "ds-uid", ResourceVersion: "9",
+		}}
+		listing([]appsv1.DaemonSet{ds}, nil)
+
+		// The delete pins the object that was read, so a same-named replacement is left alone.
+		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, o ctrlclient.Object, opts ...ctrlclient.DeleteOption) error {
+				do := &ctrlclient.DeleteOptions{}
+				for _, opt := range opts {
+					opt.ApplyToDelete(do)
+				}
+				Expect(*do.Preconditions.UID).To(Equal(ds.UID))
+				Expect(*do.Preconditions.ResourceVersion).To(Equal(ds.ResourceVersion))
+				Expect(*do.PropagationPolicy).To(Equal(metav1.DeletePropagationForeground))
+				return nil
+			},
+		)
+
+		remaining, err := drh.deleteDRAResources(ctx, mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(remaining).To(Equal(1))
+	})
+
+	It("counts a DeviceClass that is still there", func() {
+		dc := resourcev1.DeviceClass{ObjectMeta: metav1.ObjectMeta{Name: "gpu", UID: "dc-uid"}}
+		listing(nil, []resourcev1.DeviceClass{dc})
+
+		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).Return(nil)
+
+		remaining, err := drh.deleteDRAResources(ctx, mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(remaining).To(Equal(1))
+	})
+
+	It("reports a read failure, so an empty answer cannot be mistaken for an empty cluster", func() {
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		remaining, err := drh.deleteDRAResources(ctx, mod)
+		Expect(err).To(HaveOccurred())
+		Expect(remaining).To(BeZero())
+	})
+
+	It("reports a DeviceClass read failure rather than an empty cluster", func() {
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, l ctrlclient.ObjectList, _ ...ctrlclient.ListOption) error {
+				if _, ok := l.(*resourcev1.DeviceClassList); ok {
+					return fmt.Errorf("some error")
+				}
+				return nil
+			},
+		).AnyTimes()
+
+		remaining, err := drh.deleteDRAResources(ctx, mod)
+		Expect(err).To(HaveOccurred())
+		Expect(remaining).To(BeZero())
+	})
+
+	It("keeps the Module when a delete fails", func() {
+		ds := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: modNS, Name: "dra-ds"}}
+		listing([]appsv1.DaemonSet{ds}, nil)
+
+		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		remaining, err := drh.deleteDRAResources(ctx, mod)
+		Expect(err).To(HaveOccurred())
+		Expect(remaining).NotTo(BeZero())
+	})
+
+	It("reports the delete that failed as well as the read that came after it", func() {
+		ds := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: modNS, Name: "dra-ds"}}
+
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, l ctrlclient.ObjectList, _ ...ctrlclient.ListOption) error {
+				switch typed := l.(type) {
+				case *appsv1.DaemonSetList:
+					typed.Items = []appsv1.DaemonSet{ds}
+				case *resourcev1.DeviceClassList:
+					return fmt.Errorf("device class read failed")
+				}
+				return nil
+			},
+		).AnyTimes()
+
+		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("daemonset delete failed"))
+
+		remaining, err := drh.deleteDRAResources(ctx, mod)
+		Expect(remaining).To(BeZero())
+		Expect(err).To(MatchError(ContainSubstring("daemonset delete failed")))
+		Expect(err).To(MatchError(ContainSubstring("device class read failed")))
+	})
+})
+
+var _ = Describe("DRAReconciler_setFinalizer", func() {
+	const foreign = "example.com/someone-else"
+
 	var (
 		ctrl *gomock.Controller
 		clnt *client.MockClient
 		drh  draReconcilerHelper
+		mod  *kmmv1beta1.Module
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		drh = draReconcilerHelper{
-			client: clnt,
+		drh = draReconcilerHelper{client: clnt}
+		mod = &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:       "ns",
+				Name:            "mod",
+				ResourceVersion: "42",
+				Finalizers:      []string{foreign},
+			},
 		}
 	})
 
 	ctx := context.Background()
 
-	It("should delete all DaemonSets and DeviceClasses via DeleteAllOf", func() {
-		clnt.EXPECT().DeleteAllOf(ctx, &appsv1.DaemonSet{}, gomock.Any()).Return(nil)
-		clnt.EXPECT().DeleteAllOf(ctx, &resourcev1.DeviceClass{}, gomock.Any()).Return(nil)
+	It("writes nothing when the finalizer is already there", func() {
+		mod.Finalizers = append(mod.Finalizers, constants.DRAFinalizer)
 
-		err := drh.deleteDRAResources(ctx, "my-mod", "my-ns")
+		Expect(drh.setFinalizer(ctx, mod)).NotTo(HaveOccurred())
+	})
+
+	It("locks the write to the version it read, so a concurrent finalizer is not dropped", func() {
+		var sent []byte
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, o ctrlclient.Object, p ctrlclient.Patch, _ ...ctrlclient.PatchOption) error {
+				data, err := p.Data(o)
+				Expect(err).NotTo(HaveOccurred())
+				sent = data
+				return nil
+			},
+		)
+
+		Expect(drh.setFinalizer(ctx, mod)).NotTo(HaveOccurred())
+
+		var patch struct {
+			Metadata struct {
+				ResourceVersion string   `json:"resourceVersion"`
+				Finalizers      []string `json:"finalizers"`
+			} `json:"metadata"`
+		}
+		Expect(json.Unmarshal(sent, &patch)).To(Succeed())
+		Expect(patch.Metadata.ResourceVersion).To(Equal("42"))
+		Expect(patch.Metadata.Finalizers).To(ContainElements(foreign, constants.DRAFinalizer))
+		Expect(mod.Finalizers).To(ContainElement(constants.DRAFinalizer))
+	})
+
+	It("does not report protection the API server refused", func() {
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("conflict"))
+
+		Expect(drh.setFinalizer(ctx, mod)).To(HaveOccurred())
+	})
+})
+
+var _ = Describe("DRAReconciler_finalizeModule", func() {
+	const (
+		modName = "mod"
+		modNS   = "ns"
+		foreign = "example.com/someone-else"
+	)
+
+	var (
+		ctrl   *gomock.Controller
+		clnt   *client.MockClient
+		reader *client.MockClient
+		nm     *node.MockNode
+		drh    draReconcilerHelper
+		mod    *kmmv1beta1.Module
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		reader = client.NewMockClient(ctrl)
+		nm = node.NewMockNode(ctrl)
+		drh = draReconcilerHelper{client: clnt, apiReader: reader, nodeAPI: nm}
+		mod = &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:       modNS,
+				Name:            modName,
+				ResourceVersion: "7",
+				Finalizers:      []string{foreign, constants.DRAFinalizer},
+			},
+		}
+	})
+
+	ctx := context.Background()
+	targetLabel := utils.GetDRATargetNodeLabel(modNS, modName)
+
+	// emptyCluster returns an empty list for every type the finalizer reads, so both the node label
+	// cleanup and the resource cleanup find nothing. Both read through the API reader.
+	emptyCluster := func() {
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	}
+	// staleNode has the API reader return a node still carrying the label, which a stale cache would
+	// miss, and an empty list for every other type.
+	staleNode := func() {
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, l ctrlclient.ObjectList, _ ...ctrlclient.ListOption) error {
+				if nl, ok := l.(*v1.NodeList); ok {
+					nl.Items = []v1.Node{{ObjectMeta: metav1.ObjectMeta{
+						Name:   "stale-node",
+						Labels: map[string]string{targetLabel: ""},
+					}}}
+				}
+				return nil
+			},
+		).AnyTimes()
+	}
+
+	It("does nothing for a Module that never had the finalizer", func() {
+		mod.Finalizers = []string{foreign}
+		// No List, Delete, or Patch: an absent finalizer means nothing was written to tear down.
+
+		Expect(drh.finalizeModule(ctx, mod)).NotTo(HaveOccurred())
+		Expect(mod.Finalizers).To(Equal([]string{foreign}))
+	})
+
+	It("removes the finalizer once the labels and resources are gone", func() {
+		emptyCluster()
+
+		var sent []byte
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, o ctrlclient.Object, p ctrlclient.Patch, _ ...ctrlclient.PatchOption) error {
+				data, err := p.Data(o)
+				Expect(err).NotTo(HaveOccurred())
+				sent = data
+				return nil
+			},
+		)
+
+		Expect(drh.finalizeModule(ctx, mod)).NotTo(HaveOccurred())
+		Expect(string(sent)).To(ContainSubstring(`"resourceVersion":"7"`))
+		Expect(mod.Finalizers).NotTo(ContainElement(constants.DRAFinalizer))
+		Expect(mod.Finalizers).To(ContainElement(foreign))
+	})
+
+	It("clears a label the cache has not caught up on before releasing the Module", func() {
+		// The API reader still sees the label while a stale cache would read empty; the finalizer
+		// must not be released until that node is actually unlabelled, so the order is pinned.
+		staleNode()
+		gomock.InOrder(
+			nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(nil),
+			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(nil),
+		)
+
+		Expect(drh.finalizeModule(ctx, mod)).NotTo(HaveOccurred())
+		Expect(mod.Finalizers).NotTo(ContainElement(constants.DRAFinalizer))
+	})
+
+	It("keeps the finalizer when a stale node cannot be unlabelled", func() {
+		// The label removal fails, so the Module is held with no resource delete and no release.
+		staleNode()
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(fmt.Errorf("conflict"))
+
+		Expect(drh.finalizeModule(ctx, mod)).To(HaveOccurred())
+		Expect(mod.Finalizers).To(ContainElement(constants.DRAFinalizer))
+	})
+
+	It("keeps the finalizer while a DRA resource is still there", func() {
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, l ctrlclient.ObjectList, _ ...ctrlclient.ListOption) error {
+				if dsl, ok := l.(*appsv1.DaemonSetList); ok {
+					dsl.Items = []appsv1.DaemonSet{{ObjectMeta: metav1.ObjectMeta{Namespace: modNS, Name: "dra-ds"}}}
+				}
+				return nil
+			},
+		).AnyTimes()
+		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).Return(nil)
+
+		// No Patch: nothing releases the Module while a resource is still there.
+		Expect(drh.finalizeModule(ctx, mod)).NotTo(HaveOccurred())
+		Expect(mod.Finalizers).To(ContainElement(constants.DRAFinalizer))
+	})
+
+	It("stops before touching resources when the labels cannot be listed", func() {
+		// A label-listing failure holds the Module before any resource delete or release.
+		reader.EXPECT().List(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+
+		Expect(drh.finalizeModule(ctx, mod)).To(HaveOccurred())
+		Expect(mod.Finalizers).To(ContainElement(constants.DRAFinalizer))
+	})
+
+	It("keeps the Module when the release cannot be written", func() {
+		emptyCluster()
+		clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("conflict"))
+
+		Expect(drh.finalizeModule(ctx, mod)).To(HaveOccurred())
+	})
+})
+
+var _ = Describe("deleteDRAObjects", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+	})
+
+	ctx := context.Background()
+
+	It("pins the object it read, so a replacement under the same name is left alone", func() {
+		ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{
+			Namespace: "ns", Name: "ds", UID: "the-uid", ResourceVersion: "11",
+		}}
+
+		clnt.EXPECT().Delete(ctx, ds, gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ ctrlclient.Object, opts ...ctrlclient.DeleteOption) error {
+				do := &ctrlclient.DeleteOptions{}
+				for _, opt := range opts {
+					opt.ApplyToDelete(do)
+				}
+				Expect(*do.Preconditions.UID).To(BeEquivalentTo("the-uid"))
+				Expect(*do.Preconditions.ResourceVersion).To(Equal("11"))
+				Expect(*do.PropagationPolicy).To(Equal(metav1.DeletePropagationForeground))
+				return nil
+			},
+		)
+
+		count, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{ds})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(count).To(Equal(1))
+	})
+
+	It("leaves an object that is already going alone, and still counts it", func() {
+		now := metav1.Now()
+		dc := &resourcev1.DeviceClass{ObjectMeta: metav1.ObjectMeta{
+			Name: "class", UID: "dc-uid", ResourceVersion: "20",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"tests.kmm.sigs.x-k8s.io/hold"},
+		}}
+
+		// No Delete: asking again writes to the object and wakes the controller.
+		count, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{dc})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(count).To(Equal(1))
+	})
+
+	It("asks only for the ones that are not going yet, and counts both", func() {
+		now := metav1.Now()
+		going := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{
+			Namespace: "ns", Name: "going", DeletionTimestamp: &now,
+			Finalizers: []string{"tests.kmm.sigs.x-k8s.io/hold"},
+		}}
+		fresh := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "fresh"}}
+
+		clnt.EXPECT().Delete(ctx, fresh, gomock.Any()).Return(nil)
+
+		count, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{going, fresh})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(count).To(Equal(2))
+	})
+
+	It("does not fail over an object that has already gone", func() {
+		ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "ds"}}
+
+		clnt.EXPECT().Delete(ctx, ds, gomock.Any()).
+			Return(apierrors.NewNotFound(schema.GroupResource{}, "ds"))
+
+		_, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{ds})
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should return error when DaemonSet DeleteAllOf fails", func() {
-		clnt.EXPECT().DeleteAllOf(ctx, &appsv1.DaemonSet{}, gomock.Any()).Return(fmt.Errorf("ds delete failed"))
-		clnt.EXPECT().DeleteAllOf(ctx, &resourcev1.DeviceClass{}, gomock.Any()).Return(nil)
+	It("goes on to the rest when one delete fails", func() {
+		first := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "first"}}
+		second := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "second"}}
 
-		err := drh.deleteDRAResources(ctx, "my-mod", "my-ns")
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("DaemonSets"))
+		clnt.EXPECT().Delete(ctx, first, gomock.Any()).Return(fmt.Errorf("some error"))
+		clnt.EXPECT().Delete(ctx, second, gomock.Any()).Return(nil)
+
+		_, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{first, second})
+		Expect(err).To(MatchError("could not delete ns/first: some error"))
 	})
 
-	It("should return error when DeviceClass DeleteAllOf fails", func() {
-		clnt.EXPECT().DeleteAllOf(ctx, &appsv1.DaemonSet{}, gomock.Any()).Return(nil)
-		clnt.EXPECT().DeleteAllOf(ctx, &resourcev1.DeviceClass{}, gomock.Any()).Return(fmt.Errorf("dc delete failed"))
+	It("names a DeviceClass without a namespace", func() {
+		dc := &resourcev1.DeviceClass{ObjectMeta: metav1.ObjectMeta{Name: "class"}}
 
-		err := drh.deleteDRAResources(ctx, "my-mod", "my-ns")
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("DeviceClasses"))
-	})
+		clnt.EXPECT().Delete(ctx, dc, gomock.Any()).Return(fmt.Errorf("some error"))
 
-	It("should aggregate errors from both DeleteAllOf calls", func() {
-		clnt.EXPECT().DeleteAllOf(ctx, &appsv1.DaemonSet{}, gomock.Any()).Return(fmt.Errorf("ds error"))
-		clnt.EXPECT().DeleteAllOf(ctx, &resourcev1.DeviceClass{}, gomock.Any()).Return(fmt.Errorf("dc error"))
-
-		err := drh.deleteDRAResources(ctx, "my-mod", "my-ns")
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("DaemonSets"))
-		Expect(err.Error()).To(ContainSubstring("DeviceClasses"))
+		_, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{dc})
+		Expect(err).To(MatchError("could not delete class: some error"))
 	})
 })
