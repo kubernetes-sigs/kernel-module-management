@@ -74,7 +74,7 @@ func (r *PodNodeLabelReconciler) Reconcile(ctx context.Context, pod *v1.Pod) (ct
 			fieldSelector := client.MatchingFields{"spec.nodeName": nodeName}
 
 			var podsList v1.PodList
-			if err := r.client.List(ctx, &podsList, labelSelector, fieldSelector); err != nil {
+			if err := r.client.List(ctx, &podsList, client.InNamespace(pod.Namespace), labelSelector, fieldSelector); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to get list of pods for module %s on node %s: %v", moduleName, nodeName, err)
 			}
 
