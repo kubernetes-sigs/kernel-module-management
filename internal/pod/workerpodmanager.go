@@ -197,6 +197,13 @@ func (wpmi *workerPodManagerImpl) LoaderPodTemplate(ctx context.Context, nmc cli
 		privileged = true
 	}
 
+	if nms.Config.Modprobe.ModprobedDir != "" {
+		if err = addModprobedDirCopyCommand(pod, nms.Config.Modprobe.ModprobedDir); err != nil {
+			return nil, fmt.Errorf("could not add the modprobedDir copy command to the init container: %v", err)
+		}
+		privileged = true
+	}
+
 	if err = setWorkerConfigAnnotation(pod, nms.Config); err != nil {
 		return nil, fmt.Errorf("could not set worker config: %v", err)
 	}
@@ -234,7 +241,8 @@ func (wpmi *workerPodManagerImpl) UnloaderPodTemplate(ctx context.Context, nmc c
 		return nil, fmt.Errorf("could not set worker tolerations: %v", err)
 	}
 
-	if err = setWorkerSecurityContext(pod, wpmi.workerCfg, false); err != nil {
+	privileged := nms.Config.Modprobe.ModprobedDir != ""
+	if err = setWorkerSecurityContext(pod, wpmi.workerCfg, privileged); err != nil {
 		return nil, fmt.Errorf("could not set the worker Pod's security context: %v", err)
 	}
 
@@ -255,6 +263,12 @@ func (wpmi *workerPodManagerImpl) UnloaderPodTemplate(ctx context.Context, nmc c
 
 		if err = setFirmwareVolume(pod, firmwareHostPath); err != nil {
 			return nil, fmt.Errorf("could not map host volume needed for firmware unloading: %v", err)
+		}
+	}
+
+	if nms.Config.Modprobe.ModprobedDir != "" {
+		if err = addModprobedDirCopyCommand(pod, nms.Config.Modprobe.ModprobedDir); err != nil {
+			return nil, fmt.Errorf("could not add the modprobedDir copy command to the init container: %v", err)
 		}
 	}
 
@@ -508,7 +522,8 @@ func setWorkerSofdepConfig(pod *v1.Pod, modulesLoadingOrder []string) error {
 	softDepVolumeMount := v1.VolumeMount{
 		Name:      "modules-order",
 		ReadOnly:  true,
-		MountPath: "/etc/modprobe.d",
+		MountPath: "/etc/modprobe.d/softdep.conf",
+		SubPath:   "softdep.conf",
 	}
 	pod.Spec.Volumes = append(pod.Spec.Volumes, softdepVolume)
 	container, _ := podcmd.FindContainerByName(pod, WorkerContainerName)
@@ -534,6 +549,64 @@ cp -R %s %s;
 	container.Args[0] = strings.Join([]string{container.Args[0], copyCommand}, "")
 
 	return nil
+}
+
+func addModprobedDirCopyCommand(pod *v1.Pod, modprobedDir string) error {
+	container, _ := podcmd.FindContainerByName(pod, initContainerName)
+	if container == nil {
+		return errors.New("could not find the init container")
+	}
+
+	dst := filepath.Join(sharedFilesDir, modprobedDir)
+	const template = `
+src=%s
+dst=%s
+if [ ! -d "$src" ]; then
+  echo "modprobedDir $src is missing or not a directory" >&2
+  exit 1
+fi
+found=0
+for p in "$src"/* "$src"/.*; do
+  b=${p##*/}
+  if [ "$b" = "." ] || [ "$b" = ".." ]; then
+    continue
+  fi
+  if [ ! -e "$p" ]; then
+    continue
+  fi
+  if [ -d "$p" ]; then
+    echo "modprobedDir $src contains a subdirectory" >&2
+    exit 1
+  fi
+  if [ -f "$p" ]; then
+    found=1
+  fi
+done
+if [ "$found" -eq 0 ]; then
+  echo "modprobedDir $src contains no regular files" >&2
+  exit 1
+fi
+mkdir -p "$dst" || exit 1
+for p in "$src"/* "$src"/.*; do
+  b=${p##*/}
+  if [ "$b" = "." ] || [ "$b" = ".." ]; then
+    continue
+  fi
+  if [ -f "$p" ]; then
+    cp "$p" "$dst/" || exit 1
+  fi
+done
+`
+	copyCommand := fmt.Sprintf(template, shellSingleQuote(modprobedDir), shellSingleQuote(dst))
+	container.Args[0] = strings.Join([]string{container.Args[0], copyCommand}, "")
+
+	return nil
+}
+
+// shellSingleQuote wraps s in POSIX single quotes so /bin/sh -c treats it as
+// literal text (no $(), backticks, or variable expansion).
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func setFirmwareVolume(pod *v1.Pod, firmwareHostPath *string) error {

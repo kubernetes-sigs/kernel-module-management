@@ -29,6 +29,7 @@ const (
 	nmcName            = "nmc"
 	moduleName         = "my-module"
 	namespace          = "namespace"
+	testModprobedDir   = "/opt/driver/modprobe.d"
 )
 
 var (
@@ -126,7 +127,7 @@ var _ = Describe("CreateLoaderPod", func() {
 			Config:     moduleConfigToUse,
 		}
 
-		expected := getBaseWorkerPod("load", nmc, nil, false, true, nil)
+		expected := getBaseWorkerPod("load", nmc, nil, false, true, nil, false)
 
 		Expect(
 			controllerutil.SetControllerReference(nmc, expected, scheme),
@@ -185,7 +186,7 @@ var _ = Describe("CreateLoaderPod", func() {
 				Config:     moduleConfigToUse,
 			}
 
-			expected := getBaseWorkerPod("load", nmc, firmwareHostPath, withFirmwareLoading, true, mi.ImageRepoSecret)
+			expected := getBaseWorkerPod("load", nmc, firmwareHostPath, withFirmwareLoading, true, mi.ImageRepoSecret, false)
 
 			Expect(
 				controllerutil.SetControllerReference(nmc, expected, scheme),
@@ -243,6 +244,198 @@ var _ = Describe("CreateLoaderPod", func() {
 		Entry("firmwareHostPath set, firmware loading not requested", ptr.To("some-path"), false),
 		Entry("firmwareHostPath set , firmware loading requested", ptr.To("some-path"), true),
 	)
+
+	It("should privilege the worker and stage modprobedDir when set", func() {
+		moduleConfigToUse.Modprobe.ModprobedDir = testModprobedDir
+
+		nms := &kmmv1beta1.NodeModuleSpec{
+			ModuleItem: mi,
+			Config:     moduleConfigToUse,
+		}
+
+		expected := getBaseWorkerPod("load", nmc, nil, false, true, mi.ImageRepoSecret, true)
+
+		Expect(
+			controllerutil.SetControllerReference(nmc, expected, scheme),
+		).NotTo(
+			HaveOccurred(),
+		)
+
+		controllerutil.AddFinalizer(expected, NodeModulesConfigFinalizer)
+
+		container, _ := podcmd.FindContainerByName(expected, "worker")
+		Expect(container).NotTo(BeNil())
+
+		container.SecurityContext = &v1.SecurityContext{
+			Privileged: ptr.To(true),
+			RunAsUser:  workerCfg.RunAsUser,
+		}
+
+		hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
+
+		gomock.InOrder(
+			client.EXPECT().Create(ctx, cmpmock.DiffEq(expected)),
+		)
+
+		workerCfg := *workerCfg
+
+		kli := &workerPodManagerImpl{
+			client:      client,
+			scheme:      scheme,
+			workerImage: workerImage,
+			workerCfg:   &workerCfg,
+		}
+
+		Expect(
+			kli.CreateLoaderPod(ctx, nmc, nms),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should stage modprobedDir together with firmware", func() {
+		moduleConfigToUse.Modprobe.FirmwarePath = "/firmware-path"
+		moduleConfigToUse.Modprobe.ModprobedDir = testModprobedDir
+
+		nms := &kmmv1beta1.NodeModuleSpec{
+			ModuleItem: mi,
+			Config:     moduleConfigToUse,
+		}
+
+		firmwareHostPath := ptr.To("some-path")
+		expected := getBaseWorkerPod("load", nmc, firmwareHostPath, true, true, mi.ImageRepoSecret, true)
+
+		Expect(
+			controllerutil.SetControllerReference(nmc, expected, scheme),
+		).NotTo(
+			HaveOccurred(),
+		)
+
+		controllerutil.AddFinalizer(expected, NodeModulesConfigFinalizer)
+
+		container, _ := podcmd.FindContainerByName(expected, "worker")
+		Expect(container).NotTo(BeNil())
+
+		container.SecurityContext = &v1.SecurityContext{
+			Privileged: ptr.To(true),
+			RunAsUser:  workerCfg.RunAsUser,
+		}
+
+		hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
+
+		gomock.InOrder(
+			client.EXPECT().Create(ctx, cmpmock.DiffEq(expected)),
+		)
+
+		workerCfg := *workerCfg
+		workerCfg.FirmwareHostPath = firmwareHostPath
+
+		kli := &workerPodManagerImpl{
+			client:      client,
+			scheme:      scheme,
+			workerImage: workerImage,
+			workerCfg:   &workerCfg,
+		}
+
+		Expect(
+			kli.CreateLoaderPod(ctx, nmc, nms),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should not mount softdep when modprobedDir is set without modulesLoadingOrder", func() {
+		moduleConfigToUse.Modprobe.ModulesLoadingOrder = nil
+		moduleConfigToUse.Modprobe.ModprobedDir = testModprobedDir
+
+		nms := &kmmv1beta1.NodeModuleSpec{
+			ModuleItem: mi,
+			Config:     moduleConfigToUse,
+		}
+
+		expected := getBaseWorkerPod("load", nmc, nil, false, true, mi.ImageRepoSecret, true)
+		stripSoftdep(expected)
+		expected.Annotations[configAnnotationKey] = strings.ReplaceAll(
+			expected.Annotations[configAnnotationKey],
+			`  modulesLoadingOrder:
+  - a
+  - b
+  - c
+`,
+			"",
+		)
+
+		Expect(
+			controllerutil.SetControllerReference(nmc, expected, scheme),
+		).NotTo(
+			HaveOccurred(),
+		)
+
+		controllerutil.AddFinalizer(expected, NodeModulesConfigFinalizer)
+
+		container, _ := podcmd.FindContainerByName(expected, "worker")
+		Expect(container).NotTo(BeNil())
+
+		container.SecurityContext = &v1.SecurityContext{
+			Privileged: ptr.To(true),
+			RunAsUser:  workerCfg.RunAsUser,
+		}
+
+		hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
+
+		gomock.InOrder(
+			client.EXPECT().Create(ctx, cmpmock.DiffEq(expected)),
+		)
+
+		workerCfg := *workerCfg
+
+		kli := &workerPodManagerImpl{
+			client:      client,
+			scheme:      scheme,
+			workerImage: workerImage,
+			workerCfg:   &workerCfg,
+		}
+
+		Expect(
+			kli.CreateLoaderPod(ctx, nmc, nms),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("quotes modprobedDir so shell metacharacters are literal", func() {
+		const injected = `/opt/driver/$(touch /tmp/marker)`
+		moduleConfigToUse.Modprobe.ModprobedDir = injected
+
+		nms := &kmmv1beta1.NodeModuleSpec{
+			ModuleItem: mi,
+			Config:     moduleConfigToUse,
+		}
+
+		kli := &workerPodManagerImpl{
+			client:      client,
+			scheme:      scheme,
+			workerImage: workerImage,
+			workerCfg:   workerCfg,
+		}
+
+		pod, err := kli.LoaderPodTemplate(ctx, nmc, nms)
+		Expect(err).NotTo(HaveOccurred())
+
+		init, _ := podcmd.FindContainerByName(pod, initContainerName)
+		Expect(init).NotTo(BeNil())
+		Expect(init.Args[0]).To(ContainSubstring("src='" + injected + "'"))
+		Expect(init.Args[0]).To(ContainSubstring("dst='/tmp" + injected + "'"))
+	})
 })
 
 var _ = Describe("CreateUnloaderPod", func() {
@@ -305,7 +498,7 @@ var _ = Describe("CreateUnloaderPod", func() {
 
 	It("should work as expected", func() {
 
-		expected := getBaseWorkerPod("unload", nmc, ptr.To("/lib/firmware"), true, false, mi.ImageRepoSecret)
+		expected := getBaseWorkerPod("unload", nmc, ptr.To("/lib/firmware"), true, false, mi.ImageRepoSecret, false)
 
 		container, _ := podcmd.FindContainerByName(expected, "worker")
 		Expect(container).NotTo(BeNil())
@@ -316,6 +509,70 @@ var _ = Describe("CreateUnloaderPod", func() {
 			},
 			RunAsUser:      workerCfg.RunAsUser,
 			SELinuxOptions: &v1.SELinuxOptions{Type: workerCfg.SELinuxType},
+		}
+
+		hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
+
+		client.EXPECT().Create(ctx, cmpmock.DiffEq(expected))
+
+		workerCfg := *workerCfg
+		workerCfg.FirmwareHostPath = ptr.To("/lib/firmware")
+
+		wpm := NewWorkerPodManager(client, workerImage, scheme, &workerCfg)
+
+		Expect(
+			wpm.CreateUnloaderPod(ctx, nmc, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should privilege the worker and stage modprobedDir when set", func() {
+		moduleConfigToUse.Modprobe.FirmwarePath = ""
+		moduleConfigToUse.Modprobe.ModprobedDir = testModprobedDir
+		status.Config = moduleConfigToUse
+
+		expected := getBaseWorkerPod("unload", nmc, nil, false, false, mi.ImageRepoSecret, true)
+
+		container, _ := podcmd.FindContainerByName(expected, "worker")
+		Expect(container).NotTo(BeNil())
+
+		container.SecurityContext = &v1.SecurityContext{
+			Privileged: ptr.To(true),
+			RunAsUser:  workerCfg.RunAsUser,
+		}
+
+		hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		expected.Annotations[hashAnnotationKey] = fmt.Sprintf("%d", hash)
+
+		client.EXPECT().Create(ctx, cmpmock.DiffEq(expected))
+
+		wpm := NewWorkerPodManager(client, workerImage, scheme, workerCfg)
+
+		Expect(
+			wpm.CreateUnloaderPod(ctx, nmc, status),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
+
+	It("should stage modprobedDir together with firmware and run privileged", func() {
+		moduleConfigToUse.Modprobe.ModprobedDir = testModprobedDir
+		status.Config = moduleConfigToUse
+
+		expected := getBaseWorkerPod("unload", nmc, ptr.To("/lib/firmware"), true, false, mi.ImageRepoSecret, true)
+
+		container, _ := podcmd.FindContainerByName(expected, "worker")
+		Expect(container).NotTo(BeNil())
+
+		container.SecurityContext = &v1.SecurityContext{
+			Privileged: ptr.To(true),
+			RunAsUser:  workerCfg.RunAsUser,
 		}
 
 		hash, err := hashstructure.Hash(expected, hashstructure.FormatV2, nil)
@@ -429,7 +686,7 @@ var _ = Describe("ListWorkerPodsOnNode", func() {
 })
 
 func getBaseWorkerPod(subcommand string, owner ctrlclient.Object, firmwareHostPath *string,
-	withFirmware, isLoaderPod bool, imagePullSecret *v1.LocalObjectReference) *v1.Pod {
+	withFirmware, isLoaderPod bool, imagePullSecret *v1.LocalObjectReference, withModprobedDir bool) *v1.Pod {
 	GinkgoHelper()
 
 	const (
@@ -483,6 +740,23 @@ cp -R /firmware-path/* /tmp/firmware-path;
 		initContainerArg = strings.Join([]string{initContainerArg, initContainerArgFirmwareAddition}, "")
 	} else {
 		configAnnotationValue = strings.ReplaceAll(configAnnotationValue, "firmwarePath: /firmware-path\n  ", "")
+	}
+	if withModprobedDir {
+		modprobedDirYAML := "  modprobedDir: " + testModprobedDir + "\n"
+		if withFirmware {
+			configAnnotationValue = strings.ReplaceAll(
+				configAnnotationValue,
+				"  firmwarePath: /firmware-path\n",
+				"  firmwarePath: /firmware-path\n"+modprobedDirYAML,
+			)
+		} else {
+			configAnnotationValue = strings.ReplaceAll(
+				configAnnotationValue,
+				"  dirName: /dir\n",
+				"  dirName: /dir\n"+modprobedDirYAML,
+			)
+		}
+		initContainerArg = strings.Join([]string{initContainerArg, modprobedDirInitCommand()}, "")
 	}
 	tolerationAnotationValue := "- effect: NoExecute\n  key: test-key\n  value: test-value\n"
 	annotations := map[string]string{
@@ -608,7 +882,8 @@ cp -R /firmware-path/* /tmp/firmware-path;
 		softDepVolumeMount := v1.VolumeMount{
 			Name:      "modules-order",
 			ReadOnly:  true,
-			MountPath: "/etc/modprobe.d",
+			MountPath: "/etc/modprobe.d/softdep.conf",
+			SubPath:   "softdep.conf",
 		}
 		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, softDepVolumeMount)
 		softdepVolume := v1.Volume{
@@ -659,4 +934,68 @@ cp -R /firmware-path/* /tmp/firmware-path;
 	controllerutil.AddFinalizer(&pod, NodeModulesConfigFinalizer)
 
 	return &pod
+}
+
+func modprobedDirInitCommand() string {
+	return `
+src='/opt/driver/modprobe.d'
+dst='/tmp/opt/driver/modprobe.d'
+if [ ! -d "$src" ]; then
+  echo "modprobedDir $src is missing or not a directory" >&2
+  exit 1
+fi
+found=0
+for p in "$src"/* "$src"/.*; do
+  b=${p##*/}
+  if [ "$b" = "." ] || [ "$b" = ".." ]; then
+    continue
+  fi
+  if [ ! -e "$p" ]; then
+    continue
+  fi
+  if [ -d "$p" ]; then
+    echo "modprobedDir $src contains a subdirectory" >&2
+    exit 1
+  fi
+  if [ -f "$p" ]; then
+    found=1
+  fi
+done
+if [ "$found" -eq 0 ]; then
+  echo "modprobedDir $src contains no regular files" >&2
+  exit 1
+fi
+mkdir -p "$dst" || exit 1
+for p in "$src"/* "$src"/.*; do
+  b=${p##*/}
+  if [ "$b" = "." ] || [ "$b" = ".." ]; then
+    continue
+  fi
+  if [ -f "$p" ]; then
+    cp "$p" "$dst/" || exit 1
+  fi
+done
+`
+}
+
+func stripSoftdep(pod *v1.Pod) {
+	GinkgoHelper()
+
+	delete(pod.Annotations, modulesOrderKey)
+
+	mounts := make([]v1.VolumeMount, 0, len(pod.Spec.Containers[0].VolumeMounts))
+	for _, m := range pod.Spec.Containers[0].VolumeMounts {
+		if m.Name != "modules-order" {
+			mounts = append(mounts, m)
+		}
+	}
+	pod.Spec.Containers[0].VolumeMounts = mounts
+
+	vols := make([]v1.Volume, 0, len(pod.Spec.Volumes))
+	for _, v := range pod.Spec.Volumes {
+		if v.Name != "modules-order" {
+			vols = append(vols, v)
+		}
+	}
+	pod.Spec.Volumes = vols
 }
