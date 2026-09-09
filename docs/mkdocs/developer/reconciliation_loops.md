@@ -27,7 +27,10 @@ Each time a new `Module` is created, we need to find to which nodes it applies.
 A separate DRA reconciler watches `Module` resources that have `.spec.dra` set.
 
 1. When a `Module` has `.spec.dra` configured, the DRA reconciler creates a DRA driver `DaemonSet` targeting nodes
-   where the kernel module is loaded.
+   where the kernel module is loaded and that carry the `kmm.node.kubernetes.io/$namespace.$module.dra-target` label.
+   The reconciler puts that label on every schedulable node the `Module` selects and does not remove it, so a node that
+   stops being selected keeps its driver Pod. A `Module` with no `.spec.moduleLoader` has no kernel module to unload,
+   so its `DaemonSet` targets `.spec.selector` directly and no such label is written.
 
 1. It also creates and manages cluster-scoped `DeviceClass` resources as declared in `.spec.dra.deviceClasses`.
    DeviceClasses are tracked via labels (`kmm.node.kubernetes.io/module.name` and
@@ -38,3 +41,6 @@ A separate DRA reconciler watches `Module` resources that have `.spec.dra` set.
 
 1. During [ordered upgrades](../documentation/ordered_upgrade.md), a new DRA `DaemonSet` is created for the new module
    version. Once the old-version `DaemonSet` is no longer scheduled on any node, it is garbage-collected.
+
+1. We watch `Module`, owned `DaemonSet`, `DeviceClass` and nodes, since the `dra-target` label is decided from a
+   node's own labels and taints.
