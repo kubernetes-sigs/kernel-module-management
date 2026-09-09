@@ -20,10 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	appsv1 "k8s.io/api/apps/v1"
@@ -57,17 +59,20 @@ const (
 
 type DRAReconciler struct {
 	client         client.Client
+	filter         *filter.Filter
 	reconHelperAPI draReconcilerHelperAPI
 }
 
 func NewDRAReconciler(
 	client client.Client,
+	filter *filter.Filter,
 	nodeAPI node.Node,
 	scheme *runtime.Scheme,
 ) *DRAReconciler {
 	reconHelperAPI := newDRAReconcilerHelper(client, nodeAPI, scheme)
 	return &DRAReconciler{
 		client:         client,
+		filter:         filter,
 		reconHelperAPI: reconHelperAPI,
 	}
 }
@@ -80,6 +85,12 @@ func (r *DRAReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&resourcev1.DeviceClass{},
 			handler.EnqueueRequestsFromMapFunc(filter.DeviceClassToModuleReconcileRequest),
 			builder.WithPredicates(filter.HasLabel(constants.ModuleNameLabel)),
+		).
+		// The target label is decided from the node's labels and taints; no other watch sees those.
+		Watches(
+			&v1.Node{},
+			handler.EnqueueRequestsFromMapFunc(r.filter.FindModulesForNode),
+			builder.WithPredicates(filter.ModuleReconcilerNodePredicate()),
 		).
 		Named(DRAReconcilerName).
 		Complete(
@@ -111,6 +122,10 @@ func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, r.reconHelperAPI.clearDRAStatus(ctx, mod)
+	}
+
+	if err = r.reconHelperAPI.handleDRATargetLabels(ctx, mod); err != nil {
+		return res, fmt.Errorf("could not reconcile dra-target labels: %v", err)
 	}
 
 	err = r.reconHelperAPI.handleDRA(ctx, mod, existingDRADS)
@@ -149,6 +164,7 @@ type draReconcilerHelperAPI interface {
 	clearDRAStatus(ctx context.Context, mod *kmmv1beta1.Module) error
 	getModuleDeviceClasses(ctx context.Context, name, namespace string) ([]resourcev1.DeviceClass, error)
 	handleDeviceClasses(ctx context.Context, mod *kmmv1beta1.Module, existingDCs []resourcev1.DeviceClass) error
+	handleDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
 }
 
 type draReconcilerHelper struct {
@@ -167,6 +183,44 @@ func newDRAReconcilerHelper(client client.Client,
 		daemonSetHelper: daemonSetHelper,
 		nodeAPI:         nodeAPI,
 	}
+}
+
+// draTolerations includes the pressure tolerations that the DaemonSet controller adds to its Pods.
+func draTolerations(mod *kmmv1beta1.Module) []v1.Toleration {
+	return slices.Concat(mod.Spec.Tolerations, module.InternalTolerations)
+}
+
+// handleDRATargetLabels ensures the dra-target label is present on schedulable nodes targeted by
+// the Module. It does not remove the label yet.
+func (drh *draReconcilerHelper) handleDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
+	if mod.Spec.DRA == nil {
+		return nil
+	}
+
+	targetLabel := utils.GetDRATargetNodeLabel(mod.Namespace, mod.Name)
+
+	nodes, err := drh.nodeAPI.GetAllNodesBySelector(ctx, mod.Spec.Selector)
+	if err != nil {
+		return fmt.Errorf("could not list nodes targeted by module: %v", err)
+	}
+
+	tolerations := draTolerations(mod)
+
+	var errs []error
+	for i := range nodes {
+		node := &nodes[i]
+		// UpdateLabels always sends a PATCH; skip only the exact "" the DaemonSet selector matches.
+		value, labelled := node.Labels[targetLabel]
+		if (labelled && value == "") || !drh.nodeAPI.IsNodeSchedulable(node, tolerations) {
+			continue
+		}
+
+		if err := drh.nodeAPI.UpdateLabels(ctx, node, map[string]string{targetLabel: ""}, nil); err != nil {
+			errs = append(errs, fmt.Errorf("could not add dra-target label to node %s: %v", node.Name, err))
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 func (drh *draReconcilerHelper) getModuleDRADaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
@@ -200,8 +254,29 @@ func (drh *draReconcilerHelper) handleDRA(ctx context.Context, mod *kmmv1beta1.M
 		}
 	}
 
+	targetLabel := utils.GetDRATargetNodeLabel(mod.Namespace, mod.Name)
+	creating := ds.Name == ""
+
 	opRes, err := controllerutil.CreateOrPatch(ctx, drh.client, ds, func() error {
-		return drh.daemonSetHelper.setDRAAsDesired(ctx, ds, mod)
+		// Requiring the label on a live DaemonSet drops Pods from unlabelled nodes; keep its entry.
+		held, wasSet := ds.Spec.Template.Spec.NodeSelector[targetLabel]
+
+		if err := drh.daemonSetHelper.setDRAAsDesired(ctx, ds, mod); err != nil {
+			return err
+		}
+
+		// Without a loader the node selector is the Module's own map, which must not be edited.
+		if creating || mod.Spec.ModuleLoader == nil {
+			return nil
+		}
+
+		if wasSet {
+			ds.Spec.Template.Spec.NodeSelector[targetLabel] = held
+		} else {
+			delete(ds.Spec.Template.Spec.NodeSelector, targetLabel)
+		}
+
+		return nil
 	})
 
 	if err == nil {
@@ -292,7 +367,7 @@ func (drh *draReconcilerHelper) moduleUpdateDRAStatus(ctx context.Context,
 		return nil
 	}
 
-	numTargetedNodes, err := drh.nodeAPI.GetNumTargetedNodes(ctx, mod.Spec.Selector, mod.Spec.Tolerations)
+	numTargetedNodes, err := drh.nodeAPI.GetNumTargetedNodes(ctx, mod.Spec.Selector, draTolerations(mod))
 	if err != nil {
 		return fmt.Errorf("failed to determine the number of nodes targeted by Module %s/%s selector: %v", mod.Namespace, mod.Name, err)
 	}
@@ -510,6 +585,7 @@ func (dsci *draDaemonSetCreatorImpl) setDRAAsDesired(
 
 	nodeSelector := map[string]string{
 		utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name): "",
+		utils.GetDRATargetNodeLabel(mod.Namespace, mod.Name):         "",
 	}
 
 	if mod.Spec.ModuleLoader != nil {
