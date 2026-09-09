@@ -25,6 +25,15 @@ var InternalTolerations = []v1.Toleration{
 	},
 }
 
+// EffectiveTolerations returns the tolerations KMM uses to decide whether a node is a target of a
+// Module: the ones the user declared, plus the pressure taints KMM always tolerates. It always
+// returns a new slice, so the Module's own tolerations are never appended to in place.
+func EffectiveTolerations(userTolerations []v1.Toleration) []v1.Toleration {
+	tolerations := make([]v1.Toleration, 0, len(userTolerations)+len(InternalTolerations))
+	tolerations = append(tolerations, userTolerations...)
+	return append(tolerations, InternalTolerations...)
+}
+
 // AppendToTag adds the specified tag to the image name cleanly, i.e. by avoiding messing up
 // the name or getting "name:-tag"
 func AppendToTag(name string, tag string) string {
