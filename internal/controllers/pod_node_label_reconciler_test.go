@@ -3,6 +3,9 @@ package controllers
 import (
 	"context"
 	"errors"
+	"fmt"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	mock_client "github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
@@ -36,6 +39,25 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 	})
 
 	ctx := context.Background()
+
+	Context("a node that has gone", func() {
+		It("counts as unlabeled, so the pod finalizer is not held for a node that no longer exists", func() {
+			kubeClient.EXPECT().
+				Get(ctx, types.NamespacedName{Name: nodeName}, gomock.Any()).
+				Return(apierrors.NewNotFound(schema.GroupResource{Resource: "nodes"}, nodeName))
+
+			// No Patch: there is nothing left to take the label off.
+			Expect(r.deleteLabel(ctx, nodeName, "some-label")).To(Succeed())
+		})
+
+		It("still reports a real read failure, so the label is not assumed gone", func() {
+			kubeClient.EXPECT().
+				Get(ctx, types.NamespacedName{Name: nodeName}, gomock.Any()).
+				Return(apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, nodeName, fmt.Errorf("nope")))
+
+			Expect(r.deleteLabel(ctx, nodeName, "some-label")).NotTo(Succeed())
+		})
+	})
 
 	Context("device-plugin pods", func() {
 		It("should return an error if the pod is not labeled", func() {
@@ -141,7 +163,7 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 			kubeClient.EXPECT().Patch(ctx, gomock.AssignableToTypeOf(&v1.Pod{}), gomock.Any()).Do(
 				func(_ interface{}, pod *v1.Pod, p client.Patch, _ ...client.GetOption) {
 					Expect(p.Type()).To(Equal(types.MergePatchType))
-					Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null}}`)))
+					Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null,"resourceVersion":"1"}}`)))
 				},
 			)
 
@@ -152,6 +174,7 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 					Labels:            map[string]string{constants.ModuleNameLabel: moduleName},
 					Name:              podName,
 					Namespace:         podNamespace,
+					ResourceVersion:   "1",
 				},
 			}
 
@@ -175,10 +198,11 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Finalizers: []string{constants.NodeLabelerFinalizer},
-					Labels:     map[string]string{constants.ModuleNameLabel: moduleName},
-					Name:       podName,
-					Namespace:  podNamespace,
+					Finalizers:      []string{constants.NodeLabelerFinalizer},
+					Labels:          map[string]string{constants.ModuleNameLabel: moduleName},
+					Name:            podName,
+					Namespace:       podNamespace,
+					ResourceVersion: "1",
 				},
 				Spec: v1.PodSpec{NodeName: nodeName},
 				Status: v1.PodStatus{
@@ -269,7 +293,7 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 
 			patchRemoveFinalizerFunc := func(_ interface{}, pod *v1.Pod, p client.Patch, _ ...client.GetOption) {
 				Expect(p.Type()).To(Equal(types.MergePatchType))
-				Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null}}`)))
+				Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null,"resourceVersion":"1"}}`)))
 			}
 
 			gomock.InOrder(
@@ -286,12 +310,42 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 					Labels:            map[string]string{constants.ModuleNameLabel: moduleName},
 					Name:              podName,
 					Namespace:         podNamespace,
+					ResourceVersion:   "1",
 				},
 				Spec: v1.PodSpec{NodeName: nodeName},
 			}
 
 			_, err := r.Reconcile(ctx, pod)
 			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("a pod another controller is also holding", func() {
+		It("takes only its own finalizer off, and fails on a stale read rather than dropping theirs", func() {
+			const foreign = "example.com/other-controller"
+
+			now := metav1.Now()
+			pod := &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					DeletionTimestamp: &now,
+					Finalizers:        []string{constants.NodeLabelerFinalizer, foreign},
+					Name:              podName,
+					ResourceVersion:   "42",
+				},
+			}
+
+			kubeClient.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, o client.Object, patch client.Patch, _ ...client.PatchOption) error {
+					data, err := patch.Data(o)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(string(data)).To(ContainSubstring(foreign))
+					Expect(string(data)).NotTo(ContainSubstring(constants.NodeLabelerFinalizer))
+					Expect(string(data)).To(ContainSubstring(`"resourceVersion":"42"`))
+					return nil
+				},
+			)
+
+			Expect(r.deleteFinalizer(ctx, pod)).To(Succeed())
 		})
 	})
 
@@ -489,8 +543,9 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 						constants.ModuleNameLabel: moduleName,
 						constants.DaemonSetRole:   constants.DRARoleLabelValue,
 					},
-					Name:      podName,
-					Namespace: podNamespace,
+					Name:            podName,
+					Namespace:       podNamespace,
+					ResourceVersion: "1",
 				},
 				Spec: v1.PodSpec{NodeName: nodeName},
 				Status: v1.PodStatus{
@@ -513,7 +568,7 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 			kubeClient.EXPECT().Patch(ctx, gomock.AssignableToTypeOf(&v1.Pod{}), gomock.Any()).Do(
 				func(_ interface{}, pod *v1.Pod, p client.Patch, _ ...client.GetOption) {
 					Expect(p.Type()).To(Equal(types.MergePatchType))
-					Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null}}`)))
+					Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null,"resourceVersion":"1"}}`)))
 				},
 			)
 
@@ -525,8 +580,9 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 						constants.ModuleNameLabel: moduleName,
 						constants.DaemonSetRole:   constants.DRARoleLabelValue,
 					},
-					Name:      podName,
-					Namespace: podNamespace,
+					Name:            podName,
+					Namespace:       podNamespace,
+					ResourceVersion: "1",
 				},
 			}
 
@@ -546,7 +602,7 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 
 			patchRemoveFinalizerFunc := func(_ interface{}, pod *v1.Pod, p client.Patch, _ ...client.GetOption) {
 				Expect(p.Type()).To(Equal(types.MergePatchType))
-				Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null}}`)))
+				Expect(p.Data(pod)).To(Equal([]byte(`{"metadata":{"finalizers":null,"resourceVersion":"1"}}`)))
 			}
 
 			gomock.InOrder(
@@ -564,8 +620,9 @@ var _ = Describe("PodNodeLabelReconciler_Reconcile", func() {
 						constants.ModuleNameLabel: moduleName,
 						constants.DaemonSetRole:   constants.DRARoleLabelValue,
 					},
-					Name:      podName,
-					Namespace: podNamespace,
+					Name:            podName,
+					Namespace:       podNamespace,
+					ResourceVersion: "1",
 				},
 				Spec: v1.PodSpec{NodeName: nodeName},
 			}
