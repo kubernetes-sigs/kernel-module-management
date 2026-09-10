@@ -35,7 +35,8 @@ modules that rely on this pattern cannot be reliably unloaded through KMM.
   modprobe.d files live, via a new field on the Module API. KMM always
   copies those files to the same fixed location on the worker pod
   (`/etc/modprobe.d/`), regardless of the configured source path.
-  Modules that don't set the field are unaffected (see NFR-2).
+  Modules that don't set the field continue to load and unload as today
+  (see NFR-2).
 
 ### 2.2 Non-Goals
 
@@ -59,13 +60,12 @@ effect. KMM copies the directory as-is and does not rename or filter by
 extension.
 
 `ModulesLoadingOrder` continues to be a `softdep.conf` file in that
-directory. When both capabilities are enabled, KMM mounts that file
-read-only at `/etc/modprobe.d/softdep.conf` and copies the user's files
-next to it. The directory stays writable, so `modprobe` reads both.
-If the user image already contains a file named `softdep.conf`, the copy
-fails rather than overwriting KMM's file (FR-9).
-
-When `modprobedDir` is not set, `ModulesLoadingOrder` is unchanged.
+directory. KMM always mounts that file read-only at
+`/etc/modprobe.d/softdep.conf` (file-level `subPath`), so the rest of
+the directory stays writable. When both capabilities are enabled, the
+worker's copy of the user's files lands next to it. If the user image
+already contains a file named `softdep.conf`, the copy fails rather than
+overwriting KMM's file (FR-9).
 
 ## 3. Requirements
 
@@ -116,8 +116,9 @@ When `modprobedDir` is not set, `ModulesLoadingOrder` is unchanged.
   that enabling the modprobe.d capability implies this elevated privilege
   level for the module's worker pods.
 - **NFR-2:** Modules that do not enable the modprobe.d capability continue
-  to behave exactly as they do today — this capability introduces no
-  change for existing modules.
+  to load and unload as they do today. The only related change is that
+  `ModulesLoadingOrder` always uses a file-level mount of `softdep.conf`
+  rather than overlaying the whole `/etc/modprobe.d` directory.
 - **NFR-3:** When the modprobe.d configuration cannot be applied (per
   FR-4, FR-5, or FR-9), the user must be able to observe the failure and
   its cause through the Module's status or a Kubernetes event, without
