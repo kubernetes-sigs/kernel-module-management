@@ -70,7 +70,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 
 	ctx := context.Background()
 
-	DescribeTable("check error flows", func(getDSError, getDCError, handleDRAError, gcError, handleDCError bool) {
+	DescribeTable("check error flows", func(getDSError, getDCError, targetLabelError, handleDRAError, gcError, handleDCError bool) {
 		draDS := []appsv1.DaemonSet{{}}
 		returnedError := fmt.Errorf("some error")
 		if getDSError {
@@ -83,6 +83,11 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil)
+		if targetLabelError {
+			mockReconHelper.EXPECT().handleDRATargetLabels(ctx, mod).Return(returnedError)
+			goto executeTestFunction
+		}
+		mockReconHelper.EXPECT().handleDRATargetLabels(ctx, mod).Return(nil)
 		if handleDRAError {
 			mockReconHelper.EXPECT().handleDRA(ctx, mod, draDS).Return(returnedError)
 			goto executeTestFunction
@@ -107,12 +112,13 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 
 	},
-		Entry("getModuleDRADaemonSets failed", true, false, false, false, false),
-		Entry("getModuleDeviceClasses failed", false, true, false, false, false),
-		Entry("handleDRA failed", false, false, true, false, false),
-		Entry("garbageCollectDRADaemonSets failed", false, false, false, true, false),
-		Entry("handleDeviceClasses failed", false, false, false, false, true),
-		Entry("moduleUpdateDRAStatus failed", false, false, false, false, false),
+		Entry("getModuleDRADaemonSets failed", true, false, false, false, false, false),
+		Entry("getModuleDeviceClasses failed", false, true, false, false, false, false),
+		Entry("handleDRATargetLabels failed", false, false, true, false, false, false),
+		Entry("handleDRA failed", false, false, false, true, false, false),
+		Entry("garbageCollectDRADaemonSets failed", false, false, false, false, true, false),
+		Entry("handleDeviceClasses failed", false, false, false, false, false, true),
+		Entry("moduleUpdateDRAStatus failed", false, false, false, false, false, false),
 	)
 
 	It("Good flow", func() {
@@ -120,6 +126,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
 			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
+			mockReconHelper.EXPECT().handleDRATargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().handleDRA(ctx, mod, draDS).Return(nil),
 			mockReconHelper.EXPECT().garbageCollectDRADaemonSets(ctx, mod, draDS).Return(nil),
 			mockReconHelper.EXPECT().handleDeviceClasses(ctx, mod, []resourcev1.DeviceClass(nil)).Return(nil),
@@ -207,6 +214,221 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).To(HaveOccurred())
+	})
+})
+
+var _ = Describe("DRAReconciler_setDRAAsDesired_targetSelector", func() {
+	const (
+		modName = "my-mod"
+		modNS   = "my-ns"
+	)
+
+	ctx := context.Background()
+	targetLabel := utils.GetDRATargetNodeLabel(modNS, modName)
+
+	mod := func(withLoader bool) *kmmv1beta1.Module {
+		m := &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Namespace: modNS, Name: modName},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA:      &kmmv1beta1.DRASpec{Container: kmmv1beta1.CommonContainerSpec{Image: "img"}},
+				Selector: map[string]string{"kubernetes.io/os": "linux"},
+			},
+		}
+		if withLoader {
+			m.Spec.ModuleLoader = &kmmv1beta1.ModuleLoaderSpec{}
+		}
+		return m
+	}
+
+	It("selects on the target label for a Module with a moduleLoader", func() {
+		ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: modNS}}
+
+		Expect(newDRADaemonSetCreator(scheme).setDRAAsDesired(ctx, ds, mod(true))).To(Succeed())
+		Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveKey(targetLabel))
+	})
+
+	// Without a loader there is nothing to unload, so the Module's own selector is used as it is
+	// and the target label has no part to play.
+	It("leaves the Module's own selector alone when there is no moduleLoader", func() {
+		m := mod(false)
+		ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: modNS}}
+
+		Expect(newDRADaemonSetCreator(scheme).setDRAAsDesired(ctx, ds, m)).To(Succeed())
+		Expect(ds.Spec.Template.Spec.NodeSelector).NotTo(HaveKey(targetLabel))
+		Expect(m.Spec.Selector).NotTo(HaveKey(targetLabel))
+	})
+})
+
+var _ = Describe("DRAReconciler_handleDRATargetLabels", func() {
+	const (
+		modName = "my-mod"
+		modNS   = "my-ns"
+	)
+
+	var (
+		ctrl *gomock.Controller
+		nm   *node.MockNode
+		drh  draReconcilerHelper
+		mod  *kmmv1beta1.Module
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		nm = node.NewMockNode(ctrl)
+		drh = draReconcilerHelper{nodeAPI: nm}
+		mod = &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Namespace: modNS, Name: modName},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA:          &kmmv1beta1.DRASpec{},
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
+		}
+	})
+
+	ctx := context.Background()
+
+	targetLabel := utils.GetDRATargetNodeLabel(modNS, modName)
+
+	node1 := func(labels map[string]string) v1.Node {
+		return v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: labels}}
+	}
+
+	tainted := func(key string) v1.Node {
+		n := node1(nil)
+		n.Spec.Taints = []v1.Taint{{Key: key, Effect: v1.TaintEffectNoSchedule}}
+		return n
+	}
+
+	// The real check, so a spec that hands it the wrong tolerations fails here instead of being
+	// told the answer.
+	realSchedulability := func() {
+		nm.EXPECT().IsNodeSchedulable(gomock.Any(), gomock.Any()).
+			DoAndReturn(node.NewNode(nil).IsNodeSchedulable).AnyTimes()
+	}
+
+	It("does nothing for a Module with no DRA spec", func() {
+		mod.Spec.DRA = nil
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	It("does nothing for a Module with no moduleLoader, whose DaemonSet ignores the label", func() {
+		mod.Spec.ModuleLoader = nil
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	It("labels a node under memory pressure, which the driver Pod tolerates", func() {
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).
+			Return([]v1.Node{tainted(v1.TaintNodeMemoryPressure)}, nil)
+		realSchedulability()
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), map[string]string{targetLabel: ""}, nil).Return(nil)
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	It("leaves a cordoned node alone, since that is what takes the driver Pod off it", func() {
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).
+			Return([]v1.Node{tainted(v1.TaintNodeUnschedulable)}, nil)
+		realSchedulability()
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	It("leaves a node alone when nothing tolerates its taint", func() {
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{tainted("maintenance")}, nil)
+		realSchedulability()
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	It("labels a node whose taint the Module itself tolerates", func() {
+		mod.Spec.Tolerations = []v1.Toleration{{
+			Key: "maintenance", Operator: v1.TolerationOpExists, Effect: v1.TaintEffectNoSchedule,
+		}}
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{tainted("maintenance")}, nil)
+		realSchedulability()
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), map[string]string{targetLabel: ""}, nil).Return(nil)
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	It("does not write the internal tolerations into the Module's own slice", func() {
+		backing := make([]v1.Toleration, 1, 8)
+		backing[0] = v1.Toleration{Key: "maintenance", Operator: v1.TolerationOpExists}
+		mod.Spec.Tolerations = backing[:1]
+
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{node1(nil)}, nil)
+		realSchedulability()
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), gomock.Any(), nil).Return(nil)
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+		Expect(backing[:cap(backing)][1:]).To(Equal(make([]v1.Toleration, cap(backing)-1)))
+	})
+
+	It("labels a selected node that is schedulable", func() {
+		n := node1(nil)
+
+		gomock.InOrder(
+			nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{n}, nil),
+			nm.EXPECT().IsNodeSchedulable(gomock.Any(), gomock.Any()).Return(true),
+			nm.EXPECT().UpdateLabels(ctx, gomock.Any(), map[string]string{targetLabel: ""}, nil).Return(nil),
+		)
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	// Nothing takes the label off in this piece, so an unschedulable node keeps whatever it has.
+	It("leaves an unschedulable node alone", func() {
+		n := node1(nil)
+
+		gomock.InOrder(
+			nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{n}, nil),
+			nm.EXPECT().IsNodeSchedulable(gomock.Any(), gomock.Any()).Return(false),
+		)
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	// The DaemonSet selector matches on the empty value, so a key with anything else
+	// in it leaves the node unmatched until it is rewritten.
+	It("rewrites a target label whose value is not empty", func() {
+		n := node1(map[string]string{targetLabel: "true"})
+
+		gomock.InOrder(
+			nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{n}, nil),
+			nm.EXPECT().IsNodeSchedulable(gomock.Any(), gomock.Any()).Return(true),
+			nm.EXPECT().UpdateLabels(ctx, gomock.Any(), map[string]string{targetLabel: ""}, nil).Return(nil),
+		)
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	It("does not write again to a node that already carries the label", func() {
+		n := node1(map[string]string{targetLabel: ""})
+
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{n}, nil)
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).To(Succeed())
+	})
+
+	It("reports a listing failure rather than an empty cluster", func() {
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return(nil, fmt.Errorf("some error"))
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(Succeed())
+	})
+
+	It("goes on to the rest when one node cannot be labelled", func() {
+		a := node1(nil)
+		b := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node2"}}
+
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{a, b}, nil)
+		nm.EXPECT().IsNodeSchedulable(gomock.Any(), gomock.Any()).Return(true).Times(2)
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), map[string]string{targetLabel: ""}, nil).
+			Return(fmt.Errorf("some error"))
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), map[string]string{targetLabel: ""}, nil).Return(nil)
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(Succeed())
 	})
 })
 
@@ -299,6 +521,133 @@ var _ = Describe("DRAReconciler_handleDRA", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 	})
+
+	// A DaemonSet that was already migrated keeps the label, so a Module that has been through
+	// the migration does not lose it on the next pass.
+	It("keeps the target label on a DaemonSet that already carries it", func() {
+		ctx := context.Background()
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "namespace"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA:          &kmmv1beta1.DRASpec{},
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
+		}
+
+		const name = "some name"
+		targetLabel := utils.GetDRATargetNodeLabel(mod.Namespace, mod.Name)
+		existingDS := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, Name: name},
+		}
+
+		var patched *appsv1.DaemonSet
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, ds *appsv1.DaemonSet, _ ...ctrlclient.GetOption) error {
+					ds.SetName(name)
+					ds.SetNamespace(mod.Namespace)
+					ds.Spec.Template.Spec.NodeSelector = map[string]string{targetLabel: ""}
+					return nil
+				},
+			),
+			mockDSHelper.EXPECT().setDRAAsDesired(ctx, gomock.Any(), &mod).DoAndReturn(
+				func(_ context.Context, ds *appsv1.DaemonSet, _ *kmmv1beta1.Module) error {
+					ds.Spec.Template.Spec.NodeSelector = map[string]string{"other": "x"}
+					return nil
+				},
+			),
+			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, o ctrlclient.Object, _ ctrlclient.Patch, _ ...ctrlclient.PatchOption) error {
+					patched = o.(*appsv1.DaemonSet)
+					return nil
+				},
+			),
+		)
+
+		Expect(drh.handleDRA(ctx, &mod, []appsv1.DaemonSet{existingDS})).To(Succeed())
+		Expect(patched).NotTo(BeNil())
+		Expect(patched.Spec.Template.Spec.NodeSelector).To(HaveKey(targetLabel))
+	})
+
+	It("reports a failure from setDRAAsDesired on an existing DaemonSet", func() {
+		ctx := context.Background()
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "namespace"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA:          &kmmv1beta1.DRASpec{},
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
+		}
+
+		const name = "some name"
+		existingDS := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, Name: name},
+		}
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, ds *appsv1.DaemonSet, _ ...ctrlclient.GetOption) error {
+					ds.SetName(name)
+					ds.SetNamespace(mod.Namespace)
+					return nil
+				},
+			),
+			mockDSHelper.EXPECT().setDRAAsDesired(ctx, gomock.Any(), &mod).Return(fmt.Errorf("some error")),
+		)
+
+		Expect(drh.handleDRA(ctx, &mod, []appsv1.DaemonSet{existingDS})).NotTo(Succeed())
+	})
+
+	// Requiring the target label narrows what a DaemonSet selects, so an existing one keeps
+	// whatever it already had and nobody upgrading sees their driver Pods move.
+	It("does not put the target label on a DaemonSet that is already there", func() {
+		ctx := context.Background()
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "moduleName", Namespace: "namespace"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA:          &kmmv1beta1.DRASpec{},
+				ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{},
+			},
+		}
+
+		const name = "some name"
+		targetLabel := utils.GetDRATargetNodeLabel(mod.Namespace, mod.Name)
+		existingDS := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: mod.Namespace, Name: name},
+		}
+
+		var patched *appsv1.DaemonSet
+
+		gomock.InOrder(
+			clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ interface{}, _ interface{}, ds *appsv1.DaemonSet, _ ...ctrlclient.GetOption) error {
+					ds.SetName(name)
+					ds.SetNamespace(mod.Namespace)
+					return nil
+				},
+			),
+			mockDSHelper.EXPECT().setDRAAsDesired(ctx, gomock.Any(), &mod).DoAndReturn(
+				func(_ context.Context, ds *appsv1.DaemonSet, _ *kmmv1beta1.Module) error {
+					// "other" makes the object differ from what was read, so CreateOrPatch has a
+					// reason to send a patch at all and the selector can be inspected in it.
+					ds.Spec.Template.Spec.NodeSelector = map[string]string{targetLabel: "", "other": "x"}
+					return nil
+				},
+			),
+			clnt.EXPECT().Patch(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, o ctrlclient.Object, _ ctrlclient.Patch, _ ...ctrlclient.PatchOption) error {
+					patched = o.(*appsv1.DaemonSet)
+					return nil
+				},
+			),
+		)
+
+		Expect(drh.handleDRA(ctx, &mod, []appsv1.DaemonSet{existingDS})).To(Succeed())
+		Expect(patched).NotTo(BeNil())
+		Expect(patched.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("other", "x"))
+		Expect(patched.Spec.Template.Spec.NodeSelector).NotTo(HaveKey(targetLabel))
+	})
 })
 
 var _ = Describe("DRAReconciler_moduleUpdateDRAStatus", func() {
@@ -383,6 +732,31 @@ var _ = Describe("DRAReconciler_moduleUpdateDRAStatus", func() {
 		Entry("3 target node, 0 ds", 3, nil, 3, 0),
 		Entry("2 target node, 3 ds", 2, []int{3, 6, 8}, 2, 17),
 	)
+
+	// The count has to agree with the target-label decision, or the status reports a
+	// smaller desired number than the DaemonSet it is describing.
+	It("counts a node under memory pressure, which the driver Pods tolerate", func() {
+		mod := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: &kmmv1beta1.DRASpec{}},
+		}
+		expectedMod := mod.DeepCopy()
+		expectedMod.Status.DRA.NodesMatchingSelectorNumber = 1
+		expectedMod.Status.DRA.DesiredNumber = 1
+
+		clnt.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ interface{}, list *v1.NodeList, _ ...interface{}) error {
+				list.Items = []v1.Node{{Spec: v1.NodeSpec{Taints: []v1.Taint{{
+					Key:    v1.TaintNodeMemoryPressure,
+					Effect: v1.TaintEffectNoSchedule,
+				}}}}}
+				return nil
+			},
+		)
+		clnt.EXPECT().Status().Return(statusWriter)
+		statusWriter.EXPECT().Patch(ctx, expectedMod, gomock.Any())
+
+		Expect(drh.moduleUpdateDRAStatus(ctx, &mod, nil)).To(Succeed())
+	})
 })
 
 var _ = Describe("DRAReconciler_clearDRAStatus", func() {
