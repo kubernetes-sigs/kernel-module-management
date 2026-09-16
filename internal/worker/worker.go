@@ -37,6 +37,8 @@ func NewWorker(mr ModprobeRunner, fh utils.FSHelper, logger logr.Logger) Worker 
 
 const sharedFilesDir = "/tmp"
 
+var workerModprobeDDir = "/etc/modprobe.d"
+
 func (w *worker) LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, firmwareMountPath string) error {
 
 	inTreeModulesToRemove := cfg.InTreeModulesToRemove
@@ -105,6 +107,10 @@ func (w *worker) LoadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, fir
 		args = append(args, cfg.Modprobe.Parameters...)
 	}
 
+	if err := w.applyModprobedDir(cfg); err != nil {
+		return fmt.Errorf("failed to apply modprobe.d files: %w", err)
+	}
+
 	return w.mr.Run(ctx, args...)
 }
 
@@ -155,6 +161,10 @@ func (w *worker) UnloadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, f
 		}
 	}
 
+	if err := w.applyModprobedDir(cfg); err != nil {
+		return fmt.Errorf("failed to apply modprobe.d files: %w", err)
+	}
+
 	w.logger.Info("Starting unloading", "args", args)
 
 	if err := w.mr.Run(ctx, args...); err != nil {
@@ -167,6 +177,51 @@ func (w *worker) UnloadKmod(ctx context.Context, cfg *kmmv1beta1.ModuleConfig, f
 		err := w.fh.RemoveSrcFilesFromDst(imageFirmwarePath, firmwareMountPath)
 		if err != nil {
 			w.logger.Info(utils.WarnString("failed to remove all firmware blobs"), "error", err)
+		}
+	}
+
+	return nil
+}
+
+func (w *worker) applyModprobedDir(cfg *kmmv1beta1.ModuleConfig) error {
+	if cfg.Modprobe.ModprobedDir == "" {
+		return nil
+	}
+
+	src := filepath.Join(sharedFilesDir, cfg.Modprobe.ModprobedDir)
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return fmt.Errorf("failed to read staged modprobedDir %s: %v", src, err)
+	}
+
+	var files []os.DirEntry
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			return fmt.Errorf("failed to stat %s: %v", filepath.Join(src, e.Name()), err)
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		if len(cfg.Modprobe.ModulesLoadingOrder) > 0 && e.Name() == "softdep.conf" {
+			return fmt.Errorf("staged modprobedDir %s contains softdep.conf which collides with modulesLoadingOrder", src)
+		}
+		files = append(files, e)
+	}
+	if len(files) == 0 {
+		return fmt.Errorf("staged modprobedDir %s contains no regular files", src)
+	}
+
+	if err := os.MkdirAll(workerModprobeDDir, 0755); err != nil {
+		return fmt.Errorf("failed to create %s: %v", workerModprobeDDir, err)
+	}
+
+	w.logger.Info("Copying staged modprobe.d files", "src", src, "dest", workerModprobeDDir)
+	for _, e := range files {
+		from := filepath.Join(src, e.Name())
+		to := filepath.Join(workerModprobeDDir, e.Name())
+		if err := cp.Copy(from, to); err != nil {
+			return fmt.Errorf("failed to copy %s to %s: %v", from, to, err)
 		}
 	}
 

@@ -191,6 +191,133 @@ var _ = Describe("worker_LoadKmod", func() {
 			HaveOccurred(),
 		)
 	})
+
+	Context("modprobedDir apply", func() {
+		const modprobedDir = "/kmm-test-modprobed"
+
+		var (
+			destDir  string
+			origDest string
+		)
+
+		BeforeEach(func() {
+			var err error
+			destDir, err = os.MkdirTemp("", "modprobe-d")
+			Expect(err).Should(BeNil())
+			origDest = workerModprobeDDir
+			workerModprobeDDir = destDir
+		})
+
+		AfterEach(func() {
+			workerModprobeDDir = origDest
+			Expect(os.RemoveAll(destDir)).To(Succeed())
+			Expect(os.RemoveAll(filepath.Join(sharedFilesDir, modprobedDir))).To(Succeed())
+		})
+
+		It("should copy staged files before modprobe", func() {
+			stageModprobedFiles(modprobedDir, map[string]string{
+				"user.conf":   "install x /bin/true",
+				".extra.conf": "hidden",
+			})
+
+			cfg := v1beta1.ModuleConfig{
+				ContainerImage: imageName,
+				Modprobe: v1beta1.ModprobeSpec{
+					ModuleName:   moduleName,
+					DirName:      dirName,
+					ModprobedDir: modprobedDir,
+				},
+			}
+
+			mr.EXPECT().Run(ctx, "-vd", filepath.Join(sharedFilesDir, dirName), moduleName).DoAndReturn(
+				func(context.Context, ...string) error {
+					Expect(os.ReadFile(filepath.Join(destDir, "user.conf"))).To(Equal([]byte("install x /bin/true")))
+					Expect(os.ReadFile(filepath.Join(destDir, ".extra.conf"))).To(Equal([]byte("hidden")))
+					return nil
+				},
+			)
+
+			Expect(w.LoadKmod(ctx, &cfg, "")).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if the staged directory is missing", func() {
+			cfg := v1beta1.ModuleConfig{
+				ContainerImage: imageName,
+				Modprobe: v1beta1.ModprobeSpec{
+					ModuleName:   moduleName,
+					DirName:      dirName,
+					ModprobedDir: modprobedDir,
+				},
+			}
+
+			Expect(w.LoadKmod(ctx, &cfg, "")).To(HaveOccurred())
+		})
+
+		It("should copy firmware and staged modprobe.d files", func() {
+			stageModprobedFiles(modprobedDir, map[string]string{"user.conf": "ok"})
+
+			cfg := v1beta1.ModuleConfig{
+				ContainerImage: imageName,
+				Modprobe: v1beta1.ModprobeSpec{
+					ModuleName:   moduleName,
+					DirName:      dirName,
+					FirmwarePath: "/firmwareDir",
+					ModprobedDir: modprobedDir,
+				},
+			}
+
+			err := os.MkdirAll(filepath.Join(sharedFilesDir, "firmwareDir"), 0750)
+			Expect(err).Should(BeNil())
+			err = os.WriteFile(filepath.Join(sharedFilesDir, "firmwareDir", "blob"), []byte("fw"), 0660)
+			Expect(err).Should(BeNil())
+
+			mr.EXPECT().Run(ctx, "-vd", filepath.Join(sharedFilesDir, dirName), moduleName)
+
+			Expect(w.LoadKmod(ctx, &cfg, hostDir)).NotTo(HaveOccurred())
+			_, err = os.Stat(hostDir + "/blob")
+			Expect(err).Should(BeNil())
+			Expect(os.ReadFile(filepath.Join(destDir, "user.conf"))).To(Equal([]byte("ok")))
+		})
+
+		It("should copy user files next to existing softdep.conf", func() {
+			Expect(os.WriteFile(filepath.Join(destDir, "softdep.conf"), []byte("kmm-softdep"), 0660)).To(Succeed())
+			stageModprobedFiles(modprobedDir, map[string]string{"user.conf": "user"})
+
+			cfg := v1beta1.ModuleConfig{
+				ContainerImage: imageName,
+				Modprobe: v1beta1.ModprobeSpec{
+					ModuleName:          moduleName,
+					DirName:             dirName,
+					ModprobedDir:        modprobedDir,
+					ModulesLoadingOrder: []string{moduleName, "dep"},
+				},
+			}
+
+			mr.EXPECT().Run(ctx, "-vd", filepath.Join(sharedFilesDir, dirName), moduleName)
+
+			Expect(w.LoadKmod(ctx, &cfg, "")).NotTo(HaveOccurred())
+			Expect(os.ReadFile(filepath.Join(destDir, "softdep.conf"))).To(Equal([]byte("kmm-softdep")))
+			Expect(os.ReadFile(filepath.Join(destDir, "user.conf"))).To(Equal([]byte("user")))
+		})
+
+		It("should fail if staged softdep.conf collides with modulesLoadingOrder", func() {
+			Expect(os.WriteFile(filepath.Join(destDir, "softdep.conf"), []byte("kmm-softdep"), 0660)).To(Succeed())
+			stageModprobedFiles(modprobedDir, map[string]string{"softdep.conf": "user-softdep"})
+
+			cfg := v1beta1.ModuleConfig{
+				ContainerImage: imageName,
+				Modprobe: v1beta1.ModprobeSpec{
+					ModuleName:          moduleName,
+					DirName:             dirName,
+					ModprobedDir:        modprobedDir,
+					ModulesLoadingOrder: []string{moduleName, "dep"},
+				},
+			}
+
+			Expect(w.LoadKmod(ctx, &cfg, "")).To(HaveOccurred())
+			Expect(os.ReadFile(filepath.Join(destDir, "softdep.conf"))).To(Equal([]byte("kmm-softdep")))
+		})
+	})
 })
 
 var _ = Describe("worker_SetFirmwareClassPath", func() {
@@ -370,7 +497,62 @@ var _ = Describe("worker_UnloadKmod", func() {
 			HaveOccurred(),
 		)
 	})
+
+	Context("modprobedDir apply", func() {
+		const modprobedDir = "/kmm-test-modprobed-unload"
+
+		var (
+			destDir  string
+			origDest string
+		)
+
+		BeforeEach(func() {
+			var err error
+			destDir, err = os.MkdirTemp("", "modprobe-d-unload")
+			Expect(err).Should(BeNil())
+			origDest = workerModprobeDDir
+			workerModprobeDDir = destDir
+		})
+
+		AfterEach(func() {
+			workerModprobeDDir = origDest
+			Expect(os.RemoveAll(destDir)).To(Succeed())
+			Expect(os.RemoveAll(filepath.Join(sharedFilesDir, modprobedDir))).To(Succeed())
+		})
+
+		It("should copy staged files before modprobe unload", func() {
+			stageModprobedFiles(modprobedDir, map[string]string{"user.conf": "remove x /bin/true"})
+
+			cfg := v1beta1.ModuleConfig{
+				ContainerImage: imageName,
+				Modprobe: v1beta1.ModprobeSpec{
+					ModuleName:   moduleName,
+					DirName:      dirName,
+					ModprobedDir: modprobedDir,
+				},
+			}
+
+			mr.EXPECT().Run(ctx, "-rvd", filepath.Join(sharedFilesDir, dirName), moduleName).DoAndReturn(
+				func(context.Context, ...string) error {
+					Expect(os.ReadFile(filepath.Join(destDir, "user.conf"))).To(Equal([]byte("remove x /bin/true")))
+					return nil
+				},
+			)
+
+			Expect(w.UnloadKmod(ctx, &cfg, "")).NotTo(HaveOccurred())
+		})
+	})
 })
+
+func stageModprobedFiles(modprobedDir string, files map[string]string) {
+	GinkgoHelper()
+
+	src := filepath.Join(sharedFilesDir, modprobedDir)
+	Expect(os.MkdirAll(src, 0750)).To(Succeed())
+	for name, content := range files {
+		Expect(os.WriteFile(filepath.Join(src, name), []byte(content), 0660)).To(Succeed())
+	}
+}
 
 func ToInterfaceSlice[T any](s []T) []interface{} {
 	GinkgoHelper()
