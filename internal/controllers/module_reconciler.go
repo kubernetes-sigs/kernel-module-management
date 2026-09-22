@@ -592,17 +592,25 @@ func (h *namespaceLabelerImpl) tryRemovingLabel(ctx context.Context, name, modul
 		return fmt.Errorf("could not list modules in namespace %s: %v", name, err)
 	}
 
-	if count := len(modList.Items); count > 1 {
-		logger.Info("Namespace still contains modules; not removing the label", "count", count)
+	// Modules that are themselves being deleted (DeletionTimestamp set) are racing to remove
+	// their own finalizer concurrently and cannot be relied upon to trigger a future cleanup of
+	// the namespace label; only modules that are NOT being deleted should keep the label set.
+	// Otherwise, when several modules in the same namespace are deleted at roughly the same
+	// time, every one of them could see the others still present here and skip removing the
+	// label, leaving it stuck even after all modules are gone (MGMT-25441).
+	liveModules := make([]string, 0, len(modList.Items))
+
+	for _, m := range modList.Items {
+		if m.GetDeletionTimestamp() == nil {
+			liveModules = append(liveModules, m.Name)
+		}
+	}
+
+	if count := len(liveModules); count > 0 {
+		logger.Info("Namespace still contains live modules; not removing the label", "count", count)
 
 		if verboseLogger := logger.V(1); verboseLogger.Enabled() {
-			modNames := make([]string, 0, count)
-
-			for _, m := range modList.Items {
-				modNames = append(modNames, m.Name)
-			}
-
-			verboseLogger.Info("Remaining modules", "names", modNames)
+			verboseLogger.Info("Remaining modules", "names", liveModules)
 		}
 
 		return nil
