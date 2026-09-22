@@ -1353,16 +1353,20 @@ var _ = Describe("namespaceHelper_tryRemovingLabel", func() {
 		nh = newNamespaceLabeler(mockClient)
 	})
 
-	It("should do nothing if several modules remain", func() {
+	It("should do nothing if a live module remains", func() {
+		now := metav1.Now()
+
 		mockClient.
 			EXPECT().
 			List(ctx, &kmmv1beta1.ModuleList{}, ctrlclient.InNamespace(namespace)).
 			Do(func(_ context.Context, modList *kmmv1beta1.ModuleList, _ ...ctrlclient.ListOption) {
 				modList.Items = []kmmv1beta1.Module{
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+						// the module being deleted; already has a DeletionTimestamp
+						ObjectMeta: metav1.ObjectMeta{Name: moduleName, DeletionTimestamp: &now},
 					},
 					{
+						// a live, unrelated module; no DeletionTimestamp
 						ObjectMeta: metav1.ObjectMeta{Name: "some-other-module-name"},
 					},
 				}
@@ -1376,6 +1380,8 @@ var _ = Describe("namespaceHelper_tryRemovingLabel", func() {
 	})
 
 	It("should remove the label if it's the only module remaining", func() {
+		now := metav1.Now()
+
 		gomock.InOrder(
 			mockClient.
 				EXPECT().
@@ -1383,7 +1389,7 @@ var _ = Describe("namespaceHelper_tryRemovingLabel", func() {
 				Do(func(_ context.Context, modList *kmmv1beta1.ModuleList, _ ...ctrlclient.ListOption) {
 					modList.Items = []kmmv1beta1.Module{
 						{
-							ObjectMeta: metav1.ObjectMeta{Name: moduleName},
+							ObjectMeta: metav1.ObjectMeta{Name: moduleName, DeletionTimestamp: &now},
 						},
 					}
 				}),
@@ -1402,4 +1408,43 @@ var _ = Describe("namespaceHelper_tryRemovingLabel", func() {
 		)
 	})
 
+	// Regression test for MGMT-25441: several modules in the same namespace being deleted
+	// concurrently must not leave the namespace label stuck once they are all gone. Every one
+	// of them still shows up in the List() call issued by its siblings' reconciles (their own
+	// finalizer hasn't been removed yet), but since they all carry a DeletionTimestamp, none of
+	// them should block the label removal.
+	It("should remove the label when only terminating sibling modules remain", func() {
+		now := metav1.Now()
+
+		gomock.InOrder(
+			mockClient.
+				EXPECT().
+				List(ctx, &kmmv1beta1.ModuleList{}, ctrlclient.InNamespace(namespace)).
+				Do(func(_ context.Context, modList *kmmv1beta1.ModuleList, _ ...ctrlclient.ListOption) {
+					modList.Items = []kmmv1beta1.Module{
+						{
+							ObjectMeta: metav1.ObjectMeta{Name: moduleName, DeletionTimestamp: &now},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{Name: "sibling-module-1", DeletionTimestamp: &now},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{Name: "sibling-module-2", DeletionTimestamp: &now},
+						},
+					}
+				}),
+			mockClient.
+				EXPECT().
+				Get(ctx, types.NamespacedName{Name: namespace}, &v1.Namespace{}),
+			mockClient.
+				EXPECT().
+				Patch(ctx, &v1.Namespace{}, gomock.Any()),
+		)
+
+		Expect(
+			nh.tryRemovingLabel(ctx, namespace, moduleName),
+		).NotTo(
+			HaveOccurred(),
+		)
+	})
 })
