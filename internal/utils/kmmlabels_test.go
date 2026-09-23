@@ -5,6 +5,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var _ = Describe("GetDRATargetNodeLabel", func() {
+	It("should work as expected", func() {
+		res := GetDRATargetNodeLabel("some-namespace", "some-name")
+		Expect(res).To(Equal("kmm.node.kubernetes.io/some-namespace.some-name.dra-target"))
+	})
+})
+
 var _ = Describe("GetModuleVersionLabelName", func() {
 	It("should work as expected", func() {
 		res := GetModuleVersionLabelName("some-namespace", "some-name")

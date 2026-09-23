@@ -127,6 +127,20 @@ func (mr *MockdraReconcilerHelperAPIMockRecorder) handleDRA(ctx, mod, existingDR
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDRA", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).handleDRA), ctx, mod, existingDRADS)
 }
 
+// handleDRATargetLabels mocks base method.
+func (m *MockdraReconcilerHelperAPI) handleDRATargetLabels(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "handleDRATargetLabels", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// handleDRATargetLabels indicates an expected call of handleDRATargetLabels.
+func (mr *MockdraReconcilerHelperAPIMockRecorder) handleDRATargetLabels(ctx, mod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleDRATargetLabels", reflect.TypeOf((*MockdraReconcilerHelperAPI)(nil).handleDRATargetLabels), ctx, mod)
+}
+
 // handleDeviceClasses mocks base method.
 func (m *MockdraReconcilerHelperAPI) handleDeviceClasses(ctx context.Context, mod *v1beta1.Module, existingDCs []v10.DeviceClass) error {
 	m.ctrl.T.Helper()

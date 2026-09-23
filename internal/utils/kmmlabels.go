@@ -84,6 +84,10 @@ func GetDevicePluginNodeLabel(namespace, moduleName string) string {
 	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.device-plugin-ready", namespace, moduleName)
 }
 
+func GetDRATargetNodeLabel(namespace, moduleName string) string {
+	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.dra-target", namespace, moduleName)
+}
+
 func GetDRANodeLabel(namespace, moduleName string) string {
 	return fmt.Sprintf("kmm.node.kubernetes.io/%s.%s.dra-ready", namespace, moduleName)
 }
