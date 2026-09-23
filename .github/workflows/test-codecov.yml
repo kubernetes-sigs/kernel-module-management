@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   test-build:
     name: Test and upload to Codecov
@@ -27,3 +31,8 @@ jobs:
 
     - name: Upload the coverage to Codecov
       uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+      with:
+        use_oidc: true
+        # A failed upload is the problem this is fixing, so let it show on main.
+        # A Codecov outage should still not block a contributor's pull request.
+        fail_ci_if_error: ${{ github.event_name == 'push' }}
