@@ -17,6 +17,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -534,6 +535,9 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 				podsToDelete = append(podsToDelete, p)
 			}
 		case v1.PodFailed:
+			h.recordWorkerPodFailure(&p, &kmmv1beta1.Module{
+				ObjectMeta: metav1.ObjectMeta{Name: modName, Namespace: modNamespace},
+			})
 			podsToDelete = append(podsToDelete, p)
 		case v1.PodSucceeded:
 			if h.podManager.IsUnloaderPod(&p) {
@@ -600,6 +604,31 @@ func (h *nmcReconcilerHelperImpl) SyncStatus(ctx context.Context, nmcObj *kmmv1b
 	}
 
 	return errors.Join(errs...)
+}
+
+func (h *nmcReconcilerHelperImpl) recordWorkerPodFailure(p *v1.Pod, mod *kmmv1beta1.Module) {
+	reason := "ModuleLoadFailed"
+	if h.podManager.IsUnloaderPod(p) {
+		reason = "ModuleUnloadFailed"
+	}
+
+	msg := terminatedContainerMessage(p)
+	if msg == "" {
+		msg = fmt.Sprintf("Worker pod %s/%s failed", p.Namespace, p.Name)
+	}
+
+	h.recorder.Event(mod, v1.EventTypeWarning, reason, msg)
+}
+
+func terminatedContainerMessage(p *v1.Pod) string {
+	for _, list := range [][]v1.ContainerStatus{p.Status.InitContainerStatuses, p.Status.ContainerStatuses} {
+		for _, cs := range list {
+			if cs.State.Terminated != nil && cs.State.Terminated.Message != "" {
+				return cs.State.Terminated.Message
+			}
+		}
+	}
+	return ""
 }
 
 func (h *nmcReconcilerHelperImpl) UpdateNodeLabels(ctx context.Context, nmc *kmmv1beta1.NodeModulesConfig, node *v1.Node) ([]types.NamespacedName, []types.NamespacedName, error) {
