@@ -15,6 +15,8 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: dra-consumer
+  labels:
+    app: dra-consumer
 spec:
   # Prefer the node WITHOUT the DRA device. This ensures that if the pod
   # still lands on minikube (the node with the device), it is because DRA

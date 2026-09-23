@@ -39,6 +39,21 @@ func (m *MockNode) EXPECT() *MockNodeMockRecorder {
 	return m.recorder
 }
 
+// GetAllNodesByLabelKey mocks base method.
+func (m *MockNode) GetAllNodesByLabelKey(ctx context.Context, labelKey string) ([]v1.Node, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllNodesByLabelKey", ctx, labelKey)
+	ret0, _ := ret[0].([]v1.Node)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllNodesByLabelKey indicates an expected call of GetAllNodesByLabelKey.
+func (mr *MockNodeMockRecorder) GetAllNodesByLabelKey(ctx, labelKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllNodesByLabelKey", reflect.TypeOf((*MockNode)(nil).GetAllNodesByLabelKey), ctx, labelKey)
+}
+
 // GetAllNodesBySelector mocks base method.
 func (m *MockNode) GetAllNodesBySelector(ctx context.Context, selector map[string]string) ([]v1.Node, error) {
 	m.ctrl.T.Helper()
@@ -124,4 +139,18 @@ func (m *MockNode) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, t
 func (mr *MockNodeMockRecorder) UpdateLabels(ctx, node, toBeAdded, toBeRemoved any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLabels", reflect.TypeOf((*MockNode)(nil).UpdateLabels), ctx, node, toBeAdded, toBeRemoved)
+}
+
+// UpdateLabelsWithOptimisticLock mocks base method.
+func (m *MockNode) UpdateLabelsWithOptimisticLock(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLabelsWithOptimisticLock", ctx, node, toBeAdded, toBeRemoved)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateLabelsWithOptimisticLock indicates an expected call of UpdateLabelsWithOptimisticLock.
+func (mr *MockNodeMockRecorder) UpdateLabelsWithOptimisticLock(ctx, node, toBeAdded, toBeRemoved any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLabelsWithOptimisticLock", reflect.TypeOf((*MockNode)(nil).UpdateLabelsWithOptimisticLock), ctx, node, toBeAdded, toBeRemoved)
 }

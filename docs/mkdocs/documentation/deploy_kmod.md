@@ -74,7 +74,44 @@ for modern hardware orchestration.
 The DRA DaemonSet will target nodes:
 
 - that match the `Module`'s `.spec.selector`;
-- on which the kernel module is loaded (using the `kmm.node.kubernetes.io/<namespace>.<modulename>.ready` label).
+- on which the kernel module is loaded (using the `kmm.node.kubernetes.io/<namespace>.<modulename>.ready` label);
+- that KMM still wants the driver on (using the `kmm.node.kubernetes.io/<namespace>.<modulename>.dra-target` label).
+
+KMM manages the `dra-target` label itself. DaemonSet pods tolerate the taint `kubectl cordon` adds, so without it a
+cordon would leave the driver pod in place while KMM tries to unload the kernel module underneath it. KMM removes the
+label from a node that is cordoned, that carries any other taint the `Module` does not tolerate, or that has stopped
+matching `.spec.selector`, and the DaemonSet controller then removes the driver pod.
+
+A DaemonSet created by a KMM that predates this label has to be given the selector, which changes its pod template and
+restarts its driver pods. KMM holds that back while any claim on the driver is reserved anywhere in the cluster, since
+a pod template is not per node: one long-lived claim can therefore keep an older DaemonSet on the previous selector
+while an unrelated node is drained. A selector that has the label with the wrong value is corrected straight away,
+because that DaemonSet already matches no node.
+
+A cordoned node keeps the label for as long as a pod on it still holds a `ResourceClaim` allocated from this `Module`'s
+driver, so that kubelet can still call the driver to unprepare those devices. The label goes once the last such claim is
+released.
+
+What the label controls is which nodes the DaemonSet selects, and that is all it controls. The DaemonSet asks for the
+`ready` label as well, and KMM removes that one as soon as it sees a cordoned node whose `Module` is still in the node's
+`NodeModulesConfig`, without looking at claims. Whether that happens before the driver is done depends on which
+controller reaches the cordon first, so the retention here narrows the window rather than closing it, whether or not the
+driver holds a reference to the kernel module.
+
+The label also does not add tolerations to the driver pod, so a `NoExecute` taint the `Module` does not tolerate still
+evicts the driver, and a `NoExecute` toleration with a `tolerationSeconds` still expires. Deleting the `Module` removes
+the label from every node without looking for claims.
+
+`.spec.dra` cannot be removed from a `Module` after it is set, and `.spec.dra.driverName` cannot be changed: both take
+the driver away from claims that may still be reserved. Adding `.spec.dra` to a `Module` that did not have one is
+allowed.
+
+`.spec.dra.driverName` must name one `Module` in the cluster. It is what KMM matches claims against to decide which
+nodes still need a driver, so two `Module`s sharing a name each keep the other's labels and hold up the other's
+`DaemonSet` updates. KMM does not reject that today.
+
+A `Module` with no `.spec.moduleLoader` has no kernel module to unload, so its DRA DaemonSet targets `.spec.selector`
+directly and no `dra-target` label is used.
 
 When the DRA driver pod is running and ready on a node, KMM sets the following label:
 ```
