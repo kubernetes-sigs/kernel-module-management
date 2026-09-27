@@ -193,6 +193,44 @@ With the configuration above:
 
 The first value in the list, to be loaded last, must be equivalent to the `moduleName`.
 
+### modprobe.d configuration files
+
+Some modules need extra `modprobe` `install` / `remove` scripts (for example to drop a
+subsystem reference count before unload). Put those scripts in `*.conf` files in a
+flat directory in the driver image, and set
+`.spec.moduleLoader.container.modprobe.modprobedDir` to that directory's absolute path.
+
+KMM copies the files into `/etc/modprobe.d/` in the worker Pod before load and unload.
+Enabling `modprobedDir` makes that Module's worker Pods run Privileged.
+
+`modprobe` only reads files named `*.conf`. Other files are copied but ignored, and the
+module still loads.
+
+`modprobedDir` may be set together with `modulesLoadingOrder`. On load, KMM implements
+load order with `softdep` lines. See the [modprobe.d(5) man page](https://man7.org/linux/man-pages/man5/modprobe.d.5.html):
+kmod ignores `install` / `remove` for every module that is a `softdep` target.
+
+For example:
+
+- `softdep a pre: b` — `install` / `remove` are ignored for `a`, but still run for `b`
+- if there is also `softdep b pre: c` — `install` / `remove` for `b` are ignored as well
+
+With `modulesLoadingOrder: [a, b, c]`, KMM generates `softdep a pre: b` and
+`softdep b pre: c`. Put `install` on `c` (the last entry, loaded first). Unload does
+not use `softdep`, so `remove` scripts still run.
+
+To run `install` / `remove` on a module that would be a `softdep` target, omit
+`modulesLoadingOrder` and declare the dependency in `install` / `remove` only.
+For example, to load `b` before `a`:
+
+```
+install a /sbin/modprobe b && /sbin/modprobe --ignore-install a
+remove a /sbin/modprobe -r --ignore-remove a && /sbin/modprobe -r b
+```
+
+If the image already contains a file named `softdep.conf` and `modulesLoadingOrder` is
+also set, the Module fails to load rather than overwriting KMM's load-order file.
+
 ### Replacing an in-tree module
 
 Some modules loaded by KMM may replace in-tree modules already loaded on the node.  
@@ -306,6 +344,11 @@ spec:
         # in the `kmm-operator-manager-config` at `worker.setFirmwareClassPath`
         # before `modprobe` is called to insert the kernel module..
         firmwarePath: /firmware
+
+        # Optional. Absolute path in the driver image of a flat directory of
+        # modprobe.d `*.conf` files. Worker Pods run Privileged when this is set.
+        # See "modprobe.d configuration files" above if also using modulesLoadingOrder.
+        modprobedDir: /opt/driver/modprobe.d
         
         parameters:  # Optional
           - param=1

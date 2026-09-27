@@ -28,9 +28,10 @@ modules that rely on this pattern cannot be reliably unloaded through KMM.
   Firmware loading capability, with no degradation to either.
 - Users are always informed when their modprobe.d configuration could not
   be applied, rather than experiencing a silent failure.
-- The modprobe.d capability works correctly together with the existing
-  `ModulesLoadingOrder` capability, with no degradation to either.
-  A Module may enable both on the same resource.
+- The modprobe.d capability can be enabled together with
+  `ModulesLoadingOrder`. Load order is unchanged. kmod ignores
+  `install`/`remove` for every softdep target on load; that is
+  documented, and `remove` still runs on unload.
 - Users can specify where in their driver container image their
   modprobe.d files live, via a new field on the Module API. KMM always
   copies those files to the same fixed location on the worker pod
@@ -100,9 +101,13 @@ overwriting KMM's file (FR-9).
 - **FR-7:** The modprobe.d capability must continue to work correctly for
   modules that also use Firmware loading.
 - **FR-8:** A Module may enable the modprobe.d capability and set
-  `ModulesLoadingOrder` at the same time. Both take effect: the user's
-  init/de-init configuration and the configured load order. KMM must not
-  reject this combination.
+  `ModulesLoadingOrder` at the same time. KMM must not reject this
+  combination. Load order still applies. On load, kmod ignores
+  `install`/`remove` for every module that is a `softdep` target (see
+  [modprobe.d(5)](https://man7.org/linux/man-pages/man5/modprobe.d.5.html)).
+  Users should put `install` on a module that is not a `softdep` target
+  (the last entry in `modulesLoadingOrder`). Unload does not use `softdep`,
+  so `remove` scripts still run. This limitation is documented.
 - **FR-9:** If a Module enables both capabilities and the user's
   modprobe.d files include a file whose name collides with the file KMM
   uses for `ModulesLoadingOrder`, the module must fail to load rather
@@ -146,9 +151,11 @@ overwriting KMM's file (FR-9).
 - [ ] A user can use the modprobe.d capability on a module that also uses
       Firmware loading, and both capabilities work correctly together.
 - [ ] A user can enable the modprobe.d capability on a module that also
-      sets `ModulesLoadingOrder`, and both take effect: load order from
-      `ModulesLoadingOrder` and the init/de-init sequences from the
-      user's modprobe.d files.
+      sets `ModulesLoadingOrder`. Load order still applies. Documentation
+      states that `install`/`remove` are ignored for every softdep target
+      on load, and that the workaround is to put `install` on a module
+      that is not a softdep target (last entry in the list); `remove`
+      still runs on unload.
 - [ ] A user who enables both capabilities and whose modprobe.d files
       include a file that collides with KMM's `ModulesLoadingOrder`
       file sees the module fail to load and can observe the failure via
