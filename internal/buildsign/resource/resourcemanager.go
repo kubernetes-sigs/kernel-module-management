@@ -24,15 +24,17 @@ const (
 
 type resourceManager struct {
 	client            client.Client
+	secretReader      client.Reader
 	buildArgOverrider module.BuildArgOverrider
 	scheme            *runtime.Scheme
 }
 
-func NewResourceManager(client client.Client, buildArgOverrider module.BuildArgOverrider,
+func NewResourceManager(client client.Client, secretReader client.Reader, buildArgOverrider module.BuildArgOverrider,
 	scheme *runtime.Scheme) buildsign.ResourceManager {
 
 	return &resourceManager{
 		client:            client,
+		secretReader:      secretReader,
 		buildArgOverrider: buildArgOverrider,
 		scheme:            scheme,
 	}

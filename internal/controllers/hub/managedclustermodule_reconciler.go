@@ -68,7 +68,7 @@ type ManagedClusterModuleReconciler struct {
 //+kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworks,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=create;delete;list;patch;watch
-//+kubebuilder:rbac:groups="core",resources=secrets,verbs=get;list;watch
+//+kubebuilder:rbac:groups="core",resources=secrets,verbs=get
 //+kubebuilder:rbac:groups="core",resources=configmaps,verbs=get;list;watch
 
 func NewManagedClusterModuleReconciler(

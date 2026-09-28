@@ -10,12 +10,17 @@ rules:
   - ""
   resources:
   - configmaps
-  - secrets
   - serviceaccounts
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
 - apiGroups:
   - ""
   resources:

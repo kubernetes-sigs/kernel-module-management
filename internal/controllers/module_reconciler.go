@@ -39,7 +39,7 @@ import (
 //+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;patch;watch
 //+kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch;patch
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=create;delete;get;list;patch;watch
-//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get
 //+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modulebuildsignconfigs,verbs=get;list;watch;update;patch;create;delete
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=modulebuildsignconfigs/status,verbs=get;update;patch

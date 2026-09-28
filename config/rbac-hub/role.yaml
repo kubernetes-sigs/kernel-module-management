@@ -8,7 +8,6 @@ rules:
   - ""
   resources:
   - configmaps
-  - secrets
   verbs:
   - get
   - list
@@ -23,6 +22,12 @@ rules:
   - list
   - patch
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
 - apiGroups:
   - cluster.open-cluster-management.io
   resources:

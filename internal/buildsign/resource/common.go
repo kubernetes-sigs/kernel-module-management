@@ -200,7 +200,7 @@ func (rm *resourceManager) getSignHashAnnotationValue(ctx context.Context, priva
 func (rm *resourceManager) getSecretData(ctx context.Context, secretName, secretDataKey, namespace string) ([]byte, error) {
 	secret := v1.Secret{}
 	namespacedName := types.NamespacedName{Name: secretName, Namespace: namespace}
-	err := rm.client.Get(ctx, namespacedName, &secret)
+	err := rm.secretReader.Get(ctx, namespacedName, &secret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Secret %s: %v", namespacedName, err)
 	}
