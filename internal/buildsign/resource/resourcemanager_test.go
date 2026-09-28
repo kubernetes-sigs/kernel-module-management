@@ -32,7 +32,7 @@ var _ = Describe("GetResourceByKernel", func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
 		mockBuildArgOverrider = module.NewMockBuildArgOverrider(ctrl)
-		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
+		rm = NewResourceManager(clnt, clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("should return only one pod", func() {
@@ -201,7 +201,7 @@ var _ = Describe("GetModuleResources", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
+		rm = NewResourceManager(clnt, clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("return all found pods", func() {
@@ -311,7 +311,7 @@ var _ = Describe("DeleteResource", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
+		rm = NewResourceManager(clnt, clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("good flow", func() {
@@ -356,7 +356,7 @@ var _ = Describe("CreateResource", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
+		rm = NewResourceManager(clnt, clnt, mockBuildArgOverrider, scheme)
 	})
 
 	It("good flow", func() {
@@ -395,7 +395,7 @@ var _ = Describe("PodStatus", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
+		rm = NewResourceManager(clnt, clnt, mockBuildArgOverrider, scheme)
 	})
 
 	DescribeTable("should return the correct status depending on the pod status",
@@ -428,7 +428,7 @@ var _ = Describe("IsPodChnaged", func() {
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		clnt = client.NewMockClient(ctrl)
-		rm = NewResourceManager(clnt, mockBuildArgOverrider, scheme)
+		rm = NewResourceManager(clnt, clnt, mockBuildArgOverrider, scheme)
 	})
 
 	DescribeTable("should detect if a pod has changed",
