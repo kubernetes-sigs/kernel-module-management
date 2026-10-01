@@ -113,12 +113,19 @@ func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (
 		return res, fmt.Errorf("could not get DeviceClasses for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
 	}
 
+	// Remove the dra-target labels on cleanup so the DaemonSet controller takes the driver Pods off.
 	if mod.GetDeletionTimestamp() != nil {
-		return ctrl.Result{}, r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace)
+		return ctrl.Result{}, errors.Join(
+			r.reconHelperAPI.removeDRATargetLabels(ctx, mod),
+			r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace),
+		)
 	}
 
 	if mod.Spec.DRA == nil {
-		if err = r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace); err != nil {
+		if err = errors.Join(
+			r.reconHelperAPI.removeDRATargetLabels(ctx, mod),
+			r.reconHelperAPI.deleteDRAResources(ctx, mod.Name, mod.Namespace),
+		); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, r.reconHelperAPI.clearDRAStatus(ctx, mod)
@@ -165,6 +172,7 @@ type draReconcilerHelperAPI interface {
 	getModuleDeviceClasses(ctx context.Context, name, namespace string) ([]resourcev1.DeviceClass, error)
 	handleDeviceClasses(ctx context.Context, mod *kmmv1beta1.Module, existingDCs []resourcev1.DeviceClass) error
 	handleDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
+	removeDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
 }
 
 type draReconcilerHelper struct {
@@ -191,7 +199,8 @@ func draTolerations(mod *kmmv1beta1.Module) []v1.Toleration {
 }
 
 // handleDRATargetLabels ensures the dra-target label is present on schedulable nodes targeted by
-// the Module. It does not remove the label yet.
+// the Module, and removed from unschedulable nodes. This enables the DRA driver DaemonSet to be
+// evicted from draining nodes. Nodes outside the Module's selector are not reconciled here.
 func (drh *draReconcilerHelper) handleDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
 	if mod.Spec.DRA == nil {
 		return nil
@@ -209,14 +218,35 @@ func (drh *draReconcilerHelper) handleDRATargetLabels(ctx context.Context, mod *
 	var errs []error
 	for i := range nodes {
 		node := &nodes[i]
-		// UpdateLabels always sends a PATCH; skip only the exact "" the DaemonSet selector matches.
-		value, labelled := node.Labels[targetLabel]
-		if (labelled && value == "") || !drh.nodeAPI.IsNodeSchedulable(node, tolerations) {
-			continue
-		}
 
-		if err := drh.nodeAPI.UpdateLabels(ctx, node, map[string]string{targetLabel: ""}, nil); err != nil {
-			errs = append(errs, fmt.Errorf("could not add dra-target label to node %s: %v", node.Name, err))
+		var err error
+		if drh.nodeAPI.IsNodeSchedulable(node, tolerations) {
+			err = drh.nodeAPI.UpdateLabels(ctx, node, map[string]string{targetLabel: ""}, nil)
+		} else {
+			err = drh.nodeAPI.UpdateLabels(ctx, node, nil, map[string]string{targetLabel: ""})
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("could not reconcile dra-target label on node %s: %v", node.Name, err))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// removeDRATargetLabels removes the dra-target label from every node that carries it, used on cleanup.
+func (drh *draReconcilerHelper) removeDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
+	targetLabel := utils.GetDRATargetNodeLabel(mod.Namespace, mod.Name)
+
+	nodes, err := drh.nodeAPI.GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""})
+	if err != nil {
+		return fmt.Errorf("could not list nodes with dra-target label: %v", err)
+	}
+
+	var errs []error
+	for i := range nodes {
+		node := &nodes[i]
+		if err := drh.nodeAPI.UpdateLabels(ctx, node, nil, map[string]string{targetLabel: ""}); err != nil {
+			errs = append(errs, fmt.Errorf("could not remove dra-target label from node %s: %v", node.Name, err))
 		}
 	}
 

@@ -148,6 +148,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
 			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(existingDCs, nil),
+			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(nil),
 		)
 
@@ -159,6 +160,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
 			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(existingDCs, nil),
+			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(fmt.Errorf("some error")),
 		)
 
@@ -172,6 +174,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
+			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(nil),
 			mockReconHelper.EXPECT().clearDRAStatus(ctx, mod).Return(nil),
 		)
@@ -190,6 +193,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(draDS, nil),
 			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(existingDCs, nil),
+			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(nil),
 			mockReconHelper.EXPECT().clearDRAStatus(ctx, mod).Return(nil),
 		)
@@ -206,6 +210,7 @@ var _ = Describe("DRAReconciler_Reconcile", func() {
 		gomock.InOrder(
 			mockReconHelper.EXPECT().getModuleDRADaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().getModuleDeviceClasses(ctx, mod.Name, mod.Namespace).Return(nil, nil),
+			mockReconHelper.EXPECT().removeDRATargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().deleteDRAResources(ctx, mod.Name, mod.Namespace).Return(nil),
 			mockReconHelper.EXPECT().clearDRAStatus(ctx, mod).Return(fmt.Errorf("some error")),
 		)
@@ -277,10 +282,12 @@ var _ = Describe("DRAReconciler_handleDRATargetLabels", func() {
 		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
 	})
 
-	It("leaves a cordoned node alone, since that is what takes the driver Pod off it", func() {
-		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).
-			Return([]v1.Node{tainted(v1.TaintNodeUnschedulable)}, nil)
+	It("removes the label from a cordoned node that still carries it", func() {
+		n := node1(map[string]string{targetLabel: ""})
+		n.Spec.Taints = []v1.Taint{{Key: v1.TaintNodeUnschedulable, Effect: v1.TaintEffectNoSchedule}}
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{n}, nil)
 		realSchedulability()
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(nil)
 
 		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
 	})
@@ -321,14 +328,6 @@ var _ = Describe("DRAReconciler_handleDRATargetLabels", func() {
 		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
 	})
 
-	It("does not write again to a node that already carries the label", func() {
-		n := node1(map[string]string{targetLabel: ""})
-
-		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{n}, nil)
-
-		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
-	})
-
 	It("reports a listing failure rather than an empty cluster", func() {
 		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return(nil, fmt.Errorf("some error"))
 
@@ -349,6 +348,58 @@ var _ = Describe("DRAReconciler_handleDRATargetLabels", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("node1"))
 		Expect(err.Error()).NotTo(ContainSubstring("node2"))
+	})
+})
+
+var _ = Describe("DRAReconciler_removeDRATargetLabels", func() {
+	const (
+		modName = "my-mod"
+		modNS   = "my-ns"
+	)
+
+	var (
+		ctrl *gomock.Controller
+		nm   *node.MockNode
+		drh  draReconcilerHelper
+		mod  *kmmv1beta1.Module
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		nm = node.NewMockNode(ctrl)
+		drh = draReconcilerHelper{nodeAPI: nm}
+		mod = &kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{Namespace: modNS, Name: modName}}
+	})
+
+	ctx := context.Background()
+	targetLabel := utils.GetDRATargetNodeLabel(modNS, modName)
+	labelled := func(name string) v1.Node {
+		return v1.Node{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{targetLabel: ""}}}
+	}
+
+	It("removes the label from every node that carries it", func() {
+		nm.EXPECT().GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""}).
+			Return([]v1.Node{labelled("node1"), labelled("node2")}, nil)
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(nil).Times(2)
+
+		Expect(drh.removeDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
+	})
+
+	It("reports a listing failure rather than an empty cluster", func() {
+		nm.EXPECT().GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""}).Return(nil, fmt.Errorf("boom"))
+
+		Expect(drh.removeDRATargetLabels(ctx, mod)).To(HaveOccurred())
+	})
+
+	It("goes on to the rest when one node cannot be unlabelled", func() {
+		nm.EXPECT().GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""}).
+			Return([]v1.Node{labelled("node1"), labelled("node2")}, nil)
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(fmt.Errorf("some error"))
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(nil)
+
+		err := drh.removeDRATargetLabels(ctx, mod)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("node1"))
 	})
 })
 
