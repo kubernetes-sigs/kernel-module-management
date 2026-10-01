@@ -257,6 +257,21 @@ var _ = Describe("UpdateLabels", func() {
 		Expect(err).To(HaveOccurred())
 
 	})
+
+	It("does not patch when the labels are unchanged", func() {
+		node := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{firstloadedKernelModuleReadyNodeLabel: ""},
+			},
+		}
+		// Re-adding a present label and removing an absent one changes nothing, so no Patch.
+		err := n.UpdateLabels(ctx,
+			&node,
+			map[string]string{firstloadedKernelModuleReadyNodeLabel: ""},
+			map[string]string{unloadedKernelModuleReadyNodeLabel: ""},
+		)
+		Expect(err).ToNot(HaveOccurred())
+	})
 })
 
 var _ = Describe("GetNumTargetedNodes", func() {
