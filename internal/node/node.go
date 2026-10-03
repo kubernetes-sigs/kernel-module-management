@@ -6,6 +6,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
+	"maps"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -83,12 +84,17 @@ func (n *node) GetNumTargetedNodes(ctx context.Context, selector map[string]stri
 }
 
 func (n *node) UpdateLabels(ctx context.Context, node *v1.Node, toBeAdded, toBeRemoved map[string]string) error {
-	patchFrom := client.MergeFrom(node.DeepCopy())
+	original := node.DeepCopy()
 
 	addLabels(node, toBeAdded)
 	removeLabels(node, toBeRemoved)
 
-	if err := n.client.Patch(ctx, node, patchFrom); err != nil {
+	// Skip a no-op Patch; it is still an API request even when nothing changes.
+	if maps.Equal(node.Labels, original.Labels) {
+		return nil
+	}
+
+	if err := n.client.Patch(ctx, node, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("could not patch node: %v", err)
 	}
 	return nil
