@@ -10,15 +10,15 @@ runs:
   using: composite
 
   steps:
-    - name: Install kubectl support-bundle
-      run: |
-        curl https://krew.sh/support-bundle | bash
-        echo "PATH=${KREW_ROOT:-$HOME/.krew}/bin:$PATH" >> "$GITHUB_ENV"
-      shell: bash
-
     - name: Collect a support bundle
-      run: kubectl support-bundle -o support-bundle.tar.gz ./support/kmm.spec.yaml
       shell: bash
+      run: |
+        archive="$RUNNER_TEMP/support-bundle-cli.tar.gz"
+        curl -fsSL --retry 3 -o "$archive" \
+          https://github.com/replicatedhq/troubleshoot/releases/download/v0.134.1/support-bundle_linux_amd64.tar.gz
+        echo "43da920966efc49743ba033e803cdd11e0b0ec36c19b7e4e5867e341b256eb3f  $archive" | sha256sum -c -
+        tar -xzf "$archive" -C "$RUNNER_TEMP" support-bundle
+        "$RUNNER_TEMP/support-bundle" -o support-bundle.tar.gz ./support/kmm.spec.yaml
 
     - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
