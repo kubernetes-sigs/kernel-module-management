@@ -3,10 +3,13 @@ package node
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
+
 	"github.com/kubernetes-sigs/kernel-module-management/internal/meta"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
-	"maps"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -33,6 +36,7 @@ func NewNode(client client.Client) Node {
 }
 
 func (n *node) IsNodeSchedulable(node *v1.Node, tolerations []v1.Toleration) bool {
+	tolerations = slices.Concat(tolerations, module.InternalTolerations)
 	for _, taint := range node.Spec.Taints {
 		toleranceFound := false
 		for _, toleration := range tolerations {

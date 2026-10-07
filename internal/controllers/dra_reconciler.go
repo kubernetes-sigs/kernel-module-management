@@ -20,12 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/filter"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	appsv1 "k8s.io/api/apps/v1"
@@ -193,11 +191,6 @@ func newDRAReconcilerHelper(client client.Client,
 	}
 }
 
-// draTolerations includes the pressure tolerations that the DaemonSet controller adds to its Pods.
-func draTolerations(mod *kmmv1beta1.Module) []v1.Toleration {
-	return slices.Concat(mod.Spec.Tolerations, module.InternalTolerations)
-}
-
 // handleDRATargetLabels ensures the dra-target label is present on schedulable nodes targeted by
 // the Module, and removed from unschedulable nodes. This enables the DRA driver DaemonSet to be
 // evicted from draining nodes. Nodes outside the Module's selector are not reconciled here.
@@ -213,14 +206,12 @@ func (drh *draReconcilerHelper) handleDRATargetLabels(ctx context.Context, mod *
 		return fmt.Errorf("could not list nodes targeted by module: %v", err)
 	}
 
-	tolerations := draTolerations(mod)
-
 	var errs []error
 	for i := range nodes {
 		node := &nodes[i]
 
 		var err error
-		if drh.nodeAPI.IsNodeSchedulable(node, tolerations) {
+		if drh.nodeAPI.IsNodeSchedulable(node, mod.Spec.Tolerations) {
 			err = drh.nodeAPI.UpdateLabels(ctx, node, map[string]string{targetLabel: ""}, nil)
 		} else {
 			err = drh.nodeAPI.UpdateLabels(ctx, node, nil, map[string]string{targetLabel: ""})
@@ -397,7 +388,7 @@ func (drh *draReconcilerHelper) moduleUpdateDRAStatus(ctx context.Context,
 		return nil
 	}
 
-	numTargetedNodes, err := drh.nodeAPI.GetNumTargetedNodes(ctx, mod.Spec.Selector, draTolerations(mod))
+	numTargetedNodes, err := drh.nodeAPI.GetNumTargetedNodes(ctx, mod.Spec.Selector, mod.Spec.Tolerations)
 	if err != nil {
 		return fmt.Errorf("failed to determine the number of nodes targeted by Module %s/%s selector: %v", mod.Namespace, mod.Name, err)
 	}
