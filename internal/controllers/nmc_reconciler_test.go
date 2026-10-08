@@ -1033,15 +1033,28 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 		mockWorkerPodManager *pod.MockWorkerPodManager
 		sw                   *testclient.MockStatusWriter
 		wh                   nmcReconcilerHelper
+		fakeRecorder         *record.FakeRecorder
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		kubeClient = testclient.NewMockClient(ctrl)
 		mockWorkerPodManager = pod.NewMockWorkerPodManager(ctrl)
-		wh = newNMCReconcilerHelper(kubeClient, mockWorkerPodManager, nil, nil)
+		fakeRecorder = record.NewFakeRecorder(10)
+		wh = newNMCReconcilerHelper(kubeClient, mockWorkerPodManager, fakeRecorder, nil)
 		sw = testclient.NewMockStatusWriter(ctrl)
 	})
+
+	collectEvents := func() []string {
+		GinkgoHelper()
+
+		close(fakeRecorder.Events)
+		events := make([]string, 0)
+		for e := range fakeRecorder.Events {
+			events = append(events, e)
+		}
+		return events
+	}
 
 	const (
 		podName      = "pod-name"
@@ -1104,6 +1117,8 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 
 		gomock.InOrder(
 			mockWorkerPodManager.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return(pods, nil),
+			mockWorkerPodManager.EXPECT().IsUnloaderPod(&podWithStatus).Return(false),
+			mockWorkerPodManager.EXPECT().IsUnloaderPod(&podWithoutStatus).Return(false),
 			kubeClient.EXPECT().Status().Return(sw),
 			sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
 			mockWorkerPodManager.EXPECT().DeletePod(ctx, &podWithStatus),
@@ -1117,6 +1132,93 @@ var _ = Describe("nmcReconcilerHelperImpl_SyncStatus", func() {
 		)
 
 		Expect(nmc.Status.Modules).To(HaveLen(1))
+	})
+
+	Context("worker pod failure Events", func() {
+		const (
+			modName      = "my-module"
+			modNamespace = "pod-namespace"
+		)
+
+		failedPod := func(termMsg string, init bool) v1.Pod {
+			p := v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: modNamespace,
+					Name:      podName,
+					Labels: map[string]string{
+						constants.ModuleNameLabel: modName,
+					},
+				},
+				Status: v1.PodStatus{Phase: v1.PodFailed},
+			}
+			term := &v1.ContainerStateTerminated{Message: termMsg}
+			if init {
+				p.Status.InitContainerStatuses = []v1.ContainerStatus{{
+					Name:  "image-extractor",
+					State: v1.ContainerState{Terminated: term},
+				}}
+			} else if termMsg != "" {
+				p.Status.ContainerStatuses = []v1.ContainerStatus{{
+					Name:  "worker",
+					State: v1.ContainerState{Terminated: term},
+				}}
+			}
+			return p
+		}
+
+		expectFailedPodFlow := func(p *v1.Pod, unloader bool) {
+			GinkgoHelper()
+
+			nmc := &kmmv1beta1.NodeModulesConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			}
+
+			gomock.InOrder(
+				mockWorkerPodManager.EXPECT().ListWorkerPodsOnNode(ctx, nmcName).Return([]v1.Pod{*p}, nil),
+				mockWorkerPodManager.EXPECT().IsUnloaderPod(p).Return(unloader),
+				kubeClient.EXPECT().Status().Return(sw),
+				sw.EXPECT().Patch(ctx, nmc, gomock.Any()),
+				mockWorkerPodManager.EXPECT().DeletePod(ctx, p),
+			)
+
+			Expect(wh.SyncStatus(ctx, nmc, &v1.Node{})).NotTo(HaveOccurred())
+		}
+
+		It("should emit ModuleLoadFailed for a failed loader pod", func() {
+			p := failedPod("init failed", true)
+			expectFailedPodFlow(&p, false)
+
+			events := collectEvents()
+			Expect(events).To(HaveLen(1))
+			Expect(events[0]).To(ContainSubstring("Warning ModuleLoadFailed init failed"))
+		})
+
+		It("should emit ModuleUnloadFailed for a failed unloader pod", func() {
+			p := failedPod("remove failed", false)
+			expectFailedPodFlow(&p, true)
+
+			events := collectEvents()
+			Expect(events).To(HaveLen(1))
+			Expect(events[0]).To(ContainSubstring("Warning ModuleUnloadFailed remove failed"))
+		})
+
+		It("should use the worker terminated message when init has none", func() {
+			p := failedPod("apply failed", false)
+			expectFailedPodFlow(&p, false)
+
+			events := collectEvents()
+			Expect(events).To(HaveLen(1))
+			Expect(events[0]).To(ContainSubstring("Warning ModuleLoadFailed apply failed"))
+		})
+
+		It("should use a fallback message when no container message is present", func() {
+			p := failedPod("", false)
+			expectFailedPodFlow(&p, false)
+
+			events := collectEvents()
+			Expect(events).To(HaveLen(1))
+			Expect(events[0]).To(ContainSubstring("Warning ModuleLoadFailed Worker pod " + modNamespace + "/" + podName + " failed"))
+		})
 	})
 
 	It("should remove the status and label if an unloader pod was successful", func() {
