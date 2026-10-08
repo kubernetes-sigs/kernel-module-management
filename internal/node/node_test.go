@@ -43,6 +43,22 @@ var _ = Describe("IsNodeSchedulable", func() {
 		Expect(isNodeSchedulable).To(BeFalse())
 
 	})
+	It("Returns true for disk, memory, and pid pressure taints", func() {
+		for _, key := range []string{v1.TaintNodeDiskPressure, v1.TaintNodeMemoryPressure, v1.TaintNodePIDPressure} {
+			node := v1.Node{
+				Spec: v1.NodeSpec{
+					Taints: []v1.Taint{
+						{
+							Key:    key,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					},
+				},
+			}
+			Expect(mn.IsNodeSchedulable(&node, nil)).To(BeTrue(), key)
+		}
+	})
+
 	It("Returns true, node is schedulable", func() {
 
 		node := v1.Node{
