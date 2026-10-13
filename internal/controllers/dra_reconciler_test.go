@@ -24,6 +24,7 @@ import (
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
@@ -1115,7 +1116,7 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 								},
 								draVol,
 							},
-							Tolerations:                  []v1.Toleration{testToleration},
+							Tolerations:                  append([]v1.Toleration{testToleration}, module.InternalTolerations...),
 							AutomountServiceAccountToken: ptr.To(false),
 						},
 					},

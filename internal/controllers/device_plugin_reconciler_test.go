@@ -12,6 +12,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -954,7 +955,7 @@ var _ = Describe("DevicePluginReconciler_setDevicePluginAsDesired", func() {
 								},
 								dpVol,
 							},
-							Tolerations:                  []v1.Toleration{testToleration},
+							Tolerations:                  append([]v1.Toleration{testToleration}, module.InternalTolerations...),
 							AutomountServiceAccountToken: ptr.To(false),
 						},
 					},
