@@ -231,6 +231,8 @@ func (dprh *devicePluginReconcilerHelper) handleDevicePlugin(ctx context.Context
 // handleDevicePluginTargetLabels ensures the device-plugin-target label is present on schedulable
 // nodes targeted by the Module, and removed from unschedulable nodes.
 // This enables the device plugin DaemonSet to be evicted from draining nodes.
+// IsNodeSchedulable already includes InternalTolerations, so disk/memory/pid pressure
+// does not drop the label — matching the Device Plugin pod's own tolerations.
 func (dprh *devicePluginReconcilerHelper) handleDevicePluginTargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
 	if mod.Spec.DevicePlugin == nil {
 		return nil

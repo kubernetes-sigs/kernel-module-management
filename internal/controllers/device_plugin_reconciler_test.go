@@ -1250,6 +1250,50 @@ var _ = Describe("devicePluginReconcilerHelper_handleDevicePluginTargetLabels", 
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	// The real check, so InternalTolerations inside IsNodeSchedulable are under test.
+	realSchedulability := func() {
+		nm.EXPECT().IsNodeSchedulable(gomock.Any(), gomock.Any()).
+			DoAndReturn(node.NewNode(nil).IsNodeSchedulable)
+	}
+
+	It("should add target label to a node under disk, memory, or pid pressure", func() {
+		targetLabel := utils.GetDevicePluginTargetNodeLabel(namespace, moduleName)
+
+		for _, key := range []string{v1.TaintNodeDiskPressure, v1.TaintNodeMemoryPressure, v1.TaintNodePIDPressure} {
+			pressuredNode := v1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "pressured-node"},
+				Spec: v1.NodeSpec{
+					Taints: []v1.Taint{{Key: key, Effect: v1.TaintEffectNoSchedule}},
+				},
+			}
+
+			nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{pressuredNode}, nil)
+			realSchedulability()
+			nm.EXPECT().UpdateLabels(ctx, &pressuredNode, map[string]string{targetLabel: ""}, nil).Return(nil)
+
+			Expect(dprh.handleDevicePluginTargetLabels(ctx, mod)).NotTo(HaveOccurred(), key)
+		}
+	})
+
+	It("should remove the target label from a cordoned node", func() {
+		targetLabel := utils.GetDevicePluginTargetNodeLabel(namespace, moduleName)
+		cordoned := v1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "cordoned-node",
+				Labels: map[string]string{targetLabel: ""},
+			},
+			Spec: v1.NodeSpec{
+				Taints: []v1.Taint{{Key: v1.TaintNodeUnschedulable, Effect: v1.TaintEffectNoSchedule}},
+			},
+		}
+
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{cordoned}, nil)
+		realSchedulability()
+		nm.EXPECT().UpdateLabels(ctx, &cordoned, nil, map[string]string{targetLabel: ""}).Return(nil)
+
+		Expect(dprh.handleDevicePluginTargetLabels(ctx, mod)).NotTo(HaveOccurred())
+	})
+
 	It("should add target label to schedulable node", func() {
 		targetLabel := utils.GetDevicePluginTargetNodeLabel(namespace, moduleName)
 

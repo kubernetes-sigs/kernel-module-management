@@ -196,6 +196,8 @@ func newDRAReconcilerHelper(client client.Client,
 // handleDRATargetLabels ensures the dra-target label is present on schedulable nodes targeted by
 // the Module, and removed from unschedulable nodes. This enables the DRA driver DaemonSet to be
 // evicted from draining nodes. Nodes outside the Module's selector are not reconciled here.
+// IsNodeSchedulable already includes InternalTolerations, so disk/memory/pid pressure
+// does not drop the label — matching the DRA pod's own tolerations.
 func (drh *draReconcilerHelper) handleDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
 	if mod.Spec.DRA == nil {
 		return nil
