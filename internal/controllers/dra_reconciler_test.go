@@ -274,13 +274,15 @@ var _ = Describe("DRAReconciler_handleDRATargetLabels", func() {
 		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
 	})
 
-	It("labels a node under memory pressure, which the driver Pod tolerates", func() {
-		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).
-			Return([]v1.Node{tainted(v1.TaintNodeMemoryPressure)}, nil)
-		realSchedulability()
-		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), map[string]string{targetLabel: ""}, nil).Return(nil)
+	It("labels a node under disk, memory, or pid pressure, which the driver Pod tolerates", func() {
+		for _, key := range []string{v1.TaintNodeDiskPressure, v1.TaintNodeMemoryPressure, v1.TaintNodePIDPressure} {
+			nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).
+				Return([]v1.Node{tainted(key)}, nil)
+			realSchedulability()
+			nm.EXPECT().UpdateLabels(ctx, gomock.Any(), map[string]string{targetLabel: ""}, nil).Return(nil)
 
-		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
+			Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(HaveOccurred(), key)
+		}
 	})
 
 	It("removes the label from a cordoned node that still carries it", func() {
