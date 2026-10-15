@@ -28,8 +28,9 @@ A separate DRA reconciler watches `Module` resources that have `.spec.dra` set.
 
 1. When a `Module` has `.spec.dra` configured, the DRA reconciler creates a DRA driver `DaemonSet` targeting nodes
    where the kernel module is loaded and that carry the `kmm.node.kubernetes.io/<namespace>.<modulename>.dra-target`
-   label. The reconciler puts that label on every schedulable node the `Module` selects and takes it off a node that
-   is no longer schedulable, so the DRA driver `DaemonSet` is evicted from a draining node. A node that stops matching
+   label. The reconciler puts that label on every schedulable node the `Module` selects. On a draining node with a
+   kernel module, it keeps the label while a Pod there still uses the driver's ResourceClaim, then removes the label
+   so the DRA driver `DaemonSet` can leave the node. A node that stops matching
    `.spec.selector` is not visited here and keeps the label until `spec.dra` is removed or the `Module` is deleted. A
    `Module` with no `.spec.moduleLoader` has no kernel module to unload, so its `DaemonSet` targets `.spec.selector`
    directly and does not select on the label.

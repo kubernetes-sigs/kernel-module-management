@@ -37,9 +37,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -291,6 +293,32 @@ var _ = Describe("DRAReconciler_handleDRATargetLabels", func() {
 		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{n}, nil)
 		realSchedulability()
 		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), nil, map[string]string{targetLabel: ""}).Return(nil)
+
+		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
+	})
+
+	It("keeps the label while a Pod on the cordoned node uses the driver", func() {
+		mod.Spec.ModuleLoader = &kmmv1beta1.ModuleLoaderSpec{}
+		mod.Spec.DRA.DriverName = "gpu.example.com"
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "work", UID: types.UID("pod-uid")},
+			Spec:       v1.PodSpec{NodeName: "node1"},
+		}
+		claim := &resourcev1.ResourceClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "claim", Namespace: "work"},
+			Status: resourcev1.ResourceClaimStatus{
+				Allocation: &resourcev1.AllocationResult{Devices: resourcev1.DeviceAllocationResult{
+					Results: []resourcev1.DeviceRequestAllocationResult{{Driver: mod.Spec.DRA.DriverName}},
+				}},
+				ReservedFor: []resourcev1.ResourceClaimConsumerReference{{Resource: "pods", Name: pod.Name, UID: pod.UID}},
+			},
+		}
+		drh.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod, claim).Build()
+		n := node1(map[string]string{targetLabel: ""})
+		n.Spec.Taints = []v1.Taint{{Key: v1.TaintNodeUnschedulable, Effect: v1.TaintEffectNoSchedule}}
+		nm.EXPECT().GetAllNodesBySelector(ctx, mod.Spec.Selector).Return([]v1.Node{n}, nil)
+		realSchedulability()
+		nm.EXPECT().UpdateLabels(ctx, gomock.Any(), map[string]string{targetLabel: ""}, nil).Return(nil)
 
 		Expect(drh.handleDRATargetLabels(ctx, mod)).NotTo(HaveOccurred())
 	})
@@ -1775,5 +1803,64 @@ var _ = Describe("DRAReconciler_deleteDRAResources", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("DaemonSets"))
 		Expect(err.Error()).To(ContainSubstring("DeviceClasses"))
+	})
+})
+
+var _ = Describe("activeDRAClaimNodes", func() {
+	const driverName = "gpu.example.com"
+
+	It("only holds nodes with a reserved Pod for this driver", func() {
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "work", UID: types.UID("consumer-uid")},
+			Spec:       v1.PodSpec{NodeName: "node1"},
+		}
+		claim := &resourcev1.ResourceClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "claim", Namespace: "work"},
+			Status: resourcev1.ResourceClaimStatus{
+				Allocation: &resourcev1.AllocationResult{Devices: resourcev1.DeviceAllocationResult{
+					Results: []resourcev1.DeviceRequestAllocationResult{{Driver: driverName}},
+				}},
+				ReservedFor: []resourcev1.ResourceClaimConsumerReference{{Resource: "pods", Name: pod.Name, UID: pod.UID}},
+			},
+		}
+		otherDriver := claim.DeepCopy()
+		otherDriver.Name = "other-driver"
+		otherDriver.Status.Allocation.Devices.Results[0].Driver = "other.example.com"
+		otherDriver.Status.ReservedFor[0].Name = "other-consumer"
+		otherDriver.Status.ReservedFor[0].UID = types.UID("other-uid")
+		otherPod := pod.DeepCopy()
+		otherPod.Name = "other-consumer"
+		otherPod.UID = types.UID("other-uid")
+		otherPod.Spec.NodeName = "node2"
+		unreserved := claim.DeepCopy()
+		unreserved.Name = "unreserved"
+		unreserved.Status.ReservedFor = nil
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod, claim, otherPod, otherDriver, unreserved).Build()
+		nodes, err := activeDRAClaimNodes(context.Background(), c, driverName)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nodes.UnsortedList()).To(ConsistOf("node1"))
+	})
+
+	It("ignores a reservation for a Pod UID that no longer exists", func() {
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "work", UID: types.UID("new-uid")},
+			Spec:       v1.PodSpec{NodeName: "node1"},
+		}
+		claim := &resourcev1.ResourceClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "claim", Namespace: "work"},
+			Status: resourcev1.ResourceClaimStatus{
+				Allocation: &resourcev1.AllocationResult{Devices: resourcev1.DeviceAllocationResult{
+					Results: []resourcev1.DeviceRequestAllocationResult{{Driver: driverName}},
+				}},
+				ReservedFor: []resourcev1.ResourceClaimConsumerReference{{Resource: "pods", Name: pod.Name, UID: types.UID("old-uid")}},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod, claim).Build()
+		nodes, err := activeDRAClaimNodes(context.Background(), c, driverName)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nodes).To(BeEmpty())
 	})
 })

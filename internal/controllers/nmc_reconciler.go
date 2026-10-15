@@ -110,6 +110,26 @@ func (r *NMCReconciler) Reconcile(ctx context.Context, req reconcile.Request) (r
 
 		// skipping handling NMC spec module until node is ready
 		if !r.nodeAPI.IsNodeSchedulable(&node, mod.Tolerations) {
+			// A DRA consumer still needs the driver and its ready label during teardown.
+			module := kmmv1beta1.Module{}
+			key := types.NamespacedName{Namespace: mod.Namespace, Name: mod.Name}
+			if err := r.client.Get(ctx, key, &module); err != nil && !k8serrors.IsNotFound(err) {
+				errs = append(errs, fmt.Errorf("could not get Module %s before removing ready labels: %w", key, err))
+				delete(statusMap, moduleNameKey)
+				continue
+			}
+			if module.Spec.DRA != nil {
+				activeNodes, err := activeDRAClaimNodes(ctx, r.client, module.Spec.DRA.DriverName)
+				if err != nil {
+					errs = append(errs, fmt.Errorf("could not check DRA claims for Module %s: %w", key, err))
+					delete(statusMap, moduleNameKey)
+					continue
+				}
+				if activeNodes.Has(node.Name) {
+					delete(statusMap, moduleNameKey)
+					continue
+				}
+			}
 			readyLabelsToRemove[utils.GetKernelModuleReadyNodeLabel(mod.Namespace, mod.Name)] = ""
 			readyLabelsToRemove[utils.GetKernelModuleVersionReadyNodeLabel(mod.Namespace, mod.Name)] = ""
 			delete(statusMap, moduleNameKey)

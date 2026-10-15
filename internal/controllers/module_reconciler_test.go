@@ -21,12 +21,14 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -214,6 +216,25 @@ var _ = Describe("ModuleReconciler_Reconcile", func() {
 
 		Expect(res).To(Equal(reconcile.Result{}))
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("requeues instead of unloading while the DRA driver is still needed", func() {
+		mod.Spec.DRA = &kmmv1beta1.DRASpec{DriverName: "gpu.example.com"}
+		waitData := map[string]schedulingData{nodeName: {action: actionWait}}
+		gomock.InOrder(
+			mockNamespaceHelper.EXPECT().setLabel(ctx, mod.Namespace),
+			mockReconHelper.EXPECT().setFinalizerAndStatus(ctx, mod).Return(nil),
+			mn.EXPECT().GetSchedulableNodesBySelector(ctx, mod.Spec.Selector, mod.Spec.Tolerations).Return(targetedNodes, nil),
+			mockReconHelper.EXPECT().handleMIC(ctx, mod, targetedNodes).Return(nil),
+			mockReconHelper.EXPECT().getNMCsByModuleSet(ctx, mod).Return(currentNMCs, nil),
+			mockReconHelper.EXPECT().prepareSchedulingData(ctx, mod, targetedNodes, currentNMCs).Return(waitData, nil),
+			mockReconHelper.EXPECT().updateModuleStatus(ctx, mod, targetedNodes).Return(nil),
+		)
+
+		res, err := mr.Reconcile(ctx, mod)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res.RequeueAfter).To(BeNumerically(">", 0))
 	})
 
 	It("Good flow, should not load kernel module when moduleLoader is missing", func() {
@@ -812,6 +833,39 @@ var _ = Describe("prepareSchedulingData", func() {
 
 		Expect(errs).To(BeEmpty())
 		Expect(scheduleData).To(HaveKeyWithValue(nodeName, schedulingData{action: actionDelete}))
+	})
+
+	It("waits for the claim consumer before unloading", func() {
+		mod := &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: moduleName, Namespace: moduleNamespace},
+			Spec:       kmmv1beta1.ModuleSpec{DRA: &kmmv1beta1.DRASpec{DriverName: "gpu.example.com"}},
+		}
+		consumer := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "work", UID: types.UID("consumer-uid")},
+			Spec:       v1.PodSpec{NodeName: nodeName},
+		}
+		claim := &resourcev1.ResourceClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "claim", Namespace: "work"},
+			Status: resourcev1.ResourceClaimStatus{
+				Allocation: &resourcev1.AllocationResult{Devices: resourcev1.DeviceAllocationResult{
+					Results: []resourcev1.DeviceRequestAllocationResult{{Driver: mod.Spec.DRA.DriverName}},
+				}},
+				ReservedFor: []resourcev1.ResourceClaimConsumerReference{{Resource: "pods", Name: consumer.Name, UID: consumer.UID}},
+			},
+		}
+		clnt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(consumer, claim).Build()
+		helper := newModuleReconcilerHelper(clnt, mockKernel, nil, mockHelper, scheme)
+		getAction := func() string {
+			data, errs := helper.prepareSchedulingData(ctx, mod, nil, sets.New[string](nodeName))
+			Expect(errs).To(BeEmpty())
+			return data[nodeName].action
+		}
+
+		Expect(getAction()).To(Equal(actionWait))
+		releasedClaim := claim.DeepCopy()
+		releasedClaim.Status.ReservedFor = nil
+		helper.(*moduleReconcilerHelper).client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(consumer, releasedClaim).Build()
+		Expect(getAction()).To(Equal(actionDelete))
 	})
 })
 
