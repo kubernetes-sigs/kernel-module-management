@@ -34,6 +34,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -86,7 +87,11 @@ func (r *DRAReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(filter.DeviceClassToModuleReconcileRequest),
 			builder.WithPredicates(filter.HasLabel(constants.ModuleNameLabel)),
 		).
-		// The target label is decided from the node's labels and taints; no other watch sees those.
+		Watches(
+			&resourcev1.ResourceClaim{},
+			handler.EnqueueRequestsFromMapFunc(r.modulesForClaim),
+		).
+		// Node selection and cordon state also determine where the driver is needed.
 		Watches(
 			&v1.Node{},
 			handler.EnqueueRequestsFromMapFunc(r.filter.FindModulesForNode),
@@ -96,6 +101,91 @@ func (r *DRAReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(
 			reconcile.AsReconciler[*kmmv1beta1.Module](r.client, r),
 		)
+}
+
+func (r *DRAReconciler) modulesForClaim(ctx context.Context, obj client.Object) []reconcile.Request {
+	claim, ok := obj.(*resourcev1.ResourceClaim)
+	if !ok || claim.Status.Allocation == nil {
+		return nil
+	}
+
+	drivers := sets.New[string]()
+	for _, device := range claim.Status.Allocation.Devices.Results {
+		drivers.Insert(device.Driver)
+	}
+	if drivers.Len() == 0 {
+		return nil
+	}
+
+	modules := kmmv1beta1.ModuleList{}
+	if err := r.client.List(ctx, &modules); err != nil {
+		log.FromContext(ctx).Error(err, "could not list Modules for ResourceClaim", "claim", client.ObjectKeyFromObject(claim))
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0)
+	for i := range modules.Items {
+		mod := &modules.Items[i]
+		if mod.Spec.ModuleLoader != nil && mod.Spec.DRA != nil && drivers.Has(mod.Spec.DRA.DriverName) {
+			requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(mod)})
+		}
+	}
+	return requests
+}
+
+// activeDRAClaimNodes returns nodes with a Pod still reserved for an allocated
+// claim of this driver. During normal Pod termination, Kubernetes keeps the Pod
+// until kubelet has finished unpreparing its resources, so an existing reserved
+// Pod is the drain barrier.
+func activeDRAClaimNodes(ctx context.Context, clnt client.Reader, driverName string) (sets.Set[string], error) {
+	nodes := sets.New[string]()
+	if driverName == "" {
+		return nodes, nil
+	}
+
+	claims := resourcev1.ResourceClaimList{}
+	if err := clnt.List(ctx, &claims); err != nil {
+		return nil, fmt.Errorf("could not list ResourceClaims: %w", err)
+	}
+
+	for i := range claims.Items {
+		claim := &claims.Items[i]
+		if claim.Status.Allocation == nil || len(claim.Status.ReservedFor) == 0 || !claimUsesDriver(claim, driverName) {
+			continue
+		}
+
+		for _, consumer := range claim.Status.ReservedFor {
+			if consumer.APIGroup != "" || consumer.Resource != "pods" {
+				continue
+			}
+
+			pod := v1.Pod{}
+			key := client.ObjectKey{Namespace: claim.Namespace, Name: consumer.Name}
+			if err := clnt.Get(ctx, key, &pod); err != nil {
+				if apierrors.IsNotFound(err) {
+					continue
+				}
+				return nil, fmt.Errorf("could not get ResourceClaim consumer Pod %s: %w", key, err)
+			}
+			if pod.UID == consumer.UID && pod.Spec.NodeName != "" {
+				nodes.Insert(pod.Spec.NodeName)
+			}
+		}
+	}
+
+	return nodes, nil
+}
+
+func claimUsesDriver(claim *resourcev1.ResourceClaim, driverName string) bool {
+	if claim.Status.Allocation == nil {
+		return false
+	}
+	for _, device := range claim.Status.Allocation.Devices.Results {
+		if device.Driver == driverName {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *DRAReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Module) (ctrl.Result, error) {
@@ -194,10 +284,12 @@ func newDRAReconcilerHelper(client client.Client,
 }
 
 // handleDRATargetLabels ensures the dra-target label is present on schedulable nodes targeted by
-// the Module, and removed from unschedulable nodes. This enables the DRA driver DaemonSet to be
-// evicted from draining nodes. Nodes outside the Module's selector are not reconciled here.
+// the Module, and removed from unschedulable nodes once no Pod there uses the driver.
+// This lets the DRA driver DaemonSet leave a draining node after claim teardown.
+// Nodes outside the Module's selector are not reconciled here.
 // IsNodeSchedulable already includes InternalTolerations, so disk/memory/pid pressure
 // does not drop the label — matching the DRA pod's own tolerations.
+// A reserved ResourceClaim keeps the label while its consumer Pod is still on the node.
 func (drh *draReconcilerHelper) handleDRATargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error {
 	if mod.Spec.DRA == nil {
 		return nil
@@ -211,11 +303,22 @@ func (drh *draReconcilerHelper) handleDRATargetLabels(ctx context.Context, mod *
 	}
 
 	var errs []error
+	var activeNodes sets.Set[string]
 	for i := range nodes {
 		node := &nodes[i]
 
 		var err error
-		if drh.nodeAPI.IsNodeSchedulable(node, mod.Spec.Tolerations) {
+		keepLabel := drh.nodeAPI.IsNodeSchedulable(node, mod.Spec.Tolerations)
+		if !keepLabel && mod.Spec.ModuleLoader != nil {
+			if activeNodes == nil {
+				activeNodes, err = activeDRAClaimNodes(ctx, drh.client, mod.Spec.DRA.DriverName)
+				if err != nil {
+					return fmt.Errorf("could not find active claims for driver %s: %w", mod.Spec.DRA.DriverName, err)
+				}
+			}
+			keepLabel = activeNodes.Has(node.Name)
+		}
+		if keepLabel {
 			err = drh.nodeAPI.UpdateLabels(ctx, node, map[string]string{targetLabel: ""}, nil)
 		} else {
 			err = drh.nodeAPI.UpdateLabels(ctx, node, nil, map[string]string{targetLabel: ""})

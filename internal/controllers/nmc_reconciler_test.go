@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -26,6 +27,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 )
@@ -166,6 +168,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			),
 			wh.EXPECT().SyncStatus(ctx, nmc, &node),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
+			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Namespace: "test-ns", Name: "test-module"}, &kmmv1beta1.Module{}).Return(k8serrors.NewNotFound(schema.GroupResource{}, "test-module")),
 			nm.EXPECT().UpdateLabels(ctx, &node, nil, map[string]string{kmodReadyLabel: "", kmodVersionReadyLabel: ""}).DoAndReturn(
 				func(_ context.Context, obj ctrlclient.Object, _, _ map[string]string) error {
 					delete(node.ObjectMeta.Labels, kmodReadyLabel)
@@ -224,6 +227,7 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 			),
 			wh.EXPECT().SyncStatus(ctx, nmc, &node),
 			nm.EXPECT().IsNodeSchedulable(&node, nil).Return(false),
+			kubeClient.EXPECT().Get(ctx, types.NamespacedName{Namespace: "test-ns", Name: "test-module"}, &kmmv1beta1.Module{}).Return(k8serrors.NewNotFound(schema.GroupResource{}, "test-module")),
 			nm.EXPECT().UpdateLabels(ctx, &node, nil, map[string]string{kmodReadyLabel: "", kmodVersionReadyLabel: ""}).DoAndReturn(
 				func(_ context.Context, obj ctrlclient.Object, _, _ map[string]string) error {
 					return fmt.Errorf("some error")
@@ -234,6 +238,47 @@ var _ = Describe("NodeModulesConfigReconciler_Reconcile", func() {
 		_, err := r.Reconcile(ctx, req)
 		Expect(err).To(HaveOccurred())
 		Expect(node).ToNot(Equal(expectedNode))
+	})
+
+	It("keeps the ready label on a cordoned node with a DRA claim consumer", func() {
+		mod := &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-module", Namespace: "test-ns"},
+			Spec:       kmmv1beta1.ModuleSpec{DRA: &kmmv1beta1.DRASpec{DriverName: "gpu.example.com"}},
+		}
+		nmc := &kmmv1beta1.NodeModulesConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: nmcName},
+			Spec: kmmv1beta1.NodeModulesConfigSpec{Modules: []kmmv1beta1.NodeModuleSpec{{
+				ModuleItem: kmmv1beta1.ModuleItem{Name: mod.Name, Namespace: mod.Namespace},
+			}}},
+		}
+		node := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: nmcName, Labels: map[string]string{kmodReadyLabel: ""}}}
+		consumer := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "work", UID: types.UID("consumer-uid")},
+			Spec:       v1.PodSpec{NodeName: nmcName},
+		}
+		claim := &resourcev1.ResourceClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "claim", Namespace: "work"},
+			Status: resourcev1.ResourceClaimStatus{
+				Allocation: &resourcev1.AllocationResult{Devices: resourcev1.DeviceAllocationResult{
+					Results: []resourcev1.DeviceRequestAllocationResult{{Driver: mod.Spec.DRA.DriverName}},
+				}},
+				ReservedFor: []resourcev1.ResourceClaimConsumerReference{{Resource: "pods", Name: consumer.Name, UID: consumer.UID}},
+			},
+		}
+		clnt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mod, nmc, node, consumer, claim).Build()
+		r.client = clnt
+		nm.EXPECT().IsNodeSchedulable(gomock.Any(), nil).Return(false)
+		wh.EXPECT().SyncStatus(ctx, gomock.Any(), gomock.Any()).Return(nil)
+		wh.EXPECT().GarbageCollectInUseLabels(ctx, gomock.Any()).Return(nil)
+		wh.EXPECT().GarbageCollectWorkerPods(ctx, gomock.Any()).Return(nil)
+		wh.EXPECT().UpdateNodeLabels(ctx, gomock.Any(), gomock.Any()).Return(nil, nil, nil)
+		wh.EXPECT().RecordEvents(gomock.Any(), nil, nil)
+
+		_, err := r.Reconcile(ctx, req)
+		Expect(err).NotTo(HaveOccurred())
+		actualNode := v1.Node{}
+		Expect(clnt.Get(ctx, types.NamespacedName{Name: nmcName}, &actualNode)).To(Succeed())
+		Expect(actualNode.Labels).To(HaveKey(kmodReadyLabel))
 	})
 
 	It("should process spec entries and orphan statuses", func() {

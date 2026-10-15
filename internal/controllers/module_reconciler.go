@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/api"
@@ -52,11 +53,13 @@ import (
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=preflightvalidations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kmm.sigs.x-k8s.io,resources=preflightvalidations/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=resource.k8s.io,resources=deviceclasses,verbs=create;delete;deletecollection;get;list;patch;update;watch
+//+kubebuilder:rbac:groups=resource.k8s.io,resources=resourceclaims,verbs=list;watch
 
 const (
 	ModuleReconcilerName = "ModuleReconciler"
 	actionDelete         = "delete"
 	actionAdd            = "add"
+	actionWait           = "wait"
 )
 
 type schedulingData struct {
@@ -140,7 +143,12 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 	errs := make([]error, 0, len(sdMap)+1)
 	errs = append(errs, prepareErrs...)
 
+	waitingForDRA := false
 	for nodeName, sd := range sdMap {
+		if sd.action == actionWait {
+			waitingForDRA = true
+			continue
+		}
 		if sd.action == actionAdd {
 			err = mr.reconHelper.enableModuleOnNode(ctx, sd.mld, sd.node)
 		}
@@ -156,6 +164,9 @@ func (mr *ModuleReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.Modul
 	err = errors.Join(errs...)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile module %s/%s config: %v", mod.Namespace, mod.Name, err)
+	}
+	if waitingForDRA {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	return ctrl.Result{}, nil
 }
@@ -342,6 +353,20 @@ func (mrh *moduleReconcilerHelper) prepareSchedulingData(ctx context.Context,
 		}
 		result[node.Name] = prepareNodeSchedulingData(node, mld, currentNMCs)
 		currentNMCs.Delete(node.Name)
+	}
+	// Keep the module configured until kubelet has released its claim consumers.
+	if mod.Spec.DRA != nil && currentNMCs.Len() > 0 {
+		activeNodes, err := activeDRAClaimNodes(ctx, mrh.client, mod.Spec.DRA.DriverName)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("could not check DRA claims before unloading Module %s/%s: %w", mod.Namespace, mod.Name, err))
+			return result, errs
+		}
+		for nodeName := range activeNodes {
+			if currentNMCs.Has(nodeName) {
+				result[nodeName] = schedulingData{action: actionWait}
+				currentNMCs.Delete(nodeName)
+			}
+		}
 	}
 	for _, nmcName := range currentNMCs.UnsortedList() {
 		result[nmcName] = schedulingData{action: actionDelete}
