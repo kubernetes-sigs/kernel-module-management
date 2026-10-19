@@ -120,6 +120,19 @@ There is also support for running an init-container as part of the DRA driver by
 [DNS subdomain](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names).
 This is the name the DRA driver registers with kubelet.
 
+#### Draining a node
+
+Before cordoning or draining a node that runs a KMM-managed DRA driver, stop or move the workloads on that node that use
+the driver's ResourceClaims. Prevent their controllers from placing replacement Pods on the node, and wait for the Pods
+to terminate normally so kubelet can unprepare their devices. Check that their ResourceClaims are no longer reserved for
+those Pods before draining the node. Do not force-delete the Pods as a substitute for device cleanup.
+
+`kubectl drain` marks the node unschedulable before it evicts workload Pods. KMM may then remove the DRA driver Pod and
+unload the kernel module. If kubelet still needs to call `NodeUnprepareResources`, the workload Pod can remain in
+`Terminating`. The workload owner or cluster administrator is responsible for this order and for managing user
+ResourceClaims; KMM does not delete them. See the Kubernetes guidance on
+[draining DRA drivers](https://kubernetes.io/docs/concepts/cluster-administration/dra/#when-draining-a-node-drain-the-dra-driver-as-late-as-possible).
+
 #### DeviceClasses
 
 `.spec.dra.deviceClasses` is an optional list of
