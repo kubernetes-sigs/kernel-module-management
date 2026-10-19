@@ -23,6 +23,9 @@ const (
 	// NMC lists the Module as in use, which says nothing about whether the cleanup has finished.
 	DRAFinalizer = "kmm.node.kubernetes.io/dra-finalizer"
 
+	// Device-plugin cleanup must finish independently of the Module's NMC usage.
+	DevicePluginFinalizer = "kmm.node.kubernetes.io/device-plugin-finalizer"
+
 	ManagedClusterModuleNameLabel  = "kmm.node.kubernetes.io/managedclustermodule.name"
 	KernelVersionsClusterClaimName = "kernel-versions.kmm.node.kubernetes.io"
 	DockerfileCMKey                = "dockerfile"

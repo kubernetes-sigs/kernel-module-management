@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -13,6 +12,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/metrics"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/module"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/node"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -26,8 +26,256 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+var _ = Describe("DevicePluginReconciler finalizer lifecycle", func() {
+	It("keeps a device-plugin-only Module available when label cleanup must be retried", func() {
+		ctx := context.Background()
+		mod := &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: moduleName, Namespace: namespace,
+				Finalizers: []string{constants.ModuleFinalizer},
+			},
+			Spec: kmmv1beta1.ModuleSpec{DevicePlugin: &kmmv1beta1.DevicePluginSpec{}},
+		}
+		failNodeList := true
+		clnt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mod).WithInterceptorFuncs(interceptor.Funcs{
+			List: func(ctx context.Context, c ctrlclient.WithWatch, list ctrlclient.ObjectList, opts ...ctrlclient.ListOption) error {
+				if _, ok := list.(*v1.NodeList); ok && failNodeList {
+					return fmt.Errorf("node list failed")
+				}
+				return c.List(ctx, list, opts...)
+			},
+		}).Build()
+		r := NewDevicePluginReconciler(clnt, metrics.New(), nil, node.NewNode(clnt), scheme)
+		key := ctrlclient.ObjectKeyFromObject(mod)
+
+		// Stop the first pass before resources are created, then start deletion.
+		_, err := r.Reconcile(ctx, mod)
+		Expect(err).To(HaveOccurred())
+		Expect(clnt.Get(ctx, key, mod)).To(Succeed())
+		Expect(mod.Finalizers).To(ContainElement(constants.DevicePluginFinalizer))
+
+		Expect(clnt.Delete(ctx, mod)).To(Succeed())
+		Expect(clnt.Get(ctx, key, mod)).To(Succeed())
+		original := mod.DeepCopy()
+		mod.Finalizers = []string{constants.DevicePluginFinalizer}
+		Expect(clnt.Patch(ctx, mod, ctrlclient.MergeFrom(original))).To(Succeed())
+
+		_, err = r.Reconcile(ctx, mod)
+		Expect(err).To(HaveOccurred())
+		Expect(clnt.Get(ctx, key, mod)).To(Succeed())
+
+		failNodeList = false
+		_, err = r.Reconcile(ctx, mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(apierrors.IsNotFound(clnt.Get(ctx, key, mod))).To(BeTrue())
+	})
+
+	DescribeTable("waits for DaemonSets before releasing its finalizer", func(deleting bool) {
+		ctx := context.Background()
+		targetLabel := utils.GetDevicePluginTargetNodeLabel(namespace, moduleName)
+		mod := &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: moduleName, Namespace: namespace,
+				Finalizers: []string{constants.ModuleFinalizer, constants.DevicePluginFinalizer},
+			},
+		}
+		if deleting {
+			mod.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{}
+		}
+		ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{
+			Name: "device-plugin", Namespace: namespace, UID: "device-plugin-uid",
+			Labels: map[string]string{
+				constants.ModuleNameLabel: moduleName,
+				constants.DaemonSetRole:   constants.DevicePluginRoleLabelValue,
+			},
+			Finalizers: []string{"example.com/hold"},
+		}}
+		n := &v1.Node{ObjectMeta: metav1.ObjectMeta{
+			Name: "labelled-node", Labels: map[string]string{targetLabel: "", "unrelated": "keep"},
+		}}
+		clnt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mod, ds, n).Build()
+		r := NewDevicePluginReconciler(clnt, metrics.New(), nil, node.NewNode(clnt), scheme)
+		if deleting {
+			Expect(clnt.Delete(ctx, mod)).To(Succeed())
+		}
+		Expect(clnt.Get(ctx, ctrlclient.ObjectKeyFromObject(mod), mod)).To(Succeed())
+
+		_, err := r.Reconcile(ctx, mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clnt.Get(ctx, ctrlclient.ObjectKeyFromObject(mod), mod)).To(Succeed())
+		Expect(mod.Finalizers).To(ContainElement(constants.DevicePluginFinalizer))
+		Expect(clnt.Get(ctx, ctrlclient.ObjectKeyFromObject(n), n)).To(Succeed())
+		Expect(n.Labels).To(Equal(map[string]string{"unrelated": "keep"}))
+		Expect(clnt.Get(ctx, ctrlclient.ObjectKeyFromObject(ds), ds)).To(Succeed())
+		Expect(ds.DeletionTimestamp).NotTo(BeNil())
+
+		// Repeated reconciliations must keep waiting for an already terminating DaemonSet.
+		_, err = r.Reconcile(ctx, mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clnt.Get(ctx, ctrlclient.ObjectKeyFromObject(mod), mod)).To(Succeed())
+		Expect(mod.Finalizers).To(ContainElement(constants.DevicePluginFinalizer))
+
+		original := ds.DeepCopy()
+		ds.Finalizers = nil
+		Expect(clnt.Patch(ctx, ds, ctrlclient.MergeFrom(original))).To(Succeed())
+		_, err = r.Reconcile(ctx, mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clnt.Get(ctx, ctrlclient.ObjectKeyFromObject(mod), mod)).To(Succeed())
+		Expect(mod.Finalizers).To(Equal([]string{constants.ModuleFinalizer}))
+	},
+		Entry("Module deletion", true),
+		Entry("device-plugin spec removal", false),
+	)
+})
+
+var _ = Describe("DevicePluginReconciler_setFinalizer", func() {
+	It("does not write when its finalizer is already registered", func() {
+		ctrl := gomock.NewController(GinkgoT())
+		helper := devicePluginReconcilerHelper{client: client.NewMockClient(ctrl)}
+		mod := &kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{
+			Finalizers: []string{constants.DevicePluginFinalizer},
+		}}
+
+		Expect(helper.setFinalizer(context.Background(), mod)).To(Succeed())
+	})
+
+	It("preserves existing finalizers when registering its own", func() {
+		ctx := context.Background()
+		mod := &kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{
+			Name: moduleName, Namespace: namespace, Finalizers: []string{constants.ModuleFinalizer},
+		}}
+		clnt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mod).Build()
+		helper := devicePluginReconcilerHelper{client: clnt}
+		Expect(clnt.Get(ctx, ctrlclient.ObjectKeyFromObject(mod), mod)).To(Succeed())
+
+		Expect(helper.setFinalizer(ctx, mod)).To(Succeed())
+		Expect(clnt.Get(ctx, ctrlclient.ObjectKeyFromObject(mod), mod)).To(Succeed())
+		Expect(mod.Finalizers).To(ConsistOf(constants.ModuleFinalizer, constants.DevicePluginFinalizer))
+	})
+})
+
+var _ = Describe("DevicePluginReconciler finalizer conflicts", func() {
+	DescribeTable("preserves a concurrent finalizer update", func(removing bool) {
+		ctx := context.Background()
+		mod := &kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{
+			Name: moduleName, Namespace: namespace,
+			Finalizers: []string{constants.ModuleFinalizer},
+		}}
+		if removing {
+			mod.Finalizers = append(mod.Finalizers, constants.DevicePluginFinalizer)
+		}
+		clnt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mod).Build()
+		helper := devicePluginReconcilerHelper{client: clnt, nodeAPI: node.NewNode(clnt)}
+		key := ctrlclient.ObjectKeyFromObject(mod)
+		Expect(clnt.Get(ctx, key, mod)).To(Succeed())
+		updated := mod.DeepCopy()
+		updated.Finalizers = append(updated.Finalizers, "example.com/concurrent")
+		Expect(clnt.Update(ctx, updated)).To(Succeed())
+
+		var err error
+		if removing {
+			err = helper.finalizeModule(ctx, mod)
+		} else {
+			err = helper.setFinalizer(ctx, mod)
+		}
+		Expect(apierrors.IsConflict(err)).To(BeTrue())
+		Expect(clnt.Get(ctx, key, mod)).To(Succeed())
+		Expect(mod.Finalizers).To(Equal(updated.Finalizers))
+	},
+		Entry("registration", false),
+		Entry("removal", true),
+	)
+})
+
+var _ = Describe("DevicePluginReconciler_finalizeModule", func() {
+	var (
+		clnt   *client.MockClient
+		nodes  *node.MockNode
+		helper devicePluginReconcilerHelper
+		mod    *kmmv1beta1.Module
+	)
+	ctx := context.Background()
+	targetLabel := utils.GetDevicePluginTargetNodeLabel(namespace, moduleName)
+
+	BeforeEach(func() {
+		ctrl := gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		nodes = node.NewMockNode(ctrl)
+		helper = devicePluginReconcilerHelper{client: clnt, nodeAPI: nodes}
+		mod = &kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{
+			Name: moduleName, Namespace: namespace,
+			Finalizers: []string{constants.ModuleFinalizer, constants.DevicePluginFinalizer},
+		}}
+	})
+
+	listNodes := func(items ...v1.Node) *gomock.Call {
+		return nodes.EXPECT().GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""}).Return(items, nil)
+	}
+
+	listDaemonSets := func(items ...appsv1.DaemonSet) *gomock.Call {
+		return clnt.EXPECT().List(ctx, gomock.AssignableToTypeOf(&appsv1.DaemonSetList{}), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, list *appsv1.DaemonSetList, _ ...ctrlclient.ListOption) error {
+				list.Items = items
+				return nil
+			},
+		)
+	}
+
+	It("keeps the finalizer when labels cannot be listed", func() {
+		nodes.EXPECT().GetAllNodesBySelector(ctx, map[string]string{targetLabel: ""}).Return(nil, fmt.Errorf("list failed"))
+
+		Expect(helper.finalizeModule(ctx, mod)).To(HaveOccurred())
+		Expect(mod.Finalizers).To(ContainElement(constants.DevicePluginFinalizer))
+	})
+
+	It("keeps the finalizer when a node cannot be unlabelled", func() {
+		n := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "labelled-node"}}
+		listNodes(n)
+		nodes.EXPECT().UpdateLabels(ctx, &n, nil, map[string]string{targetLabel: ""}).Return(fmt.Errorf("patch failed"))
+
+		Expect(helper.finalizeModule(ctx, mod)).To(HaveOccurred())
+		Expect(mod.Finalizers).To(ContainElement(constants.DevicePluginFinalizer))
+	})
+
+	It("keeps the finalizer when a DaemonSet cannot be deleted", func() {
+		ds := appsv1.DaemonSet{}
+		listNodes()
+		listDaemonSets(ds)
+		clnt.EXPECT().Delete(ctx, &ds).Return(fmt.Errorf("delete failed"))
+
+		Expect(helper.finalizeModule(ctx, mod)).To(HaveOccurred())
+		Expect(mod.Finalizers).To(ContainElement(constants.DevicePluginFinalizer))
+	})
+
+	It("keeps the finalizer when DaemonSets cannot be listed", func() {
+		listNodes()
+		clnt.EXPECT().List(ctx, gomock.AssignableToTypeOf(&appsv1.DaemonSetList{}), gomock.Any(), gomock.Any()).
+			Return(fmt.Errorf("list failed"))
+
+		Expect(helper.finalizeModule(ctx, mod)).To(HaveOccurred())
+		Expect(mod.Finalizers).To(ContainElement(constants.DevicePluginFinalizer))
+	})
+
+	It("cleans up legacy Modules without a device-plugin finalizer", func() {
+		mod.Finalizers = []string{constants.ModuleFinalizer}
+		n := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "legacy-node"}}
+		ds := appsv1.DaemonSet{}
+		gomock.InOrder(
+			listNodes(n),
+			nodes.EXPECT().UpdateLabels(ctx, &n, nil, map[string]string{targetLabel: ""}).Return(nil),
+			listDaemonSets(ds),
+			clnt.EXPECT().Delete(ctx, &ds).Return(nil),
+		)
+
+		Expect(helper.finalizeModule(ctx, mod)).To(Succeed())
+		Expect(mod.Finalizers).To(Equal([]string{constants.ModuleFinalizer}))
+	})
+})
 
 var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 	var (
@@ -55,15 +303,20 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 
 	ctx := context.Background()
 
-	DescribeTable("check error flows", func(getDSError, handleTargetLabelsError, handlePluginError, gcError bool) {
+	DescribeTable("check error flows", func(setFinalizerError, getDSError, handleTargetLabelsError, handlePluginError, gcError bool) {
 		devicePluginDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
 		returnedError := fmt.Errorf("some error")
+		mockReconHelper.EXPECT().setKMMOMetrics(ctx)
+		if setFinalizerError {
+			mockReconHelper.EXPECT().setFinalizer(ctx, mod).Return(returnedError)
+			goto executeTestFunction
+		}
+		mockReconHelper.EXPECT().setFinalizer(ctx, mod).Return(nil)
 		if getDSError {
 			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, returnedError)
 			goto executeTestFunction
 		}
 		mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil)
-		mockReconHelper.EXPECT().setKMMOMetrics(ctx)
 		if handleTargetLabelsError {
 			mockReconHelper.EXPECT().handleDevicePluginTargetLabels(ctx, mod).Return(returnedError)
 			goto executeTestFunction
@@ -88,18 +341,20 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 		Expect(err).To(HaveOccurred())
 
 	},
-		Entry("getDevicePluginDaemonSets failed", true, false, false, false),
-		Entry("handleDevicePluginTargetLabels failed", false, true, false, false),
-		Entry("handleDevicePlugin failed", false, false, true, false),
-		Entry("garbageCollect failed", false, false, false, true),
-		Entry("devicePluginUpdateStatus failed", false, false, false, false),
+		Entry("setFinalizer failed", true, false, false, false, false),
+		Entry("getDevicePluginDaemonSets failed", false, true, false, false, false),
+		Entry("handleDevicePluginTargetLabels failed", false, false, true, false, false),
+		Entry("handleDevicePlugin failed", false, false, false, true, false),
+		Entry("garbageCollect failed", false, false, false, false, true),
+		Entry("devicePluginUpdateStatus failed", false, false, false, false, false),
 	)
 
 	It("Good flow", func() {
 		devicePluginDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
+			mockReconHelper.EXPECT().setFinalizer(ctx, mod).Return(nil),
+			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
 			mockReconHelper.EXPECT().handleDevicePluginTargetLabels(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().handleDevicePlugin(ctx, mod, devicePluginDS).Return(nil),
 			mockReconHelper.EXPECT().garbageCollect(ctx, mod, devicePluginDS).Return(nil),
@@ -112,49 +367,28 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("module deletion flow", func() {
+	DescribeTable("module deletion flow", func(cleanupError error) {
 		mod.SetDeletionTimestamp(&metav1.Time{})
-		devicePluginDS := []appsv1.DaemonSet{appsv1.DaemonSet{}}
-
-		By("good flow")
-		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
-			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(nil),
-			mockReconHelper.EXPECT().deleteDevicePluginDaemonSets(ctx, devicePluginDS).Return(nil),
-		)
+		mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(cleanupError)
 
 		res, err := dpr.Reconcile(ctx, mod)
 		Expect(res).To(Equal(reconcile.Result{}))
-		Expect(err).NotTo(HaveOccurred())
+		if cleanupError == nil {
+			Expect(err).NotTo(HaveOccurred())
+		} else {
+			Expect(err).To(MatchError(ContainSubstring(cleanupError.Error())))
+		}
+	},
+		Entry("cleanup succeeds", nil),
+		Entry("cleanup fails", fmt.Errorf("some error")),
+	)
 
-		By("error flow - removeDevicePluginTargetLabels fails")
-		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
-			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(fmt.Errorf("some error")),
-		)
-
-		res, err = dpr.Reconcile(ctx, mod)
-		Expect(res).To(Equal(reconcile.Result{}))
-		Expect(err).To(HaveOccurred())
-
-		By("error flow - deleteDevicePluginDaemonSets fails")
-		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
-			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(nil),
-			mockReconHelper.EXPECT().deleteDevicePluginDaemonSets(ctx, devicePluginDS).Return(fmt.Errorf("some error")),
-		)
-
-		res, err = dpr.Reconcile(ctx, mod)
-		Expect(res).To(Equal(reconcile.Result{}))
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("no-op when spec.devicePlugin is nil and no existing DaemonSets", func() {
+	It("finalizes and clears status when spec.devicePlugin is nil", func() {
 		mod.Spec.DevicePlugin = nil
+
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
-			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(nil),
+			mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().clearDevicePluginStatus(ctx, mod).Return(nil),
 		)
 
@@ -164,31 +398,12 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("cleanup when spec.devicePlugin is nil but existing DaemonSets present", func() {
-		mod.Spec.DevicePlugin = nil
-		devicePluginDS := []appsv1.DaemonSet{{}}
-
-		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(devicePluginDS, nil),
-			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
-			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(nil),
-			mockReconHelper.EXPECT().deleteDevicePluginDaemonSets(ctx, devicePluginDS).Return(nil),
-			mockReconHelper.EXPECT().clearDevicePluginStatus(ctx, mod).Return(nil),
-		)
-
-		res, err := dpr.Reconcile(ctx, mod)
-
-		Expect(res).To(Equal(reconcile.Result{}))
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	It("cleanup when spec.devicePlugin is nil and removeDevicePluginTargetLabels fails", func() {
+	It("cleanup when spec.devicePlugin is nil and finalizeModule fails", func() {
 		mod.Spec.DevicePlugin = nil
 
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
-			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(fmt.Errorf("some error")),
+			mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(fmt.Errorf("some error")),
 		)
 
 		res, err := dpr.Reconcile(ctx, mod)
@@ -201,9 +416,8 @@ var _ = Describe("DevicePluginReconciler_Reconcile", func() {
 		mod.Spec.DevicePlugin = nil
 
 		gomock.InOrder(
-			mockReconHelper.EXPECT().getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace).Return(nil, nil),
 			mockReconHelper.EXPECT().setKMMOMetrics(ctx),
-			mockReconHelper.EXPECT().removeDevicePluginTargetLabels(ctx, mod).Return(nil),
+			mockReconHelper.EXPECT().finalizeModule(ctx, mod).Return(nil),
 			mockReconHelper.EXPECT().clearDevicePluginStatus(ctx, mod).Return(fmt.Errorf("some error")),
 		)
 
@@ -436,6 +650,20 @@ var _ = Describe("DevicePluginReconciler_deleteDevicePluginDaemonSets", func() {
 
 		err := dprh.deleteDevicePluginDaemonSets(ctx, existingDevicePluginDS)
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("ignores an already deleted DaemonSet", func() {
+		clnt.EXPECT().Delete(ctx, &existingDevicePluginDS[0]).
+			Return(apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, "device-plugin"))
+
+		Expect(dprh.deleteDevicePluginDaemonSets(ctx, existingDevicePluginDS)).To(Succeed())
+	})
+
+	It("handles a terminating DaemonSet", func() {
+		ds := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{DeletionTimestamp: ptr.To(metav1.Now())}}
+		clnt.EXPECT().Delete(ctx, &ds).Return(nil)
+
+		Expect(dprh.deleteDevicePluginDaemonSets(ctx, []appsv1.DaemonSet{ds})).To(Succeed())
 	})
 })
 

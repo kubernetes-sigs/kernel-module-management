@@ -68,6 +68,20 @@ func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) deleteDevicePluginDae
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "deleteDevicePluginDaemonSets", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).deleteDevicePluginDaemonSets), ctx, existingDevicePluginDS)
 }
 
+// finalizeModule mocks base method.
+func (m *MockdevicePluginReconcilerHelperAPI) finalizeModule(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "finalizeModule", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// finalizeModule indicates an expected call of finalizeModule.
+func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) finalizeModule(ctx, mod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "finalizeModule", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).finalizeModule), ctx, mod)
+}
+
 // garbageCollect mocks base method.
 func (m *MockdevicePluginReconcilerHelperAPI) garbageCollect(ctx context.Context, mod *v1beta1.Module, existingDS []v1.DaemonSet) error {
 	m.ctrl.T.Helper()
@@ -151,6 +165,20 @@ func (m *MockdevicePluginReconcilerHelperAPI) removeDevicePluginTargetLabels(ctx
 func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) removeDevicePluginTargetLabels(ctx, mod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "removeDevicePluginTargetLabels", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).removeDevicePluginTargetLabels), ctx, mod)
+}
+
+// setFinalizer mocks base method.
+func (m *MockdevicePluginReconcilerHelperAPI) setFinalizer(ctx context.Context, mod *v1beta1.Module) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "setFinalizer", ctx, mod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// setFinalizer indicates an expected call of setFinalizer.
+func (mr *MockdevicePluginReconcilerHelperAPIMockRecorder) setFinalizer(ctx, mod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setFinalizer", reflect.TypeOf((*MockdevicePluginReconcilerHelperAPI)(nil).setFinalizer), ctx, mod)
 }
 
 // setKMMOMetrics mocks base method.
