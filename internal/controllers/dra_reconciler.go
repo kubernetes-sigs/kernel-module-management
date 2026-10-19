@@ -439,23 +439,13 @@ func (drh *draReconcilerHelper) deleteDRAResources(ctx context.Context, mod *kmm
 	return remaining, errors.Join(errs...)
 }
 
-// deleteDRAObjects deletes the objects that are not already going and returns how many it saw, since
-// one that is still finalizing has not gone. Each delete pins the UID it read, skipping a replacement.
+// deleteDRAObjects requests deletion and returns how many objects it saw, since an object that is
+// still finalizing has not gone.
 func deleteDRAObjects(ctx context.Context, c client.Client, objs []client.Object) (int, error) {
 	var errs []error
 
 	for _, obj := range objs {
-		// Asking again puts the GC finalizer back, and every one of those writes wakes us again.
-		if obj.GetDeletionTimestamp() != nil {
-			continue
-		}
-
-		opts := &client.DeleteOptions{
-			Preconditions:     &metav1.Preconditions{UID: ptr.To(obj.GetUID())},
-			PropagationPolicy: ptr.To(metav1.DeletePropagationForeground),
-		}
-
-		if err := c.Delete(ctx, obj, opts); err != nil && !apierrors.IsNotFound(err) {
+		if err := c.Delete(ctx, obj); err != nil && !apierrors.IsNotFound(err) {
 			// Items of a typed list carry no Kind, and a DeviceClass has no namespace.
 			errs = append(errs, fmt.Errorf("could not delete %s: %v", klog.KObj(obj), err))
 		}

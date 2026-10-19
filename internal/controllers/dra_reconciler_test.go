@@ -1821,37 +1821,26 @@ var _ = Describe("DRAReconciler_deleteDRAResources", func() {
 		}).String()))
 	})
 
-	It("counts a DeviceClass that is still finalizing without asking again", func() {
+	It("counts a DeviceClass that is still finalizing", func() {
 		now := metav1.Now()
 		listing(nil, []resourcev1.DeviceClass{{ObjectMeta: metav1.ObjectMeta{
 			Name: "class", DeletionTimestamp: &now,
 			Finalizers: []string{"tests.kmm.sigs.x-k8s.io/hold"},
 		}}})
 
-		// No Delete: it has been asked for, and asking again would wake this controller each pass.
+		clnt.EXPECT().Delete(ctx, gomock.Any()).Return(nil)
 		remaining, err := drh.deleteDRAResources(ctx, mod)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(remaining).To(Equal(1))
 	})
 
-	It("pins the DaemonSet it read when it asks for it to go", func() {
+	It("requests deletion and counts a DaemonSet that is still there", func() {
 		ds := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{
 			Namespace: modNS, Name: "dra-ds", UID: "ds-uid",
 		}}
 		listing([]appsv1.DaemonSet{ds}, nil)
 
-		// The delete pins the object that was read, so a same-named replacement is left alone.
-		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ context.Context, o ctrlclient.Object, opts ...ctrlclient.DeleteOption) error {
-				do := &ctrlclient.DeleteOptions{}
-				for _, opt := range opts {
-					opt.ApplyToDelete(do)
-				}
-				Expect(*do.Preconditions.UID).To(Equal(ds.UID))
-				Expect(*do.PropagationPolicy).To(Equal(metav1.DeletePropagationForeground))
-				return nil
-			},
-		)
+		clnt.EXPECT().Delete(ctx, &ds).Return(nil)
 
 		remaining, err := drh.deleteDRAResources(ctx, mod)
 		Expect(err).NotTo(HaveOccurred())
@@ -1862,7 +1851,7 @@ var _ = Describe("DRAReconciler_deleteDRAResources", func() {
 		dc := resourcev1.DeviceClass{ObjectMeta: metav1.ObjectMeta{Name: "gpu", UID: "dc-uid"}}
 		listing(nil, []resourcev1.DeviceClass{dc})
 
-		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).Return(nil)
+		clnt.EXPECT().Delete(ctx, gomock.Any()).Return(nil)
 
 		remaining, err := drh.deleteDRAResources(ctx, mod)
 		Expect(err).NotTo(HaveOccurred())
@@ -1896,7 +1885,7 @@ var _ = Describe("DRAReconciler_deleteDRAResources", func() {
 		ds := appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: modNS, Name: "dra-ds"}}
 		listing([]appsv1.DaemonSet{ds}, nil)
 
-		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("some error"))
+		clnt.EXPECT().Delete(ctx, gomock.Any()).Return(fmt.Errorf("some error"))
 
 		remaining, err := drh.deleteDRAResources(ctx, mod)
 		Expect(err).To(HaveOccurred())
@@ -1918,7 +1907,7 @@ var _ = Describe("DRAReconciler_deleteDRAResources", func() {
 			},
 		).AnyTimes()
 
-		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("daemonset delete failed"))
+		clnt.EXPECT().Delete(ctx, gomock.Any()).Return(fmt.Errorf("daemonset delete failed"))
 
 		remaining, err := drh.deleteDRAResources(ctx, mod)
 		Expect(remaining).To(BeZero())
@@ -2103,7 +2092,7 @@ var _ = Describe("DRAReconciler_finalizeModule", func() {
 				return nil
 			},
 		).AnyTimes()
-		clnt.EXPECT().Delete(ctx, gomock.Any(), gomock.Any()).Return(nil)
+		clnt.EXPECT().Delete(ctx, gomock.Any()).Return(nil)
 
 		// No Patch: nothing releases the Module while a resource is still there.
 		Expect(drh.finalizeModule(ctx, mod)).NotTo(HaveOccurred())
@@ -2139,29 +2128,19 @@ var _ = Describe("deleteDRAObjects", func() {
 
 	ctx := context.Background()
 
-	It("pins the object it read, so a replacement under the same name is left alone", func() {
+	It("requests deletion and counts the object it finds", func() {
 		ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{
 			Namespace: "ns", Name: "ds", UID: "the-uid",
 		}}
 
-		clnt.EXPECT().Delete(ctx, ds, gomock.Any()).DoAndReturn(
-			func(_ context.Context, _ ctrlclient.Object, opts ...ctrlclient.DeleteOption) error {
-				do := &ctrlclient.DeleteOptions{}
-				for _, opt := range opts {
-					opt.ApplyToDelete(do)
-				}
-				Expect(*do.Preconditions.UID).To(BeEquivalentTo("the-uid"))
-				Expect(*do.PropagationPolicy).To(Equal(metav1.DeletePropagationForeground))
-				return nil
-			},
-		)
+		clnt.EXPECT().Delete(ctx, ds).Return(nil)
 
 		count, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{ds})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(count).To(Equal(1))
 	})
 
-	It("leaves an object that is already going alone, and still counts it", func() {
+	It("counts an object that is still terminating", func() {
 		now := metav1.Now()
 		dc := &resourcev1.DeviceClass{ObjectMeta: metav1.ObjectMeta{
 			Name: "class", UID: "dc-uid", ResourceVersion: "20",
@@ -2169,13 +2148,13 @@ var _ = Describe("deleteDRAObjects", func() {
 			Finalizers:        []string{"tests.kmm.sigs.x-k8s.io/hold"},
 		}}
 
-		// No Delete: asking again writes to the object and wakes the controller.
+		clnt.EXPECT().Delete(ctx, dc).Return(nil)
 		count, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{dc})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(count).To(Equal(1))
 	})
 
-	It("asks only for the ones that are not going yet, and counts both", func() {
+	It("requests deletion for all listed objects and counts them", func() {
 		now := metav1.Now()
 		going := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{
 			Namespace: "ns", Name: "going", DeletionTimestamp: &now,
@@ -2183,7 +2162,8 @@ var _ = Describe("deleteDRAObjects", func() {
 		}}
 		fresh := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "fresh"}}
 
-		clnt.EXPECT().Delete(ctx, fresh, gomock.Any()).Return(nil)
+		clnt.EXPECT().Delete(ctx, going).Return(nil)
+		clnt.EXPECT().Delete(ctx, fresh).Return(nil)
 
 		count, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{going, fresh})
 		Expect(err).NotTo(HaveOccurred())
@@ -2193,7 +2173,7 @@ var _ = Describe("deleteDRAObjects", func() {
 	It("does not fail over an object that has already gone", func() {
 		ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "ds"}}
 
-		clnt.EXPECT().Delete(ctx, ds, gomock.Any()).
+		clnt.EXPECT().Delete(ctx, ds).
 			Return(apierrors.NewNotFound(schema.GroupResource{}, "ds"))
 
 		_, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{ds})
@@ -2204,8 +2184,8 @@ var _ = Describe("deleteDRAObjects", func() {
 		first := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "first"}}
 		second := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "second"}}
 
-		clnt.EXPECT().Delete(ctx, first, gomock.Any()).Return(fmt.Errorf("some error"))
-		clnt.EXPECT().Delete(ctx, second, gomock.Any()).Return(nil)
+		clnt.EXPECT().Delete(ctx, first).Return(fmt.Errorf("some error"))
+		clnt.EXPECT().Delete(ctx, second).Return(nil)
 
 		_, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{first, second})
 		Expect(err).To(MatchError("could not delete ns/first: some error"))
@@ -2214,7 +2194,7 @@ var _ = Describe("deleteDRAObjects", func() {
 	It("names a DeviceClass without a namespace", func() {
 		dc := &resourcev1.DeviceClass{ObjectMeta: metav1.ObjectMeta{Name: "class"}}
 
-		clnt.EXPECT().Delete(ctx, dc, gomock.Any()).Return(fmt.Errorf("some error"))
+		clnt.EXPECT().Delete(ctx, dc).Return(fmt.Errorf("some error"))
 
 		_, err := deleteDRAObjects(ctx, clnt, []ctrlclient.Object{dc})
 		Expect(err).To(MatchError("could not delete class: some error"))

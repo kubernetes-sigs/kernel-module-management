@@ -32,6 +32,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -93,31 +94,30 @@ func (r *DevicePluginReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.
 
 	logger := log.FromContext(ctx)
 
-	existingDevicePluginDS, err := r.reconHelperAPI.getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace)
-	if err != nil {
-		return res, fmt.Errorf("could not get DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
-	}
-
 	if mod.GetDeletionTimestamp() != nil {
-		if err = r.reconHelperAPI.removeDevicePluginTargetLabels(ctx, mod); err != nil {
-			return ctrl.Result{}, fmt.Errorf("could not remove device-plugin-target labels on deletion: %v", err)
+		if err := r.reconHelperAPI.finalizeModule(ctx, mod); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to finalize Module %s/%s: %v", mod.Namespace, mod.Name, err)
 		}
-		err = r.reconHelperAPI.deleteDevicePluginDaemonSets(ctx, existingDevicePluginDS)
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	r.reconHelperAPI.setKMMOMetrics(ctx)
 
 	if mod.Spec.DevicePlugin == nil {
-		if err = r.reconHelperAPI.removeDevicePluginTargetLabels(ctx, mod); err != nil {
-			return ctrl.Result{}, fmt.Errorf("could not remove device-plugin-target labels: %v", err)
-		}
-		if len(existingDevicePluginDS) > 0 {
-			if err = r.reconHelperAPI.deleteDevicePluginDaemonSets(ctx, existingDevicePluginDS); err != nil {
-				return ctrl.Result{}, err
-			}
+		if err := r.reconHelperAPI.finalizeModule(ctx, mod); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to finalize Module %s/%s: %v", mod.Namespace, mod.Name, err)
 		}
 		return ctrl.Result{}, r.reconHelperAPI.clearDevicePluginStatus(ctx, mod)
+	}
+
+	// Hold the Module before adding any labels or creating resources.
+	if err := r.reconHelperAPI.setFinalizer(ctx, mod); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to set finalizer on Module %s/%s: %v", mod.Namespace, mod.Name, err)
+	}
+
+	existingDevicePluginDS, err := r.reconHelperAPI.getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		return res, fmt.Errorf("could not get DaemonSets for module %s, namespace %s: %v", mod.Name, mod.Namespace, err)
 	}
 
 	if err = r.reconHelperAPI.handleDevicePluginTargetLabels(ctx, mod); err != nil {
@@ -148,6 +148,8 @@ func (r *DevicePluginReconciler) Reconcile(ctx context.Context, mod *kmmv1beta1.
 //go:generate mockgen -source=device_plugin_reconciler.go -package=controllers -destination=mock_device_plugin_reconciler.go devicePluginReconcilerHelperAPI,daemonSetCreator
 
 type devicePluginReconcilerHelperAPI interface {
+	setFinalizer(ctx context.Context, mod *kmmv1beta1.Module) error
+	finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error
 	setKMMOMetrics(ctx context.Context)
 	handleDevicePlugin(ctx context.Context, mod *kmmv1beta1.Module, existingDevicePluginDS []appsv1.DaemonSet) error
 	handleDevicePluginTargetLabels(ctx context.Context, mod *kmmv1beta1.Module) error
@@ -178,6 +180,42 @@ func newDevicePluginReconcilerHelper(client client.Client,
 		daemonSetHelper: daemonSetHelper,
 		nodeAPI:         nodeAPI,
 	}
+}
+
+func (dprh *devicePluginReconcilerHelper) setFinalizer(ctx context.Context, mod *kmmv1beta1.Module) error {
+	if controllerutil.ContainsFinalizer(mod, constants.DevicePluginFinalizer) {
+		return nil
+	}
+
+	modCopy := mod.DeepCopy()
+	controllerutil.AddFinalizer(mod, constants.DevicePluginFinalizer)
+	return dprh.client.Patch(ctx, mod, client.MergeFromWithOptions(modCopy, client.MergeFromWithOptimisticLock{}))
+}
+
+func (dprh *devicePluginReconcilerHelper) finalizeModule(ctx context.Context, mod *kmmv1beta1.Module) error {
+	// Also clean up Modules created before the device-plugin finalizer was introduced.
+	if err := dprh.removeDevicePluginTargetLabels(ctx, mod); err != nil {
+		return fmt.Errorf("could not remove device-plugin-target labels: %w", err)
+	}
+
+	existingDevicePluginDS, err := dprh.getModuleDevicePluginDaemonSets(ctx, mod.Name, mod.Namespace)
+	if err != nil {
+		return err
+	}
+
+	if len(existingDevicePluginDS) > 0 {
+		// Each DaemonSet's deletion event triggers another reconciliation, which releases the
+		// Module once the list is empty.
+		return dprh.deleteDevicePluginDaemonSets(ctx, existingDevicePluginDS)
+	}
+
+	if !controllerutil.ContainsFinalizer(mod, constants.DevicePluginFinalizer) {
+		return nil
+	}
+
+	modCopy := mod.DeepCopy()
+	controllerutil.RemoveFinalizer(mod, constants.DevicePluginFinalizer)
+	return dprh.client.Patch(ctx, mod, client.MergeFromWithOptions(modCopy, client.MergeFromWithOptimisticLock{}))
 }
 
 func (dprh *devicePluginReconcilerHelper) getModuleDevicePluginDaemonSets(ctx context.Context, name, namespace string) ([]appsv1.DaemonSet, error) {
@@ -308,8 +346,7 @@ func (dprh *devicePluginReconcilerHelper) garbageCollect(ctx context.Context,
 func (dprh *devicePluginReconcilerHelper) deleteDevicePluginDaemonSets(ctx context.Context, existingDevicePluginDS []appsv1.DaemonSet) error {
 	// delete all the Device Plugin Daemonset, in order to allow worker pods to delete kernel modules
 	for _, ds := range existingDevicePluginDS {
-		err := dprh.client.Delete(ctx, &ds)
-		if err != nil {
+		if err := dprh.client.Delete(ctx, &ds); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete device-plugin Daemonset %s/%s: %v", ds.Namespace, ds.Name, err)
 		}
 	}
