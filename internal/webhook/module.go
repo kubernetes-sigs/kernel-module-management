@@ -94,6 +94,16 @@ func (m *ModuleValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 		}
 	}
 
+	// Adding or removing spec.moduleLoader is not a supported update. On a DRA or
+	// device-plugin Module it leaves two DaemonSets competing for the same driver.
+	// On a Module that only has a loader, removing it is the same as deleting the
+	// Module, and adding a loader to an empty Module is not a useful transition.
+	oldHasLoader := oldMod.Spec.ModuleLoader != nil
+	newHasLoader := newMod.Spec.ModuleLoader != nil
+	if oldHasLoader != newHasLoader {
+		return nil, errors.New("cannot add or remove spec.moduleLoader; please delete the Module and create it again")
+	}
+
 	// Renaming the driver stops matching the claims allocated under the old name, and dropping
 	// spec.dra then putting it back is how a rename would otherwise get through.
 	if oldMod.Spec.DRA != nil {
