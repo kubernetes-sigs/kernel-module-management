@@ -740,6 +740,44 @@ var _ = Describe("ValidateUpdate", func() {
 		Entry(nil, "", "", false),
 		Entry(nil, "v1", "v2", false),
 	)
+
+	DescribeTable(
+		"moduleLoader presence updates",
+		func(oldHasLoader, newHasLoader, hasDRA, hasDevicePlugin, errorExpected bool) {
+			old := validModule
+			new := validModule
+			if hasDRA {
+				old.Spec.DRA = &kmmv1beta1.DRASpec{DriverName: "a.example.com"}
+				new.Spec.DRA = &kmmv1beta1.DRASpec{DriverName: "a.example.com"}
+			}
+			if hasDevicePlugin {
+				old.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{}
+				new.Spec.DevicePlugin = &kmmv1beta1.DevicePluginSpec{}
+			}
+			if !oldHasLoader {
+				old.Spec.ModuleLoader = nil
+			}
+			if !newHasLoader {
+				new.Spec.ModuleLoader = nil
+			}
+
+			_, err := moduleWebhook.ValidateUpdate(ctx, &old, &new)
+
+			if errorExpected {
+				Expect(err).To(MatchError(ContainSubstring("cannot add or remove spec.moduleLoader")))
+			} else {
+				Expect(err).NotTo(HaveOccurred())
+			}
+		},
+		Entry("remove loader from a DRA Module", true, false, true, false, true),
+		Entry("add loader to a DRA Module", false, true, true, false, true),
+		Entry("remove loader from a device-plugin Module", true, false, false, true, true),
+		Entry("add loader to a device-plugin Module", false, true, false, true, true),
+		Entry("keep loader on a DRA Module", true, true, true, false, false),
+		Entry("keep omitted loader on a DRA Module", false, false, true, false, false),
+		Entry("remove loader when neither DRA nor device plugin is set", true, false, false, false, false),
+		Entry("add loader when neither DRA nor device plugin is set", false, true, false, false, false),
+	)
 })
 
 var _ = Describe("ValidateDelete", func() {

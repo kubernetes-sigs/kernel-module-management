@@ -332,6 +332,9 @@ spec:
       image: some.registry/org/my-dra-driver:latest
 ```
 
+`.spec.moduleLoader` may be omitted when the Module is created. It cannot be added or removed later
+if `.spec.dra` or `.spec.devicePlugin` is set. Delete the Module and create it again with the desired spec.
+
 ### Example resource
 
 Below is an annotated `Module` example with most options set.
