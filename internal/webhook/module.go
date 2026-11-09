@@ -376,7 +376,7 @@ func validateSignSection(sign *kmmv1beta1.Sign, dirName string) error {
 		return fmt.Errorf("filesToSign is required when Sign is set")
 	}
 	for _, filePath := range sign.FilesToSign {
-		if !strings.HasPrefix(filePath, dirName+"/") {
+		if !strings.HasPrefix(filepath.Clean(filePath), dirName+"/") {
 			return fmt.Errorf("filesToSign[%q] must be under dirName %q", filePath, dirName)
 		}
 	}

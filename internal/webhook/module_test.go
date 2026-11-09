@@ -473,6 +473,60 @@ var _ = Describe("validateModprobe", func() {
 	)
 })
 
+var _ = Describe("validateFilesToSign", func() {
+	It("should pass when no Sign section is set", func() {
+		Expect(validateFilesToSign(kmmv1beta1.ModuleLoaderContainerSpec{})).To(Succeed())
+	})
+
+	for _, section := range []string{"global", "kernel mapping"} {
+		Context(section+" Sign section", func() {
+			DescribeTable("should validate normalized paths against dirName",
+				func(dirName string, filesToSign []string, errExpected bool) {
+					sign := &kmmv1beta1.Sign{FilesToSign: filesToSign}
+					container := kmmv1beta1.ModuleLoaderContainerSpec{
+						Modprobe: kmmv1beta1.ModprobeSpec{DirName: dirName},
+					}
+					errPrefix := "global Sign: "
+					if section == "global" {
+						container.Sign = sign
+					} else {
+						container.KernelMappings = []kmmv1beta1.KernelMapping{{}, {Sign: sign}}
+						errPrefix = "kernelMappings[1].Sign: "
+					}
+
+					err := validateFilesToSign(container)
+					if errExpected {
+						Expect(err).To(MatchError(HavePrefix(errPrefix)))
+					} else {
+						Expect(err).To(Succeed())
+					}
+				},
+				Entry("default directory", "/opt", []string{"/opt/module.ko"}, false),
+				Entry("normalized path under default directory", "/opt", []string{"/opt/lib/../module.ko"}, false),
+				Entry("path outside default directory", "/opt", []string{"/etc/module.ko"}, true),
+				Entry("path escaping default directory", "/opt", []string{"/opt/../etc/module.ko"}, true),
+				Entry("custom directory", "/modules", []string{"/modules/module.ko"}, false),
+				Entry("path outside custom directory", "/modules", []string{"/opt/module.ko"}, true),
+				Entry("path escaping custom directory", "/modules", []string{"/modules/../outside.ko"}, true),
+				Entry("nested path escaping custom directory", "/modules", []string{"/modules/lib/../../outside.ko"}, true),
+				Entry("similar directory prefix", "/modules", []string{"/modules-other/module.ko"}, true),
+				Entry("normalized file path", "/modules", []string{"/modules//lib/./../module.ko"}, false),
+				Entry("file path normalizes into directory", "/modules", []string{"/tmp/../modules/module.ko"}, false),
+				Entry("directory is not normalized", "/opt/../modules//", []string{"/modules/module.ko"}, true),
+				Entry("directory itself", "/modules", []string{"/modules"}, true),
+				Entry("path resolving to directory itself", "/modules", []string{"/modules/lib/.."}, true),
+				Entry("root directory itself", "/", []string{"/"}, true),
+				Entry("relative file path", "/modules", []string{"modules/module.ko"}, true),
+				Entry("empty file path", "/modules", []string{""}, true),
+				Entry("nil file list", "/modules", nil, true),
+				Entry("empty file list", "/modules", []string{}, true),
+				Entry("glob patterns", "/modules", []string{"/modules/lib/*/kernel/*.ko", "/modules/module?.ko"}, false),
+				Entry("invalid path after a valid path", "/modules", []string{"/modules/module.ko", "/modules/../outside.ko"}, true),
+			)
+		})
+	}
+})
+
 var _ = Describe("validateModule", func() {
 	chars21 := strings.Repeat("a", 21)
 
