@@ -1627,6 +1627,46 @@ var _ = Describe("DRAReconciler_handleDeviceClasses", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should not patch a DeviceClass owned by another Module", func() {
+		// Names are cluster-scoped; labels, not namespace, decide who may update the object.
+		mod := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "driver-b", Namespace: "team-b"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DeviceClasses: []kmmv1beta1.DeviceClassSpec{
+						{
+							Name: "shared-gpu",
+							Selectors: []resourcev1.DeviceSelector{
+								{CEL: &resourcev1.CELDeviceSelector{Expression: "device.driver == 'other'"}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		existingDC := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "shared-gpu",
+				Labels: map[string]string{
+					constants.ModuleNameLabel:      "driver-a",
+					constants.ModuleNamespaceLabel: "team-a",
+				},
+			},
+		}
+
+		clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ ctrlclient.ObjectKey, obj ctrlclient.Object, _ ...ctrlclient.GetOption) error {
+				existingDC.DeepCopyInto(obj.(*resourcev1.DeviceClass))
+				return nil
+			},
+		)
+
+		err := drh.handleDeviceClasses(ctx, &mod, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("owned by Module team-a/driver-a"))
+	})
+
 	It("should delete DeviceClasses not in the desired list", func() {
 		mod := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "my-mod", Namespace: "my-ns"},

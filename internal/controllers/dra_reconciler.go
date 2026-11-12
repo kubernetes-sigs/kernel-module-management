@@ -514,6 +514,10 @@ func (drh *draReconcilerHelper) getModuleDeviceClasses(ctx context.Context, name
 //   - DeviceClasses present in the spec but missing from the cluster are created.
 //   - DeviceClasses present in both are patched to reflect the current spec (drift correction).
 //   - DeviceClasses present in the cluster but absent from the spec are deleted (stale cleanup).
+//
+// DeviceClasses are cluster-scoped, so two Modules in different namespaces can still name the
+// same class. Ownership is only the Module name/namespace labels. If those labels already
+// identify another Module, this pass leaves the object unchanged and returns an error.
 func (drh *draReconcilerHelper) handleDeviceClasses(ctx context.Context, mod *kmmv1beta1.Module, existingDCs []resourcev1.DeviceClass) error {
 	if mod.Spec.DRA == nil {
 		return nil
@@ -534,6 +538,18 @@ func (drh *draReconcilerHelper) handleDeviceClasses(ctx context.Context, mod *km
 			ObjectMeta: metav1.ObjectMeta{Name: desired.Name},
 		}
 		opRes, err := controllerutil.CreateOrPatch(ctx, drh.client, dc, func() error {
+			// CreateOrPatch loads an existing object by name. If that object is already labeled as
+			// belonging to another Module, do not overwrite it: names are cluster-wide and labels
+			// are the only owner record we have.
+			if ownerName := dc.Labels[constants.ModuleNameLabel]; ownerName != "" {
+				ownerNS := dc.Labels[constants.ModuleNamespaceLabel]
+				if ownerName != mod.Name || ownerNS != mod.Namespace {
+					return fmt.Errorf(
+						"DeviceClass %s is owned by Module %s/%s",
+						dc.Name, ownerNS, ownerName,
+					)
+				}
+			}
 			if dc.Labels == nil {
 				dc.Labels = make(map[string]string)
 			}

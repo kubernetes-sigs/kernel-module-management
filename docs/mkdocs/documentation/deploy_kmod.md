@@ -144,6 +144,9 @@ Each entry requires a `name` (must be a valid DNS subdomain and unique within th
 
 KMM tracks ownership of DeviceClasses via labels (`kmm.node.kubernetes.io/module.name` and
 `kmm.node.kubernetes.io/module.namespace`).
+DeviceClass names are cluster-scoped. If a DeviceClass with that name already exists and its
+ownership labels point at another Module, KMM does not update or take it over; it reports an
+ownership conflict instead.
 When a `Module` is deleted, all DeviceClasses managed by that Module are automatically deleted.
 Removing an entry from the list deletes the corresponding DeviceClass; editing an entry updates it.
 
