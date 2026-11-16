@@ -25,6 +25,9 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/go-logr/logr"
@@ -34,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -42,12 +46,13 @@ import (
 const maxCombinedLength = 41
 
 type ModuleValidator struct {
+	client      client.Client
 	logger      logr.Logger
 	kubeVersion *version.KubeVersion
 }
 
-func NewModuleValidator(logger logr.Logger, kubeVersion *version.KubeVersion) *ModuleValidator {
-	return &ModuleValidator{logger: logger, kubeVersion: kubeVersion}
+func NewModuleValidator(logger logr.Logger, kubeVersion *version.KubeVersion, clnt client.Client) *ModuleValidator {
+	return &ModuleValidator{client: clnt, logger: logger, kubeVersion: kubeVersion}
 }
 
 func (m *ModuleValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
@@ -70,7 +75,11 @@ func (m *ModuleValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 
 	m.logger.Info("Validating Module creation", "name", mod.Name, "namespace", mod.Namespace)
 
-	return validateModule(mod, m.kubeVersion)
+	warnings, err := validateModule(mod, m.kubeVersion)
+	if err != nil {
+		return warnings, err
+	}
+	return warnings, m.validateDeviceClassOwnership(ctx, mod)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
@@ -115,12 +124,47 @@ func (m *ModuleValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 		}
 	}
 
-	return validateModule(newMod, m.kubeVersion)
+	warnings, err := validateModule(newMod, m.kubeVersion)
+	if err != nil {
+		return warnings, err
+	}
+	return warnings, m.validateDeviceClassOwnership(ctx, newMod)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (m *ModuleValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	return nil, NotImplemented
+}
+
+// validateDeviceClassOwnership rejects a Module whose spec.dra.deviceClasses names a
+// cluster-scoped DeviceClass that already exists and is not labeled as this Module.
+// That covers another Module's labels and a DeviceClass created by something else.
+// A nil client skips the lookup (hub ManagedClusterModule validation; DeviceClasses live on the spoke).
+// A Module that is already being deleted is skipped: removing the DRA finalizer is an
+// update, and rejecting it would leave the Module stuck Terminating.
+func (m *ModuleValidator) validateDeviceClassOwnership(ctx context.Context, mod *kmmv1beta1.Module) error {
+	if m.client == nil || mod.Spec.DRA == nil || !mod.DeletionTimestamp.IsZero() {
+		return nil
+	}
+
+	for _, desired := range mod.Spec.DRA.DeviceClasses {
+		dc := &resourcev1.DeviceClass{}
+		err := m.client.Get(ctx, types.NamespacedName{Name: desired.Name}, dc)
+		if apierrors.IsNotFound(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("failed to get DeviceClass %s: %v", desired.Name, err)
+		}
+
+		ownerName := dc.Labels[constants.ModuleNameLabel]
+		ownerNS := dc.Labels[constants.ModuleNamespaceLabel]
+		if ownerName != mod.Name || ownerNS != mod.Namespace {
+			return fmt.Errorf("DeviceClass %s already exists, and is not owned by Module", desired.Name)
+		}
+	}
+
+	return nil
 }
 
 func validateModule(mod *kmmv1beta1.Module, kubeVersion *version.KubeVersion) (admission.Warnings, error) {

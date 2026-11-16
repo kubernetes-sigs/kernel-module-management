@@ -12,6 +12,7 @@ import (
 	"github.com/kubernetes-sigs/kernel-module-management/internal/version"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/webhook"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/webhook/hub"
+	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -24,6 +25,7 @@ var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(resourcev1.AddToScheme(scheme))
 	utilruntime.Must(kmmv1beta1.AddToScheme(scheme))
 	utilruntime.Must(kmmv1beta2.AddToScheme(scheme))
 	utilruntime.Must(kmmhubv1beta1.AddToScheme(scheme))
@@ -93,7 +95,7 @@ func main() {
 
 		setupLogger.Info("Detected Kubernetes version", "major", kubeVersion.Major, "minor", kubeVersion.Minor)
 
-		if err = webhook.NewModuleValidator(logger, &kubeVersion).SetupWebhookWithManager(mgr); err != nil {
+		if err = webhook.NewModuleValidator(logger, &kubeVersion, mgr.GetClient()).SetupWebhookWithManager(mgr); err != nil {
 			cmd.FatalError(setupLogger, err, "unable to create webhook", "webhook", "ModuleValidator")
 		}
 	}

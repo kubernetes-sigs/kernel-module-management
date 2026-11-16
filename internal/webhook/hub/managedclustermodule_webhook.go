@@ -38,7 +38,7 @@ type ManagedClusterModuleValidator struct {
 func NewManagedClusterModuleValidator(logger logr.Logger, kubeVersion *version.KubeVersion) *ManagedClusterModuleValidator {
 	return &ManagedClusterModuleValidator{
 		logger: logger,
-		m:      webhook.NewModuleValidator(logger, kubeVersion),
+		m:      webhook.NewModuleValidator(logger, kubeVersion, nil),
 	}
 }
 
