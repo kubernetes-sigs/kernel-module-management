@@ -18,10 +18,19 @@ package webhook
 
 import (
 	"context"
-	v1 "k8s.io/api/core/v1"
+	"fmt"
 	"strings"
 
+	"go.uber.org/mock/gomock"
+	v1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/client"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/utils"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/version"
 	. "github.com/onsi/ginkgo/v2"
@@ -54,7 +63,7 @@ var (
 		},
 	}
 
-	moduleWebhook = NewModuleValidator(GinkgoLogr, &version.KubeVersion{Major: 1, Minor: 34})
+	moduleWebhook = NewModuleValidator(GinkgoLogr, &version.KubeVersion{Major: 1, Minor: 34}, nil)
 )
 
 var _ = Describe("maxCombinedLength", func() {
@@ -616,6 +625,121 @@ var _ = Describe("ValidateCreate", func() {
 				ContainSubstring("failed to validate kernel mappings"),
 			),
 		)
+	})
+})
+
+var _ = Describe("validateDeviceClassOwnership", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		v    *ModuleValidator
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		v = NewModuleValidator(GinkgoLogr, &version.KubeVersion{Major: 1, Minor: 34}, clnt)
+	})
+
+	ctx := context.TODO()
+
+	draModule := func() *kmmv1beta1.Module {
+		return &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "driver-b", Namespace: "team-b"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DriverName: "example.com",
+					Container:  kmmv1beta1.CommonContainerSpec{Image: "driver:latest"},
+					DeviceClasses: []kmmv1beta1.DeviceClassSpec{
+						{Name: "shared-gpu"},
+					},
+				},
+			},
+		}
+	}
+
+	It("should skip the lookup when the client is nil", func() {
+		v = NewModuleValidator(GinkgoLogr, &version.KubeVersion{Major: 1, Minor: 34}, nil)
+		Expect(v.validateDeviceClassOwnership(ctx, draModule())).NotTo(HaveOccurred())
+	})
+
+	It("should skip the lookup when the Module is being deleted", func() {
+		// Removing the finalizer is an update; do not block it or the Module stays Terminating.
+		mod := draModule()
+		now := metav1.Now()
+		mod.DeletionTimestamp = &now
+		Expect(v.validateDeviceClassOwnership(ctx, mod)).NotTo(HaveOccurred())
+	})
+
+	It("should reject a DeviceClass owned by another Module", func() {
+		existingDC := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "shared-gpu",
+				Labels: map[string]string{
+					constants.ModuleNameLabel:      "driver-a",
+					constants.ModuleNamespaceLabel: "team-a",
+				},
+			},
+		}
+		clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ ctrlclient.ObjectKey, obj ctrlclient.Object, _ ...ctrlclient.GetOption) error {
+				existingDC.DeepCopyInto(obj.(*resourcev1.DeviceClass))
+				return nil
+			},
+		)
+
+		err := v.validateDeviceClassOwnership(ctx, draModule())
+		Expect(err).To(MatchError(ContainSubstring("DeviceClass shared-gpu already exists, and is not owned by Module")))
+	})
+
+	It("should reject a DeviceClass that exists without this Module's labels", func() {
+		existingDC := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{Name: "shared-gpu"},
+		}
+		clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ ctrlclient.ObjectKey, obj ctrlclient.Object, _ ...ctrlclient.GetOption) error {
+				existingDC.DeepCopyInto(obj.(*resourcev1.DeviceClass))
+				return nil
+			},
+		)
+
+		err := v.validateDeviceClassOwnership(ctx, draModule())
+		Expect(err).To(MatchError(ContainSubstring("DeviceClass shared-gpu already exists, and is not owned by Module")))
+	})
+
+	It("should allow a DeviceClass owned by this Module", func() {
+		existingDC := resourcev1.DeviceClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "shared-gpu",
+				Labels: map[string]string{
+					constants.ModuleNameLabel:      "driver-b",
+					constants.ModuleNamespaceLabel: "team-b",
+				},
+			},
+		}
+		clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ ctrlclient.ObjectKey, obj ctrlclient.Object, _ ...ctrlclient.GetOption) error {
+				existingDC.DeepCopyInto(obj.(*resourcev1.DeviceClass))
+				return nil
+			},
+		)
+
+		Expect(v.validateDeviceClassOwnership(ctx, draModule())).NotTo(HaveOccurred())
+	})
+
+	It("should allow a DeviceClass that does not exist yet", func() {
+		clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(
+			apierrors.NewNotFound(resourcev1.Resource("deviceclasses"), "shared-gpu"),
+		)
+
+		Expect(v.validateDeviceClassOwnership(ctx, draModule())).NotTo(HaveOccurred())
+	})
+
+	It("should return an error when Get fails", func() {
+		clnt.EXPECT().Get(ctx, gomock.Any(), gomock.Any()).Return(fmt.Errorf("get failed"))
+
+		err := v.validateDeviceClassOwnership(ctx, draModule())
+		Expect(err).To(MatchError(ContainSubstring("failed to get DeviceClass shared-gpu")))
 	})
 })
 
