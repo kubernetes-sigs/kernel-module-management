@@ -200,6 +200,11 @@ func (p *preflightReconcilerHelperImpl) getModulesData(ctx context.Context, pv *
 		if mod.GetDeletionTimestamp() != nil {
 			continue
 		}
+		// DevicePlugin-only and DRA-only Modules have no loader; skip them so
+		// GetModuleLoaderDataForKernel does not panic on a nil ModuleLoader.
+		if mod.Spec.ModuleLoader == nil {
+			continue
+		}
 		mld, err := p.kernelAPI.GetModuleLoaderDataForKernel(&mod, pv.Spec.KernelVersion)
 		if err != nil {
 			if !errors.Is(err, module.ErrNoMatchingKernelMapping) {

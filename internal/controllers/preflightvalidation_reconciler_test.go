@@ -193,18 +193,26 @@ var _ = Describe("getModulesData", func() {
 	It("should get modules data", func() {
 		testMod1 := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "testMod1 name", Namespace: "testMod1 namespace"},
+			Spec:       kmmv1beta1.ModuleSpec{ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{}},
 		}
 		testMod2 := kmmv1beta1.Module{
 			ObjectMeta: metav1.ObjectMeta{Name: "testMod2 name", Namespace: "testMod2 namespace"},
+			Spec:       kmmv1beta1.ModuleSpec{ModuleLoader: &kmmv1beta1.ModuleLoaderSpec{}},
 		}
 		testMod3 := kmmv1beta1.Module{}
 		now := metav1.Now()
 		testMod3.SetDeletionTimestamp(&now)
+		testMod4 := kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: "dra-only", Namespace: "testMod4 namespace"},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{DriverName: "example.com"},
+			},
+		}
 		returnedMLD := api.ModuleLoaderData{Name: "testMod1 name", Namespace: "testMod1 namespace"}
 		gomock.InOrder(
 			mockClient.EXPECT().List(ctx, gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ interface{}, list *kmmv1beta1.ModuleList, _ ...interface{}) error {
-					list.Items = []kmmv1beta1.Module{testMod1, testMod2, testMod3}
+					list.Items = []kmmv1beta1.Module{testMod1, testMod2, testMod3, testMod4}
 					return nil
 				},
 			),
