@@ -4625,6 +4625,16 @@ spec:
                     description: DriverName is the DRA driver name registered with
                       kubelet.
                     type: string
+                  healthCheckPort:
+                    description: |-
+                      HealthCheckPort is the host TCP port for the DRA driver's gRPC health check.
+                      KMM sets HEALTHCHECK_PORT and the default gRPC liveness probe to this value.
+                      When omitted, KMM uses 51515. Set a different port when more than one DRA
+                      driver runs on the same node.
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
                   initContainer:
                     description: InitContainer defines the init container that will
                       be used by the DRA driver.

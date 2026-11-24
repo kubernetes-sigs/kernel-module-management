@@ -888,6 +888,28 @@ var _ = Describe("DRAReconciler_setDRAAsDesired", func() {
 		Expect(ds.Spec.Template.Spec.Volumes[3]).To(Equal(vol))
 	})
 
+	It("should use spec.dra.healthCheckPort for HEALTHCHECK_PORT and the default liveness probe", func() {
+		mod := kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					Container:       kmmv1beta1.CommonContainerSpec{Image: draImage},
+					HealthCheckPort: ptr.To(int32(52000)),
+				},
+			},
+		}
+		ds := appsv1.DaemonSet{}
+
+		err := dsc.setDRAAsDesired(context.Background(), &ds, &mod)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+		c := ds.Spec.Template.Spec.Containers[0]
+		Expect(c.Env).To(ContainElement(v1.EnvVar{Name: "HEALTHCHECK_PORT", Value: "52000"}))
+		Expect(c.LivenessProbe).NotTo(BeNil())
+		Expect(c.LivenessProbe.GRPC).NotTo(BeNil())
+		Expect(c.LivenessProbe.GRPC.Port).To(Equal(int32(52000)))
+	})
+
 	DescribeTable("should work as expected",
 		func(withInitContainer bool, customLiveness *v1.Probe, customStartup *v1.Probe) {
 			const (
