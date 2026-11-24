@@ -26,6 +26,7 @@ import (
 	resourcev1 "k8s.io/api/resource/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
@@ -743,6 +744,105 @@ var _ = Describe("validateDeviceClassOwnership", func() {
 	})
 })
 
+var _ = Describe("validateDRAHealthCheckPortConflict", func() {
+	var (
+		ctrl *gomock.Controller
+		clnt *client.MockClient
+		v    *ModuleValidator
+	)
+
+	BeforeEach(func() {
+		ctrl = gomock.NewController(GinkgoT())
+		clnt = client.NewMockClient(ctrl)
+		v = NewModuleValidator(GinkgoLogr, &version.KubeVersion{Major: 1, Minor: 34}, clnt)
+	})
+
+	ctx := context.TODO()
+
+	draModule := func(name, namespace string, port *int32) *kmmv1beta1.Module {
+		return &kmmv1beta1.Module{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Spec: kmmv1beta1.ModuleSpec{
+				DRA: &kmmv1beta1.DRASpec{
+					DriverName:      "example.com",
+					Container:       kmmv1beta1.CommonContainerSpec{Image: "driver:latest"},
+					HealthCheckPort: port,
+				},
+			},
+		}
+	}
+
+	expectList := func(items []kmmv1beta1.Module) {
+		clnt.EXPECT().List(ctx, gomock.Any()).DoAndReturn(
+			func(_ context.Context, list ctrlclient.ObjectList, _ ...ctrlclient.ListOption) error {
+				list.(*kmmv1beta1.ModuleList).Items = items
+				return nil
+			},
+		)
+	}
+
+	It("should skip the lookup when the client is nil", func() {
+		v = NewModuleValidator(GinkgoLogr, &version.KubeVersion{Major: 1, Minor: 34}, nil)
+		Expect(v.validateDRAHealthCheckPortConflict(ctx, draModule("driver-b", "team-b", nil))).NotTo(HaveOccurred())
+	})
+
+	It("should skip the lookup when the Module is being deleted", func() {
+		mod := draModule("driver-b", "team-b", nil)
+		now := metav1.Now()
+		mod.DeletionTimestamp = &now
+		Expect(v.validateDRAHealthCheckPortConflict(ctx, mod)).NotTo(HaveOccurred())
+	})
+
+	It("should reject another DRA Module that uses the default port", func() {
+		expectList([]kmmv1beta1.Module{*draModule("driver-a", "team-a", nil)})
+
+		err := v.validateDRAHealthCheckPortConflict(ctx, draModule("driver-b", "team-b", nil))
+		Expect(err).To(MatchError(ContainSubstring("spec.dra.healthCheckPort 51515 is already used by Module team-a/driver-a")))
+	})
+
+	It("should reject another DRA Module that uses the same custom port", func() {
+		expectList([]kmmv1beta1.Module{*draModule("driver-a", "team-a", ptr.To(int32(52000)))})
+
+		err := v.validateDRAHealthCheckPortConflict(ctx, draModule("driver-b", "team-b", ptr.To(int32(52000))))
+		Expect(err).To(MatchError(ContainSubstring("spec.dra.healthCheckPort 52000 is already used by Module team-a/driver-a")))
+	})
+
+	It("should allow another DRA Module that uses a different port", func() {
+		expectList([]kmmv1beta1.Module{*draModule("driver-a", "team-a", ptr.To(int32(52000)))})
+
+		Expect(v.validateDRAHealthCheckPortConflict(ctx, draModule("driver-b", "team-b", nil))).NotTo(HaveOccurred())
+	})
+
+	It("should ignore Modules without spec.dra", func() {
+		other := kmmv1beta1.Module{ObjectMeta: metav1.ObjectMeta{Name: "loader", Namespace: "team-a"}}
+		expectList([]kmmv1beta1.Module{other})
+
+		Expect(v.validateDRAHealthCheckPortConflict(ctx, draModule("driver-b", "team-b", nil))).NotTo(HaveOccurred())
+	})
+
+	It("should ignore the same Module on update", func() {
+		expectList([]kmmv1beta1.Module{*draModule("driver-b", "team-b", nil)})
+
+		Expect(v.validateDRAHealthCheckPortConflict(ctx, draModule("driver-b", "team-b", nil))).NotTo(HaveOccurred())
+	})
+
+	It("should ignore a deleting DRA Module that uses the same port", func() {
+		other := draModule("driver-a", "team-a", nil)
+		now := metav1.Now()
+		other.DeletionTimestamp = &now
+		expectList([]kmmv1beta1.Module{*other})
+
+		Expect(v.validateDRAHealthCheckPortConflict(ctx, draModule("driver-b", "team-b", nil))).NotTo(HaveOccurred())
+	})
+
+	It("should return an error when List fails", func() {
+		clnt.EXPECT().List(ctx, gomock.Any()).Return(fmt.Errorf("list failed"))
+
+		err := v.validateDRAHealthCheckPortConflict(ctx, draModule("driver-b", "team-b", nil))
+		Expect(err).To(MatchError(ContainSubstring("failed to list Modules")))
+	})
+})
+
 var _ = Describe("ValidateUpdate", func() {
 	ctx := context.TODO()
 
@@ -1177,6 +1277,15 @@ var _ = Describe("validateDRA", func() {
 	It("should accept valid driverName", func() {
 		mod := &kmmv1beta1.Module{
 			Spec: kmmv1beta1.ModuleSpec{DRA: validDRASpec()},
+		}
+		Expect(validateDRA(mod, minValidKubeVersion)).NotTo(HaveOccurred())
+	})
+
+	It("should accept a valid healthCheckPort", func() {
+		dra := validDRASpec()
+		dra.HealthCheckPort = ptr.To(int32(52000))
+		mod := &kmmv1beta1.Module{
+			Spec: kmmv1beta1.ModuleSpec{DRA: dra},
 		}
 		Expect(validateDRA(mod, minValidKubeVersion)).NotTo(HaveOccurred())
 	})

@@ -391,6 +391,15 @@ type DRASpec struct {
 	// +kubebuilder:validation:Required
 	DriverName string `json:"driverName"`
 
+	// HealthCheckPort is the host TCP port for the DRA driver's gRPC health check.
+	// KMM sets HEALTHCHECK_PORT and the default gRPC liveness probe to this value.
+	// When omitted, KMM uses 51515. Set a different port when more than one DRA
+	// driver runs on the same node.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	HealthCheckPort *int32 `json:"healthCheckPort,omitempty"`
+
 	// DeviceClasses lists DeviceClass resources to manage.
 	// +optional
 	DeviceClasses []DeviceClassSpec `json:"deviceClasses,omitempty"`

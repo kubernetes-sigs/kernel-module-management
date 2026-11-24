@@ -33,6 +33,7 @@ import (
 	"github.com/go-logr/logr"
 	kmmv1beta1 "github.com/kubernetes-sigs/kernel-module-management/api/v1beta1"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/constants"
+	"github.com/kubernetes-sigs/kernel-module-management/internal/controllers"
 	"github.com/kubernetes-sigs/kernel-module-management/internal/version"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -79,7 +80,10 @@ func (m *ModuleValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 	if err != nil {
 		return warnings, err
 	}
-	return warnings, m.validateDeviceClassOwnership(ctx, mod)
+	if err := m.validateDeviceClassOwnership(ctx, mod); err != nil {
+		return warnings, err
+	}
+	return warnings, m.validateDRAHealthCheckPortConflict(ctx, mod)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
@@ -128,7 +132,10 @@ func (m *ModuleValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 	if err != nil {
 		return warnings, err
 	}
-	return warnings, m.validateDeviceClassOwnership(ctx, newMod)
+	if err := m.validateDeviceClassOwnership(ctx, newMod); err != nil {
+		return warnings, err
+	}
+	return warnings, m.validateDRAHealthCheckPortConflict(ctx, newMod)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
@@ -161,6 +168,49 @@ func (m *ModuleValidator) validateDeviceClassOwnership(ctx context.Context, mod 
 		ownerNS := dc.Labels[constants.ModuleNamespaceLabel]
 		if ownerName != mod.Name || ownerNS != mod.Namespace {
 			return fmt.Errorf("DeviceClass %s already exists, and is not owned by Module", desired.Name)
+		}
+	}
+
+	return nil
+}
+
+func effectiveDRAHealthCheckPort(dra *kmmv1beta1.DRASpec) int32 {
+	if dra != nil && dra.HealthCheckPort != nil {
+		return *dra.HealthCheckPort
+	}
+	return controllers.DRAHealthcheckPort
+}
+
+// validateDRAHealthCheckPortConflict rejects a Module whose effective DRA health-check
+// port is already used by another Module with spec.dra. An omitted healthCheckPort is
+// 51515. A nil client skips the lookup (hub). A Module that is already being deleted
+// is skipped so finalizer removal is not blocked.
+func (m *ModuleValidator) validateDRAHealthCheckPortConflict(ctx context.Context, mod *kmmv1beta1.Module) error {
+	if m.client == nil || mod.Spec.DRA == nil || !mod.DeletionTimestamp.IsZero() {
+		return nil
+	}
+
+	list := &kmmv1beta1.ModuleList{}
+	if err := m.client.List(ctx, list); err != nil {
+		return fmt.Errorf("failed to list Modules: %v", err)
+	}
+
+	port := effectiveDRAHealthCheckPort(mod.Spec.DRA)
+	for _, other := range list.Items {
+		if other.Spec.DRA == nil {
+			continue
+		}
+		if other.Name == mod.Name && other.Namespace == mod.Namespace {
+			continue
+		}
+		if !other.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if effectiveDRAHealthCheckPort(other.Spec.DRA) == port {
+			return fmt.Errorf(
+				"spec.dra.healthCheckPort %d is already used by Module %s/%s",
+				port, other.Namespace, other.Name,
+			)
 		}
 	}
 

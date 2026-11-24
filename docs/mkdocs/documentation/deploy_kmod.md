@@ -84,8 +84,13 @@ It is strongly recommended to use `GetDRANodeLabel` function from the `labels` p
 
 DRA driver pods run with `hostNetwork: true` and `priorityClassName: system-node-critical`, which ensures they are not
 preempted and have access to the host network.
-KMM also configures a GRPC liveness probe on port `51515` (service `liveness`) with a 30-second initial delay.
+KMM also configures a GRPC liveness probe (service `liveness`) with a 30-second initial delay.
+The default port is `51515`. Set `.spec.dra.healthCheckPort` to use a different port; KMM then sets both
+`HEALTHCHECK_PORT` and the default probe to that value.
+The webhook rejects a Module whose port (including the default `51515` when the field is omitted) is already used by
+another DRA Module. To run more than one DRA driver, set `.spec.dra.healthCheckPort` to a unique value.
 The DRA driver container should implement this GRPC health check endpoint; if it fails, the pod will be restarted.
+A custom `.spec.dra.container.livenessProbe` still overrides the default probe.
 
 KMM automatically mounts the following host paths into DRA driver pods:
 
@@ -104,7 +109,7 @@ The following environment variables are preset in the DRA driver container:
 | `CDI_ROOT` | `/var/run/cdi` |
 | `KUBELET_REGISTRAR_DIRECTORY_PATH` | `/var/lib/kubelet/plugins_registry/` |
 | `KUBELET_PLUGINS_DIRECTORY_PATH` | `/var/lib/kubelet/plugins/` |
-| `HEALTHCHECK_PORT` | `51515` |
+| `HEALTHCHECK_PORT` | `.spec.dra.healthCheckPort` if set, otherwise `51515` |
 
 Users may specify additional volumes and volume mounts via `.spec.dra.volumes` and `.spec.dra.container.volumeMounts`.
 
@@ -482,6 +487,8 @@ spec:
 
   dra:
     driverName: dra.example.com  # Required; must be a valid DNS subdomain
+
+    healthCheckPort: 51515  # Optional; default 51515. Must be unique among DRA Modules.
 
     container:
       image: some.registry/org/my-dra-driver:latest  # Required

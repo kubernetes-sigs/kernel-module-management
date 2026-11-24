@@ -175,6 +175,11 @@ func (in *DRASpec) DeepCopyInto(out *DRASpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.HealthCheckPort != nil {
+		in, out := &in.HealthCheckPort, &out.HealthCheckPort
+		*out = new(int32)
+		**out = **in
+	}
 	if in.DeviceClasses != nil {
 		in, out := &in.DeviceClasses, &out.DeviceClasses
 		*out = make([]DeviceClassSpec, len(*in))

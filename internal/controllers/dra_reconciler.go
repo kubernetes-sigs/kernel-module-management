@@ -55,8 +55,16 @@ const (
 	cdiVolumeName                    = "cdi"
 	cdiPath                          = "/var/run/cdi"
 
-	draHealthcheckPort = 51515
+	// DRAHealthcheckPort is the default host port for the DRA gRPC health check.
+	DRAHealthcheckPort int32 = 51515
 )
+
+func effectiveDRAHealthcheckPort(dra *kmmv1beta1.DRASpec) int32 {
+	if dra != nil && dra.HealthCheckPort != nil {
+		return *dra.HealthCheckPort
+	}
+	return DRAHealthcheckPort
+}
 
 type DRAReconciler struct {
 	client         client.Client
@@ -590,6 +598,8 @@ func (dsci *draDaemonSetCreatorImpl) setDRAAsDesired(
 		return errors.New("DRA spec in module should not be nil")
 	}
 
+	healthcheckPort := effectiveDRAHealthcheckPort(mod.Spec.DRA)
+
 	hostPathDirOrCreate := v1.HostPathDirectoryOrCreate
 	hostPathDir := v1.HostPathDirectory
 
@@ -656,14 +666,14 @@ func (dsci *draDaemonSetCreatorImpl) setDRAAsDesired(
 		},
 		{
 			Name:  "HEALTHCHECK_PORT",
-			Value: fmt.Sprintf("%d", draHealthcheckPort),
+			Value: fmt.Sprintf("%d", healthcheckPort),
 		},
 	}
 
 	draLivenessProbe := &v1.Probe{
 		ProbeHandler: v1.ProbeHandler{
 			GRPC: &v1.GRPCAction{
-				Port:    draHealthcheckPort,
+				Port:    healthcheckPort,
 				Service: ptr.To("liveness"),
 			},
 		},
